@@ -1,6 +1,9 @@
 {
   "includeCoAuthoredBy": false,
   "model": "sonnet",
+  "env": {
+    "MAX_THINKING_TOKENS": 31999
+  },
   "hooks": {
     "Stop": [
       {
