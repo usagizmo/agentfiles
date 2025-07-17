@@ -34,6 +34,7 @@
 ## コーディング規約
 
 - `any`型禁止 → `unknown`型や適切な型定義を使用
+- `interface`より`type`を優先 → 予期しないプロパティの追加を防ぐため
 - optional chaining（`?.`）とnullish coalescing（`??`）の積極活用
 - ジェネリック型・ユニオン型を活用して型安全性を保持
 - デバッグ用のログ表示は `console.debug` を使用
