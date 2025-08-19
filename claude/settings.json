@@ -1,9 +1,9 @@
 {
-  "includeCoAuthoredBy": false,
-  "model": "sonnet",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
-    "MAX_THINKING_TOKENS": 31999
+    "MAX_THINKING_TOKENS": "31999"
   },
+  "includeCoAuthoredBy": false,
   "hooks": {
     "Stop": [
       {
