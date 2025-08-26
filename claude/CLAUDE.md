@@ -54,12 +54,3 @@
 ## ドキュメント作成規則
 
 - ドキュメント（.md）を作成する際は、コードよりもMermaid図を優先して使用し、全体感が掴めるようにする
-- Mermaidでは以下の図表を適切に使い分ける：
-  - `flowchart`: フローチャート・処理の流れ
-  - `sequenceDiagram`: シーケンス図・処理の時系列
-  - `classDiagram`: クラス図・構造の関係性
-  - `stateDiagram`: 状態遷移図・状態の変化
-  - `erDiagram`: ER図・データの関係性
-  - `journey`: ユーザージャーニー・体験の流れ
-  - `quadrantChart`: 象限図・分析・比較
-  - `requirementDiagram`: 要件図・機能要件の関係
