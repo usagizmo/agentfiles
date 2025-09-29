@@ -1,4 +1,6 @@
 # claude
+/claude/file-history
+/claude/history.jsonl
 /claude/ide
 /claude/plugins
 /claude/projects
