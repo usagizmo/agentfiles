@@ -4,11 +4,6 @@
 
 - commitメッセージは絵文字（gitmoji）で開始
 
-## パッケージ管理
-
-- npm/yarn よりも pnpm を優先的に使用します
-- package.json の scripts は pnpm での実行を前提とする
-
 ## 言語使用規則
 
 ### ユーザー向け (英語で記述)
