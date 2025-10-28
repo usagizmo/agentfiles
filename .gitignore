@@ -8,3 +8,12 @@
 /claude/shell-snapshots
 /claude/statsig
 /claude/todos
+
+# codex
+/codex/log
+/codex/sessions
+/codex/auth.json
+/codex/config.toml
+/codex/history.jsonl
+/codex/AGENTS.md
+/codex/version.json
