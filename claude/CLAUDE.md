@@ -1,9 +1,5 @@
 日本語で返答して。
 
-## Git運用
-
-- commitメッセージは絵文字（gitmoji）で開始
-
 ## 言語使用規則
 
 ### ユーザー向け (英語で記述)
@@ -16,8 +12,6 @@
 
 - コードコメント・JSDoc
 - テストコード・説明
-- Gitコミットメッセージ
-- プルリクエスト説明
 - 技術文書
 
 ## コーディング原則
@@ -39,12 +33,7 @@
 ### Svelte 5 Runes 規約
 
 - 派生値の計算は getter ではなく `$derived` / `$derived.by` を使用する
-
-## CSS・Tailwind CSS
-
-- `w-*` と `h-*` の値が同じ場合は `size-*` を使用
-  - 例: `w-4 h-4` → `size-4`
-  - 例: `w-full h-full` → `size-full`
+- リアクティブな Map/Set は `$state(new Map/Set)` ではなく `SvelteMap` / `SvelteSet` を直接使用する
 
 ## ドキュメント作成規則
 
