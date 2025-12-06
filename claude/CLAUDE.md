@@ -29,7 +29,8 @@
 - optional chaining（`?.`）とnullish coalescing（`??`）の積極活用
 - ジェネリック型・ユニオン型を活用して型安全性を保持
 - デバッグ用のログ表示は `console.debug` を使用
-- プライベートフィールド: DI（コンストラクタ引数）以外は `#` を使用、`private` は使用しない
+- プライベートフィールド・メソッド: `#` を使用、`private` は禁止
+  - 例外: シングルトンパターンの `private constructor` のみ許可
 - 早期リターンは `if (...) { return; }` ではなく `if (...) return;` の1行形式を使用する
 
 ### Svelte 5 Runes 規約
@@ -39,7 +40,3 @@
   - 複雑な計算や条件分岐が必要な場合のみ `$derived.by(() => ...)` を使用する
 - リアクティブな Map/Set は `$state(new Map/Set)` ではなく `SvelteMap` / `SvelteSet` を直接使用する
 - TSファイル内で Rune を使用する場合、ファイル名は `.svelte.ts` にする
-
-## ドキュメント作成規則
-
-- ドキュメント（.md）を作成する際は、コードよりもMermaid図を優先して使用し、全体感が掴めるようにする
