@@ -31,6 +31,11 @@
 - デバッグ用のログ表示は `console.debug` を使用
 - プライベートフィールド・メソッド: `#` を使用、`private` は禁止
   - 例外: シングルトンパターンの `private constructor` のみ許可
+- readonly vs #prop + getter の使い分け:
+  - `readonly prop`: 初期化後に一切変更しない値（constructor 引数など）
+  - `readonly prop = $derived(...)`: 派生値（初期化時に依存値が確定している場合）
+  - `#prop` + `get prop()`: 内部で変更される状態を読み取り専用で公開
+  - `#prop`（非公開）: 内部でのみ使用
 - 早期リターンは `if (...) { return; }` ではなく `if (...) return;` の1行形式を使用する
 
 ### Svelte 5 Runes 規約
