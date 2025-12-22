@@ -12,6 +12,8 @@
 /claude/shell-snapshots
 /claude/statsig
 /claude/todos
+/claude/stats-cache.json
+/claude/.update.lock
 
 # codex
 /codex/log
@@ -21,3 +23,4 @@
 /codex/history.jsonl
 /codex/AGENTS.md
 /codex/version.json
+/codex/skills/.system
