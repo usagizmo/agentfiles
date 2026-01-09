@@ -2,6 +2,7 @@
 .DS_Store
 
 # claude
+/claude/.update.lock
 /claude/cache
 /claude/debug
 /claude/file-history
@@ -11,10 +12,10 @@
 /claude/plugins
 /claude/projects
 /claude/shell-snapshots
-/claude/statsig
-/claude/todos
 /claude/stats-cache.json
-/claude/.update.lock
+/claude/statsig
+/claude/telemetry
+/claude/todos
 
 # codex
 /codex/log
