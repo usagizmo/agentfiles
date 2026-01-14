@@ -11,7 +11,7 @@
       "Skill(docs:*)",
       "Skill(commit:*)"
     ],
-    "defaultMode": "plan"
+    "defaultMode": "acceptEdits"
   },
   "model": "opus",
   "hooks": {
