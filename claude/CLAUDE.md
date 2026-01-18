@@ -50,3 +50,8 @@
 - 派生値の計算は getter ではなく `$derived` / `$derived.by` を使用する
 - リアクティブな Map/Set は `$state(new Map/Set)` ではなく `SvelteMap` / `SvelteSet` を直接使用する
 - TSファイル内で Rune を使用する場合、ファイル名は `.svelte.ts` にする
+
+## ツール使用規則
+
+- `grep` ではなく `rg`（ripgrep）を使用する
+- `find` ではなく `fd` を使用する
