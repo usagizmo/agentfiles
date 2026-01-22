@@ -66,15 +66,9 @@
 - optional chaining（`?.`）とnullish coalescing（`??`）の積極活用
 - ジェネリック型・ユニオン型を活用して型安全性を保持
 - デバッグ用のログ表示は `console.debug` を使用
-- 早期リターンは `if (...) { return; }` ではなく `if (...) return;` の1行形式を使用する
 
 ### Svelte 5 Runes 規約
 
 - 派生値の計算は getter ではなく `$derived` / `$derived.by` を使用する
 - リアクティブな Map/Set は `$state(new Map/Set)` ではなく `SvelteMap` / `SvelteSet` を直接使用する
 - TSファイル内で Rune を使用する場合、ファイル名は `.svelte.ts` にする
-
-## ツール使用規則
-
-- `grep` ではなく `rg`（ripgrep）を使用する
-- `find` ではなく `fd` を使用する
