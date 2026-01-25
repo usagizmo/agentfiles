@@ -13,7 +13,7 @@
     ],
     "defaultMode": "acceptEdits"
   },
-  "model": "opus",
+  "model": "opusplan",
   "hooks": {
     "Stop": [
       {
