@@ -9,7 +9,8 @@
       "WebFetch",
       "WebSearch",
       "Skill(docs:*)",
-      "Skill(commit:*)"
+      "Skill(commit:*)",
+      "Mcp(serena:*)"
     ],
     "defaultMode": "acceptEdits"
   },
