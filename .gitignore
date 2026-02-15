@@ -18,6 +18,7 @@
 /claude/statsig
 /claude/telemetry
 /claude/todos
+/claude/usage-data
 
 # codex
 /codex/log

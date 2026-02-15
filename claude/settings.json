@@ -1,5 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
@@ -8,13 +11,15 @@
       "Read",
       "WebFetch",
       "WebSearch",
+      "Skill(tidy:*)",
       "Skill(docs:*)",
       "Skill(commit:*)",
-      "Mcp(serena:*)"
+      "mcp__context7",
+      "mcp__project-notes"
     ],
     "defaultMode": "acceptEdits"
   },
-  "model": "opusplan",
+  "model": "opus",
   "hooks": {
     "Stop": [
       {
