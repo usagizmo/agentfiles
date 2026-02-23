@@ -9,9 +9,11 @@
 /claude/history.jsonl
 /claude/ide
 /claude/paste-cache
+/claude/backups
 /claude/plans
 /claude/plugins
 /claude/tasks
+/claude/teams
 /claude/projects
 /claude/shell-snapshots
 /claude/stats-cache.json
