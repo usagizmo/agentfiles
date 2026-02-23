@@ -22,6 +22,14 @@
 /claude/todos
 /claude/usage-data
 
+# copilot
+/copilot/command-history-state.json
+/copilot/config.json
+/copilot/ide
+/copilot/logs
+/copilot/pkg
+/copilot/session-state
+
 # codex
 /codex/log
 /codex/sessions
