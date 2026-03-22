@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Pattern 5: Braille dots - dotted progress bar using braille characters"""
+"""Pattern 4: Fine-grained progress bar with true color gradient"""
 import json, sys
 
 data = json.load(sys.stdin)
 
-BRAILLE = ' ⣀⣄⣤⣦⣶⣷⣿'
+BLOCKS = ' ▏▎▍▌▋▊▉█'
 R = '\033[0m'
 DIM = '\033[2m'
 
@@ -14,27 +14,22 @@ def gradient(pct):
         return f'\033[38;2;{r};200;80m'
     else:
         g = int(200 - (pct - 50) * 4)
-        return f'\033[38;2;255;{max(g, 0)};60m'
+        return f'\033[38;2;255;{max(g,0)};60m'
 
-def braille_bar(pct, width=8):
+def bar(pct, width=10):
     pct = min(max(pct, 0), 100)
-    level = pct / 100
-    bar = ''
-    for i in range(width):
-        seg_start = i / width
-        seg_end = (i + 1) / width
-        if level >= seg_end:
-            bar += BRAILLE[7]
-        elif level <= seg_start:
-            bar += BRAILLE[0]
-        else:
-            frac = (level - seg_start) / (seg_end - seg_start)
-            bar += BRAILLE[min(int(frac * 7), 7)]
-    return bar
+    filled = pct * width / 100
+    full = int(filled)
+    frac = int((filled - full) * 8)
+    b = '█' * full
+    if full < width:
+        b += BLOCKS[frac]
+        b += '░' * (width - full - 1)
+    return b
 
 def fmt(label, pct):
     p = round(pct)
-    return f'{DIM}{label}{R} {gradient(pct)}{braille_bar(pct)}{R} {p}%'
+    return f'{label} {gradient(pct)}{bar(pct)} {p}%{R}'
 
 model = data.get('model', {}).get('display_name', 'Claude')
 parts = [model]
@@ -51,5 +46,5 @@ week = data.get('rate_limits', {}).get('seven_day', {}).get('used_percentage')
 if week is not None:
     parts.append(fmt('7d', week))
 
-print(f' {DIM}│{R} '.join(parts), end='')
+print(f'{DIM}│{R}'.join(f' {p} ' for p in parts), end='')
 
