@@ -4,6 +4,7 @@
 # claude
 /claude/.update.lock
 /claude/cache
+/claude/channels
 /claude/debug
 /claude/file-history
 /claude/history.jsonl
@@ -12,15 +13,17 @@
 /claude/backups
 /claude/plans
 /claude/plugins
-/claude/tasks
-/claude/teams
-/claude/projects
-/claude/powerline
+/claude/sessions
+/claude/settings.local.json
 /claude/shell-snapshots
 /claude/stats-cache.json
 /claude/statsig
+/claude/tasks
+/claude/teams
 /claude/telemetry
 /claude/todos
+/claude/projects
+/claude/powerline
 /claude/usage-data
 
 # copilot
@@ -28,15 +31,20 @@
 /copilot/config.json
 /copilot/ide
 /copilot/logs
+/copilot/mcp-oauth-config
 /copilot/pkg
 /copilot/session-state
 
 # codex
-/codex/log
-/codex/sessions
+/codex/.personality_migration
 /codex/auth.json
 /codex/config.toml
 /codex/history.jsonl
-/codex/AGENTS.md
-/codex/version.json
+/codex/log
+/codex/models_cache.json
+/codex/sessions
+/codex/shell_snapshots
 /codex/skills/.system
+/codex/tmp
+/codex/version.json
+/codex/AGENTS.md
