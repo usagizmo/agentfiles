@@ -4,7 +4,7 @@
 
 ## 優先順位（上位が優先）
 
-1. **破壊的変更の推奨**: 部分的パッチより、根本的な改善を優先。不調なコードは完全に削除し、新しい実装に置き換える
+1. **破壊的変更の推奨**: 部分的パッチより、根本的な改善を優先。不調なコードは完全に削除し、新しい実装に置き換える。動く状態を一時的に犠牲にしても、中途半端な併存（古い実装の温存、feature flag での棚上げ）は選ばない
 2. **構造の美しさ**: ドメインに沿った設計、重複の一元管理（SSOT）、既存パターンとの整合性
 
 ## 実装方針
@@ -24,6 +24,20 @@ serde の `#[serde(tag, rename_all)]`、Valibot の `v.variant` / `v.transform` 
 ### SSOT は契約層に置き、利用側は派生させる
 
 型と schema を複数箇所で独立に定義すると drift が起きる。schema を契約層（contracts / IPC schema）に集約し、利用側は `v.InferOutput<...>` や `typeof XXX[number]` で派生させる。同じ概念の型を複数モジュールから export しない。
+
+### 実行時状態の持ち主は 1 箇所に集約し、consumer は引数で受け取る
+
+型・schema の SSOT と同じ原則は、**メモリ上の状態 instance**（キャッシュ・検索 index・接続プール等）にも当てはまる。load / persist / mutate を複数モジュールから独立に呼べる設計にすると、同じ state instance が並走してメモリ上の不整合（片方に upsert したのに他方は stale）を生む。
+
+具体策: instance を生成・保持する「持ち主」を 1 モジュールに決め（orchestrator 等）、query / mutate 関数は instance を**引数で受け取る pure ロジック**にする。consumer（UI / 他モジュール）は持ち主越しにアクセスし、独自の load を持たない。lifecycle（初期化・persist debounce・破棄）は持ち主のみが責任を持つ。
+
+判定: 「この state を load / persist できる入口は何箇所あるか？」を自問し、2 箇所以上なら入口を 1 つに寄せる。
+
+### 変更通知は「何が変わったか」を同梱した discriminated union で fan-out する
+
+「cache に変化があった」ような情報量ゼロのイベント（`onChange()` / `invalidate()`）は、subscriber に**全 reload を強制**し、incremental update を封じる。代わりに差分を同梱した event（`{ kind: 'upsert' | 'delete', noteId, before, after }` 等）を配信すれば、同じ event を複数用途（UI reconcile / 検索 index upsert / meta 登録）に fan-out できる。
+
+軸が違う variant（削除 vs upsert など、運ぶ情報量・型が違うもの）を単一 record + nullable field で表現すると「`deleted === true ⇔ after === undefined`」のような不変条件が型で守られない。discriminated union にして各 variant の必要 field だけを持たせる（「軸が異なる値を同じ enum / union に混ぜない」の通知レイヤー版）。
 
 ### 同じ名前空間に異なる責務を混ぜない
 
