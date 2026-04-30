@@ -11,50 +11,28 @@
 
 - エッジケースまで考慮した完全な実装を目指す
 
-## 設計の落とし穴
+## 設計の落とし穴（要約）
 
-### 軸が異なる値を同じ enum / union に混ぜない
+各項目の詳細・実例・コード例は `~/.claude/skills/design-pitfalls/SKILL.md` を参照。
 
-discriminated union の variant は「同一の軸」上の分類でなければならない。「種別」と「伝搬形態」と「不在」など異なる次元を同じ union に混ぜると、境界ごとに `Exclude` が必要になり、nested 情報の型が unknown に落ちる。異なる軸は外側で discriminate し、各軸内で独立した union として閉じる。
-
-### スキーマライブラリが表現できるものは手書きしない
-
-serde の `#[serde(tag, rename_all)]`、Valibot の `v.variant` / `v.transform` 等で表現できる JSON shape を、手書きの `to_json()` や手動変換で書かない。手書きは variant 追加時のフィールド名 typo・漏れを型が守らない。schema 属性で自動導出すれば JSON shape が型定義から一意に決まる。
-
-### SSOT は契約層に置き、利用側は派生させる
-
-型と schema を複数箇所で独立に定義すると drift が起きる。schema を契約層（contracts / IPC schema）に集約し、利用側は `v.InferOutput<...>` や `typeof XXX[number]` で派生させる。同じ概念の型を複数モジュールから export しない。
-
-### 実行時状態の持ち主は 1 箇所に集約し、consumer は引数で受け取る
-
-型・schema の SSOT と同じ原則は、**メモリ上の状態 instance**（キャッシュ・検索 index・接続プール等）にも当てはまる。load / persist / mutate を複数モジュールから独立に呼べる設計にすると、同じ state instance が並走してメモリ上の不整合（片方に upsert したのに他方は stale）を生む。
-
-具体策: instance を生成・保持する「持ち主」を 1 モジュールに決め（orchestrator 等）、query / mutate 関数は instance を**引数で受け取る pure ロジック**にする。consumer（UI / 他モジュール）は持ち主越しにアクセスし、独自の load を持たない。lifecycle（初期化・persist debounce・破棄）は持ち主のみが責任を持つ。
-
-判定: 「この state を load / persist できる入口は何箇所あるか？」を自問し、2 箇所以上なら入口を 1 つに寄せる。
-
-### 変更通知は「何が変わったか」を同梱した discriminated union で fan-out する
-
-「cache に変化があった」ような情報量ゼロのイベント（`onChange()` / `invalidate()`）は、subscriber に**全 reload を強制**し、incremental update を封じる。代わりに差分を同梱した event（`{ kind: 'upsert' | 'delete', noteId, before, after }` 等）を配信すれば、同じ event を複数用途（UI reconcile / 検索 index upsert / meta 登録）に fan-out できる。
-
-軸が違う variant（削除 vs upsert など、運ぶ情報量・型が違うもの）を単一 record + nullable field で表現すると「`deleted === true ⇔ after === undefined`」のような不変条件が型で守られない。discriminated union にして各 variant の必要 field だけを持たせる（「軸が異なる値を同じ enum / union に混ぜない」の通知レイヤー版）。
-
-### 同じ名前空間に異なる責務を混ぜない
-
-モジュール名・prefix・ディレクトリ等の名前空間に複数軸の責務を共存させると、利用者は 1 軸だと誤認し、一方の削除が他方を巻き込む事故が起きる。「軸が違う enum variant を混ぜない」の命名レイヤー版。rename できないなら少なくとも docs で両方の責務を明示する。
-
-### 不変条件の検証は条件分岐より上の層に置く
-
-セキュリティチェック・入力検証など「常に成り立つべき不変条件」は、`#[cfg(unix)]` / `if (platform === 'X')` 等の条件分岐の**内側**ではなく**外側**（プラットフォーム非依存層・共通エントリ）に置く。条件分岐の内側に置くと、新しい分岐（Windows サポート追加等）を実装した人が検証コピーを忘れた瞬間に抜け穴になる。検証を共通層に 1 箇所だけ書けば、分岐追加時に書き忘れる余地がそもそも生まれない。
-
-### 境界の極性はプロダクトの意図に合わせる（許可 vs 除外リスト）
-
-「一部だけ特別扱いする」境界を実装するとき、許可リスト（allowlist）と除外リスト（denylist）のどちらを選ぶかは、**未知の新要素が追加されたときに「特別扱いに入るか／外れるか」のデフォルトがプロダクトの意図と一致する方**を選ぶ。意図と逆方向の極性を選ぶと、新しい要素が追加されるたびに意図せず特別扱いに巻き込まれ（または漏れ）、事故が起きる。
-
-例: 「LP ページだけ多言語 URL prefix を持つ」が意図なら、未知のトップレベルパス（`/robots.txt`, 新しい静的資産等）は**デフォルトで prefix を付けない**のが安全 → 許可リスト方式を選ぶ。除外リストだと新しい静的資産が追加されるたびに意図せず prefix が付き 404 を生む。
-
-判定: 「リストに書き忘れた場合、何が起きるのが safe か？」を自問し、safe 側をデフォルトにする極性を選ぶ。
-
-### プラットフォームの推奨レールから外れない
-
-ツール・フレームワーク・SDK が公式に推奨する構造（ディレクトリ配置、設定ファイル、ライフサイクル API 等）があるなら、独自の並行構造を作らない。公式レールから外れると、アップデート時の drift・他ツール連携時の不整合・新メンバーの学習コストが累積する。独自構造を選ぶなら「公式では解決できない明確な理由」を docs に明示する。
+- **軸が異なる値を同じ enum / union に混ぜない** — 軸を混ぜると `Exclude` の応酬で nested 型が unknown に落ちる。軸ごとに union を分け外側で discriminate
+- **公開 surface と実装層は migration コストの非対称性で軸を分ける** — surface は dispatch table 1 つで rename 完了、実装層 (DB / event key / migration) は version 互換が要る。一斉 rename を恐れず層ごとに分けて良い
+- **スキーマライブラリが表現できるものは手書きしない** — `serde(tag, rename_all)` / Valibot `v.variant` / `v.transform` で表現できるものを手書き `to_json()` で書かない
+- **SSOT は契約層に置き、利用側は派生させる** — schema を contracts に集約、利用側は `v.InferOutput<...>` / `typeof XXX[number]` で派生
+- **実行時状態の持ち主は 1 箇所に集約し、consumer は引数で受け取る** — load / persist / mutate 入口が 2 箇所以上ならメモリ整合が壊れる。query / mutate は instance を引数で受ける pure ロジックに
+- **orchestration は event source に近い側で所有する** — debounce / coalescing / retry を event source から遠いレイヤに置くと中継 IPC・ライフサイクル依存・トリガ重複を生む
+- **変更通知は discriminated union で fan-out する** — 情報量ゼロの `onChange()` は全 reload を強制する。差分（kind / before / after）を同梱
+- **cache は event 駆動で常に最新化、view-binning は UX 境界で gate する** — sort / group key にしている field を event で null 上書きしない。`existing?.field ?? next.field` で preserve、re-bin は `refresh()` 1 関数に集約
+- **同じ名前空間に異なる責務を混ぜない** — モジュール名 / prefix / ディレクトリに複数軸を共存させない
+- **不変条件の検証は条件分岐より上の層に置く** — `#[cfg(unix)]` / `if (platform === 'X')` の内側ではなく外側（共通エントリ）に置く
+- **境界の極性はプロダクトの意図に合わせる** — 許可リスト / 除外リスト。「リストに書き忘れた場合 safe か？」を自問し safe 側をデフォルトにする
+- **集合 SSOT は positive list と negative list の両端で gate する** — 入れ忘れ検証と誤投入検証は別軸の gate が必要
+- **正誤判定は独立した cheap proof で行う** — 鍵 / トークンの正誤を副作用の成否で間接判定しない。HMAC / 署名で deterministic に判定
+- **setup + verify を同じ API に統合する** — 内部状態の問題を caller に漏らさない。1 surface 内で `None` / `Some + valid` / `Some + invalid` / `Some + stale` を分岐
+- **プラットフォームの推奨レールから外れない** — 公式構造があるなら独自並行構造を作らない
+- **派生 struct への field-by-field copy で field を silent に drop しない** — `B = A + extra` の包含構造、または `impl From<A> for B` + rest pattern で守る
+- **追加系 API の前提条件 gate は caller ではなく helper の内側に置く** — `RequestBuilder::header` のような append API は protected key を helper 内で弾く
+- **クロスプロセス SSOT の drift は test 文字列 pin + 相互参照コメントで二重 gate** — 3 端以上に拡散したら literal の owner を 1 端に絞る (build-time codegen)
+- **観測軸が異なる出力チャネルは混ぜない** — 人間 UI / 機械 caller / 下流 pipeline は別 surface
+- **機械 caller 向け error 応答は self-repair に必要な情報量を同梱する** — underlying error + hint + minimal example JSON。catalog 集約方式 + positive/negative gate test
+- **機械 caller 向け doc は truncate-safe に書く** — 冒頭 N 字 (~1000) に signature / invariant / minimal example を揃える
