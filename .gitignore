@@ -36,12 +36,6 @@
 /copilot/pkg
 /copilot/session-state
 
-# claude - installed skills (keep only self-authored skills tracked)
-/claude/skills/find-skills
-/claude/skills/sentry-cli
-/claude/skills/stripe-best-practices
-/claude/skills/vercel-cli
-
 # codex
 /codex/.codex-global-state.json
 /codex/.codex-global-state.json.bak

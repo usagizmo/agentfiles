@@ -42,3 +42,15 @@ silent path の典型:
 例: ❌ Bad — `PutObjectCommand({ CacheControl: '...' })` を渡して presign URL を発行して終わり。SDK の hoist 最適化で SignedHeaders から外れるため、client が PUT 時に header を忘れても URL は valid。R2 にはメタデータが入らないが PUT は成功する → 数ヶ月後に「キャッシュされてないですね？」で気づく。
 
 **判定フロー**: cross-process / cross-language 契約で値を渡すとき、(1) 発行側の SDK / lib に「silent default で値を捨てる経路」がないか docs を確認、(2) あれば override option を探す（`signableHeaders` / `forceHeaders` / 等）、(3) override が無ければそもそもその SDK の使い方を疑う、(4) override + schema required + echo の三段構えで fail-closed に倒す。
+
+### 応用: JSON file の read-modify-write 経路では mutate 前に必須 field を補完する
+
+複数経路から同じ JSON file (config / library.json / settings 等) を read-modify-write するとき、外部由来 (server pull / 他端末同期 / 外部エディタ) の payload には書き込み側 schema の必須 field が含まれていないことがある。schema validation 無しに書き戻すと、次回 reader (strict parse) が reject して default fallback に落ち、UI から見ると「設定が消えた」silent regression になる。
+
+対策:
+
+- **書き込み handler は mutate 前に必須 field を `entry().or_insert_with(...)` で補完**する。reader が strict / writer が loose の非対称を、writer 側で対称化する
+- **新 field を追加する場合は reader 側 schema で `optional + default` で受ける**: 既存 user の file は新 field を持たないため、required にすると既存環境を全 reject する
+- **同 file の load fallback (NotFound 等) と writer の補完を同じ default で揃える**: 両端で field 構造を一致させないと「load 後 → write → load」のラウンドトリップで diff が出る
+
+これも「issuer が産んだ値を receiver が読まなくても build が成功する」silent path の射影。HTTP header が presign optimizer で消えるのと同じく、JSON object の field が schema mismatch で fallback に落ちるのも silent failure。発行側で必須 field を強制注入し、受信側で required schema (または safe default 付き optional) で受ける、両端を対称に閉じるのが原則。
