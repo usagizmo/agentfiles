@@ -41,3 +41,19 @@ SSOT になる in-memory cache（entity を ID で索引化した Map 等）は 
 例: ✅ Good — entity changed event で ID-keyed Map を最新化するが、sort key 用の timestamp field は `existing?.field ?? next.field` で preserve（既存値があれば位置 jump を防ぎ、null なら新タイムスタンプを採用）。Set 移動は `refresh()` でのみ起きる。
 例: ❌ Bad — `existing ? { ...next, field: existing.field } : next`。existing.field が null のときに新値を捨ててしまい、初回遷移で全件 "No timestamp" group に集約される逆向きの故障。
 例: ❌ Bad — event で sort key field を `null` で即上書きし、Set 移動も即実行する。操作直後に行が視界から消えてユーザーが「何が起きたか」を見失う。
+
+## RMW merge は previous の diff を 3 軸目に持つ（append-only ロジックを CRUD に流用しない）
+
+複数プロセス / window が共有する store を Read-Modify-Write で永続化するとき、`current state ∪ latestDisk` の **2 軸 merge** は **append-only collection 専用**（LRU / 最近使った N 件 / event log の蓄積等）。
+
+CRUD 対象（ユーザーが明示削除する model history / favorite list / pinned items 等）に **同じ 2 軸 merge を流用すると**、自プロセスで削除した entry が disk 側に残存していて、それを「他プロセスが追加した」と誤認して merge 結果に復活する silent drift を起こす。runtime error は出ず、UX が「削除しても次の save で蘇る」になって user が混乱する。
+
+判定:
+
+- merge 対象が **append-only か CRUD か** を `MERGE_*` registry の名前 / 型 / 責務として明示する。同じ for ループの分岐内に append-only と CRUD を並列に置くなら、それぞれ別 const + 別 merge 関数で分ける（`MERGE_ARRAY_KEYS` / `MERGE_OBJECT_ARRAY_KEYS` のような軸命名）
+- CRUD 対象には `previous → current` の **3 軸目** を導入する。`previousIds - currentIds = deletedIds` を抽出し、`latestDisk` から `deletedIds` を除外する。これで「自プロセスで削除した entry」と「他プロセスがまだ追加していない entry」を区別できる
+- merge ロジックは call site の closure 内に直書きせず、pure 関数 `mergeXForRmw(previous, current, latest, key)` に切り出して export し、削除 / 追加 / 衝突 / 全消去 / 初回 save の variant を unit test で SSOT pin する。closure 直書きは「append-only ロジックを後から CRUD 用にコピペ流用される」起点になりやすい
+
+例: ✅ Good — `mergeObjectArrayForRmw(previous, current, latest, uniqueKey)` を pure に切り出し、`deletedIds = previousIds - currentIds` を `latest.filter` から除外。削除が永続化され、他 window の追加は保持される。
+例: ❌ Bad — `[...current, ...latest.filter(item => !currentIds.includes(item.id))]` の 2 軸 merge を CRUD 対象に流用。自 window の削除が disk 側残存値で「他 window 追加」扱いされて復活する。
+例: ❌ Bad — append-only LRU 用に書いた `MERGE_KEYS` を後から「同じ shared cache だから」と CRUD 対象 (model history 等) にも流用。型 / 責務軸が違うので別 const + 別 merge 関数に分ける必要がある。

@@ -44,6 +44,10 @@ description: >
 - **正誤判定は独立した cheap proof で行う** — 鍵 / トークンの正誤を副作用の成否で間接判定しない。HMAC / 署名で deterministic に判定
 - **setup + verify を同じ API に統合する** — 内部状態の問題を caller に漏らさない。1 surface 内で `None` / `Some + valid` / `Some + invalid` / `Some + stale` を分岐
 - **プラットフォームの推奨レールから外れない** — 公式構造があるなら独自並行構造を作らない
+- **セキュリティ validation のエラー応答は外向き generic / 内向き構造化に軸分離する** — 種別を返すと allowlist / 認可境界を attacker に enumerate される。クライアント返却は単一 generic 文言、構造化情報は server log のみ
+- **並列 counter check は INSERT-then-check + ROLLBACK で atomic にする** — `SELECT count → if ok INSERT` は 2-step の時間窓で上限を 1 件突破する。write tx 内で「INSERT 予約 → count → 超過なら throw で rollback」に倒し、DB の write lock に serial 化を任せる
+- **fail-open / fail-closed のスイッチは環境で明示分岐する** — production は config 漏れで gate が無言で無効化されるのを防ぐため fail-closed、dev / test は開発体験のため fail-open。極性の判定は **環境ごとに別答え** を持ち、`if (!dev)` 単一フラグに集約する
+- **CORS / CSRF は認証経路ごとに検証軸を分ける** — Bearer 経路は browser CORS レールに乗らないので検証スキップ、Cookie 経路だけが CSRF 対象。`isDesktopClient` のような経路 SSOT で discriminate し、全 request に CORS ヘッダを反射しない。反射型 CORS + credentials true は CSRF 前段リスク。Origin 不在 = browser 起点ではない（server-to-server）なので state-changing method でも通す（各 endpoint が HMAC / signature で別軸防御）
 
 ## 派生 struct / 追加系 API — `references/struct-api.md`
 

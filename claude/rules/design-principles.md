@@ -10,6 +10,7 @@
 ## 実装方針
 
 - エッジケースまで考慮した完全な実装を目指す
+- **抽象化は variant が 2 つ以上の分岐ロジックを実際に持つ時点で導入する**: 1-variant enum / 将来の variant を予約する enum / dead label は YAGNI 違反。Plan 段階で「将来 X を追加する前提で抽象化を入れる」と合意していても、実装後に trivial dispatch / dead label に落ちたら tidy 段階で容赦なく削る。フラットな field の組み合わせで決定論的に導出できるラベルは struct field のままにし、enum を作らない
 
 ## 設計の落とし穴
 

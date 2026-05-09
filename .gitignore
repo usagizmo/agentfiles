@@ -9,6 +9,7 @@
 /claude/file-history
 /claude/history.jsonl
 /claude/ide
+/claude/.last-cleanup
 /claude/mcp-needs-auth-cache.json
 /claude/paste-cache
 /claude/backups
