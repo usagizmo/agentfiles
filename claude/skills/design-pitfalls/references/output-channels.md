@@ -27,13 +27,13 @@ LLM / 別プロセス / RPC など「機械 caller」が自律的にリトライ
 
 - error site (handler / parser) ごとに hint を散らさず、1 ファイルに集約する catalog (`method 名 → InvalidParamsHint`) を作り、入口 helper (`format_invalid_params(method, err)`) 経由で組み立てる
 - catalog の coverage は **positive list (AI-facing handler は entry 必須) + negative list (内部限定 handler は entry 禁止)** の両端 gate test で守る（「集合 SSOT は positive list と negative list の両端で gate する」原則の応用）
-- catalog key の軸（registry method 名 / internal symbol）と hint テキストの軸（公開 surface 名 / 公開 field 名）は分けて良い: catalog は実装層で identify、hint は caller の観測軸で書く（「公開 surface と実装層は migration コストの非対称性で軸を分ける」原則の error 応答版）
-- zero-arg / `unwrap_or` fallback で INVALID_PARAMS 経路を持たない handler は **catalog に dead entry を作らない** ため negative list 側に明示する。両端 gate でなければ気づかない
+- catalog key の軸（実装層の method 名 / internal symbol）と hint テキストの軸（公開 surface 名 / 公開 field 名）は分けて良い: catalog は実装層で identify、hint は caller の観測軸で書く（「公開 surface と実装層は migration コストの非対称性で軸を分ける」原則の error 応答版）
+- zero-arg / fallback で INVALID_PARAMS 経路を持たない handler は **catalog に dead entry を作らない** ため negative list 側に明示する。両端 gate でなければ気づかない
 
 判定: 「この境界の caller は人間か機械か？」を自問する。機械 caller なら underlying error の素通しは「次に何を書けば動くか」の情報損失を意味する。狭い境界の修復責務を caller に押し付けず、応答側で 1 メッセージに self-repair 情報を畳み込む。
 
-例: ✅ Good — `Invalid parameters: missing field 'foo'. Hint: this method uses 'foo' for the parent identifier; for new children use 'fromTempId' / 'toTempId'. Minimal example: {"foo":"...","children":[...]}`（field 名・典型誤りの言い換え・動く JSON snippet が揃っている）
-例: ❌ Bad — `Invalid parameters: unknown field 'fooRef', expected one of 'foo', 'children'`（serde 素エラー素通し。caller は「`fooRef` ではない」しか学べず、別の hallucination に再試行で到達する）
+例: ✅ Good — `Invalid parameters: missing field 'parentId'. Hint: this method uses 'parentId' for the parent identifier; for new children use 'childRef'. Minimal example: {"parentId":"...","children":[...]}`（field 名・典型誤りの言い換え・動く JSON snippet が揃っている）
+例: ❌ Bad — `Invalid parameters: unknown field 'parentRef', expected one of 'parentId', 'children'`（serializer / parser の素エラー素通し。caller は「`parentRef` ではない」しか学べず、別の hallucination に再試行で到達する）
 
 「正誤判定は独立した cheap proof で行う」が**入力の正誤**を判定する原則なら、こちらは**入力が誤っていたときに caller の自己修復に必要な情報を返す**原則。両者は対称で、片方欠けると caller が serializer 素エラー or 副作用試行のどちらかで判定を肩代わりする羽目になる。
 

@@ -26,6 +26,6 @@
 
 判定: 「この list に書き忘れた場合」と「誤って書き加えた場合」の両方の事故シナリオを列挙し、片方しか検出できないなら反対側の gate を追加する。
 
-例: registry handler の `is_mutation` flag を「mutation 候補が positive list にあるか」だけで test すると、read-only handler を誤って mutation 付与した時に `--dry-run` で実 handler 呼び出しが echo に振り替わる正反対の regression を埋め込んでも検出できない。positive list (`known_mutations_are_marked`) と negative list (`known_read_only_are_not_marked`) を併置して両軸を gate する。
+例: handler の「mutation か read-only か」flag を「mutation 候補が positive list にあるか」だけで test すると、read-only handler を誤って mutation 付与した時に `--dry-run` 等で実 handler 呼び出しが echo に振り替わる正反対の regression を埋め込んでも検出できない。positive list (「mutation として登録されている候補がすべて mark されているか」) と negative list (「read-only として登録されている候補が誤って mark されていないか」) を併置して両軸を gate する。
 
 「境界の極性はプロダクトの意図に合わせる」が「list そのものをどちら極性で書くか」なのに対し、こちらは「list の **検証** をどちら方向で書くか」。同じ allowlist / denylist でも、入れ忘れ検証と誤投入検証は別軸の gate が必要。

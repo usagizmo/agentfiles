@@ -25,8 +25,8 @@
 
 silent path の典型:
 
-- **ヘッダの hoist**: AWS S3 presigned URL の `getSignedUrl` は default で `PutObjectCommand` の header value を `X-Amz-SignedHeaders` から外す（hoist して URL 生成側にだけ反映）。client が PUT 時に同じ header を送らなくても URL は valid → R2 オブジェクトメタデータに値が入らない silent failure
-- **optional 引数の省略**: presign API のレスポンスに `cacheControl` を optional にすると、client が field を読まずに済む経路ができる
+- **ヘッダの hoist**: presigned URL を発行する SDK が default で「URL 生成時に header を hoist」する optimizer を持つことがある。issuer 側は header を渡したつもりでも、SDK が SignedHeaders から外すと、client が PUT 時に header を送らなくても URL は valid → object storage 側にメタデータが入らない silent failure になる
+- **optional 引数の省略**: presign API のレスポンスに metadata 系 field を optional にすると、client が field を読まずに済む経路ができる
 - **暗黙デフォルト**: 関数内で「デフォルト値を持つ optional パラメータ」にすると、caller の意図が明示されず drift する
 
 判定: 「issuer が産んだ値を receiver が読まなくても build / 通常 path が成功してしまうか？」を自問する。Yes なら fail-closed に倒す:
@@ -37,15 +37,15 @@ silent path の典型:
 
 「呼び忘れ・順序ミスで破綻する API を作らない」（runtime 状態系の原則）を SDK / プロトコル境界に拡張した版。runtime 系は順序制約を 1 関数に閉じるのが正解だが、SDK 境界は順序ではなく「値の伝播経路」が問題で、こちらは強制注入 + schema 強制 + echo の三段構えで閉じる。
 
-例: ✅ Good — `getSignedUrl(client, command, { signableHeaders: new Set(['cache-control']) })` で SignedHeaders に強制注入し、レスポンスに `cacheControl` を required で含めて返し、Rust 側 `LibraryPresignResult::Upload.cache_control: String` (non-Option) で受け取り、PUT 時に `.header("cache-control", &cache_control)` で再送する。client が `cache_control` field を読まずに PUT すると R2 が SignatureMismatch を返す → 契約違反が **deploy 後の最初のリクエストで実行時エラーとして必ず顕在化** する。
+例: ✅ Good — SDK の override option (`signableHeaders` 等) で SignedHeaders に対象 header を強制注入し、レスポンスに該当 metadata を required field として含めて返し、受信側 schema (Rust の non-Option / TS の non-optional) で受け取り、PUT 時に同じ header を再送する。client が field を読まずに PUT すると signature mismatch で reject → 契約違反が **deploy 後の最初のリクエストで実行時エラーとして必ず顕在化** する。
 
-例: ❌ Bad — `PutObjectCommand({ CacheControl: '...' })` を渡して presign URL を発行して終わり。SDK の hoist 最適化で SignedHeaders から外れるため、client が PUT 時に header を忘れても URL は valid。R2 にはメタデータが入らないが PUT は成功する → 数ヶ月後に「キャッシュされてないですね？」で気づく。
+例: ❌ Bad — `PutObjectCommand` 系の API に metadata を渡して presign URL を発行して終わり。SDK の hoist 最適化で SignedHeaders から外れるため、client が PUT 時に header を忘れても URL は valid。object storage にメタデータが入らないが PUT は成功する → 数ヶ月後に「キャッシュ / 識別がされていない」で気づく。
 
 **判定フロー**: cross-process / cross-language 契約で値を渡すとき、(1) 発行側の SDK / lib に「silent default で値を捨てる経路」がないか docs を確認、(2) あれば override option を探す（`signableHeaders` / `forceHeaders` / 等）、(3) override が無ければそもそもその SDK の使い方を疑う、(4) override + schema required + echo の三段構えで fail-closed に倒す。
 
 ### 応用: JSON file の read-modify-write 経路では mutate 前に必須 field を補完する
 
-複数経路から同じ JSON file (config / library.json / settings 等) を read-modify-write するとき、外部由来 (server pull / 他端末同期 / 外部エディタ) の payload には書き込み側 schema の必須 field が含まれていないことがある。schema validation 無しに書き戻すと、次回 reader (strict parse) が reject して default fallback に落ち、UI から見ると「設定が消えた」silent regression になる。
+複数経路から同じ JSON file (config / settings / state snapshot 等) を read-modify-write するとき、外部由来 (server pull / 他端末同期 / 外部エディタ) の payload には書き込み側 schema の必須 field が含まれていないことがある。schema validation 無しに書き戻すと、次回 reader (strict parse) が reject して default fallback に落ち、UI から見ると「設定が消えた」silent regression になる。
 
 対策:
 

@@ -14,7 +14,7 @@
 - 軽微なコードスタイルの統一
 - 互換性維持のためだけの古い記述の削除（未使用の再export、deprecatedコード等）
 - 不要なコード・ファイルの削除（dead code、空ファイル、スタブのみのファイル等）
-  - dead 判定は grep / 棚卸し agent の結果だけでなく、caller chain を実コード (`Read`) で辿って確認する。同じ prefix を持つ API でも責務軸が違う並列 layer (例: `sync_canvas_*` と `sync_local_*` のように IPC 名が似ていても叩く endpoint と sync 対象が違う) の可能性があるため。判別不能ならユーザーに確認する
+  - dead 判定は grep / 棚卸し agent の結果だけでなく、caller chain を実コード (`Read`) で辿って確認する。同じ prefix / 命名規則を持つ API でも責務軸が違う並列 layer (例: `sync_X_*` と `sync_Y_*` のように名前が似ていても叩く endpoint と sync 対象が違う) の可能性があるため。判別不能ならユーザーに確認する
 - 周辺コードの共通化・抽象化（重複ロジックの統合、共通パターンの抽出）
 
 ## スコープ判断

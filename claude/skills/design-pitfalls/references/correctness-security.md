@@ -42,7 +42,7 @@ allowlist / 認可 / 入力検証で reject した時、reject 理由（種別 e
 
 「Bearer / Cookie / 認証なし」のような複数の認証経路を持つ API で、CORS allowlist や CSRF Origin 検証を **全経路一律** に適用すると、経路ごとの脅威モデルの違いを無視して誤判定する。Bearer token 経路は browser CORS レールに乗らない（Authorization ヘッダ自体が認可の証明、credentials は cookie ではない）ので CORS / CSRF 検証は意味を持たない。Cookie 経路だけが CSRF の対象（被害者の browser に勝手に credentials を持たせて第三者 origin から発火させる攻撃モデル）。
 
-経路判定（例: `event.locals.isDesktopClient = authHeader?.startsWith('Bearer ')`）を 1 箇所の SSOT に置き、その値で `if (cookiePath) { allowlist 検証 } else { skip }` のように discriminate する。「全 request に CORS ヘッダを反射する」ような経路無視の実装は、Bearer 経路に不要な反射を出して脅威面を広げる。
+経路判定（例: `isBearerAuth = authHeader?.startsWith('Bearer ')` を context / middleware で 1 度評価）を 1 箇所の SSOT に置き、その値で `if (cookiePath) { allowlist 検証 } else { skip }` のように discriminate する。「全 request に CORS ヘッダを反射する」ような経路無視の実装は、Bearer 経路に不要な反射を出して脅威面を広げる。
 
 ### 反射型 CORS + credentials は CSRF の前段リスク
 
@@ -89,3 +89,12 @@ if (!service) {
 ```
 
 判定: 「config が抜けたとき、(a) attacker が gate を素通りする / (b) ユーザーが何も触れない の被害が大きいのはどちらか？」を自問する。production は (a)、dev は (b) が大きいケースが多いので極性が反転する。境界 polarity（allowlist vs denylist）と同じく「リストに書き忘れた場合 safe か？」の判定を **環境ごとに別答え** で持つ設計。dev で fail-open にする場合も「dev は permissive、production は restrictive」を 1 行の `if (!dev)` で表現し、condition の引数を増やさない（環境分岐は単一フラグに集約）。
+
+## 双方向参照を持つ load 経路は fire-and-forget で cycle を断つ
+
+loading-state を共有 promise として持つモジュール（一度走った load の promise を 2 回目以降の caller が `await` で待つ仕組み）が、参照関係で互いを load し合うと、A→B / B→A の `await` が循環して deadlock する。A の load 完了 hook の中で B を `await load` する経路を作らない。先読み / catch-up / warm up 系の経路は **意図的に fire-and-forget で kick off** し、整合性が必須な経路（ユーザー click / jump 等）で個別に `await load` して fresh state を取る、という二段構造に倒す。
+
+判定: 「A の load 完了の中で B を load する経路があるか？ かつ B 側にも同じ経路があるか？」を双方向で自問。Yes なら低優先度の経路（preload / catch-up）を fire-and-forget に倒し、cycle を断つ。
+
+例: ✅ Good — preload 系関数は `void ensureLoaded(refId)` で kick off のみ。ユーザー操作 (jump / open) 側で別途 `await ensureLoaded(targetId)` して fresh state を取る。
+例: ❌ Bad — load 完了 hook の末尾で参照先 entity を `await ensureLoaded` で warm up。mutual ref（A が B を参照、B が A を参照）で共有 loading promise の await が循環し deadlock。

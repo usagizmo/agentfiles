@@ -5,7 +5,9 @@ description: >
   cache event-driven update と view-binning の分離、SSOT positive/negative gate、
   正誤判定の独立 proof、setup+verify 統合、派生 struct field-by-field copy、
   追加系 API の helper-internal gate、クロスプロセス SSOT drift、観測軸が異なる出力 channel、
-  機械 caller 向け error 応答 / truncate-safe doc など、設計上の典型的な落とし穴の詳細解説。
+  機械 caller 向け error 応答 / truncate-safe doc、
+  lock 内副作用回避 (分類 / 副作用 2 フェーズ分離)、flag と外部観測状態の併用
+  など、設計上の典型的な落とし穴の詳細解説。
   rules `design-principles.md` に各項目の見出しと 1 行サマリだけ常駐し、詳細は本 skill に集約。
   設計レビュー / 落とし穴の判定 / 詳細根拠が必要なときに使う。
   本 skill は全プロジェクト共通の抽象原則のみを扱う。プロジェクト固有の事例集は各プロジェクト側の skill を参照。
@@ -13,54 +15,64 @@ description: >
 
 # 設計の落とし穴（index）
 
-各落とし穴の詳細・判定基準・例は `references/` 配下に分割。該当するテーマだけを Read して読み込む。
+詳細・判定基準・例は `references/` 配下。該当テーマだけを Read する。
 
-実際のプロジェクトで踏んだ事例（war story）は各プロジェクトの skill に保管し、本 skill はどのドメインからも参照できる粒度に保つ。
+実プロジェクトで踏んだ war story は各プロジェクト側 skill に保管し、本 skill はドメイン非依存の粒度に保つ。
 
-## 型システム / SSOT 派生 — `references/type-system.md`
+## `references/type-system.md` — 型システム / SSOT 派生
 
-- **軸が異なる値を同じ enum / union に混ぜない** — 軸を混ぜると `Exclude` の応酬で nested 型が unknown に落ちる。軸ごとに union を分け外側で discriminate
-- **公開 surface と実装層は migration コストの非対称性で軸を分ける** — surface は dispatch table 1 つで rename 完了、実装層 (DB / event key / migration) は version 互換が要る
-- **スキーマライブラリが表現できるものは手書きしない** — `serde(tag, rename_all)` / Valibot `v.variant` / `v.transform` で表現できるものを手書き `to_json()` で書かない
-- **SSOT は契約層に置き、利用側は派生させる** — schema を contracts に集約、利用側は `v.InferOutput<...>` / `typeof XXX[number]` で派生
-- **関数 surface も入力軸ごとに分ける** — `f(string | object)` を `typeof` で dispatch しない。surface 名を別関数に分ける
+- 軸が異なる値を同じ enum / union に混ぜない
+- 公開 surface と実装層は migration コストの非対称性で軸を分ける
+- スキーマライブラリが表現できるものは手書きしない
+- SSOT は契約層に置き、利用側は派生させる
+- 関数 surface も入力軸ごとに分ける
 
-## 状態の所有 / orchestration / 通知 / cache — `references/state-orchestration.md`
+## `references/state-orchestration.md` — 状態の所有 / orchestration / 通知 / cache
 
-- **実行時状態の持ち主は 1 箇所に集約し、consumer は引数で受け取る** — load / persist / mutate 入口が 2 箇所以上ならメモリ整合が壊れる
-- **orchestration は event source に近い側で所有する** — debounce / coalescing / retry を event source から遠いレイヤに置くと中継 IPC・ライフサイクル依存・トリガ重複を生む
-- **変更通知は discriminated union で fan-out する** — 情報量ゼロの `onChange()` は全 reload を強制する。差分（kind / before / after）を同梱
-- **cache は event 駆動で常に最新化、view-binning は UX 境界で gate する** — sort / group key にしている field を event で null 上書きしない。`existing?.field ?? next.field` で preserve、re-bin は `refresh()` 1 関数に集約
+- 実行時状態の持ち主は 1 箇所に集約し、consumer は引数で受け取る
+- 同じ collection を走査する propagation は走査骨格を helper 1 本に集約する
+- 対象を取る command / handler の入口は target を明示パラメータで受ける
+- orchestration は event source に近い側で所有する
+- 変更通知は discriminated union で fan-out する
+- cache は event 駆動で常に最新化、view-binning は UX 境界で gate する
+- cache / 展開状態 / in-flight token は 1 つの invalidate 入口で同時 purge する
+- 非同期 read-then-commit pipeline は monotonic global token で commit gate する
+- RMW merge は previous の diff を 3 軸目に持つ（append-only ロジックを CRUD に流用しない）
+- lock 内では分類のみ実行し、副作用関数は lock 解放後に呼ぶ
+- flag は時間軸の状態のみ。「self / external」識別は外部の観測可能な状態と併用する
 
-## 名前空間 / 不変条件 / 境界の極性 — `references/naming-validation.md`
+## `references/naming-validation.md` — 名前空間 / 不変条件 / 境界の極性
 
-- **同じ名前空間に異なる責務を混ぜない** — モジュール名 / prefix / ディレクトリに複数軸を共存させない
-- **不変条件の検証は条件分岐より上の層に置く** — `#[cfg(unix)]` / `if (platform === 'X')` の内側ではなく外側（共通エントリ）に置く
-- **境界の極性はプロダクトの意図に合わせる** — 「リストに書き忘れた場合 safe か？」を自問し safe 側をデフォルトにする
-- **集合 SSOT は positive list と negative list の両端で gate する** — 入れ忘れ検証と誤投入検証は別軸の gate が必要
+- 同じ名前空間に異なる責務を混ぜない
+- 不変条件の検証は条件分岐より上の層に置く
+- 境界の極性はプロダクトの意図に合わせる
+- 集合 SSOT は positive list と negative list の両端で gate する
 
-## 正誤判定 / setup+verify / プラットフォームレール — `references/correctness-security.md`
+## `references/correctness-security.md` — 正誤判定 / setup+verify / プラットフォームレール / 認証経路
 
-- **正誤判定は独立した cheap proof で行う** — 鍵 / トークンの正誤を副作用の成否で間接判定しない。HMAC / 署名で deterministic に判定
-- **setup + verify を同じ API に統合する** — 内部状態の問題を caller に漏らさない。1 surface 内で `None` / `Some + valid` / `Some + invalid` / `Some + stale` を分岐
-- **プラットフォームの推奨レールから外れない** — 公式構造があるなら独自並行構造を作らない
-- **セキュリティ validation のエラー応答は外向き generic / 内向き構造化に軸分離する** — 種別を返すと allowlist / 認可境界を attacker に enumerate される。クライアント返却は単一 generic 文言、構造化情報は server log のみ
-- **並列 counter check は INSERT-then-check + ROLLBACK で atomic にする** — `SELECT count → if ok INSERT` は 2-step の時間窓で上限を 1 件突破する。write tx 内で「INSERT 予約 → count → 超過なら throw で rollback」に倒し、DB の write lock に serial 化を任せる
-- **fail-open / fail-closed のスイッチは環境で明示分岐する** — production は config 漏れで gate が無言で無効化されるのを防ぐため fail-closed、dev / test は開発体験のため fail-open。極性の判定は **環境ごとに別答え** を持ち、`if (!dev)` 単一フラグに集約する
-- **CORS / CSRF は認証経路ごとに検証軸を分ける** — Bearer 経路は browser CORS レールに乗らないので検証スキップ、Cookie 経路だけが CSRF 対象。`isDesktopClient` のような経路 SSOT で discriminate し、全 request に CORS ヘッダを反射しない。反射型 CORS + credentials true は CSRF 前段リスク。Origin 不在 = browser 起点ではない（server-to-server）なので state-changing method でも通す（各 endpoint が HMAC / signature で別軸防御）
+- 正誤判定は独立した cheap proof で行う
+- setup + verify を同じ API に統合する
+- プラットフォームの推奨レールから外れない
+- セキュリティ validation のエラー応答は外向き generic / 内向き構造化に軸分離する
+- 並列 counter check は INSERT-then-check + ROLLBACK で atomic にする
+- fail-open / fail-closed のスイッチは環境で明示分岐する
+- 双方向参照を持つ load 経路は fire-and-forget で cycle を断つ
+- CORS / CSRF は認証経路ごとに検証軸を分ける
+- CSP allowlist は実態に合わせて最小化、先取り allow をしない
+- inline は CSP の主敵 → 静的化できるなら codegen で外す
 
-## 派生 struct / 追加系 API — `references/struct-api.md`
+## `references/struct-api.md` — 派生 struct / 追加系 API
 
-- **派生 struct への field-by-field copy で field を silent に drop しない** — `B = A + extra` の包含構造、または `impl From<A> for B` + rest pattern で守る
-- **追加系 API の前提条件 gate は caller ではなく helper の内側に置く** — `RequestBuilder::header` のような append API は protected key を helper 内で弾く
+- 派生 struct への field-by-field copy で field を silent に drop しない
+- 追加系 API の前提条件 gate は caller ではなく helper の内側に置く
 
-## クロスプロセス契約 — `references/cross-process.md`
+## `references/cross-process.md` — クロスプロセス契約
 
-- **クロスプロセス SSOT の drift は test 文字列 pin + 相互参照コメントで二重 gate** — 3 端以上に拡散したら literal の owner を 1 端に絞る (build-time codegen)
-- **クロスプロセス契約は fail-closed に寄せる** — silent default で drift する SDK 最適化を許容しない。発行側で必須要素を強制注入し、受信側が同値を再送しないと実行時エラーになる極性に倒す
+- クロスプロセス SSOT の drift は test 文字列 pin + 相互参照コメントで二重 gate
+- クロスプロセス契約は fail-closed に寄せる
 
-## 出力チャネル / 機械 caller 向け応答 — `references/output-channels.md`
+## `references/output-channels.md` — 出力チャネル / 機械 caller 向け応答
 
-- **観測軸が異なる出力チャネルは混ぜない** — 人間 UI / 機械 caller / 下流 pipeline は別 surface
-- **機械 caller 向け error 応答は self-repair に必要な情報量を同梱する** — underlying error + hint + minimal example JSON。catalog 集約方式 + positive/negative gate test
-- **機械 caller 向け doc は truncate-safe に書く** — 冒頭 N 字 (~1000) に signature / invariant / minimal example を揃える
+- 観測軸が異なる出力チャネルは混ぜない
+- 機械 caller 向け error 応答は self-repair に必要な情報量を同梱する
+- 機械 caller 向け doc は truncate-safe に書く
