@@ -16,6 +16,28 @@ field copy の silent drop・追加系 API の前提条件 gate。
 
 判定: 「この struct A に新 field が増えたとき、その field が B / C / D に正しく伝搬しないと何が壊れるか？」を自問し、silent に脱落する経路があるなら 1 / 2 で構造的に守る。
 
+## runtime context が必要な API は `async fn` 化で caller に明示要求する
+
+`tokio::spawn` / `tokio::net::TcpListener::from_std` / `tokio::time::interval` のように **ambient runtime handle (`Handle::current()`)** に依存する API を内部で呼ぶ関数を `pub fn` で sync として公開すると、runtime context 外（main thread の setup フック、cli の main、テストの top-level 等）から呼んだ瞬間に `there is no reactor running` で panic する。`async fn body 内で `.await` を 1 つも使わない場合でも、関数を `pub async fn` で宣言する**だけで caller に「await するか `block_on` で wrap するか」を強制でき、context 不整合を型レベルで防げる。
+
+```rust
+// ❌ Bad — sync 公開で context 外から呼ばれて panic
+pub fn start(port: u16) -> Result<Self, io::Error> {
+    let listener = tokio::net::TcpListener::from_std(std_listener)?; // panics
+    tokio::spawn(async move { ... });
+    ...
+}
+
+// ✅ Good — async fn で caller に runtime 接続を明示要求
+pub async fn start(port: u16) -> Result<Self, io::Error> {
+    let listener = tokio::net::TcpListener::from_std(std_listener)?;
+    tokio::spawn(async move { ... });
+    ...
+}
+```
+
+判定: 「この関数 body は ambient runtime に依存しているか？（`Handle::current()` を直接 / 間接的に呼ぶ API を使うか？）」を自問。Yes なら `async fn` に倒し、docstring に「caller の責務: runtime context 内から呼ぶこと」を併記する。`async fn` 化は実行時オーバーヘッドゼロで型 contract が増えるだけ。
+
 ## 追加系 API の前提条件 gate は caller ではなく helper の内側に置く
 
 `reqwest::RequestBuilder::header(k, v)`、`Map::push`、`Vec::extend`、SQL の `INSERT` 等、**同じキーで呼んでも上書きせず append される追加系 API** を helper / abstraction の入口で扱うとき、前提条件（protected key の除外、空値の skip、サイズ上限の enforcement 等）を caller に委ねると、新しい caller が gate を呼び忘れた瞬間に silent fail / silent privilege escalation が起きる。

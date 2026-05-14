@@ -22,6 +22,7 @@ description: >
 ## `references/type-system.md` — 型システム / SSOT 派生
 
 - 軸が異なる値を同じ enum / union に混ぜない
+- variant / constructor の命名軸は経路名ではなく機能軸で取る
 - 公開 surface と実装層は migration コストの非対称性で軸を分ける
 - スキーマライブラリが表現できるものは手書きしない
 - SSOT は契約層に置き、利用側は派生させる
@@ -31,10 +32,12 @@ description: >
 
 - 実行時状態の持ち主は 1 箇所に集約し、consumer は引数で受け取る
 - 同じ collection を走査する propagation は走査骨格を helper 1 本に集約する
+- 並列 init path に inline bind を重複して書かない (one-time setup と per-execution reset を別 helper に分ける)
 - 対象を取る command / handler の入口は target を明示パラメータで受ける
 - orchestration は event source に近い側で所有する
 - 変更通知は discriminated union で fan-out する
 - cache は event 駆動で常に最新化、view-binning は UX 境界で gate する
+- lazy singleton cache は success だけ永続 cache、rejection は捨てる
 - cache / 展開状態 / in-flight token は 1 つの invalidate 入口で同時 purge する
 - 非同期 read-then-commit pipeline は monotonic global token で commit gate する
 - RMW merge は previous の diff を 3 軸目に持つ（append-only ロジックを CRUD に流用しない）
@@ -58,12 +61,14 @@ description: >
 - fail-open / fail-closed のスイッチは環境で明示分岐する
 - 双方向参照を持つ load 経路は fire-and-forget で cycle を断つ
 - CORS / CSRF は認証経路ごとに検証軸を分ける
+- build 時に値が不明な allowlist は runtime narrow gate で締める（CSP wide + navigation exact の二段 gate）
 - CSP allowlist は実態に合わせて最小化、先取り allow をしない
 - inline は CSP の主敵 → 静的化できるなら codegen で外す
 
 ## `references/struct-api.md` — 派生 struct / 追加系 API
 
 - 派生 struct への field-by-field copy で field を silent に drop しない
+- runtime context が必要な API は `async fn` 化で caller に明示要求する
 - 追加系 API の前提条件 gate は caller ではなく helper の内側に置く
 
 ## `references/cross-process.md` — クロスプロセス契約
@@ -74,5 +79,6 @@ description: >
 ## `references/output-channels.md` — 出力チャネル / 機械 caller 向け応答
 
 - 観測軸が異なる出力チャネルは混ぜない
+- 出力 channel の filter は produce 入口に置く、consume 出口に置かない
 - 機械 caller 向け error 応答は self-repair に必要な情報量を同梱する
 - 機械 caller 向け doc は truncate-safe に書く

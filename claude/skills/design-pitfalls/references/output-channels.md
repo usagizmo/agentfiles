@@ -17,6 +17,34 @@
 例: ✅ Good — `return value` が機械 caller に届く tool result、別 API（`render` 系）が UI に届く display、別 channel（`output(name, data)` 系）が下流 pipeline に届く named lane。3 surface とも独立で、互いに泥が飛ばない。
 例: ❌ Bad — `return { result, debug, ui }` で 1 channel に多重化し、caller 側で「自分に関係ない field は無視する契約」を docstring に書いて運用する。docstring 規約は型システムで守られないので必ず drift する。
 
+## 出力 channel の filter は produce 入口に置く、consume 出口に置かない
+
+「特定モードでこの channel への push を抑止したい」要件を、**channel 出口 (response 構築段階) で `vec![]` / `null` に固定して捨てる** 実装は、consumer 側から見て「producer が push しなかった」と「producer が push したが filter で捨てられた」を区別できず、commit ロジックの bug が silent failure として現れる。debug でも「なぜ届かないか」が producer 内部 (push site) と response 構築 (filter site) の 2 箇所に分散していて辿れない。
+
+正しい polarity は **push site に gate を置く**: 「mode が X のときは push しない」を produce する関数の入口で 1 箇所だけ判定する。channel は produce されたものをそのまま consume 側に届ける。「push しない = 返らない = 受け取らない」が単方向で一貫し、consumer は「届いた = 想定通り produce された」と信頼できる。
+
+判定: 「この filter の存在を知らない consumer が想定外の動作をしたとき、どこから debug を始めるか？」を自問。produce site なら 1 箇所だけ見ればよい。consume site の手前で捨てる設計は、consumer / push site / 捨て site の 3 箇所を見る必要があり、捨て site は consumer から見えないので根本原因に到達するまで時間がかかる。
+
+例 (実行モード別に display 出力を抑止する):
+
+```rust
+// ❌ Bad — channel 出口で捨てる。consumer (UI が append すべき出力) が
+// 受け取れず、なぜ反映されないか debug 不可能
+output: if mode == Mode::Quiet { vec![] } else { result.output },
+```
+
+```js
+// ✅ Good — push site に gate。条件下では push 自体を skip。
+// consumer は received output をそのまま append、produce されたかどうかは
+// push site だけ見れば分かる
+function pushOutput(o) {
+  if (suppressOutput()) return;
+  outputBuffer.push(o);
+}
+```
+
+複数の channel (lane 出力 / display 出力 / log) で同じ条件式を要求する場合も、共通化より「各 push site に同じ条件式を書く」を優先する。push 先 storage が違う = 軸が違うので、共通 helper にまとめると call site で「どの channel に push しないか」が読めなくなる。
+
 ## 機械 caller 向け error 応答は self-repair に必要な情報量を同梱する
 
 LLM / 別プロセス / RPC など「機械 caller」が自律的にリトライする境界で、validation error を underlying serializer / parser の素エラー (`unknown field "X", expected one of "a", "b", ...`) のまま返すと、caller は「次に何を書けば動くか」を文字列推測に頼ることになり、同じ誤りで再試行ループに入る。特に LLM caller は「expected one of ...」を読んでも、自分の context window に残る最初の hallucination パターンに引きずられて同じ field 名を書き直しがち。

@@ -6,6 +6,17 @@
 
 discriminated union の variant は「同一の軸」上の分類でなければならない。「種別」と「伝搬形態」と「不在」など異なる次元を同じ union に混ぜると、境界ごとに `Exclude` が必要になり、nested 情報の型が unknown に落ちる。異なる軸は外側で discriminate し、各軸内で独立した union として閉じる。
 
+## variant / constructor の命名軸は経路名ではなく機能軸で取る
+
+discriminated union の variant 名、struct constructor 名 (`for_X` / `non_X` / `from_X`)、enum case 名を「呼び出し経路の名前」(`for_cli` / `for_http` / `for_job`) で取ると、将来「経路 A でも機能 B を扱う」第 3 ケースが来たとき軸が崩れる。「機能軸」(`read_only` / `mutating`、`non_tx` / `in_tx`) で取れば、経路は組み合わせとして導出される。
+
+判定: 「この variant 名を、後から第 3 ケースが来たら何と命名する？」を自問。経路名軸だと「`for_X` の中で『B でない』ケース」のような曖昧な分類になる。機能軸だと「`non_X` を共有して、別軸 (Y / Z) は外側で discriminate」と明示できる。
+
+例: ✅ Good — `Operation::ReadOnly(...)` / `Operation::Mutating(...)`。「副作用の有無」という機能軸。CLI 経路の参照系も HTTP 経路の参照系も同じ `ReadOnly` を共有し、新経路 (job runner / scheduled task 等) が増えても軸は崩れない。
+例: ❌ Bad — `Operation::FromCli(...)` / `Operation::FromHttp(...)`。「経路」軸。CLI も HTTP も内部で read / write 両方を扱う事実が名前から読めず、将来「HTTP で mutation を解禁」「CLI に read-only モードを追加」が来たとき名前と意味が drift する。
+
+関連: ファイル名 / モジュール名 / ディレクトリ名も同じ。識別子名は「何をするか」(機能軸) で取り「どこから呼ばれるか」(経路軸) では取らない。同じ機能を複数経路で共有できる事実を名前から読めるようにする。
+
 ## 公開 surface と実装層は migration コストの非対称性で軸を分ける
 
 同じドメインでも、公開 surface（IPC method 名 / CLI command / URL path）と実装層（DB column / event key / module ディレクトリ）では rename コストが非対称。surface は dispatch table を 1 つ書き換えれば終わるが、実装層 (DB column / event key / migration を伴う file 名) は version compatibility / migration script が要る。drift を恐れて全層を一斉 rename しようとせず、層ごとに rename タイミングを分けて良い。

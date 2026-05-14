@@ -18,6 +18,25 @@ state owner が持つ collection (`Map<id, store>` 等) に対して複数の pr
 
 判定: 「同じ collection を、同じ skip 条件 chain で走査する関数が 2 つ以上あるか？」を自問。Yes なら走査骨格を helper に切り出し、call site は mutation 差分だけを書く設計に倒す。新しい propagation 関数を増やすたびに 5 行の skip 条件をコピーしないこと。
 
+## 並列 init path に inline bind を重複して書かない (one-time setup と per-execution reset を別 helper に分ける)
+
+「同じ runtime contract (例: embedded script engine の global register / DB schema apply / IPC handler 登録 / mock injection) を bind する init path が物理的に 2 本以上ある」ときは、bind を inline で重複して書かず共通 helper に SSOT 化する。新しい contract を追加するとき、片方の init path にだけ追加して drift する事故が必ず起きる。
+
+具体例: 「1 回限り使い捨ての runtime」と「複数 execution で reuse する runtime」(あるいは「per-request new connection」と「pooled connection」) のように物理的に並列な init path を持つケース。両 path で inline に同じ register block を書くと、新しい binding を追加する PR が片方にしか触らず、もう片方の経路で `not defined` 系 runtime error が出る。
+
+判定: 「同じ contract を bind する init path が 2 本以上あるか？」を自問。Yes なら次の順で対処する:
+1. **経路を 1 本に統合できるなら統合する** (helper SSOT は経路本数が物理的に複数必要な場合の妥協策)。例: 「使い捨て path」を内部で「reuse path」を 1 回呼ぶだけにできるなら統合
+2. 統合できないなら、bind 行を `const SETUP: ... = "..."` / `fn register_X(...)` に切り出し、両 path から呼ぶ。helper の存在自体が次に追加する人への gate になる (helper のシグネチャを増やさないと binding は追加できない)
+3. **one-time setup と per-execution reset を別 helper に分ける**。同じ block に混ぜると、「再利用経路で setup を毎回再実行 (重複 / 性能劣化)」「使い捨て経路で reset 呼び忘れ」の drift が起きる。具体的には:
+   - one-time: runtime 生存期間中 stable な register (関数 binding / schema 定義 / handler 登録 / bridge 設置)
+   - per-execution: バッファのリセット、per-call context (実行 ID / input / 認証情報 / trigger 種別) の inject
+
+例: ✅ Good — `register_runtime_globals(ctx)` (one-time) + `reset_execution_state(ctx)` (per-execution) + `set_execution_input(ctx, input)` (per-execution) に分け、`run_once = register + reset + input + body`、`init_pool = register のみ`、`run_in_pool = reset + input + body` と組み立てる。3 経路すべてが同一シーケンスに揃う。
+
+例: ❌ Bad — `run_once` と `init_pool` の中で 2 つの似た register block を inline で書く。新 binding 追加 PR が片方にしか追加されず drift。
+
+regression test の張り方: 「片方の init path で動く」test は drift を catch しない。**両方の init path をそれぞれ exercise する test を pin として持つ** (例: `pool_path_binds_X_so_Y_works` のように経路と機能の組み合わせを名前に出す)。helper 化した後でも、helper を呼び忘れたケースを catch するために pin が必要。
+
 ## 対象を取る command / handler の入口は target を明示パラメータで受ける（implicit "current active" を黙って読まない）
 
 per-row context menu / clicked tab / selected list item など、「ユーザーがクリックした対象」を起点に走る command は、target id / path を **caller が明示パラメータで渡す**。command 内で `manager.activeXxx` / `store.currentXxx` のような **implicit "current active" state を黙って読み込むと**、clicked target と active target がズレた瞬間に wrong-target で実行される silent bug を生む。
@@ -64,6 +83,33 @@ SSOT になる in-memory cache（entity を ID で索引化した Map 等）は 
 例: ✅ Good — entity changed event で ID-keyed Map を最新化するが、sort key 用の timestamp field は `existing?.field ?? next.field` で preserve（既存値があれば位置 jump を防ぎ、null なら新タイムスタンプを採用）。Set 移動は `refresh()` でのみ起きる。
 例: ❌ Bad — `existing ? { ...next, field: existing.field } : next`。existing.field が null のときに新値を捨ててしまい、初回遷移で全件 "No timestamp" group に集約される逆向きの故障。
 例: ❌ Bad — event で sort key field を `null` で即上書きし、Set 移動も即実行する。操作直後に行が視界から消えてユーザーが「何が起きたか」を見失う。
+
+## lazy singleton cache は success だけ永続 cache、rejection は捨てて再試行可能にする
+
+「app 起動中固定の値を IPC で 1 度だけ取って以降は cached promise を返す」 lazy singleton（render server URL、daemon 設定、user profile 等の一度きり init data）で、**rejection した promise も永続 cache すると、初期化順 race で 1 度失敗したら復旧できない**。Tauri setup での state 登録が WebView load より遅れる、daemon 接続が起動直後に間に合わない等の transient な失敗で、その後の全 consumer が永続的に rejected を握る故障モード。
+
+正しい polarity: **成功した promise だけ永続 cache、rejection は cache を捨てる**。最初の caller は失敗を観測するが、次の caller (= 次の component mount / 次の invoke) は新しい promise を試せる。「再試行」の責務を caller に委ねず cache layer 側で「次回呼び出しは init からやり直す」を表現する。
+
+```ts
+let cached: Promise<T> | undefined;
+
+export function getValue(): Promise<T> {
+  if (!cached) {
+    const pending = invokeOnce();
+    cached = pending;
+    // rejection 時は cache を捨てる。pending を await 中の caller は失敗を観測するが、
+    // 次の getValue() 呼び出しは新しい invoke を発火できる。
+    pending.catch(() => {
+      if (cached === pending) cached = undefined;
+    });
+  }
+  return cached;
+}
+```
+
+判定: 「この cache は初期化 race / transient failure からの自己復旧が必要か？」を自問。Yes（init 順依存・daemon 接続待ち・filesystem 一時的 unavailable 等）なら success-only cache に倒す。No（pure 計算結果 / 同一入力で常に同じ結果）なら rejection も含めて cache してよい。
+
+注意: `pending.catch(...)` での cache clear は **pending を直接 await している caller の rejection 観測を妨げない**（`pending.catch(handler)` は新しい promise を返すだけで元 promise の状態を変えない）。catch handler 内の `if (cached === pending)` は、catch が走るまでの間に別の caller が成功 invoke を cache に上書きしているケース（極稀）を守る。
 
 ## cache / 展開状態 / in-flight token は 1 つの invalidate 入口で同時 purge する
 

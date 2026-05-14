@@ -54,6 +54,14 @@ CSRF 対策で「Origin が allowlist 外なら拒否」を実装するとき、
 
 判定: state-changing method（POST / PUT / PATCH / DELETE）で `Origin` ヘッダが **存在し かつ allowlist 外** のときだけ拒否。`Origin === undefined` は通す。GET / HEAD / OPTIONS は state を変えないので対象外（OPTIONS は preflight 用に別経路で allowlist 検証）。
 
+## build 時に値が不明な allowlist は runtime narrow gate で締める（CSP wide + navigation exact の二段 gate）
+
+CSP / origin allowlist 等の許可リストには build 時に決定する宣言と、runtime まで値が決まらないリソースの両方が現れる。例: WebView の `frame-src` は build (manifest / config) 時に決定するが、loopback HTTP server を `127.0.0.1:0` で ephemeral port にすると **bind するまで実 port が分からない**。CSP は `http://127.0.0.1:*` 等の wildcard で広く書かざるを得ない。
+
+このとき「CSP wide = 攻撃面 wide」と諦めず、**runtime に値が分かる時点で別 gate を狭く絞る** 設計に倒す。たとえば Tauri の `on_navigation` ハンドラは runtime で実 bind URL を知っているので、`url == "http://127.0.0.1:<実 port>/index.html"` の **完全一致** だけを通す closure を作る。CSP（build 時）と navigation gate（runtime）の二段で gate し、defense-in-depth を保つ。
+
+判定: 「この allowlist は build 時に最終値が決まるか？」を自問する。No（runtime に決まる）なら、build 時宣言は wildcard で許容しつつ、runtime に実値が分かるレイヤーで別 gate を入れる。runtime gate を入れずに build 宣言だけ wide にすると、攻撃面は build 宣言の wildcard 幅で固定される。「先取り allow をしない」原則と同じ動機（不要な surface を開けない）を、別の時間軸（runtime）で適用する。
+
 ## CSP allowlist は実態に合わせて最小化、先取り allow をしない
 
 Content-Security-Policy の `script-src` / `connect-src` / `img-src` / `font-src` 等の allowlist に「将来使うかも」で外部 origin を先取りで載せると、攻撃面を実装の現状より広げる。CSP の価値は「実際にロードしている origin だけ許可する」ことで、未使用 origin を追加した瞬間にその origin への redirect / DNS 乗っ取り / sub-resource hijack を新しい攻撃ベクタとして開放する (実害がなければ気付かない silent な攻撃面拡大)。
