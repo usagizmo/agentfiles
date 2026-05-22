@@ -2,6 +2,23 @@
 
 観測軸ごとの surface 分離・error 応答の self-repair 情報・truncate-safe doc。
 
+## 通知 channel は subscriber がある軸だけ用意する
+
+「種別 × ライフサイクル」のような 2 軸テーブルで event / topic / channel を切るとき、全 cell に対称的に通知を用意したくなるが、**subscriber が 0 件の cell では emit 自体しない**。
+
+理由:
+
+- subscriber 0 件の channel は dead code として残り続ける（emit 側 / relay 配線 / 型定義の 3 箇所が無用に存在）
+- future engineer が「全軸で event を出すのが規約」と読み、新軸を足すたびに dead event を増やす
+- payload 設計の根拠も失われる（subscriber が居ないので「何を載せるか」の規範が無く、ハッタリの field を載せがち）
+
+判定: 通知を足す前に「実際にこの event を subscribe する consumer はどこか？」を必ず確認する。internal trigger（debounce 入口 / background worker 起動）と external event（UI / cross-process 通知）は別軸で、trigger は subscriber 不問で必要、event は subscriber が居る軸でだけ必要。一方の都合で他方を量産しない。
+
+対称性は美しさではなく **実際の consumer 構造に従う**。非対称が正解の場合は素直に非対称を docs に書く（「`X` / `Y` 軸は subscriber が居ないため event を持たない」と明示）。trigger と event を「同じ入口で同時に撃つ」設計にした場合は、入口関数の中で event key を `Option` で持ち、`Some(key)` の軸だけ emit する形に閉じ込めるとサブセット非対称を型レベルで表現できる。
+
+例: ✅ Good — 4 軸 × 4 ライフサイクル名目テーブルのうち、UI が subscribe する 2 cell だけ event を emit し、残りは push trigger としてだけ Rust 内部で機能する。dispatcher は `Option<&str>` で event key を持つので「emit しない軸」が型で見える。
+例: ❌ Bad — 16 cell すべてに event key と payload schema を用意し、subscriber が居る cell が 5 個だけだが「将来のため」全部 relay 配線する。新 contributor が「全軸で event を出すべき」と誤読し、新カテゴリを足すたびに dead event を増やす。
+
 ## 観測軸が異なる出力チャネルは混ぜない（caller 種別ごとに別 surface に分ける）
 
 同じ関数の出力でも、誰が観測するか（人間 UI / 機械 caller / 下流 pipeline）によって観測軸が違うなら、**1 つの戻り値 / log stream に多重化しない**。観測軸を 1 channel に潰すと、(1) 機械 caller が UI 装飾を parse する hack が生まれる、(2) 人間が機械向け payload を読まされる、(3) 下流 routing が想定外 field に反応する誤発火、が起きる。
