@@ -46,6 +46,9 @@
 /codex/auth.json
 /codex/cache
 /codex/config.toml
+/codex/goals_*.sqlite
+/codex/goals_*.sqlite-shm
+/codex/goals_*.sqlite-wal
 /codex/history.jsonl
 /codex/installation_id
 /codex/log
