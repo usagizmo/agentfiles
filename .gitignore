@@ -73,3 +73,26 @@
 
 # agents
 /agents/skills
+
+# cursor
+/cursor/.DS_Store
+/cursor/.gitignore
+/cursor/mcp.json
+/cursor/argv.json
+/cursor/cli-config.json
+/cursor/agent-cli-state.json
+/cursor/ai-tracking
+/cursor/browser-logs
+/cursor/chats
+/cursor/debug-logs
+/cursor/extensions
+/cursor/ide_state.json
+/cursor/plans
+/cursor/plugins
+/cursor/projects
+/cursor/prompt_history.json
+/cursor/skills
+/cursor/skills-cursor
+/cursor/snapshots
+/cursor/statsig-cache.json
+/cursor/worktrees
