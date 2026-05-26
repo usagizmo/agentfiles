@@ -17,6 +17,15 @@
   - dead 判定は grep / 棚卸し agent の結果だけでなく、caller chain を実コード (`Read`) で辿って確認する。同じ prefix / 命名規則を持つ API でも責務軸が違う並列 layer (例: `sync_X_*` と `sync_Y_*` のように名前が似ていても叩く endpoint と sync 対象が違う) の可能性があるため。判別不能ならユーザーに確認する
 - 周辺コードの共通化・抽象化（重複ロジックの統合、共通パターンの抽出）
 
+## sub-agent への作業委任
+
+agent に大量 entry の機械的変換 (一括 rename / 構造化 migration 等) を委ねるときは、spec を以下の軸で書く:
+
+- **機械的変換** (パターン置換・enum variant 移行) と **judgment-heavy 作業** (実体型を Params struct から読んで refine する / dead 判定 / reason 文言を書く) は **1 task に混ぜない**。混ぜると agent は低 precision の方に倒れ、judgment-heavy 側が placeholder (`"unknown"` / `"TODO"` / 同一文言の reason) で素通りする
+- 必要 precision を spec に明示する。「Params struct を読んで実型を埋める」「placeholder のまま残さない」「reason は entry 個別の rationale」のような expectation を literal で書く
+- 大量 entry の同名 placeholder (`"Step 3c migration placeholder"` / `ts_type: "unknown"` 等) が残る経路は、commit 直後に `git grep` で検出して必ず潰す。tidy phase まで残すと当該 commit に永続化される
+- 機械的変換と judgment-heavy を分離する場合は 2 task に分け、agent への spec も分ける (機械的変換 task → judgment-heavy refine task の順)
+
 ## スコープ判断
 
 周辺改善の変更が大きくなりそうな場合:
