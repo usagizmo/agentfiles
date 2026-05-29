@@ -10,6 +10,7 @@
 /claude/history.jsonl
 /claude/ide
 /claude/.last-cleanup
+/claude/.last-update-result.json
 /claude/mcp-needs-auth-cache.json
 /claude/paste-cache
 /claude/backups
@@ -55,6 +56,9 @@
 /codex/logs_*.sqlite
 /codex/logs_*.sqlite-shm
 /codex/logs_*.sqlite-wal
+/codex/memories_*.sqlite
+/codex/memories_*.sqlite-shm
+/codex/memories_*.sqlite-wal
 /codex/models_cache.json
 /codex/plugins
 /codex/rules
