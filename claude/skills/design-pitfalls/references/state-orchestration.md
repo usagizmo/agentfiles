@@ -129,6 +129,12 @@ export function getValue(): Promise<T> {
 
 注意: `pending.catch(...)` での cache clear は **pending を直接 await している caller の rejection 観測を妨げない**（`pending.catch(handler)` は新しい promise を返すだけで元 promise の状態を変えない）。catch handler 内の `if (cached === pending)` は、catch が走るまでの間に別の caller が成功 invoke を cache に上書きしているケース（極稀）を守る。
 
+## 時間ベースの expiry は reactive trigger にならない — read 境界の fail-closed と display 鮮度回復を 2 軸で持つ
+
+TTL を持つ cache を signal ベース reactive framework（Svelte Runes / Solid 等）で扱うとき、「読み取り時に `Date.now() - fetchedAt > TTL` を評価して stale なら undefined に倒す」read 境界は **imperative read（commit guard / capability 解決）には効く**が、**`$derived` 等の派生表示は時間経過だけでは再評価されない**（time は依存追跡の軸ではないため、cache field への代入が起きるまで stale 表示が残る）。
+
+正しさ（fail-closed: stale を gate / 表示に通さない）は read 境界が常時担保する一方、**表示の鮮度回復には TTL 到達時に明示 timer で `$state` を代入し expiry を reactive に起こす**必要がある。1 入口（`setCache` が timer を張り、到達時に cache=undefined + invalidation token bump）に集約し、mount 時の明示 invalidate のような呼び忘れ得る経路に依存させない。read 境界（read 時の TTL 判定）と reactive expiry（timer による state 代入）は **defense-in-depth の 2 軸**で、前者は timer 発火前（sleep 復帰の遅延等）を塞ぎ、後者は無操作時の表示更新を起こす。判定: 「TTL 超過の表示が、ユーザーが何も操作しなくても自動で消える / 更新される必要があるか？」が Yes なら timer/event による明示 state 変更が要る（read 境界だけでは不足）。
+
 ## 削除 / 送信 intent の outbox は一時的失敗で物理削除しない（backoff schedule で durable retain）
 
 remote 側に「削除して欲しい」「送信して欲しい」という intent を保持する local outbox（例: remote 同期対象の delete outbox / push queue）は、**一時的失敗（network / 429 / 5xx）と恒久的 ack（200 / 404 / 410）を異なる軸で扱う**。前者は attempts cap で物理削除してはいけない — 削除すると local の正本（trash / clear）と remote の状態が恒久的に分岐する。

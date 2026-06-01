@@ -36,3 +36,15 @@ serde の `#[serde(tag, rename_all)]`、Valibot の `v.variant` / `v.transform` 
 ## 関数 surface も入力軸ごとに分ける
 
 `f(string)` と `f(object)` を同一関数で受け、内部で `typeof` 判定して別ロジックに dispatch する設計は、(1) 型推論が `string | object` 起点になり caller 側の補完が弱い、(2) 引数取り違えが silent fail（誤った branch が走り戻り型だけ合う）、(3) 軸（生 SQL vs クエリ DSL、interval vs cron など）の違いが surface 名から消える。surface 名を別関数に分ける（例: `query(opts)` / `sql(sql, params)`、`trigger.interval(s)` / `trigger.cron(expr)`）。同じ動詞でも入力軸が違うなら名前を分ける。「軸が異なる値を同じ enum / union に混ぜない」の関数 surface 版。
+
+## 再生成可能な cache の派生 metadata は per-field tolerant に parse する（締めるのは SSOT 入力だけ）
+
+「Schema 境界は両端対称に締める」は **SSOT 入力**（ユーザー編集ファイル / IPC / API レスポンス）の話で、source of truth ではない **再生成可能な runtime cache**（recents / 展開状態 / 履歴 entry に同梱した外部 catalog 由来の派生メタ — 単価 / capability 等）には別軸で考える。cache 全体を 1 つの strict schema で `safeParse` し、失敗で `{}` に倒す設計だと、nested optional な派生メタ 1 フィールドが schema 進化で旧形式のまま残っただけで、無関係な兄弟フィールド（recents 等）まで連鎖破棄される。
+
+派生メタは `v.fallback(v.optional(X), undefined)` で per-field tolerant にし、**そのフィールドだけ drop して entry / cache 全体は残す**。締めるべきは外部境界の SSOT 入力、緩めてよいのは再生成可能な derived cache メタ、と軸を分ける。判定: 「この値が消えても再取得 / 再計算で復元できるか？ かつ同じ container に無関係な兄弟フィールドが居るか？」が Yes なら fallback で隔離する。これは「互換 shim を書かない」原則とは別物で、特定旧形式を変換するのではなく「未知形式を一律 drop」する一般則。回帰 test で「旧形式 1 件混入 → 当該フィールドだけ undefined・兄弟フィールド生存」の両方向を固定する（fallback を外す regression を構造的に防ぐ）。
+
+## 永続化する identity と volatile な派生 metadata は軸を分け、metadata は persist せず read 時に authoritative source から再水和する
+
+recents / 履歴のような「最近触れた entity」を永続化するとき、entity の **identity（`{id, name}` 等の不変キー）** と、その entity に紐づく **volatile な派生 metadata（pricing / capability / quota 等、別 source が権威で時間変化する値）** を同じ slot に同梱して保存しない。同梱すると (1) metadata が source 側の変化に追従できず stale 化する、(2) 同じ history slot を複数 context が共有する場合、ある context の metadata（例: ある算出方式の集計レンジ値）が別 context（別方式の確定値）へ slot 経由で混入する。
+
+設計の正解は **identity のみ persist し、metadata は read 時に authoritative runtime catalog から毎回再水和する**。書き込み入口（`addToHistory`）で identity に絞り、読み出し入口（`getHistory`）でも旧形式に残った metadata を落とす（identity-only を露出）。consumer（表示 / capability 解決）は authoritative catalog を毎回引いて metadata を組み立てる。前項「per-field tolerant に parse」が *保存はするが parse で drop* なのに対し、本項は *そもそも保存しない* 上位対策で、drift の起点と cross-context 混入を構造的に消す。判定: 「この値の権威 source は history slot 自身か、別の runtime catalog / API か？」が後者なら persist せず再水和に倒す。

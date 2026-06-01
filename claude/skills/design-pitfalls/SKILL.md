@@ -27,6 +27,7 @@ description: >
 - スキーマライブラリが表現できるものは手書きしない
 - SSOT は契約層に置き、利用側は派生させる
 - 関数 surface も入力軸ごとに分ける
+- 再生成可能な cache の派生 metadata は per-field tolerant に parse する（締めるのは SSOT 入力だけ）
 
 ## `references/state-orchestration.md` — 状態の所有 / orchestration / 通知 / cache
 
@@ -53,6 +54,7 @@ description: >
 
 ## `references/correctness-security.md` — 正誤判定 / setup+verify / プラットフォームレール / 認証経路
 
+- ユーザーに「上限 / ceiling」として見せる値は per-field の真の上限で出す
 - 正誤判定は独立した cheap proof で行う
 - setup + verify を同じ API に統合する
 - プラットフォームの推奨レールから外れない
