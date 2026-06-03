@@ -46,6 +46,8 @@
 /codex/archived_sessions
 /codex/auth.json
 /codex/cache
+/codex/chrome-native-hosts.json
+/codex/computer-use
 /codex/config.toml
 /codex/goals_*.sqlite
 /codex/goals_*.sqlite-shm
