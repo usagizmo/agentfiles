@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Edit",
+      "Glob",
+      "Read",
+      "WebFetch",
+      "WebSearch",
+      "Skill(tidy:*)",
+      "Skill(docs:*)",
+      "Skill(commit:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "claude-fable-5[1m]",
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bunx tsc --noEmit 2>&1 | head -20"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.py"
+  },
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "context7@claude-plugins-official": true
+  },
+  "language": "Japanese",
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "low",
+  "autoMemoryEnabled": false,
+  "skipWorkflowUsageWarning": true,
+  "verbose": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true
+}
