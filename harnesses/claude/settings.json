@@ -18,7 +18,6 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-fable-5[1m]",
   "enableAllProjectMcpServers": true,
   "hooks": {
     "PostToolUse": [
@@ -43,7 +42,6 @@
   },
   "language": "Japanese",
   "alwaysThinkingEnabled": true,
-  "effortLevel": "low",
   "autoMemoryEnabled": false,
   "skipWorkflowUsageWarning": true,
   "verbose": true,
