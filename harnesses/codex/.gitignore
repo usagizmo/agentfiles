@@ -1,0 +1,48 @@
+# Codex runtime / cache files
+.codex-global-state.json
+.codex-global-state.json.bak
+.personality_migration
+version.json
+installation_id
+models_cache.json
+chrome-native-hosts.json
+
+.tmp
+cache
+log
+sqlite
+tmp
+archived_sessions
+sessions
+session_index.jsonl
+shell_snapshots
+computer-use
+memories
+vendor_imports
+
+# SQLite databases
+goals_*.sqlite
+goals_*.sqlite-shm
+goals_*.sqlite-wal
+logs_*.sqlite
+logs_*.sqlite-shm
+logs_*.sqlite-wal
+memories_*.sqlite
+memories_*.sqlite-shm
+memories_*.sqlite-wal
+state_*.sqlite
+state_*.sqlite-shm
+state_*.sqlite-wal
+
+# Auth / history / config
+auth.json
+history.jsonl
+config.toml
+
+# Third-party / auto-imported content
+plugins
+skills/.system
+
+# Codex command-approval rules (local policy)
+rules
+

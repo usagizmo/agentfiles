@@ -1,0 +1,30 @@
+# Claude runtime / cache files
+.update.lock
+.last-cleanup
+.last-update-result.json
+mcp-needs-auth-cache.json
+stats-cache.json
+
+cache
+channels
+debug
+file-history
+history.jsonl
+ide
+paste-cache
+backups
+plans
+plugins
+sessions
+shell-snapshots
+statsig
+tasks
+teams
+telemetry
+todos
+projects
+powerline
+usage-data
+
+# Local overrides
+settings.local.json

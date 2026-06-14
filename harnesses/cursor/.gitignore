@@ -1,0 +1,20 @@
+# Cursor runtime / cache files
+mcp.json
+argv.json
+cli-config.json
+agent-cli-state.json
+ai-tracking
+browser-logs
+chats
+debug-logs
+extensions
+ide_state.json
+plans
+plugins
+projects
+prompt_history.json
+skills
+skills-cursor
+snapshots
+statsig-cache.json
+worktrees
