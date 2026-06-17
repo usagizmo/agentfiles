@@ -6,6 +6,7 @@ version.json
 installation_id
 models_cache.json
 chrome-native-hosts.json
+chrome-native-hosts-v2.json
 
 .tmp
 cache
@@ -17,7 +18,9 @@ sessions
 session_index.jsonl
 shell_snapshots
 computer-use
+generated_images
 memories
+process_manager
 vendor_imports
 
 # SQLite databases
@@ -38,6 +41,7 @@ state_*.sqlite-wal
 auth.json
 history.jsonl
 config.toml
+config.toml.*-backup.*
 
 # Third-party / auto-imported content
 plugins
