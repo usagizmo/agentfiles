@@ -1,21 +1,10 @@
 # misc
 .DS_Store
 
-# agents
-/agents/skills/*
-!/agents/skills/codex-consult/
-!/agents/skills/codex-consult/**
-!/agents/skills/codex-review-loop/
-!/agents/skills/codex-review-loop/**
-!/agents/skills/commit/
-!/agents/skills/commit/**
-!/agents/skills/design-pitfalls/
-!/agents/skills/design-pitfalls/**
-!/agents/skills/docs/
-!/agents/skills/docs/**
-!/agents/skills/merge/
-!/agents/skills/merge/**
-!/agents/skills/pr/
-!/agents/skills/pr/**
-!/agents/skills/tidy/
-!/agents/skills/tidy/**
+# externally installed agent skills
+/agents/skills/agent-browser/
+/agents/skills/find-skills/
+/agents/skills/sentry-cli/
+/agents/skills/skill-creator/
+/agents/skills/supabase-postgres-best-practices/
+/agents/skills/vercel-cli/
