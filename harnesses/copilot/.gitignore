@@ -1,8 +1,0 @@
-# GitHub Copilot runtime / cache files
-command-history-state.json
-config.json
-ide
-logs
-mcp-oauth-config
-pkg
-session-state

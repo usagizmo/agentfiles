@@ -36,8 +36,13 @@
 ### 補足ルール
 
 - スコープに該当しない全体的な変更は、適切な汎用 gitmoji を使用（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）
-- プロジェクト共通 instructions は `AGENTS.md` を実体にし、`.claude/CLAUDE.md` は symlink にする
-- ハーネス固有の実体ディレクトリは `harnesses/` 配下に置き、root の `claude` / `codex` などは互換 symlink として扱う
+
+## agent 設定の配置方針
+
+- `./AGENTS.md` はこの dotfiles repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
+- `./agents/` は agent 共通 instructions / rules / skills の SSOT とする
+- `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置かない
+- `~/.claude` / `~/.codex` / `~/.copilot` / `~/.cursor` / `~/.config/devin` / `~/.agents` は実ディレクトリにし、必要なファイル・サブディレクトリだけ `init.sh` で symlink する
 
 ### コミット例
 
