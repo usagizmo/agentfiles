@@ -20,10 +20,10 @@
 | 🐟 | `[fish]` | Fish シェル設定 |
 | 🐚 | `[zsh]` | Zsh シェル設定 |
 | 🤖 | `[claude]` | `harnesses/claude` 配下の Claude Code 設定 |
-| 🤖 | `[codex]` | `harnesses/codex` 配下の Codex 関連設定 |
+| 🤖 | `[codex]` | Codex 関連設定（`init.sh` の `~/.codex` 配線等） |
 | 🤖 | `[devin]` | `harnesses/devin` / `~/.config/devin` 配下の Devin CLI 設定 |
-| 🤖 | `[agents]` | `~/.agents` 配下の skill 管理（`.skill-lock.json` 等） |
-| 🤖 | `[cursor]` | `harnesses/cursor` 配下の Cursor CLI / Agent 設定 |
+| 🤖 | `[agents]` | `agents/` 配下の共通 instructions / rules / skills（`.skill-lock.json` 等） |
+| 🤖 | `[cursor]` | Cursor CLI / Agent 設定（`init.sh` の `~/.cursor` 配線等） |
 | 🖥️ | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定 |
 | 🐙 | `[copilot]` | `harnesses/copilot` 配下の GitHub Copilot 設定 |
 | 📝 | `[nvim]` | Neovim 設定 |

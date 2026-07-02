@@ -14,6 +14,6 @@
 
 ## 共通 rules / skills
 
-- エージェント共通の永続ルールは `~/.agents/rules/` を参照する。特に設計判断では `design-principles.md`、コミット前の整理では `boy-scout.md` を確認する
+- エージェント共通の永続ルールは `~/.agents/rules/` 配下の全ファイルを参照する。特に設計判断では `design-principles.md`、コミット前の整理では `boy-scout.md`、コードを書くときは `coding-conventions.md` を確認する
 - エージェント共通の task workflow は `~/.agents/skills/` を参照する。Claude / Codex などエージェント固有の入口は、この共通ディレクトリへの symlink として扱う
 - Codex の `.rules` は command approval 用の実行ポリシーであり、ここでいう設計・実装 rules とは別物として扱う
