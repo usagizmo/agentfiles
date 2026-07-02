@@ -42,6 +42,8 @@
 - `./AGENTS.md` はこの dotfiles repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
 - `./agents/` は agent 共通 instructions / rules / skills の SSOT とする
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置かない
+- harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.cursor/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイル（固有ルール + 共通 `~/.agents/AGENTS.md` への参照。Claude は `@~/.agents/AGENTS.md` import）への symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（空 overlay を先回りで作らない）
+- 共通 `agents/AGENTS.md` / `agents/rules/` には harness 名や harness 固有の機能（モデル名・subagent 機構等）に依存するルールを書かない。書きたくなったら該当 harness の overlay へ移す
 - `~/.claude` / `~/.codex` / `~/.copilot` / `~/.cursor` / `~/.config/devin` / `~/.agents` は実ディレクトリにし、必要なファイル・サブディレクトリだけ `init.sh` で symlink する
 
 ### コミット例
