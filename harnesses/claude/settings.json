@@ -37,15 +37,14 @@
     "command": "~/.claude/statusline.py"
   },
   "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "context7@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true
   },
   "language": "Japanese",
   "alwaysThinkingEnabled": true,
   "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "verbose": true,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true,
-  "skipDangerousModePermissionPrompt": true
+  "skipAutoPermissionPrompt": true
 }
