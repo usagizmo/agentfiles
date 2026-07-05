@@ -4,6 +4,7 @@
   "permissions": {
     "allow": [
       "Bash",
+      "Bash(gh pr merge:*)",
       "Edit",
       "Glob",
       "Read",
@@ -12,9 +13,6 @@
       "Skill(tidy:*)",
       "Skill(docs:*)",
       "Skill(commit:*)"
-    ],
-    "deny": [
-      "Bash(git push:*)"
     ],
     "defaultMode": "auto"
   },
