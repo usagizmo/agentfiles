@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "matcher": "^(create|edit)$",
+        "bash": "[ -f tsconfig.json ] && bunx tsc --noEmit 2>&1 | head -20 || true",
+        "timeoutSec": 60
+      }
+    ]
+  }
+}
