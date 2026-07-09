@@ -17,25 +17,13 @@
     "defaultMode": "auto"
   },
   "enableAllProjectMcpServers": true,
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -f tsconfig.json ] && bunx tsc --noEmit 2>&1 | head -20 || true"
-          }
-        ]
-      }
-    ]
-  },
+  "hooks": {},
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.py"
   },
   "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": false
   },
   "language": "Japanese",
   "alwaysThinkingEnabled": true,
@@ -44,5 +32,11 @@
   "skipWorkflowUsageWarning": true,
   "verbose": true,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "skillOverrides": {
+    "vercel-cli": "off",
+    "supabase-postgres-best-practices": "off",
+    "sentry-cli": "off",
+    "find-skills": "off"
+  }
 }

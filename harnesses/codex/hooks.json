@@ -1,16 +1,3 @@
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "apply_patch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh -c '[ -f tsconfig.json ] && bunx tsc --noEmit 2>&1 | head -20 || true'",
-            "timeout": 60
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }
