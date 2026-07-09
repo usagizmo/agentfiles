@@ -48,6 +48,12 @@ gitmoji の選び方は `../commit/references/gitmoji.md` を参照。
 - コミットが綺麗に分かれていて、コミット一覧を見れば内容が十分伝わる場合など、マージコミットの body が不要なら `--body ""` でよい
 - 修正コミットを積んだ場合は、マージコミットの body を最新の内容に更新して有効化し直す
 
-### フォールバック: web マージ用 body の出力
+### フォールバック: CLI で直接マージ
 
-auto-merge の有効化に失敗した場合（リポジトリで Allow auto-merge が無効、required checks が無い等）は、ユーザーが GitHub web の Create a merge commit でマージする。このときタイトルには PR タイトルが使われ、PR 番号は自動付与されるので、マージコミットの body のみを code block で出力する（body 不要なら出力せず、そのまま merge のみでよい旨を伝える）。フォールバック時も CI エラーの修正対応は行う。
+auto-merge の有効化に失敗した場合（リポジトリで Allow auto-merge が無効、required checks が無い等）は、CI がすべて pass したのを確認してから `--auto` を外した同じコマンドで直接マージする:
+
+```
+gh pr merge --merge --subject "{PR タイトル} (#{PR 番号})" --body "{マージコミットの body}"
+```
+
+`--subject` / `--body` を明示すればリポジトリの Default commit message 設定に関係なくその内容でコミットされる（body 不要なら `--body ""`）。フォールバック時も CI エラーの修正対応は行う。
