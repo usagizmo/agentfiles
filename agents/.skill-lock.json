@@ -14,18 +14,18 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/vercel-labs/skills.git",
       "skillPath": "skills/find-skills/SKILL.md",
-      "skillFolderHash": "eb6a23305aea6e340d14b9de3766e721f9f4861b",
+      "skillFolderHash": "76a98a285cb0434f3d39e1a873823556330e398b",
       "installedAt": "2026-03-07T22:54:58.354Z",
-      "updatedAt": "2026-07-02T10:33:27.971Z"
+      "updatedAt": "2026-07-11T03:17:41.200Z"
     },
     "vercel-cli": {
       "source": "vercel/vercel",
       "sourceType": "github",
       "sourceUrl": "https://github.com/vercel/vercel.git",
       "skillPath": "skills/vercel-cli/SKILL.md",
-      "skillFolderHash": "1cd969bd7107b4a5bf0b88bc88ef45904afe6656",
+      "skillFolderHash": "859a7decfbd55e478f6ff66f97fb8835be24e8c9",
       "installedAt": "2026-03-09T21:10:23.990Z",
-      "updatedAt": "2026-07-02T10:33:31.246Z"
+      "updatedAt": "2026-07-11T03:17:43.820Z"
     },
     "skill-creator": {
       "source": "anthropics/skills",
@@ -50,9 +50,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/supabase/agent-skills.git",
       "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
-      "skillFolderHash": "6f1495c72c918e6f80c2f69df9005eacd5c57d7a",
+      "skillFolderHash": "d11b54a2ab36d33940504ca9ec3a57bfd6126f26",
       "installedAt": "2026-05-06T08:42:46.870Z",
-      "updatedAt": "2026-07-02T10:33:39.626Z"
+      "updatedAt": "2026-07-11T03:17:46.190Z"
     }
   },
   "dismissed": {
