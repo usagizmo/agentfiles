@@ -15,5 +15,5 @@
 ## 共通 rules / skills
 
 - エージェント共通の永続ルールは `~/.agents/rules/` 配下の全ファイルを参照する。特に設計判断では `design-principles.md`、コミット前の整理では `boy-scout.md`、コードを書くときは `coding-conventions.md` を確認する
-- エージェント共通の task workflow は `~/.agents/skills/` を参照する。Claude / Codex などエージェント固有の入口は、この共通ディレクトリへの symlink として扱う
+- エージェント共通の task workflow は `~/.agents/skills/` を参照する。各 harness の skills 入口（`~/.claude/skills` 等）には、共通 skills と harness 固有 skills が union で symlink される（後者が同名を上書き）
 - Codex の `.rules` は command approval 用の実行ポリシーであり、ここでいう設計・実装 rules とは別物として扱う
