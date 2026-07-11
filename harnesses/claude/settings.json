@@ -17,6 +17,12 @@
     "defaultMode": "auto"
   },
   "enableAllProjectMcpServers": true,
+  "skillOverrides": {
+    "vercel-cli": "off",
+    "supabase-postgres-best-practices": "off",
+    "sentry-cli": "off",
+    "find-skills": "off"
+  },
   "hooks": {},
   "statusLine": {
     "type": "command",
@@ -32,11 +38,5 @@
   "skipWorkflowUsageWarning": true,
   "verbose": true,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true,
-  "skillOverrides": {
-    "vercel-cli": "off",
-    "supabase-postgres-best-practices": "off",
-    "sentry-cli": "off",
-    "find-skills": "off"
-  }
+  "skipAutoPermissionPrompt": true
 }
