@@ -13,22 +13,30 @@ description: >-
 
 | トリガー | やること |
 | --- | --- |
-| AGENTS / rules / skills / prompts / references を新規・編集した | コミット前に 品質パスを実行する。規模不問。下書きのままで commit しない |
-| 中規模以上の仕上げ | project docs 更新判定。agent-facing を触っていれば 品質パス も通す |
+| AGENTS / rules / skills / prompts / references を新規・編集した | コミット前に品質パスを実行する。規模不問。下書きのままで commit しない |
+| 中規模以上の仕上げ | project docs 更新判定。agent-facing を触っていれば品質パスも通す |
 
 規模 SSOT は `~/.agents/AGENTS.md`。設計の問い直しは `consult`。
 
 ## 契約
 
-- 下書きは判断材料の抜け漏れを優先してよい。品質は 品質パスが担保する
-- パス未実行・自己判定前は未完了（commit しない）
+- 下書きは判断材料の抜け漏れを優先してよい。品質は下記の品質パスが担保する
+- 完了はトリガー別（下表）。片軸だけやって docs 完了としない。未完了なら commit しない
 - レビュー中は変更しない。適用・報告は親
 - harness 固有の agent API は指定しない
 - subagent が使えなければ同じ観点で自己レビューする
 
+### 完了報告（トリガー別）
+
+| 該当 | 必須の自己判定 |
+| --- | --- |
+| agent-facing を触った | 品質パス: pass |
+| 中規模以上の仕上げ | project docs 更新判定: 更新済み / 更新不要 |
+| 両方 | 上の両方 |
+
 ## 品質パス（基準 + 手順）
 
-モデルに読ませる文の品質 SSOT。rules / AGENTS / skills（`references/` 含む）/ prompts など、形式を問わず適用する。global（`~/.agents/` / dotfiles agents）も project も同じ。
+モデルに読ませる文（agent-facing）の品質 SSOT。rules / AGENTS / skills（`references/` 含む）/ prompts など、形式を問わず適用する。global（`~/.agents/` / dotfiles agents）も project も同じ。
 
 下書きを本パスで基準へ適合させる。
 
@@ -47,7 +55,7 @@ description: >-
 4. 完了条件で自己判定する。非自明な境界の API から動く正例が消えていないかも見る
 5. プロジェクトに Markdown lint（目次・識別子 backtick 等）があれば通す
 
-**完了条件**: 必要な判断情報の被覆を維持または改善し、より短く明確になっていること。行数だけが減った変更や構造が壊れた変更は未完了。自己判定するまで commit しない。
+**品質パス完了条件**: 必要な判断情報の被覆を維持または改善し、より短く明確になっていること。行数だけが減った変更や構造が壊れた変更は未完了。
 
 ## 仕上げ: project docs 更新判定
 
@@ -77,5 +85,7 @@ description: >-
 1. `git status --short` で起点を確定する
 2. 材料を整理する: **知見**は検証可能な罠・正解パターン。**設計上の選択**は「A ではなく B」の主張で照合対象。単独で一般原則にしない
 3. `references/review-prompt.md` に起点・知見・選択を埋めて渡す。使えなければ自己レビュー
-4. 妥当な更新は起点外でも適用する。agent-facing を更新したら同じコミット前に 品質パスも通す
+4. 妥当な更新は起点外でも適用する。agent-facing を更新したら同じコミット前に品質パスも通す
 5. 更新・見送りを簡潔に報告する
+
+**project 判定の完了条件**: 起点に対する更新要否を判定し、要なら適用済み、不要なら見送り理由が言えること。
