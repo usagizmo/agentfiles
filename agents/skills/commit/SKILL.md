@@ -9,8 +9,9 @@ description: >-
 
 ## 手順
 
-1. プロジェクトにフォーマッターがあれば実行し、結果を staged に含める
-2. 次の形式でコミットする
+1. 変更に agent-facing（AGENTS / rules / skills / prompts / references 等）が含まれるのに `docs`（品質パス）未実施なら、先に `docs` を実行する。自己判定前に commit しない
+2. プロジェクトにフォーマッターがあれば実行し、結果を staged に含める
+3. 次の形式でコミットする
 
 ```
 {gitmoji} {message}

@@ -20,9 +20,17 @@
 
 | 規模 | 目安 | 必須フロー |
 | --- | --- | --- |
-| 軽微 | 局所・低リスク | `commit` のみ可 |
+| 軽微 | 局所・低リスク | `commit` のみ可（agent-facing を含むなら下表） |
 | 中規模 | 意味のある挙動変更（骨格は変えない） | `tidy` → `docs` → `commit` |
 | 大規模 | 責務・API・データフロー・永続形式・security/correctness 境界を変える | `review-loop` → `tidy` → `docs` → `commit` |
+
+#### agent-facing 文（規模と独立）
+
+対象: AGENTS / rules / skills / prompts / references など、モデルに読ませる文。
+
+- 下書きは判断材料の抜け漏れを優先してよい。品質は `docs`（品質パス）が担保する
+- コミット前に `docs` を実行し、完了条件で自己判定する。パス未実行なら未完了
+- 軽微でも agent-facing を含むなら `docs` → `commit`
 
 - 修正で非自明に膨らんだら規模を再判定する
 - コミット以降（verify / PR / リリース）はプロジェクトの AGENTS.md / skills に従う

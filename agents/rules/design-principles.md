@@ -18,7 +18,7 @@
 
 ## エージェント向け文書
 
-モデルに読ませる文（AGENTS / rules / skills / prompts 等）の品質基準と手順は `docs` skill（品質パス）が SSOT。
+モデルに読ませる文（AGENTS / rules / skills / prompts 等）の品質は `docs` skill（品質パス）が SSOT。下書きのまま commit せず、コミット前にパスを通す。
 
 ## 設計の落とし穴
 
