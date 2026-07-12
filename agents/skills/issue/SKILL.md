@@ -1,6 +1,9 @@
 ---
 name: issue
-description: Issue を作成する。タイトルの先頭に gitmoji を付ける以外はデフォルトの `gh issue create` フローに従う。ユーザーが「issue 作って」「GitHub issue を作成して」と言ったときに使う。
+description: >-
+  GitHub Issue を作成する（タイトル先頭に gitmoji）。ユーザーが「issue 作って」と言ったとき、
+  および既存不具合・要件外・独立改善で今ブランチに載せると膨らむものを切り離すときに、指示がなくても作成する。
+  今回変更由来の回帰・受け入れ失敗は Issue で消さず PR blocker として直す / スコープ縮小 / 撤回する。
 ---
 
 Issue を作成する。タイトルの先頭には適切な gitmoji を付ける。それ以外はデフォルトの Issue 作成フローに従う。
