@@ -4,21 +4,37 @@
 
 ## 優先順位（上位が優先）
 
-1. **破壊的変更の推奨**: 部分的パッチより、根本的な改善を優先。不調なコードは完全に削除し、新しい実装に置き換える。動く状態を一時的に犠牲にしても、中途半端な併存（古い実装の温存、feature flag での棚上げ）は選ばない
+1. **根本解決を優先**: 部分パッチや互換 shim / feature flag 棚上げより、原因側を直す。明示された互換契約・migration・外部 API 安定性がある場合はそれを守る
 2. **構造の美しさ**: ドメインに沿った設計、重複の一元管理（SSOT）、既存パターンとの整合性
 
 ## 実装方針
 
 - エッジケースまで考慮した完全な実装を目指す
-- **抽象化は variant が 2 つ以上の分岐ロジックを実際に持つ時点で導入する**: 1-variant enum / 将来用の予約 variant / dead label は YAGNI 違反。trivial dispatch に落ちたら tidy 段階で容赦なく削る
-- **primitive の base 前提を override で打ち消す状況が 2 例以上あれば、variant 追加ではなく feature-local wrapper に切り出す**: 同じ base 前提なら primitive に variant、違う base 前提なら wrapper
-- **順序制約・不変条件は docstring ではなく型で固定する**: guard / token / session を struct に束ね、「A の後でしか B できない」を compile time で強制する
-- **表示 gate / active-implicit を撤去するときは、暗黙依存を全経路で確認する**: 時間軸（gate が下位 layer の readiness を隠していないか → 全解決経路の直前に単一 preflight）と空間軸（下位 helper が暗黙に active tenant を読んでいないか → owner を 1 回解決し全副作用を同一 owner で駆動）の両方
-- **trust boundary を跨ぐ移動は専用 journal を新設せず、既存の delete + create lifecycle SSOT の合成で表現する**: B-first 順序（先に移動先を作る）+ boot 時 reconcile で crash-safety を担保する
-- **production / test の振る舞いの差は env var ではなく型 (DI) で表現する**: trait + 必須引数で依存を明示し、test への副作用混入を compile error で構造的に排除する
+- **不変条件・順序制約は型で固定する**（コメントや env に頼らない）
+- **抽象化は実際の分岐が 2 つ以上あるときだけ入れる**。1-variant / 将来予約 / dead label は作らず、trivial になったら削る
+- **production / test の差は型 (DI) で表す**（env bypass で分岐しない）
 
-各原則の詳細な判定基準・事例は `design-pitfalls` skill の `references/deep-dives.md` にある。判定に迷ったときだけ該当項目を読む。
+判定に迷う具体シナリオ（gate 撤去、trust boundary 移動、primitive wrapper 等）は `design-pitfalls` skill（`references/deep-dives.md`）を読む。
+
+## 品質パス
+
+モデルに読ませる文を書く・直すときの品質基準。rules / AGENTS / skills（`references/` 含む）/ prompts など、形式を問わず適用する。ハーネス固有の記法ではない。適用・検証手順は `docs` skill。
+
+### 書くとき
+
+- **抜け漏れなく、要点だけ**: 判断に必要な不変条件・境界・例外は落とさない。言い換えの重複・経緯・メタ説明は書かない
+- **行動を変えられる具体性を持たせる**: 何をするか / 何をしないか / SSOT はどこかを明示する。装飾や自己言及は削る
+- **非自明な境界を持つ API は動く正例を残す**: prose の言い換えで代替しない。入口では詳細カタログを複製せず、深い SSOT へ誘導する
+- **why を現在形で書く**: コードコメントを含め、現在の成立理由を書く。Issue / PR 番号や変更経緯は git / PR に任せる（外部 upstream 参照は `repo#NNN` 形式可）
+
+### 直すとき
+
+- **原則へ文書を適合させる**: 適合作業で、既存文書の都合に合わせて原則を緩めない
+- **圧縮は書き直す**: 装飾の除去や局所的な削除だけを圧縮の主手段にしない
+- **意味と構造をともに保つ**: モデルの判断に必要な情報を落とさない。残した見出し・表・code fence・リンク・目次の構文と参照関係を壊さない
+- **残す理由がない文は削る**: モデルの行動を変える情報、または文書を解釈するために必要な構造だけを残す
+- **完了条件**: 必要な判断情報の被覆を維持または改善し、より短く明確になっていること。行数だけが減った変更や構造が壊れた変更は未完了
 
 ## 設計の落とし穴
 
-軸の混在 / SSOT / orchestration 配置 / cache と view-binning / 正誤判定 / クロスプロセス契約など、設計上の典型的な落とし穴は `design-pitfalls` skill に集約。設計レビュー時・落とし穴の判定が必要なときは skill を参照する。
+軸の混在 / SSOT / orchestration / 型で固定 / cache・async / correctness / output は `design-pitfalls` skill に集約。設計レビュー時に参照する。

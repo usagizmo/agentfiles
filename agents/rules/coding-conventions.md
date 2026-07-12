@@ -1,23 +1,15 @@
-# コーディング規約
+# コーディング規約（default stack: TypeScript / Svelte 5）
 
-## TypeScript/JavaScript 規約
+常時適用の薄い default。プロジェクト差分は各 repo の `.agents/rules/{typescript,svelte-runes}.md`。
 
-### 型システム
+## TypeScript/JavaScript
 
-- `any`型禁止 → `unknown`型や適切な型定義を使用
-- `interface`より`type`を優先 → 予期しないプロパティの追加を防ぐため
-- ジェネリック型・ユニオン型を活用して型安全性を保持
+- `any` 禁止 → `unknown` または適切な型
+- `interface` より `type` を優先
+- デバッグログは `console.debug`
 
-### 言語機能
+## Svelte 5 Runes
 
-- optional chaining（`?.`）とnullish coalescing（`??`）の積極活用
-- デバッグ用のログ表示は `console.debug` を使用
-
-## Svelte 5 Runes 規約
-
-### リアクティビティ
-
-- 派生値の計算は getter ではなく `$derived` / `$derived.by` を使用する
-- リアクティブな Map/Set は `$state(new Map/Set)` ではなく `SvelteMap` / `SvelteSet` を直接使用する
-- リアクティビティが不要な場合（`$derived` 内の一時変数・定数ルックアップ等）は `new Map` / `new Set` のままで可。ESLint の `svelte/prefer-svelte-reactivity` 警告は `// eslint-disable-next-line svelte/prefer-svelte-reactivity -- <理由>` で抑止し、理由を必ず書く
-- TS ファイル内で Rune を使用する場合、ファイル名は `.svelte.ts` にする
+- 派生値は `$derived` / `$derived.by`（getter で代替しない）
+- リアクティブな Map/Set は `SvelteMap` / `SvelteSet`（リアクティビティ不要なら `new Map` / `new Set` で可。ESLint 抑止時は理由を書く）
+- Rune を使う TS ファイルは `.svelte.ts`

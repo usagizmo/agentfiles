@@ -1,45 +1,21 @@
 ---
 name: merge
-description: 指定したブランチを --no-ff でマージし、変更内容に沿った gitmoji 付きコミットメッセージを生成する。ユーザーが「〇〇ブランチをマージして」と言ったときに使う。
+description: 指定ブランチを --no-ff でマージし、変更内容に沿った gitmoji 付きコミットメッセージを付ける。ユーザーが「〇〇ブランチをマージして」と言ったときに使う。
 ---
 
-指定したブランチを `--no-ff` でマージする。
+指定ブランチを `--no-ff` でマージする。
 
-## 手順
-
-1. 引数からマージ対象のブランチ名を取得する（例: `feature/foo`）
-2. マージするコミット一式を確認する:
-   ```
-   git log --oneline HEAD..<branch>
-   ```
-3. 各コミットの変更内容を把握する:
-   ```
-   git diff HEAD...<branch>
-   ```
-4. 1つ前のコミットメッセージのスタイルを参考にする:
-   ```
-   git log -1 --format="%s%n%n%b"
-   ```
-5. 変更内容全体を俯瞰して、最も適切な gitmoji を1つ選ぶ（マージ操作自体ではなく、変更の性質に基づいて選択する）
-6. 以下の形式でマージコミットを作成する:
-   ```
-   git merge --no-ff <branch> -m "<message>"
-   ```
-
-## コミットメッセージ形式
+1. 対象ブランチ名を取得する
+2. `git log --oneline HEAD..<branch>` と `git diff HEAD...<branch>` で変更を把握する
+3. `git log -1 --format="%s%n%n%b"` で直前コミットの言語・スタイルを合わせる
+4. 変更の性質で gitmoji を1つ選び、マージする
 
 ```
-{gitmoji} {変更内容を凝縮した説明}
+git merge --no-ff <branch> -m "{gitmoji} {変更の本質}
 
-- {マージ内容のサマリー1}
-- {マージ内容のサマリー2}
-- ...
+- {サマリー1}
+- {サマリー2}"
 ```
 
-- タイトルは `Merge branch '...'` ではなく、変更の本質を表す説明文にする
-- 1つ前のコミットの言語・スタイルに合わせる
-- 詳細箇条書きは、マージ対象コミット群の変更を簡潔にまとめる
-
-## gitmoji
-
-gitmoji の選び方は `../commit/references/gitmoji.md` を参照。
+- タイトルは `Merge branch '...'` にしない
+- gitmoji は `../commit/references/gitmoji.md`
