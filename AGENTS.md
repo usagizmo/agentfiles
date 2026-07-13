@@ -24,6 +24,8 @@
 | 🤖 | `[devin]` | `harnesses/devin` / `~/.config/devin` 配下の Devin CLI 設定 |
 | 🤖 | `[agents]` | `agents/` 配下の共通 instructions / rules / skills（`.skill-lock.json` 等） |
 | 🤖 | `[cursor]` | Cursor CLI / Agent 設定（`init.sh` の `~/.cursor` 配線等） |
+| 🤖 | `[pi]` | `harnesses/pi` / `~/.pi/agent` 配下の Pi 設定 |
+| 🤖 | `[grok]` | `harnesses/grok` / `~/.grok` 配下の Grok 設定 |
 | 🖥️ | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定 |
 | 🐙 | `[copilot]` | `harnesses/copilot` 配下の GitHub Copilot 設定 |
 | 📝 | `[nvim]` | Neovim 設定 |
@@ -44,7 +46,7 @@
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置かない
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.cursor/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイル（固有ルール + 共通 `~/.agents/AGENTS.md` への参照。Claude は `@~/.agents/AGENTS.md` import）への symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（空 overlay を先回りで作らない）
 - 共通 `agents/AGENTS.md` / `agents/rules/` には harness 名や harness 固有の機能（モデル名・subagent 機構等）に依存するルールを書かない。書きたくなったら該当 harness の overlay へ移す
-- `~/.claude` / `~/.codex` / `~/.copilot` / `~/.cursor` / `~/.config/devin` / `~/.grok` / `~/.agents` は実ディレクトリにし、必要なファイル・サブディレクトリだけ `init.sh` で symlink する
+- `~/.claude` / `~/.codex` / `~/.copilot` / `~/.cursor` / `~/.config/devin` / `~/.grok` / `~/.pi` / `~/.agents` は実ディレクトリにし、必要なファイル・サブディレクトリだけ `init.sh` で symlink する
 
 ### 共通と個別の分け方
 
@@ -57,7 +59,7 @@
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - 最初は個別に書き、**2 つ目の harness が同じ中身を必要にした時点で**昇格する（空の共通抽象を先に作らない）。昇格先: `~/.agents/` にも載せてよい → `agents/`、harness skills 入口だけ → `harnesses/shared/skills`
 - 参照方向は常に **個別 → 共通** の一方通行。共通が特定 harness を知ってはいけない
-- `consult` / `review-loop` のデフォルト実装（アドバイザー = Codex のみ）は `harnesses/shared/skills/` に置く。アドバイザー構成が異なる harness は `harnesses/<agent>/skills/` で同名上書きする（例: Grok は Claude+Codex 並列）
+- `consult` / `review-loop` のデフォルト実装（アドバイザー = Codex のみ）は `harnesses/shared/skills/` に置く。アドバイザー構成が異なる harness は `harnesses/<agent>/skills/` で同名上書きする（例: Grok / Pi は Claude+Codex 並列）
 - **Codex には shared を配らない**（アドバイザー側であり、`codex exec` を呼ぶ skill を載せると再入しうる）。inventory では `inv_collection` で `agents/skills` + `harnesses/codex/skills` のみを明示する
 
 ### symlink の貼り方
