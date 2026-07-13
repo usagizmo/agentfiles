@@ -59,7 +59,8 @@
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - 最初は個別に書き、**2 つ目の harness が同じ中身を必要にした時点で**昇格する（空の共通抽象を先に作らない）。昇格先: `~/.agents/` にも載せてよい → `agents/`、harness skills 入口だけ → `harnesses/shared/skills`
 - 参照方向は常に **個別 → 共通** の一方通行。共通が特定 harness を知ってはいけない
-- `consult` / `review-loop` のデフォルト実装（アドバイザー = Codex のみ）は `harnesses/shared/skills/` に置く。アドバイザー構成が異なる harness は `harnesses/<agent>/skills/` で同名上書きする（例: Grok / Pi は Claude+Codex 並列）
+- `consult` / `review-loop` の **手順 SSOT は `harnesses/shared/skills/*/procedure.md` のみ**。harness 上書き側は `procedure.md` をここへ symlink し、複製しない
+- デフォルト実装（アドバイザー = Claude∥Codex）は `harnesses/shared/skills/` の `SKILL.md`。再入を避ける harness（例: Claude → Codex のみ）は `harnesses/<agent>/skills/` で同名上書きする
 - **Codex には shared を配らない**（アドバイザー側であり、`codex exec` を呼ぶ skill を載せると再入しうる）。inventory では `inv_collection` で `agents/skills` + `harnesses/codex/skills` のみを明示する
 
 ### symlink の貼り方
