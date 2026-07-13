@@ -2,7 +2,7 @@
 name: review-loop
 description: >-
   AGENTS.md で大規模と判定した変更を書き終えたら、コミット前に必ず差分レビューする（ユーザーが /review-loop と言わなくても発動。規模 SSOT は ~/.agents/AGENTS.md）。
-  Claude Code と Codex でレビュー→精査→修正を指摘が消えるまで繰り返す。軽微・中規模では使わない。完了後は tidy → docs → commit へ進む。
+  Claude Code と Codex でレビュー→精査→修正を指摘が消えるまで繰り返す。軽微・中規模では使わない。完走後は必ず tidy → docs → commit まで。
 ---
 
 # レビューループ（Claude / Codex）
