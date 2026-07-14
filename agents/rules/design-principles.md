@@ -4,7 +4,7 @@
 
 ## 優先順位（上位が優先）
 
-1. **根本解決を優先**: 部分パッチや互換 shim / feature flag 棚上げより、原因側を直す。明示された互換契約・migration・外部 API 安定性がある場合はそれを守る
+1. **根本解決を優先**: 部分パッチで済ませず、原因側を直す。明示された互換契約・migration・外部 API 安定性がある場合はそれを守る
 2. **構造の美しさ**: ドメインに沿った設計、重複の一元管理（SSOT）、既存パターンとの整合性
 
 ## 実装方針
@@ -12,13 +12,10 @@
 - エッジケースまで考慮した完全な実装を目指す
 - **不変条件・順序制約は型で固定する**（コメントや env に頼らない）
 - **抽象化は実際の分岐が 2 つ以上あるときだけ入れる**。1-variant / 将来予約 / dead label は作らず、trivial になったら削る
+- **最終形に不要なコードは初手から書かない**（feature flag / deprecated alias / 互換 shim / 後で削除する前提の温存コード）
 - **production / test の差は型 (DI) で表す**（env bypass で分岐しない）
 
 判定に迷う具体シナリオ（gate 撤去、trust boundary 移動、primitive wrapper 等）は `design-pitfalls` skill（`references/deep-dives.md`）を読む。
-
-## エージェント向け文書
-
-モデルに読ませる文（AGENTS / rules / skills / prompts 等）の品質は `docs` skill（品質パス）が SSOT。下書きのまま commit せず、コミット前にパスを通す。
 
 ## 設計の落とし穴
 
