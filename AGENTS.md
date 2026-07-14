@@ -59,8 +59,8 @@
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - 最初は個別に書き、**2 つ目の harness が同じ中身を必要にした時点で**昇格する（空の共通抽象を先に作らない）。昇格先: `~/.agents/` にも載せてよい → `agents/`、harness skills 入口だけ → `harnesses/shared/skills`
 - 参照方向は常に **個別 → 共通** の一方通行。共通が特定 harness を知ってはいけない
-- `consult` / `review-loop` の **手順 SSOT は `harnesses/shared/skills/*/procedure.md` のみ**。harness 上書き側は `procedure.md` をここへ symlink し、複製しない
-- デフォルト実装（アドバイザー = Claude∥Codex）は `harnesses/shared/skills/` の `SKILL.md`。再入を避ける harness（例: Claude → Codex のみ）は `harnesses/<agent>/skills/` で同名上書きする
+- `consult` / `review-loop` は 3 ファイル構成: `procedure.md`（手順 SSOT）と `SKILL.md`（入口）は `harnesses/shared/skills/` の実体のみ、**harness 差分は `advisors.md`（アドバイザー起動表）だけ**
+- 上書きする harness（例: Claude は再入回避で Codex のみ）は `harnesses/<agent>/skills/<name>/` に `advisors.md` を置き、`SKILL.md` / `procedure.md` は shared へ symlink する（複製しない）。デフォルト（Claude|Codex）は shared の `advisors.md`
 - **Codex には shared を配らない**（アドバイザー側であり、`codex exec` を呼ぶ skill を載せると再入しうる）。inventory では `inv_collection` で `agents/skills` + `harnesses/codex/skills` のみを明示する
 
 ### symlink の貼り方

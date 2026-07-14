@@ -118,7 +118,7 @@ function buildConsultPrompt(topic: string): string {
 		"## 進め方",
 		"",
 		"1. 自分の判断・案を先に立てる（空のままアドバイザーに投げない）",
-		"2. `consult` skill の手順に従い Claude と Codex に突き合わせる",
+		"2. `consult` skill の手順に従いアドバイザー（advisors.md）と突き合わせる",
 		"3. 実装プラン確定時だけ承認ゲートで GO を待つ。短い sanity check は待たない",
 		"4. GO 後に実装へ進む場合:",
 		"   - 途中で非自明に膨らんだら規模を再判定する",
