@@ -1,0 +1,48 @@
+/* Rabi コーポレートスタイル — HTML/Artifact 用デザイントークン
+ * モノトーン基調＋クリムゾンアクセント（rabi.co.jp 実測 #DC143C） */
+:root {
+  --rabi-ink: #1a1a1a;        /* 本文・見出し */
+  --rabi-soft: #595959;       /* 補足テキスト */
+  --rabi-faint: #8f8f8f;      /* ラベル・キャプション */
+  --rabi-accent: #dc143c;     /* クリムゾン: タイトル・金額・下線のみ */
+  --rabi-accent-soft: #fbe4ea; /* 合計行などの淡地 */
+  --rabi-line: #e5e5e5;
+  --rabi-line-strong: #cdcdcd;
+  --rabi-paper: #ffffff;
+  --rabi-paper-2: #f5f5f5;    /* グループ行・薄背景 */
+  --rabi-header: #1a1a1a;     /* 表ヘッダー: 黒ベタ白文字 */
+  --rabi-font: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans",
+               "Yu Gothic", YuGothic, Meiryo, system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rabi-ink: #ececec;
+    --rabi-soft: #ababab;
+    --rabi-faint: #8a8a8a;
+    --rabi-accent: #f0466b;      /* ダークでは少し明るく */
+    --rabi-accent-soft: #3a1420;
+    --rabi-line: #2e2e2e;
+    --rabi-line-strong: #454545;
+    --rabi-paper: #171717;
+    --rabi-paper-2: #1f1f1f;
+    --rabi-header: #000000;
+  }
+}
+
+/* 見出し: 黒太字＋クリムゾン下線 */
+.rabi-heading {
+  color: var(--rabi-ink);
+  font-weight: 800;
+  border-bottom: 2px solid var(--rabi-accent);
+  padding-bottom: 6px;
+}
+
+/* 表: ヘッダー黒ベタ / グループ行淡グレー / 合計行淡クリムゾン */
+.rabi-table thead th { background: var(--rabi-header); color: #fff; }
+.rabi-table tr.group td { background: var(--rabi-paper-2); font-weight: 700; }
+.rabi-table tr.total td {
+  background: var(--rabi-accent-soft);
+  color: var(--rabi-accent);
+  font-weight: 800;
+}
