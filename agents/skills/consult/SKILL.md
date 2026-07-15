@@ -11,13 +11,4 @@ description: >-
 **判断主体は実行中のエージェント**。アドバイザーは検証者。
 
 1. 同ディレクトリの `procedure.md` を Read する（手順 SSOT）
-2. 手順 3 の諮問は同ディレクトリの `advisors.md`（起動表・失敗時ポリシー。harness 差分はここだけ）に従う
-
-## 5. 承認ゲート
-
-プラン確定時は統合プラン（仕様・変更対象・判断・スコープ外・検証）を提示し、GO まで実装しない。
-Plan Mode がある harness はそれを使う（例: `enter_plan_mode` → プラン文書 → 承認 UI）。無ければ構造化 Markdown + 明示 GO。
-
-## 6. 実装完了
-
-実装へ進んだ場合は `tidy` → `docs` → `commit` まで。手順 6 は `procedure.md`。
+2. 手順 3 の諮問は同ディレクトリの `advisors.md`（起動表・失敗時ポリシー。harness 差分はここだけ）に従う。以降は `procedure.md` の手順 4〜6

@@ -1,1 +1,0 @@
-../../../shared/skills/review-loop/SKILL.md
