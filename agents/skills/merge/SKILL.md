@@ -1,6 +1,7 @@
 ---
 name: merge
 description: 指定ブランチを --no-ff でマージし、変更内容に沿った gitmoji 付きコミットメッセージを付ける。ユーザーが「〇〇ブランチをマージして」と言ったときに使う。
+disable-model-invocation: true
 ---
 
 指定ブランチを `--no-ff` でマージする。
