@@ -4,11 +4,15 @@
  * 役割の決め打ち:
  * - オーケストレーター: grok（settings.json の defaultModel）が考え、実装する
  * - /consult /review-loop: claude / codex に外部 CLI で諮問（skill 側の手順）
- * - /finish: tidy / docs / commit を fresh な pi one-shot で逐次実行
- *   （会話コンテキストを渡さず、working tree だけを見せてバイアスを断つ）
+ * - /finish: tidy / docs / commit を fresh な CLI one-shot（tidy/docs: claude、commit: pi）で逐次実行
+ *   （会話コンテキストを渡さず、working tree だけを見せてバイアスを断つ。モデルは各 CLI のデフォルトに追従）
+ * - lg の in-session ステップ: review-loop のあと project の .pi/finish.json（lg.afterReview: string[]）を
+ *   1 件ずつ実行し、各ステップ後は必ず GO 確認を挟んでから次へ進む
  * - dirty 検知: 未コミット差分を footer に出し、session 切替時に確認
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type Size = "sm" | "md" | "lg";
@@ -20,22 +24,22 @@ type DirtyInfo = {
 
 const SIZES: Size[] = ["sm", "md", "lg"];
 
-/** 仕上げステップの担当モデル（pi --model パターン。:suffix は thinking level） */
-const MODEL = {
-	claude: "claude-fable-5:low",
-	grok: "grok-4.5:high",
-} as const;
+/**
+ * 仕上げステップの起動 CLI。モデルは決め打ちせず各 CLI のデフォルト設定に追従する
+ * （claude: ~/.claude/settings.json の model / pi: settings.json の defaultProvider+defaultModel）
+ */
+type Runner = "claude" | "pi";
 
 type Step = {
 	name: "tidy" | "docs" | "commit";
-	model: string;
+	runner: Runner;
 	prompt: string;
 };
 
 const STEPS: Record<Step["name"], Step> = {
 	tidy: {
 		name: "tidy",
-		model: MODEL.claude,
+		runner: "claude",
 		prompt: [
 			"`tidy` skill を read して完走する。",
 			"対象は git の未コミット差分（git status / git diff で把握する）。",
@@ -44,7 +48,7 @@ const STEPS: Record<Step["name"], Step> = {
 	},
 	docs: {
 		name: "docs",
-		model: MODEL.claude,
+		runner: "claude",
 		prompt: [
 			"`docs` skill を read して完走する。",
 			"対象は git の未コミット差分（git status / git diff で把握する）。",
@@ -54,7 +58,7 @@ const STEPS: Record<Step["name"], Step> = {
 	},
 	commit: {
 		name: "commit",
-		model: MODEL.grok,
+		runner: "pi",
 		prompt: [
 			"`commit` skill を read して完走する。",
 			"git の未コミット差分を確認し、規約に沿った gitmoji 付きメッセージでコミットする。",
@@ -67,7 +71,7 @@ function finishSteps(size: Size): Step[] {
 		case "sm":
 			return [STEPS.docs, STEPS.commit];
 		case "md":
-		case "lg": // lg は事前に in-session の review-loop を挟む（下記 pendingSteps）
+		case "lg": // lg は事前に in-session の review-loop + .pi/finish.json の afterReview を挟む（下記 pendingFinish）
 			return [STEPS.tidy, STEPS.docs, STEPS.commit];
 	}
 }
@@ -106,25 +110,10 @@ function formatDirty(info: DirtyInfo): string {
 	return `finish? ${info.count} file(s): ${sample}${more}`;
 }
 
+/** 手順は skill 本文が SSOT。/finish への接続だけが pi 固有なのでここで足す */
 function buildConsultPrompt(topic: string): string {
-	const topicBlock = topic || "（会話上の現在の判断・プランを対象にする）";
-	return [
-		"`consult` skill を read し、設計・方針のセカンドオピニオンを取る。",
-		"",
-		"## 論点",
-		"",
-		topicBlock,
-		"",
-		"## 進め方",
-		"",
-		"1. 自分の判断・案を先に立てる（空のままアドバイザーに投げない）",
-		"2. `consult` skill の手順に従いアドバイザー（advisors.md）と突き合わせる",
-		"3. 実装プラン確定時だけ承認ゲートで GO を待つ。短い sanity check は待たない",
-		"4. GO 後に実装へ進む場合:",
-		"   - 途中で非自明に膨らんだら規模を再判定する",
-		"   - 実装完了時は `/finish` で規模に応じた仕上げを完走する",
-		"5. 確認だけで実装しない場合は仕上げ不要",
-	].join("\n");
+	const topicBlock = topic || "会話上の現在の判断・プランを対象にする";
+	return `/skill:consult ${topicBlock}。実装まで進んだ場合、完了時は /finish で規模に応じた仕上げを完走する`;
 }
 
 function buildReviewLoopPrompt(brief: string): string {
@@ -135,6 +124,35 @@ function buildReviewLoopPrompt(brief: string): string {
 	];
 	if (brief) lines.push("", "## 変更の意図", "", brief);
 	return lines.join("\n");
+}
+
+type FinishConfig = {
+	lg?: { afterReview?: string[] };
+};
+
+/**
+ * project の .pi/finish.json から lg の review-loop 後 in-session ステップを読む。
+ * 各要素はそのまま user message として送る（例: "/skill:verify-app"）。
+ * 無い・untrusted なら空。壊れた JSON は警告して無視する
+ */
+function loadAfterReview(ctx: ExtensionContext): string[] {
+	if (!ctx.isProjectTrusted()) return [];
+
+	let raw: string;
+	try {
+		raw = readFileSync(join(ctx.cwd, ".pi", "finish.json"), "utf8");
+	} catch {
+		return [];
+	}
+
+	try {
+		const config = JSON.parse(raw) as FinishConfig;
+		const steps = config.lg?.afterReview ?? [];
+		return steps.filter((s) => typeof s === "string" && s.trim().length > 0);
+	} catch {
+		if (ctx.hasUI) ctx.ui.notify(".pi/finish.json が不正な JSON のため無視します", "warning");
+		return [];
+	}
 }
 
 function buildStepPrompt(step: Step, brief: string): string {
@@ -157,7 +175,7 @@ async function resolveSize(rawSize: Size | null, ctx: ExtensionContext): Promise
 
 const STEP_TIMEOUT_MS = 30 * 60 * 1000;
 
-/** tidy / docs / commit を fresh な pi one-shot（会話コンテキストなし）で逐次実行する */
+/** tidy / docs / commit を fresh な CLI one-shot（会話コンテキストなし）で逐次実行する */
 async function runSteps(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
@@ -166,9 +184,9 @@ async function runSteps(
 ): Promise<void> {
 	const done: string[] = [];
 	for (const step of steps) {
-		if (ctx.hasUI) ctx.ui.setStatus("workflow-finish", `${step.name} (${step.model}) 実行中…`);
+		if (ctx.hasUI) ctx.ui.setStatus("workflow-finish", `${step.name} (${step.runner}) 実行中…`);
 
-		const result = await pi.exec("pi", ["--model", step.model, "-p", buildStepPrompt(step, brief)], {
+		const result = await pi.exec(step.runner, ["-p", buildStepPrompt(step, brief)], {
 			timeout: STEP_TIMEOUT_MS,
 		});
 
@@ -179,7 +197,7 @@ async function runSteps(
 				pi,
 				ctx,
 				[
-					`仕上げの \`${step.name}\` one-shot（${step.model}）が失敗した（exit ${result.code}）。後続は中断済み。`,
+					`仕上げの \`${step.name}\` one-shot（${step.runner}）が失敗した（exit ${result.code}）。後続は中断済み。`,
 					done.length > 0 ? `完了済み: ${done.join(" → ")}` : "完了済みステップなし",
 					"",
 					"## 出力末尾",
@@ -253,8 +271,9 @@ async function confirmIfDirty(
 }
 
 export default function (pi: ExtensionAPI) {
-	// lg: in-session の review-loop 完了（= agent_settled）を待ってから one-shot 列を流す
-	let pendingFinish: { steps: Step[]; brief: string } | null = null;
+	// lg: in-session ステップ（review-loop → afterReview…）を agent_settled ごとに GO 確認して進め、
+	// queue が尽きたら one-shot 列（tidy → docs → commit）を流す
+	let pendingFinish: { queue: string[]; steps: Step[]; brief: string } | null = null;
 
 	pi.registerCommand("consult", {
 		description: "設計・方針を Codex / Claude に確認してから進む",
@@ -289,7 +308,7 @@ export default function (pi: ExtensionAPI) {
 
 			const steps = finishSteps(size);
 			if (size === "lg") {
-				pendingFinish = { steps, brief: rest };
+				pendingFinish = { queue: loadAfterReview(ctx), steps, brief: rest };
 				sendPrompt(pi, ctx, buildReviewLoopPrompt(rest));
 				return;
 			}
@@ -301,13 +320,29 @@ export default function (pi: ExtensionAPI) {
 		await refreshDirtyStatus(pi, ctx);
 
 		if (!pendingFinish) return;
+
+		const next = pendingFinish.queue[0];
+		if (next !== undefined) {
+			if (ctx.hasUI) {
+				const ok = await ctx.ui.confirm("GO？", `次の in-session ステップへ進みますか？\n${next}`);
+				if (!ok) {
+					pendingFinish = null;
+					ctx.ui.notify("中断。再開は /finish lg（review-loop から）or /finish md（仕上げのみ）", "info");
+					return;
+				}
+			}
+			pendingFinish.queue = pendingFinish.queue.slice(1);
+			sendPrompt(pi, ctx, next);
+			return;
+		}
+
 		const { steps, brief } = pendingFinish;
 		pendingFinish = null;
 
 		if (ctx.hasUI) {
 			const ok = await ctx.ui.confirm(
-				"review-loop 完了？",
-				"tidy → docs → commit を fresh セッションで開始しますか？",
+				"GO？",
+				"in-session ステップ完了。tidy → docs → commit を fresh セッションで開始しますか？",
 			);
 			if (!ok) {
 				ctx.ui.notify("中断。再開は /finish md", "info");
