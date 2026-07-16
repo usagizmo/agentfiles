@@ -18,6 +18,10 @@ description: >-
 
 規模 SSOT は `~/.agents/AGENTS.md`。設計の問い直しは `consult`。
 
+## project 差分（`docs-project`）
+
+available skills に `docs-project` があれば先に invoke し、本 skill への project 差分として適用する。差分は追加・具体化のみで、本 skill の基準・完了条件を緩めない。project 側は `docs-project` 固定名で置き、単体では invoke しない。
+
 ## 契約
 
 - 下書きは判断材料の抜け漏れを優先してよい。品質は下記の品質パスが担保する
