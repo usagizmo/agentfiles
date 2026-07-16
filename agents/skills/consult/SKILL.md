@@ -11,4 +11,4 @@ description: >-
 **判断主体は実行中のエージェント**。アドバイザーは検証者。
 
 1. 同ディレクトリの `procedure.md` を Read する（手順 SSOT）
-2. 手順 3 の諮問は同ディレクトリの `advisors.md`（起動表・失敗時ポリシー。harness 差分はここだけ）に従う。以降は `procedure.md` の手順 4〜6
+2. 諮問（アドバイザー起動）だけは同ディレクトリの `advisors.md`（起動表・失敗時ポリシー。harness 差分はここだけ）に従い、終わったら `procedure.md` の残りの手順へ戻る
