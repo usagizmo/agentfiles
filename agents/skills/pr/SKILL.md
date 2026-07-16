@@ -3,7 +3,8 @@ name: pr
 description: >-
   ブランチの実装・検証完了後に PR を作成し auto-merge まで面倒を見る。
   ユーザーが「PR を作成して」と言ったとき、および仕上げが済み積み残しが無いときに実行する。
-  他 PR の CI が回っていればマージ待ち → default へ rebase のあと push する。
+  他 PR の CI が回っていればマージ待ち → ローカル default を最新化して rebase のあと push する。
+  マージ後はセッションまとめ（作成 Issue・積み残し・改善点）を出力する。
 ---
 
 PR を作成し、auto-merge でマージされるまで面倒を見る。タイトル先頭に gitmoji。
@@ -23,7 +24,7 @@ PR を作成し、auto-merge でマージされるまで面倒を見る。タイ
    - **CI 進行中**の SSOT: `gh pr checks <number> --json bucket` のいずれかが `pending`（CheckRun / StatusContext の差は gh が正規化する）
    - **不変条件**: pending を一度でも見た候補は predecessor とし、その PR が `MERGED` または `CLOSED` になるまで待つ（checks が緑に戻っても open のままなら待ち続ける）。停滞・CI 失敗で進まなそうなら無限待ちせずユーザーに報告する
    - 待機は best-effort（他エージェントとの完全排他ではない）。解除後・push 直前に候補を再列挙し、新たな pending があれば同じ不変条件で待つ
-   - クリア後（待機の有無に関わらず）: `git fetch --prune origin` → `git rebase origin/<default>`。衝突は解消。tip が変わったら後続 push は `--force-with-lease`
+   - クリア後（待機の有無に関わらず）: `git fetch --prune origin "$DEFAULT:$DEFAULT"` でローカル default も ff 前進させ（他 worktree で checkout 中など ff 不可ならローカル更新だけ skip して報告し、rebase は `origin/$DEFAULT` 基準）→ `git rebase "$DEFAULT"`。衝突は解消。tip が変わったら後続 push は `--force-with-lease`
    ```bash
    DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
    HEAD=$(git branch --show-current)
@@ -41,6 +42,15 @@ PR を作成し、auto-merge でマージされるまで面倒を見る。タイ
    gh pr merge --merge --auto --subject "{PR タイトル} (#{PR 番号})" --body "{箇条書き body または空}"
    ```
 5. 自 PR の CI を待つ。失敗したらログを見て修正・コミットし 1 に戻る
+
+## マージ後
+
+1. `git fetch --prune origin "$DEFAULT:$DEFAULT"` でローカル default を最新化（マージコミットを取り込む）
+2. セッションまとめを出力する。含めるもの:
+   - マージした PR と変更の要点
+   - このセッションで作成した Issue（番号 + 一言）
+   - 積み残し・懸念点（Issue 化していないものはその旨を明示）
+   - 今後の改善につながる気づき（設計・運用・rules / skills への graduate 候補）
 
 ## タイトル / マージコミット
 
