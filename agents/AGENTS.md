@@ -11,8 +11,8 @@
 
 | 規模 | 目安 | 必須フロー |
 | --- | --- | --- |
-| 軽微 | 局所・低リスク | `commit` のみ可（agent-facing を含むなら下表） |
-| 中規模 | 意味のある挙動変更（骨格は変えない） | `tidy` → `docs` → `commit` |
+| 軽微 | 挙動を変えない局所変更（typo・コメント・等価リファクタ） | `commit` のみ可（agent-facing を含むなら下表） |
+| 中規模 | 挙動変更あり（バグ修正を含む。局所でも該当。骨格は変えない） | `tidy` → `docs` → `commit` |
 | 大規模 | 責務・API・データフロー・永続形式・security/correctness 境界を変える | `review-loop` → `tidy` → `docs` → `commit` |
 
 - 実装中に `consult` または `review-loop` を使った場合は、規模に関わらず実装完了時に必ず `tidy` → `docs` → `commit` まで実行する。確認のみで実装しなかった `consult` は対象外
