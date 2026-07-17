@@ -77,8 +77,7 @@ description: >-
 4. diff が空で親が「直近コミットが対象」と明示したときだけ git diff HEAD~1
 
 ## 必読
-- ~/.agents/rules/boy-scout.md
-- ~/.agents/rules/design-principles.md
+- ~/.agents/AGENTS.md（設計原則・ボーイスカウトルール）
 
 ## 蒸し返さない箇所
 {review-loop で棄却済みの指摘。なければ「なし」}

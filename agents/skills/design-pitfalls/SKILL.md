@@ -9,7 +9,7 @@ description: >-
 # Design Pitfalls
 
 細かい事例の暗記ではなく、ゼロベースで自然かを疑う。具体化は対象コード・既存パターン・自身の推論で行う。
-判定基準の詳細は迷った軸だけ `references/deep-dives.md` を読む。原則本体は `~/.agents/rules/design-principles.md`。
+判定基準の詳細は迷った軸だけ `references/deep-dives.md` を読む。原則本体は `~/.agents/AGENTS.md`。
 
 ## 軸の混在
 
