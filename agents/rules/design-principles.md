@@ -9,14 +9,9 @@
 
 ## 実装方針
 
-- エッジケースまで考慮した完全な実装を目指す
 - **不変条件・順序制約は型で固定する**（コメントや env に頼らない）
 - **抽象化は実際の分岐が 2 つ以上あるときだけ入れる**。1-variant / 将来予約 / dead label は作らず、trivial になったら削る
 - **最終形に不要なコードは初手から書かない**（feature flag / deprecated alias / 互換 shim / 後で削除する前提の温存コード）
 - **production / test の差は型 (DI) で表す**（env bypass で分岐しない）
 
-判定に迷う具体シナリオ（gate 撤去、trust boundary 移動、primitive wrapper 等）は `design-pitfalls` skill（`references/deep-dives.md`）を読む。
-
-## 設計の落とし穴
-
-軸の混在 / SSOT / orchestration / 型で固定 / cache・async / correctness / output は `design-pitfalls` skill に集約。設計レビュー時に参照する。
+設計レビュー時、および判定に迷う具体シナリオ（gate 撤去、trust boundary 移動、primitive wrapper 等）は `design-pitfalls` skill を読む。
