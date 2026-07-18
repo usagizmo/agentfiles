@@ -88,6 +88,7 @@ description: >-
 - 起点 chokepoint の production 形を test / 別層が手コピーしている SSOT 複製 → 修正すべき
 - 今回差分と周辺の shape / 型 / mock / 生成物 drift、兄弟の同修正要否
 - シグナル: TODO: remove after migration、互換だけの alias/re-export/@deprecated、未使用 feature flag、過去制約の workaround
+- 経緯コメント（変更履歴・「以前は〜だった」・Issue / PR 番号）→ 現在の成立理由に書き直すか削除
 
 ## 出力
 重要度順。なければ「指摘なし」のみ。nitpick 不要。
