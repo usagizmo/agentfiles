@@ -102,7 +102,7 @@ flowchart LR
 補足:
 
 - `consult` / `review-loop` のアドバイザーは候補 3 harness から実行中の自分を除いた 2 つを選ぶ（起動表: `consult/advisors.md`）
-- `docs` / `issue` は project 差分機構を持つ: available skills に `docs-project` / `issue-project` があれば先に invoke し差分適用（追加・具体化のみ、基準は緩めない）
+- `docs` / `issue` / `resolve` は project 差分機構を持つ: available skills に `docs-project` / `issue-project` / `resolve-project` があれば先に invoke し差分適用（追加・具体化のみ、基準は緩めない）
 
 ## skill を追加・変更するとき
 
