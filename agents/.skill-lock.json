@@ -41,9 +41,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/vercel-labs/agent-browser.git",
       "skillPath": "skills/agent-browser/SKILL.md",
-      "skillFolderHash": "9b31e495b887e4ca123960415eca69fc7e1bba28",
+      "skillFolderHash": "037e8078db4b20b4aa25c04f21c6de7d335ec449",
       "installedAt": "2026-05-05T08:23:42.455Z",
-      "updatedAt": "2026-07-02T10:33:37.313Z"
+      "updatedAt": "2026-07-23T12:35:14.829Z"
     },
     "supabase-postgres-best-practices": {
       "source": "supabase/agent-skills",
