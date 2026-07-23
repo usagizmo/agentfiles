@@ -1,6 +1,30 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "agentPushNotifEnabled": true,
+  "alwaysThinkingEnabled": true,
+  "autoMemoryEnabled": false,
+  "effortLevel": "low",
+  "enableAllProjectMcpServers": true,
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": false
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash ~/.claude/hooks/herdr-agent-state.sh session",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
   "includeCoAuthoredBy": false,
+  "language": "Japanese",
+  "model": "claude-fable-5[1m]",
   "permissions": {
     "allow": [
       "Bash",
@@ -16,27 +40,18 @@
     ],
     "defaultMode": "auto"
   },
-  "enableAllProjectMcpServers": true,
   "skillOverrides": {
-    "vercel-cli": "off",
-    "supabase-postgres-best-practices": "off",
+    "find-skills": "off",
     "sentry-cli": "off",
-    "find-skills": "off"
+    "supabase-postgres-best-practices": "off",
+    "vercel-cli": "off"
   },
-  "hooks": {},
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.py"
-  },
-  "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": false
-  },
-  "language": "Japanese",
-  "alwaysThinkingEnabled": true,
-  "autoMemoryEnabled": false,
+  "skipAutoPermissionPrompt": true,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
-  "verbose": true,
-  "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "statusLine": {
+    "command": "~/.claude/statusline.py",
+    "type": "command"
+  },
+  "verbose": true
 }
