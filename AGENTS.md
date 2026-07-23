@@ -30,7 +30,7 @@
 | 🐙 | `[copilot]` | `harnesses/copilot` 配下の GitHub Copilot 設定 |
 | 📝 | `[nvim]` | Neovim 設定 |
 | 👻 | `[ghostty]` | Ghostty ターミナル設定 |
-| 🖥️ | `[tmux]` | tmux 設定 |
+| 🐏 | `[herdr]` | `herdr/` / `~/.config/herdr` 配下の herdr 設定 |
 | 📁 | `[yazi]` | Yazi ファイルマネージャー設定 |
 | 🔨 | `[mise]` | mise ランタイムバージョン管理設定 |
 | 🔧 | `[複数]` | 複数スコープにまたがる設定変更（例: `[fish][zsh]`） |

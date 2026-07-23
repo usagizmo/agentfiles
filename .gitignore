@@ -4,6 +4,7 @@
 # externally installed agent skills
 /agents/skills/agent-browser/
 /agents/skills/find-skills/
+/agents/skills/herdr/
 /agents/skills/sentry-cli/
 /agents/skills/skill-creator/
 /agents/skills/supabase-postgres-best-practices/
