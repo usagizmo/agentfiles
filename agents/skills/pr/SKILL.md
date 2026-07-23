@@ -31,7 +31,8 @@ PR を作成し、auto-merge でマージされるまで面倒を見る。タイ
    ```
    gh pr merge --merge --auto --subject "{PR タイトル} (#{PR 番号})" --body "{箇条書き body または空}"
    ```
-5. 自 PR の CI を待つ。失敗したらログを見て修正・コミットし 1 に戻る
+5. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
+6. `gh pr view <number> --json state --jq .state` を 5 秒間隔で確認し、`MERGED` になったらマージ後へ。2 分超えたら auto-merge 不成立として原因を報告する
 
 ## マージ後
 
