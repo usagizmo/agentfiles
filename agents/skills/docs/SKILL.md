@@ -15,6 +15,7 @@ description: >-
 | --- | --- |
 | 仕様変更・機能実装があった（中規模以上の仕上げ） | コミット前に project docs / agent-facing 文書の更新要否を判定し更新する。agent-facing を更新したら品質パスも通す |
 | AGENTS / skills / prompts / references を新規・編集した | コミット前に品質パスを実行する。規模不問。下書きのままで commit しない |
+| 使用した AGENTS / skills の不備（誤誘導・欠落・冗長・手順の摩擦）に気づいた | 自明な修正はその場で直して品質パスを通す。判断が要るものはユーザーに提案する |
 
 規模 SSOT は `~/.agents/AGENTS.md`。available skills に `docs-project` があれば先に invoke し、本 skill への project 差分（追加・具体化のみ。基準・完了条件を緩めない）として適用する。project 側は `docs-project` 固定名で置き、単体では invoke しない。
 
