@@ -1,7 +1,6 @@
 ---
 name: merge
-description: 指定ブランチを --no-ff でマージし、変更内容に沿った gitmoji 付きコミットメッセージを付ける。ユーザーが「〇〇ブランチをマージして」と言ったときに使う。
-disable-model-invocation: true
+description: ローカルブランチのマージは理由・きっかけを問わず必ずこの skill を経由する（`git merge` を直接実行しない）。
 ---
 
 指定ブランチを `--no-ff` でマージする。
