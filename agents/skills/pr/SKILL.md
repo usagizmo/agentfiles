@@ -14,7 +14,7 @@ PR を作成し、auto-merge でマージされるまで面倒を見る。タイ
    - **CI 進行中**の SSOT: `gh pr checks <number> --json bucket` のいずれかが `pending`（CheckRun / StatusContext の差は gh が正規化する）
    - **不変条件**: pending を一度でも見た候補は predecessor とし、その PR が `MERGED` または `CLOSED` になるまで待つ（checks が緑に戻っても open のままなら待ち続ける）。停滞・CI 失敗で進まなそうなら無限待ちせずユーザーに報告する
    - 待機は best-effort（他エージェントとの完全排他ではない）。解除後・push 直前に候補を再列挙し、新たな pending があれば同じ不変条件で待つ
-   - クリア後（待機の有無に関わらず）: `git fetch --prune origin "$DEFAULT:$DEFAULT"` でローカル default も ff 前進させ（他 worktree で checkout 中など ff 不可ならローカル更新だけ skip して報告し、rebase は `origin/$DEFAULT` 基準）→ `git rebase "$DEFAULT"`。衝突は解消。tip が変わったら後続 push は `--force-with-lease`
+   - クリア後（待機の有無に関わらず）: 「ローカル default の同期」（後述）でローカル default を ff 前進させ、`git rebase "$DEFAULT"`。衝突は解消。tip が変わったら後続 push は `--force-with-lease`
    ```bash
    DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
    HEAD=$(git branch --show-current)
@@ -36,7 +36,24 @@ PR を作成し、auto-merge でマージされるまで面倒を見る。タイ
 
 ## マージ後
 
-`git fetch --prune origin "$DEFAULT:$DEFAULT"` でローカル default を最新化し（マージコミットを取り込む）、マージした PR と変更の要点を報告する。
+「ローカル default の同期」でローカル default を最新化し（マージコミットを取り込む）、マージした PR と変更の要点を報告する。
+
+## ローカル default の同期
+
+`$DEFAULT:$DEFAULT` 形式の fetch は default が worktree で checkout 中だと拒否されるため、**default を checkout している worktree の中で ff merge する**:
+
+```bash
+git fetch --prune origin
+DEFAULT_WT=$(git worktree list --porcelain \
+  | awk -v ref="branch refs/heads/$DEFAULT" '/^worktree /{wt=substr($0,10)} $0==ref{print wt}')
+if [ -n "$DEFAULT_WT" ]; then
+  git -C "$DEFAULT_WT" merge --ff-only "origin/$DEFAULT"
+else
+  git fetch origin "$DEFAULT:$DEFAULT"
+fi
+```
+
+ff 不可（default worktree が dirty・分岐）ならローカル更新だけ skip して報告し、rebase 等は `origin/$DEFAULT` 基準で続行する。
 
 ## タイトル / マージコミット
 
