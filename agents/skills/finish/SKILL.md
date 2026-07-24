@@ -13,7 +13,7 @@ description: >-
 2. 大規模: `review-loop`
 3. 中規模以上: `tidy`
 4. `docs` — 仕様変更・機能実装を文書へ反映する（agent-facing 文書の定義・基準は docs skill。触った変更は規模不問で必須）
-5. `commit`
+5. `commit` — 変更が複数の独立した論理単位を含む場合は、単位ごとに分割してコミットする
 
 軽微は `commit` のみ（agent-facing を含むなら 4 → 5）。
 途中で非自明に膨らんだら規模を再判定し、上の段から入り直す。
