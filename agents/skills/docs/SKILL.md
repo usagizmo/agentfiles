@@ -15,16 +15,15 @@ description: >-
 | --- | --- |
 | 仕様変更・機能実装があった（中規模以上の仕上げ） | コミット前に project docs / agent-facing 文書の更新要否を判定し更新する |
 | AGENTS / skills / prompts / references を新規・編集した | コミット前に品質パスを実行する。規模不問 |
-| 使用した AGENTS / skills の不備（誤誘導・欠落・冗長・手順の摩擦）に気づいた | 自明な修正はその場で直して品質パスを通す。判断が要るものはユーザーに提案する |
+| 使用した AGENTS / skills の不備（誤誘導・欠落・冗長・手順の摩擦）に気づいた | 反映先と可否は `~/.agents/AGENTS.md` の層契約に従う。直した agent-facing 文書は品質パスを通す |
 
-規模 SSOT は `~/.agents/AGENTS.md`。available skills に `docs-project` があれば先に invoke し、本 skill への project 差分（追加・具体化のみ。基準・完了条件を緩めない）として適用する。project 側は `docs-project` 固定名で置き、単体では invoke しない。
+規模 SSOT は `~/.agents/AGENTS.md`。
 
 ## 契約
 
 - 下書きは判断材料の抜け漏れを優先してよい。品質は品質パスが担保する
 - 該当トリガーをすべて完了して docs 完了。未完了なら commit しない
 - レビュアーは subagent。委譲の契約は `review-contract.md`。読み手の行動が変わらない編集（typo・表記・等価な言い換え）は自己レビューでよい。subagent を持たない harness は、編集の性質を問わず自己レビューで代替する
-- global（`~/.agents/` = dotfiles agents）の更新が必要と判断したら更新してよい
 
 ## 品質パス（基準 + 手順）
 
