@@ -100,6 +100,8 @@ home 側は harness が cache / auth / vendor を同居させるため **実デ�
 - repo 外を指す link・実ファイル・実ディレクトリ（vendor の `.system` や Grok bundled skills 等）は触らない
 - 外部ツールが実体化してきた実ファイルは、内容を repo 側へ取り込んでから symlink 化する（差分は git で確認・discard できる）。実ディレクトリと repo 外を指す symlink は触らず警告
 - **symlink であるべき箇所が実ディレクトリ / 実ファイルのとき、または `ln` が失敗したときは必ず ⚠️ を出し、件数を集計して非ゼロ終了する**（黙殺しない）。実 dir は自動削除しない
+- **`harnesses/<agent>/hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外**。外部ツールによる hooks 上書きの tripwire で、in-place 書き込みは git diff、実ファイル置換は上記の ❌ で検知する。空であること自体が基準線なので、中身を埋めたり配線を外したりしない
+- **hooks 専用 dir には `inv_guard_dir` を張る**。管理下 symlink と allowlist 以外のエントリを ⚠️ で報告し、別名ファイルの投下を検知する（read-only。自動削除はしない）。harness home 直下に hooks 設定がある場合（codex / cursor）は vendor ファイルと同居するため張らず、symlink check だけで守る
 
 ### コミット例
 
