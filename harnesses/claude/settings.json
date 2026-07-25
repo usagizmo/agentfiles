@@ -3,7 +3,6 @@
   "agentPushNotifEnabled": true,
   "alwaysThinkingEnabled": true,
   "autoMemoryEnabled": false,
-  "enableAllProjectMcpServers": true,
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": false
   },
@@ -26,7 +25,6 @@
   "permissions": {
     "allow": [
       "Bash",
-      "Bash(gh pr merge:*)",
       "Edit",
       "Glob",
       "Read",
