@@ -38,12 +38,6 @@
     ],
     "defaultMode": "auto"
   },
-  "skillOverrides": {
-    "find-skills": "off",
-    "sentry-cli": "off",
-    "supabase-postgres-best-practices": "off",
-    "vercel-cli": "off"
-  },
   "skipAutoPermissionPrompt": true,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
