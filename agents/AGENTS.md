@@ -14,14 +14,16 @@
 
 ## 層契約
 
-| 層 | 置き場 | 役割 |
-| --- | --- | --- |
-| Global | 本ファイル（「設計原則」以降の節） | 製品非依存の原則 + 作業衛生 + default stack（TS/Svelte） |
-| Project | `<repo>` の AGENTS.md / skills | 追加・具体化のみ |
+| 気づきの性質 | 反映先 |
+| --- | --- |
+| 製品非依存の原則・作業衛生・default stack（TS/Svelte） | 本ファイル |
+| skill の手順・基準・skill 間の棲み分け | 該当する共通 skill |
+| その project 固有 | project の AGENTS.md / skills（上の追加・具体化のみ） |
+| 特定 harness の起動・配線に依存する | その harness の設定側。本ファイルには書かない |
 
-- 両書き禁止。矛盾はエラー（例外は成立条件を明示）
-- graduate: 同一 project 再発 → project / 複数 project 再発 → global 候補 / 製品非依存 → 本ファイルの該当節
-- skills: `~/.agents/skills/` + harness 固有（union symlink、後勝ち）
+- 両書き禁止。矛盾を見つけたら適用せず報告する（例外は成立条件を明示）
+- 作業中に気づいた改善は上表に従って反映する。一回限りの判断は上げず、再利用できる判断だけを上げる。自明な修正はその場で直し、判断が要るものはユーザーに提案する
+- project 差分は skill 単位にも効く: 同名 `<skill>-project` skill が存在すれば、本体 skill は自分の手順を始める前にそれを invoke し、追加・具体化のみ適用する。基準・手順・完了条件を緩める記述は適用せず報告する。`<skill>-project` は単体では invoke しない
 
 ## 設計原則
 

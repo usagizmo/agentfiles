@@ -38,6 +38,8 @@ PR を作成し、auto-merge でマージされるまで面倒を見る。タイ
 
 「ローカル default の同期」でローカル default を最新化し（マージコミットを取り込む）、マージした PR と変更の要点を報告する。
 
+closing keyword で紐付けた Issue が実際に `CLOSED` になったか確認する（`gh issue view <n> --json state`）。open のまま残っていたら閉じる。
+
 ## ローカル default の同期
 
 `$DEFAULT:$DEFAULT` 形式の fetch は default が worktree で checkout 中だと拒否されるため、**default を checkout している worktree の中で ff merge する**:
@@ -54,6 +56,15 @@ fi
 ```
 
 ff 不可（default worktree が dirty・分岐）ならローカル更新だけ skip して報告し、rebase 等は `origin/$DEFAULT` 基準で続行する。
+
+## Body / Issue 連携
+
+解決した Issue は closing keyword で紐付ける。**キーワードは番号ごとに必要**:
+
+- ✅ `Closes #662, closes #663, closes #664`（1 行 1 keyword に分けても良い）
+- ❌ `Closes #662, #663, #664` — 先頭の #662 しかリンクされず、残りは merge 後も open で取り残される
+
+部分対応に留まる Issue は closing keyword を使わず `Refs #665` 等の参照にする。
 
 ## タイトル / マージコミット
 

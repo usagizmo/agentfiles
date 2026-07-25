@@ -3,8 +3,6 @@
   "agentPushNotifEnabled": true,
   "alwaysThinkingEnabled": true,
   "autoMemoryEnabled": false,
-  "effortLevel": "low",
-  "enableAllProjectMcpServers": true,
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": false
   },
@@ -24,11 +22,9 @@
   },
   "includeCoAuthoredBy": false,
   "language": "Japanese",
-  "model": "claude-fable-5[1m]",
   "permissions": {
     "allow": [
       "Bash",
-      "Bash(gh pr merge:*)",
       "Edit",
       "Glob",
       "Read",
@@ -39,12 +35,6 @@
       "Skill(commit:*)"
     ],
     "defaultMode": "auto"
-  },
-  "skillOverrides": {
-    "find-skills": "off",
-    "sentry-cli": "off",
-    "supabase-postgres-best-practices": "off",
-    "vercel-cli": "off"
   },
   "skipAutoPermissionPrompt": true,
   "skipDangerousModePermissionPrompt": true,
