@@ -21,7 +21,6 @@
 
 - 両書き禁止。矛盾はエラー（例外は成立条件を明示）
 - graduate: 同一 project 再発 → project / 複数 project 再発 → global 候補 / 製品非依存 → 本ファイルの該当節
-- skills: `~/.agents/skills/` + harness 固有（union symlink、後勝ち）
 
 ## 設計原則
 
