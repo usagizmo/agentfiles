@@ -26,7 +26,7 @@ description: >-
 
 ### 2. プロンプトを一時ファイルへ
 
-`PROMPT=$(mktemp "${TMPDIR:-/tmp}/consult-prompt.XXXXXX")`。軽量なら観点を絞って短くてよい:
+`PROMPT=$(mktemp "${TMPDIR:-/tmp}/consult-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、**出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、以降の各コマンドで再設定する）。軽量なら観点を絞って短くてよい:
 
 ```markdown
 あなたは設計判断のレビュアーです。コードは変更せず分析と提案だけ返してください。
@@ -49,7 +49,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-同ディレクトリの `advisors.md`（起動表・失敗時ポリシー。harness 差分はここだけ）に従う。モデル / effort は上書きしない。失敗は隠さない。
+同ディレクトリの `advisors.md` に従う（アドバイザー起動の SSOT。harness 差分もここだけ）。起動と回収は別コマンドに分ける。
 
 ### 4. 統合して提示
 

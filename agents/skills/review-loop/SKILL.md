@@ -21,7 +21,7 @@ description: >-
 
 ### 2. プロンプト
 
-`PROMPT=$(mktemp "${TMPDIR:-/tmp}/review-loop-prompt.XXXXXX")`（ラウンドごと新規）:
+`PROMPT=$(mktemp "${TMPDIR:-/tmp}/review-loop-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り（ラウンドごと新規）、**出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、以降の各コマンドで再設定する）:
 
 ```markdown
 あなたはコードレビュアーです。コードは変更しないでください。
@@ -43,7 +43,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-同ディレクトリの `advisors.md`（起動表・失敗時ポリシー。harness 差分はここだけ）に従う。モデル / effort は上書きしない。失敗は隠さない。
+同ディレクトリの `advisors.md` に従う（アドバイザー起動の SSOT。harness 差分もここだけ）。起動と回収は別コマンドに分ける。
 
 ### 4. 精査 → 修正
 

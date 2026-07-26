@@ -102,7 +102,7 @@ flowchart LR
 
 ## アドバイザー構成（consult / review-loop）
 
-`consult` / `review-loop` は、候補 3 harness（Claude / Codex / Grok）から**実行中の自分を除いた 2 つ**を read-only で並列起動し、セカンドオピニオンを取る（再入防止）。起動コマンドと、自分が候補 3 つに含まれない harness で走る場合の組み合わせは `consult/advisors.md` が SSOT。
+`consult` / `review-loop` は、候補 3 harness（Claude / Codex / Grok）から**実行中の自分を除いた 2 つ**を read-only で並列起動し、セカンドオピニオンを取る（再入防止）。起動は呼び出し元 shell から切り離し、起動と回収を別コマンドに分ける。起動の手順と条件は `consult/advisors.md` が SSOT。
 
 現在の主運用は Claude Code がメインのため、実際の構成はこうなる:
 
