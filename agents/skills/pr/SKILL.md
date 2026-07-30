@@ -3,18 +3,19 @@ name: pr
 description: PR の作成は理由・きっかけを問わず必ずこの skill を経由する（`gh pr create` を直接実行しない）。
 ---
 
-PR を作成し、auto-merge でマージされるまで面倒を見る。タイトル先頭に gitmoji。
+PR を作り、**merge 可能な状態まで**持っていく。タイトル先頭に gitmoji。
 
 ## フロー
 
-マージまで繰り返す:
+CI が通るまで繰り返す:
 
 1. **先行 PR 待ち + rebase**（毎回の push 直前）
+   - **着地の順番が外から与えられている場合はこの待ちを省く**（二重待ちになるため）。rebase は行う
    - 候補: 同一 repo・base が default の open PR のうち、自 `headRefName` 以外
    - **CI 進行中**の SSOT: `gh pr checks <number> --json bucket` のいずれかが `pending`（CheckRun / StatusContext の差は gh が正規化する）
    - **不変条件**: pending を一度でも見た候補は predecessor とし、その PR が `MERGED` または `CLOSED` になるまで待つ（checks が緑に戻っても open のままなら待ち続ける）。停滞・CI 失敗で進まなそうなら無限待ちせずユーザーに報告する
    - 待機は best-effort（他エージェントとの完全排他ではない）。解除後・push 直前に候補を再列挙し、新たな pending があれば同じ不変条件で待つ
-   - クリア後（待機の有無に関わらず）: 「ローカル default の同期」（後述）でローカル default を ff 前進させ、`git rebase "$DEFAULT"`。衝突は解消。tip が変わったら後続 push は `--force-with-lease`
+   - クリア後（待機の有無に関わらず）: `sync-default.md` でローカル default を ff 前進させ、`git rebase "$DEFAULT"`。衝突は解消。tip が変わったら後続 push は `--force-with-lease`
    ```bash
    DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
    HEAD=$(git branch --show-current)
@@ -27,51 +28,23 @@ PR を作成し、auto-merge でマージされるまで面倒を見る。タイ
    ```
 2. 未同期なら `git push`（初回は `-u`。rebase 後は `--force-with-lease`）
 3. PR が無ければ `gh pr create`、あれば `gh pr edit` で title / body を更新
-4. auto-merge を有効化:
-   ```
-   gh pr merge --merge --auto --subject "{PR タイトル} (#{PR 番号})" --body "{箇条書き body または空}"
-   ```
-5. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
-6. `gh pr view <number> --json state --jq .state` を 5 秒間隔で確認し、`MERGED` になったらマージ後へ。2 分超えたら auto-merge 不成立として原因を報告する
+4. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
 
-## マージ後
-
-「ローカル default の同期」でローカル default を最新化し（マージコミットを取り込む）、マージした PR と変更の要点を報告する。
-
-closing keyword で紐付けた Issue が実際に `CLOSED` になったか確認する（`gh issue view <n> --json state`）。open のまま残っていたら閉じる。
-
-## ローカル default の同期
-
-`$DEFAULT:$DEFAULT` 形式の fetch は default が worktree で checkout 中だと拒否されるため、**default を checkout している worktree の中で ff merge する**:
-
-```bash
-git fetch --prune origin
-DEFAULT_WT=$(git worktree list --porcelain \
-  | awk -v ref="branch refs/heads/$DEFAULT" '/^worktree /{wt=substr($0,10)} $0==ref{print wt}')
-if [ -n "$DEFAULT_WT" ]; then
-  git -C "$DEFAULT_WT" merge --ff-only "origin/$DEFAULT"
-else
-  git fetch origin "$DEFAULT:$DEFAULT"
-fi
-```
-
-ff 不可（default worktree が dirty・分岐）ならローカル更新だけ skip して報告し、rebase 等は `origin/$DEFAULT` 基準で続行する。
+CI が通ったら完了。**merge はここでしない。**
 
 ## Body / Issue 連携
 
 解決した Issue は closing keyword で紐付ける。**キーワードは番号ごとに必要**:
 
-- ✅ `Closes #662, closes #663, closes #664`（1 行 1 keyword に分けても良い）
-- ❌ `Closes #662, #663, #664` — 先頭の #662 しかリンクされず、残りは merge 後も open で取り残される
+- ✅ `Closes #101, closes #102, closes #103`（1 行 1 keyword に分けても良い）
+- ❌ `Closes #101, #102, #103` — 先頭の #101 しかリンクされず、残りは merge 後も open で取り残される
 
-部分対応に留まる Issue は closing keyword を使わず `Refs #665` 等の参照にする。
+部分対応に留まる Issue は closing keyword を使わず `Refs #101` 等の参照にする。
 
-## タイトル / マージコミット
+## タイトル
 
 ```
 {gitmoji} {変更内容を凝縮した説明}
 ```
 
-gitmoji は `../commit/references/gitmoji.md`。`--subject` に `(#N)` を必ず付ける。body はコミット群の箇条書き。不要なら `--body ""`。
-
-auto-merge が使えない場合は CI pass 後に `--auto` なしで同じコマンドを実行する。
+gitmoji は `../commit/references/gitmoji.md`。

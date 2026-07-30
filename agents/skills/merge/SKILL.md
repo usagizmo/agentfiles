@@ -1,9 +1,14 @@
 ---
 name: merge
-description: ローカルブランチのマージは理由・きっかけを問わず必ずこの skill を経由する（`git merge` を直接実行しない）。
+description: >-
+  PR を出さずにローカルで `--no-ff` マージするときに必ずこの skill を経由する
+  （`git merge` を直接実行しない）。既定の着地は PR 経由で、これは例外経路。
 ---
 
 指定ブランチを `--no-ff` でマージする。
+
+**通常は使わない。**変更を default へ入れる既定の経路は PR。
+この skill は PR を経由せずにローカルで統合すると決めたときだけ発動する。
 
 1. 対象ブランチ名を取得する
 2. `git log --oneline HEAD..<branch>` と `git diff HEAD...<branch>` で変更を把握する
