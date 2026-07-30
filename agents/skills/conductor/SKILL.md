@@ -43,14 +43,21 @@ repo 固有の資源キー・容量・停止条件は project 差分（`conducto
 | --- | --- | --- |
 | worktree もセッションも無い | 未着手 | — |
 | **`refine-<番号>` のセッションがある**（worktree は無い） | refine 中 | read |
-| worktree + commit 0 | prepare 中 | read |
-| worktree + commit あり + PR 無し | 実装中 | write |
+| worktree の `HEAD` が default と**同一 SHA** かつ **clean** | prepare 中 | read |
+| worktree が **dirty**、または commit があって PR が無い | 実装中 | write |
 | PR あり + CI pending | CI 待ち | write |
 | PR あり + CI 緑 + 未 merge | 着地待ち | integration |
-| **`default..HEAD` が 0** | 完了 | — |
+| **`default..HEAD` が 0** かつ `HEAD` が default と**別 SHA** | 完了 | — |
 
 `refine` は worktree を作らないので、**セッション名で引く**（`resolve` は worktree で引ける）。
 完了を `default..HEAD == 0` で見るのは、PR を経由しない着地も拾えるため。
+
+**prepare 中も `default..HEAD` は 0 になる。**両者を分けるのは `HEAD` が default そのものか
+（まだ 1 つも commit していない）、自分の commit が default へ取り込まれた結果か。SHA を比べずに
+commit 数だけで見ると、着地済みの worktree を prepare 中と数え続けて枠が空かない。
+
+**commit の有無だけでも足りない。**`prepare` は書き込まない工程なので、**dirty な worktree は
+commit が 0 でも実装中**。clean かどうかを見ないと、書き換えの最中を read 枠で数え続ける。
 
 **lease は台帳ではなくこの表から復元する。**tick が記憶を持たなくてよいのはこのため。
 着地待ちが複数あるときは、PR の作成が早い方が integration lease を持つ。
@@ -78,6 +85,22 @@ flowchart TD
 
 空キューは**終了条件ではなく idle**。次の観測まで待つ。
 
+### いつ打つか
+
+**ポーリングしない。待ちっぱなしにもしない。**状態のスナップショットを取り、前回と違ったときだけ打つ。
+何も変わっていない tick は観測の空振りにしかならず、API の枠だけを焼く。
+
+スナップショットに入れるもの:
+
+- default の SHA
+- worktree ごとに prepare を抜けたか（commit があるか dirty か。**0 か 1 に丸める**。
+  実装中にファイルが増えるたび起こさない）
+- open PR の番号と branch
+- 子セッションの名前と状態
+
+**自分自身は入れない。**conductor の状態は応答のたびに変わるので、入れると全部ノイズになる。
+スナップショットの取り方は harness 依存（`harness.md`）。
+
 ## lease
 
 並列は「事前に予測した path」ではなく**実行資源の貸し出し**で制御する。
@@ -93,6 +116,12 @@ flowchart TD
 
 **lock ではなく lease と呼ぶのは、明示的な解放を要さないから。**セッションが消えれば貸出も消える
 （次の tick が観測でそう判定する）。持ち主が死んで枠が残り続ける状態が原理的に起きない。
+
+**人待ちは lease を返す。**製品判断を待って止まっているセッションは実行資源を何も使っていないので、
+稼働中に数えない。数えると、答えを待っている間だけ並列度が落ちる。
+
+代わりに**人待ちの総数に上限を置く**（project 差分）。上限に達したら新規を起こさない —
+答えられる量を超えて質問を積んでも、待ち行列が伸びるだけで流れは速くならない。
 
 **lease は専用の台帳を持たない。**該当セッションを再開させることが発行であり、
 稼働中セッションの集合とその計画（`resourceKeys`）が現在の貸出状態そのもの。
@@ -127,6 +156,7 @@ flowchart TD
 
 - 1 tick あたりの最大 action 数
 - prepare / write / integration それぞれの容量
+- 人待ちの総数
 - Issue 単位の retry budget。連続失敗は Status を未計画へ戻すか人へ回す
 - systemic failure の circuit breaker。rate limit・ネットワーク断は backoff
 - **解釈不能な状態では fail-closed**（進めずに報告する）
@@ -138,7 +168,7 @@ flowchart TD
 **Issue の Status を未計画へ戻すとその Issue の新しい遷移が止まる。**全体停止は conductor セッション自体の停止。
 認証不明・conductor の多重起動・計画 schema 不明・整合失敗の連続は全体 pause に倒す。
 
-**conductor は 1 つだけ動かす。**起動したら自分のセッションに固定名を付け（`session-launch.md`）、
+**conductor は 1 つだけ動かす。**起動したら自分のセッションに固定名を付け（`harness.md`）、
 tick の観測で**同名のセッションが自分以外にいたら自分を止めて報告する**。名前が付いていないと
 検知できないので、名乗るのを飛ばさない。
 
@@ -213,7 +243,7 @@ Status や assignee では排他できない — 同時に 2 つが「自分が�
 2. remote branch を一意名で作成する。失敗したら候補を捨てて次へ
 3. Status を進行中にし、assignee を自分にする
 4. worktree を作る
-5. セッションを起こす（`session-launch.md`）
+5. セッションを起こす（`harness.md`）
 
 Project の更新失敗で claim をロールバックしない。**branch が真実**で、Status は台帳。
 ずれは次の tick が直す。base は常に default から切る。
@@ -225,11 +255,12 @@ Project の更新失敗で claim をロールバックしない。**branch が�
 | ずれ | 判定 | 扱い |
 | --- | --- | --- |
 | claim だけ残っている | 進行中なのに branch も worktree もセッションも無い | 承認済みキューへ戻し、経緯を Issue にコメントする |
-| 実体だけ残っている | **`default..HEAD` が 0**（= merge 済み）なのに worktree / セッションがある | **稼働中に数えない。**自分が作ったものは片付ける（手順は `session-launch.md`） |
+| 実体だけ残っている | 工程の判定表で**完了**なのに worktree / セッションがある | **稼働中に数えない。**自分が作ったものは片付ける（手順は `harness.md`） |
 | worktree が prunable | checkout が消えている | 稼働中に数えない。自分が作ったものなら片付ける |
 
-判定に `default..HEAD == 0` を使えるのは、着地すると worktree の HEAD が default の祖先になるため。
-**PR が閉じたかどうかを見るより確実**（PR を経由しない着地もある）。
+完了の判定に `default..HEAD == 0` を使えるのは、着地すると worktree の HEAD が default の祖先に
+なるため。**PR が閉じたかどうかを見るより確実**（PR を経由しない着地もある）。ただし
+**prepare 中と同じ観測になるので、HEAD の SHA 比較まで含めて判定する**（工程の判定表）。
 
 **セッションが idle でも完了とは限らない。**API エラーでの中断・lease 待ち・停止条件による待機を
 区別する。判定は Issue と PR と commit の有無で行い、セッションの状態表示だけで決めない。
@@ -239,8 +270,10 @@ Project の更新失敗で claim をロールバックしない。**branch が�
 
 ## 状況ボード
 
-**tick ごとに 1 つの Artifact を更新する。**ユーザーがそれを見れば、今どの worktree で何が
-起きているかが分かる状態にする。Artifact を作れない harness では、同じ内容を最終応答に出す。
+**1 つの Artifact を更新し続ける。**ユーザーがそれを見れば、今どの worktree で何が起きているかが
+分かる状態にする。Artifact を作れない harness では、同じ内容を最終応答に出す。
+
+更新するのは**稼働中・詰まり・キューのいずれかが変わったとき**。変化の無い tick で書き直さない。
 
 載せるもの:
 

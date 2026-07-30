@@ -210,7 +210,7 @@ skill 間でデータ資産を共有するときは、本文への複製では�
 ```text
 agents/skills/
 ├── conductor/
-│   └── session-launch.md              # SSOT（worktree + セッションの起こし方。multiplexer 差し替え点）
+│   └── harness.md                     # SSOT（multiplexer への操作。前半＝契約 / 後半＝差し替え点）
 ├── pr/
 │   └── sync-default.md                # SSOT（ローカル default の同期。ship からパス参照）
 ├── consult/
