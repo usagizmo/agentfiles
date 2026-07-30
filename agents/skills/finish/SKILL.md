@@ -2,15 +2,15 @@
 name: finish
 description: >-
   実装が一段落したら必ず実行する仕上げ。規模判定（SSOT は ~/.agents/AGENTS.md）に従い
-  [review-loop] → tidy → docs → commit を順に実行する。
+  [zero-base-loop] → tidy → docs → commit を順に実行する。
 ---
 
 # 仕上げ
 
 実装完了からコミットまで。規模の定義は `~/.agents/AGENTS.md` が SSOT、仕上げフローは本 skill が SSOT。
 
-1. 規模を判定する（実装中に consult / review-loop を使った場合は中規模以上として扱う。確認のみで実装しなかった consult は対象外）
-2. 大規模: `review-loop`
+1. 規模を判定する（実装中に consult / zero-base-loop を使った場合は中規模以上として扱う。確認のみで実装しなかった consult は対象外）
+2. 大規模: `zero-base-loop`
 3. 中規模以上: `tidy`
 4. `docs` — 仕様変更・機能実装を文書へ反映する（agent-facing 文書の定義・基準は docs skill。触った変更は規模不問で必須）
 5. `commit`

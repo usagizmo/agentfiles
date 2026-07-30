@@ -2,42 +2,114 @@
 
 agent 共通 skills の SSOT。`~/.agents/skills` へ投影され、各 harness から参照される。harness ごとの配線方法は harness で異なり、`lib/inventory.sh` が SSOT（配置方針は dotfiles repo の `AGENTS.md`）。
 
-この README は**関係性と発動条件の見取り図**。各 skill の手順詳細はそれぞれの `SKILL.md` が SSOT。
+この README は**人が全体を把握するための見取り図**。harness が自動で読み込むものではないので、
+**規約をここだけに書かない** — 各 skill の手順詳細は `SKILL.md`、agent-facing 文書の書き方と
+その検査は `docs` の品質パスが SSOT。
 
-## 2 層構造: フロー skill と単体 skill
+## 全体像
+
+複数の課題が同時に動いているときの俯瞰。1 件の中の進行は「1 件の進行」の図を見る。
+
+```mermaid
+flowchart TB
+    U[/ユーザー/] -->|/refine| G[refine<br/>consult → 計画を Issue へ<br/>→ Status を計画済みへ]
+    G --> Q[(計画済み<br/>open + 未 claim)]
+    U -->|/conductor| AP
+
+    subgraph AP["conductor — 1 つだけ・常駐"]
+        TICK[tick<br/>観測 → 回収 → lease 発行]
+    end
+
+    Q --> TICK
+
+    subgraph RUN["稼働中セッション（worktree ごとに独立）"]
+        direction LR
+        SA["#A 実装中<br/>write lease 保持"]
+        SB["#B 待機<br/>資源が #A と交差"]
+        SC["#C prepare 中<br/>読取のみ"]
+    end
+
+    TICK -->|起こす / 再開させる| RUN
+    RUN -.観測される.-> TICK
+    SA --> LAND["着地<br/>integration lease は常に 1 本"]
+    LAND -->|ship| MAIN[(default branch)]
+    MAIN -.次の tick で観測.-> TICK
+    LAND --> RP[セッションまとめ<br/>+ 次の候補] --> U
+```
+
+読み方は 3 つ。
+
+- **人が触るのは 2 か所だけ** — `/refine` で計画を承認する（Status が計画済みへ進む）と、止まったときに判断を返す
+- **並列できるかは lease が決める** — `#B` が待っているのは人の判断待ちではなく資源待ち。専用の台帳は無く、稼働中セッションの計画（`resourceKeys`）が貸出状態そのもの
+- **着地は必ず 1 本ずつ** — 実装が何本並んでも default に入るのは直列。ここが本当のボトルネック
+
+## 層構造
 
 | 層 | skills | 契約 |
 | --- | --- | --- |
-| フロー skill | `resolve` `finish` | 単体 skill を束ねて進行順を定義する |
-| 単体 skill | `consult` `review-loop` `tidy` `docs` `commit` `pr` `issue` `merge` `rabi-design` | それ自体で完結し、単体で invoke できる。本文で他 skill に言及しない |
+| orchestrator | `conductor` | キューを回す。1 件の解決は work-item flow に委譲する |
+| work-item flow | `refine` `resolve` | 課題 1 件を扱う。`refine` は計画まで、`resolve` は着地まで |
+| subflow | `finish` | 工程の一部を束ねる |
+| leaf | `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` | それ自体で完結し、単体で invoke できる |
 
-- 参照方向は **フロー → 単体の一方通行**。単体 skill 同士の依存・言及は作らない
-- skill 間の棲み分け・順序の知識は、フロー skill とこの README が持つ（規模の定義と層ごとの反映先は `~/.agents/AGENTS.md`）
-- 例外はデータ資産の共有のみ: gitmoji 一覧（`commit/references/gitmoji.md`）、アドバイザー起動表（`consult/advisors.md`）、レビュー委譲の契約（`tidy/review-contract.md`）。共有の張り方は「物理構造」の節を参照
+参照は上の層から下の層への一方通行:
+
+```text
+conductor → resolve → finish → consult / tidy / docs / commit / pr / ship / …
+refine    → consult
+```
+
+- **禁止するのは下位から上位への逆参照と循環**。`resolve` は `conductor` を知らないし、leaf は flow を知らない
+- 同じ層どうしの依存・言及も作らない（leaf 同士は特に）。**規約の本体と検出手順は `docs` の品質パス**
+- skill 間の棲み分け・順序の知識は、上位層の skill とこの README が持つ（規模の定義と層ごとの反映先は `~/.agents/AGENTS.md`）
+- 例外はデータ資産の共有のみ: gitmoji 一覧（`commit/references/gitmoji.md`）、アドバイザー起動表（`consult/advisors.md`）、レビュー委譲の契約（`tidy/review-contract.md`）、default 同期（`pr/sync-default.md`）。共有の張り方は「物理構造」の節を参照
 
 このほかに外部由来のツール系 skills があるが、それぞれの description に従い単発で発動するためこの README では扱わない。
 
-## フロー skill の中身
+## 上位層の中身
 
-### resolve — 課題 1 件の一気通貫
+### conductor — 承認済みキューの消化
 
-ユーザーが `/resolve` で課題（Issue 番号・タスク説明）を渡したときに実行する。Issue 切り出しの基準もここが SSOT。
+ユーザーが `/conductor` で起動したときに実行する常駐 reconciler。**外部化された状態を観測し、
+そこから一意に決まる遷移だけを実行する。**選出・claim・lease 発行・stale 回収・次の候補の提示を持つ。
+技術方針・製品判断・着手後にどこで人を待つかは持たない（`resolve` 側）。
+
+### refine — 課題を計画済みにする
+
+ユーザーが `/refine` で Issue を渡したときに実行する。`consult` で方針を確定し、Issue 契約が
+揃ったらStatus を計画済みへ進める。**実装しない。**
+
+**Status を計画済みへ進めるのは常にこの工程だけ。**`conductor` は自分でキューに積めない（自己増殖の禁止）。
+
+### resolve — 課題 1 件の状態機械
+
+`/resolve` で課題を渡されたとき、またはStatus が計画済みで claim 済みの課題を渡されたときに実行する。
+`interactive` / `managed` の 2 variant を持ち、**lease を誰が出すかは知らない**（空くまで idle で待つ）。
+計画の外部化・着手後の停止条件・作業単位の運用もここが SSOT（作業単位の原則自体は `~/.agents/AGENTS.md`）。
 
 ### finish — 実装一段落の仕上げ
 
-実装が一段落したら必ず実行する。単発タスクでも共通。
+実装が一段落したら必ず実行する。単発タスクでも共通。規模別のフローと再判定の条件は `finish` が SSOT。
+
+## 1 件の進行
+
+課題 1 件が受領から着地まで通る順。複数件が同時に動いている俯瞰は「全体像」の図を見る。
 
 ```mermaid
 flowchart TD
-    U[/ユーザーが課題を渡す/] --> W[resolve]
-    W --> C[consult<br/>方針確定]
-    C --> I[実装]
+    U[/ユーザー/] -->|課題を渡す| W[resolve]
+    U -->|/conductor| AP[conductor<br/>常駐 reconciler]
+    AP -->|claim して起こす| W
+
+    W --> P[prepare<br/>読取のみ · consult · 計画を外部化]
+    P --> WW[write lease 待ち<br/>managed のみ]
+    WW --> I[実装]
     I --> F[finish<br/>仕上げの入口]
 
     F --> S{"規模判定<br/>定義 SSOT: ~/.agents/AGENTS.md"}
 
     subgraph FIN["finish の内部（規模別）"]
-        S -->|大規模| RL[review-loop] --> T[tidy]
+        S -->|大規模| RL[zero-base-loop] --> T[tidy]
         S -->|中規模| T
         T --> D[docs]
         S -->|軽微 + agent-facing| D
@@ -46,29 +118,37 @@ flowchart TD
     end
 
     CM --> V[検証<br/>プロジェクトの検証 skill]
-    V --> GO{ユーザー GO}
-    GO -->|Yes| PR[pr]
+    V --> CK{正解を機械が持つか}
+    CK -->|test / E2E で判定できる| IW
+    CK -->|API・UI・設計| SHOW[実物を見せて確認]
+    SHOW --> IW[integration lease 待ち<br/>managed のみ・常に 1 本]
+    IW --> PR[pr] --> SH[ship] --> RP[セッションまとめ]
+    RP -.次の候補.-> AP
 
-    I -.設計判断が発生したら随時.-> C
-    I -.独立レビューが要る規模の切り出しのみ.-> IS[issue]
+    AP -.lease 発行.-> WW
+    AP -.lease 発行.-> IW
+    I -.設計判断が発生したら随時.-> C[consult]
+    I -.ユーザーが切り出すと決めたときのみ.-> IS[issue]
 ```
 
-規模の定義は `~/.agents/AGENTS.md`、規模ごとのフローと再判定の条件は `finish` が SSOT。上図はその進行順の骨格。
+規模の定義は `~/.agents/AGENTS.md`。上図は進行順の骨格であって、各工程の中身は個々の `SKILL.md` が持つ。
 
-## 単体 skill: ゲート系（直接実行禁止）
+## leaf: ゲート系（直接実行禁止）
 
 git / gh の一部操作は、理由・きっかけを問わず**必ず skill を経由する**。
 
 | skill | 置き換える生コマンド | 発動条件 |
 | --- | --- | --- |
 | `commit` | `git commit` | コミットするとき常に。gitmoji 付与（`commit/references/gitmoji.md` が SSOT） |
-| `merge` | `git merge` | ローカルマージするとき常に。`--no-ff` + gitmoji |
-| `pr` | `gh pr create` | PR を作るとき常に。auto-merge まで面倒を見る（ユーザー GO は `resolve` フロー側） |
-| `issue` | `gh issue create` | Issue を作るとき常に。切り出すかどうかの判断基準は `resolve` が SSOT |
+| `merge` | `git merge` | **PR を出さずに**ローカルで統合するときだけ（例外経路）。`--no-ff` + gitmoji |
+| `pr` | `gh pr create` | PR を作るとき常に。merge 可能な状態まで持っていく（merge はしない） |
+| `ship` | `gh pr merge` | PR を merge するとき常に。着地と後始末（Issue の CLOSED 確認まで） |
+| `issue` | `gh issue create` | Issue を作るとき常に。切り出しの判断は呼び出し元（作業単位は `~/.agents/AGENTS.md`） |
 
-`issue` / `merge` / `pr` の gitmoji は `commit/references/gitmoji.md` を共有する。
+`issue` / `merge` / `pr` / `ship` の gitmoji は `commit/references/gitmoji.md` を共有する。
+`pr` と `ship` は default 同期の手順（`pr/sync-default.md`）も共有する。
 
-## 単体 skill: レビュー・品質系の対比
+## leaf: レビュー・品質系の対比
 
 各 skill は自分のスコープだけを定義しているため、棲み分けはこの表で見る。
 
@@ -76,7 +156,7 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 flowchart LR
     Q1{"いつ・何を?"}
     Q1 -->|着手前後の設計判断・方針| consult
-    Q1 -->|書き終えた大規模 diff の総点検<br/>設計レベルの指摘も拾う| review-loop
+    Q1 -->|書き終えた大規模 diff の総点検<br/>設計レベルの指摘も拾う| zero-base-loop
     Q1 -->|クリーンアップ・周辺改善| tidy
     Q1 -->|実装・仕様変更の文書への反映| docs
 ```
@@ -84,8 +164,8 @@ flowchart LR
 | skill | 使う | 使わない |
 | --- | --- | --- |
 | `consult` | 複数案が存在し得る設計判断・中規模以上の見込みで着手するとき（ユーザー明示不要） | 選択肢が実質 1 つの自明な変更 |
-| `review-loop` | 大規模 diff を書き終えた後、コミット前。設計レベルの指摘（ゼロベース一致・根本解決）も拾う | 軽微・中規模 |
-| `tidy` | 中規模以上の実装完了後、コミット前 | 軽微。設計妥当性の判定（→ `consult` / `review-loop`） |
+| `zero-base-loop` | 大規模 diff を書き終えた後、コミット前。設計レベルの指摘（ゼロベース一致・根本解決）も拾う。**指摘が尽きるまで回す** | 軽微・中規模 |
+| `tidy` | 中規模以上の実装完了後、コミット前。**レビューは 1 巡** | 軽微。設計妥当性の判定（→ `consult` / `zero-base-loop`） |
 | `docs` | 仕様変更・機能実装を文書へ反映するとき（中規模以上の仕上げ）。agent-facing 文書を触った変更は規模不問で品質パス | 製品コード実装そのもの |
 
 補足:
@@ -97,12 +177,12 @@ flowchart LR
 
 | skill | 委譲先 | 契約の SSOT |
 | --- | --- | --- |
-| `consult` / `review-loop` | 別 harness の CLI を read-only で並列起動（次節） | `consult/advisors.md` |
+| `consult` / `zero-base-loop` | 別 harness の CLI を read-only で並列起動（次節） | `consult/advisors.md` |
 | `docs` / `tidy` | 同 harness の subagent。書き手のバイアスを切るのが目的で、対象と判断基準だけを渡す | `tidy/review-contract.md` |
 
-## アドバイザー構成（consult / review-loop）
+## アドバイザー構成（consult / zero-base-loop）
 
-`consult` / `review-loop` は、候補 3 harness（Claude / Codex / Grok）から**実行中の自分を除いた 2 つ**を read-only で並列起動し、セカンドオピニオンを取る（再入防止）。起動は呼び出し元 shell から切り離し、起動と回収を別コマンドに分ける。起動の手順と条件は `consult/advisors.md` が SSOT。
+`consult` / `zero-base-loop` は、候補 3 harness（Claude / Codex / Grok）から**実行中の自分を除いた 2 つ**を read-only で並列起動し、セカンドオピニオンを取る（再入防止）。起動は呼び出し元 shell から切り離し、起動と回収を別コマンドに分ける。起動の手順と条件は `consult/advisors.md` が SSOT。
 
 現在の主運用は Claude Code がメインのため、実際の構成はこうなる:
 
@@ -111,7 +191,7 @@ flowchart TD
     M["メイン: Claude Code"]
 
     M -->|"consult: 着手前の方針相談"| A
-    M -->|"review-loop: 大規模 diff の総点検"| A
+    M -->|"zero-base-loop: 大規模 diff の総点検"| A
 
     subgraph A["アドバイザー（自分=Claude を除いた 2 つ・並列・read-only）"]
         X["Codex"]
@@ -129,9 +209,13 @@ skill 間でデータ資産を共有するときは、本文への複製では�
 
 ```text
 agents/skills/
+├── conductor/
+│   └── session-launch.md              # SSOT（worktree + セッションの起こし方。multiplexer 差し替え点）
+├── pr/
+│   └── sync-default.md                # SSOT（ローカル default の同期。ship からパス参照）
 ├── consult/
 │   └── advisors.md                    # SSOT（アドバイザー起動表）
-├── review-loop/
+├── zero-base-loop/
 │   └── advisors.md -> ../consult/advisors.md
 ├── tidy/
 │   └── review-contract.md             # SSOT（レビュー委譲の契約）
@@ -140,11 +224,11 @@ agents/skills/
 ```
 
 - 相対 symlink にするのは、repo の checkout 場所と `~/.agents/skills` への投影のどちらでも解決できるようにするため
-- gitmoji 一覧（`commit/references/gitmoji.md`）は `issue` / `merge` / `pr` からパス参照で共有しており、symlink は張らない（読む側が SKILL.md からパスで辿れれば足りる）
+- gitmoji 一覧（`commit/references/gitmoji.md`）と default 同期（`pr/sync-default.md`）はパス参照で共有しており、symlink は張らない（読む側が SKILL.md からパスで辿れれば足りる）
 - 新たに共有したくなったら、まず SSOT の置き場（最も主たる利用者の skill 配下）を決め、他方から相対 symlink かパス参照で辿る。両方に本文を持たせない
 
 ## skill を追加・変更するとき
 
-1. 単体 skill を束ねたくなったら、フロー skill か本 README に書く
+1. 下位層の skill を束ねたくなったら、上位層の skill に書く（本 README は見取り図の更新のみ）
 2. この README を含む agent-facing 文書を触ったら `docs`（品質パス）→ `commit`
 3. 置き場所（共通 / harness 個別）の判断と配線手順は dotfiles repo の `AGENTS.md` に従う

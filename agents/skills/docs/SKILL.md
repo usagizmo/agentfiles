@@ -36,6 +36,19 @@ agent-facing 文書の品質 SSOT。global も project も同じ。
 - **行動を変えられる具体性**: 何をするか / 何をしないか / SSOT はどこかを明示する。装飾・自己言及は削る
 - **非自明な境界を持つ API は動く正例を残す**: prose の言い換えで代替しない。入口では詳細カタログを複製せず深い SSOT へ誘導する
 - **repo 内で完結させる**: Issue / PR 番号等の外部リンクを張らない。仕様・判断は文書本文に書き、参照は repo 内へ張る
+- **確立した技術用語は訳さない**: `dead code` `stale` `advisory` `lease` 等は英語のまま使う。訳すと判定範囲がぼやける（`dead code` →「不要なコード」にすると「動くが要らない」まで含み、到達不能という機械的判定が失われる）。確立した英語名が無い概念は説明的な日本語で書く
+- **図は分岐・レーン・状態遷移があるときだけ**: 直列手順は箇条書き、分類は表の方が短い。使うのは `flowchart` / `stateDiagram` に留め、experimental な図種（`swimlane-beta` 等）は使わない — レンダラが追随しておらず壊れて表示されうる。レーンは `subgraph` で表せる
+- **ゲート系 skill は置き換える生コマンド名にする**: `git commit` を塞ぐなら commit、`gh issue create` なら issue というように、名前から対応が引ける。語が既存の skill と衝突するときだけ別語にする（`gh pr merge` は merge が埋まっているので ship）。それ以外の skill 名は自由
+- **skill 本文は同じ層と上位層を参照しない**: 参照は上位層 → 下位層の一方通行。単体で完結する skill（leaf）の本文に他 skill 名を書かない。順序と棲み分けは上位層の skill が持つ。**skill を分割した直後が危ない** —「前段は〜」「〜へ渡す」を書いた瞬間に崩れる。触ったら検出する:
+  ```bash
+  for d in ~/.agents/skills/*/; do n=$(basename "$d")
+    grep -oE '`[a-z][a-z0-9-]*`' "$d/SKILL.md" 2>/dev/null | sort -u \
+      | grep -vF "\`$n\`" | while read -r m; do
+        [ -d ~/.agents/skills/"$(echo "$m" | tr -d '`')" ] && echo "$n → $m"
+      done
+  done
+  ```
+  上位層（フロー系）の行が出るのは正常。leaf の行が出たら違反
 
 手順:
 
