@@ -12,14 +12,14 @@ agent 共通 skills の SSOT。`~/.agents/skills` へ投影され、各 harness 
 
 ```mermaid
 flowchart TB
-    U[/ユーザー/] -->|/refine| G[refine<br/>consult → 計画を Issue へ<br/>→ Status を計画済みへ]
-    G --> Q[(計画済み<br/>open + 未 claim)]
-    U -->|/conductor| AP
+    U[/ユーザー/] -->|/conductor| AP
 
     subgraph AP["conductor — 1 つだけ・常駐"]
         TICK[tick<br/>観測 → 回収 → lease 発行]
     end
 
+    TICK -->|未計画を起こす| G[refine<br/>consult → 計画を Issue へ<br/>→ Status を計画済みへ]
+    G --> Q[(計画済み<br/>open + 未 claim)]
     Q --> TICK
 
     subgraph RUN["稼働中セッション（worktree ごとに独立）"]
@@ -35,11 +35,13 @@ flowchart TB
     LAND -->|ship| MAIN[(default branch)]
     MAIN -.次の tick で観測.-> TICK
     LAND --> RP[セッションまとめ<br/>+ 次の候補] --> U
+    G -.製品判断を聞く.-> U
+    RUN -.製品境界で止まる.-> U
 ```
 
 読み方は 3 つ。
 
-- **人が触るのは 2 か所だけ** — `/refine` で計画を承認する（Status が計画済みへ進む）と、止まったときに判断を返す
+- **人が返すのは製品判断だけ** — 計画中（`refine`）と実装中（`resolve`）の 2 か所で聞かれる。それ以外はエージェントが決めきる。`refine` / `resolve` は単体でも起動できるが、常時運転では conductor が起こす
 - **並列できるかは lease が決める** — `#B` が待っているのは人の判断待ちではなく資源待ち。専用の台帳は無く、稼働中セッションの計画（`resourceKeys`）が貸出状態そのもの
 - **着地は必ず 1 本ずつ** — 実装が何本並んでも default に入るのは直列。ここが本当のボトルネック
 
@@ -56,6 +58,7 @@ flowchart TB
 
 ```text
 conductor → resolve → finish → consult / tidy / docs / commit / pr / ship / …
+conductor → herdr（harness の CLI 構文。差し替え点は conductor/harness.md）
 refine    → consult
 ```
 
@@ -71,8 +74,11 @@ refine    → consult
 ### conductor — 承認済みキューの消化
 
 ユーザーが `/conductor` で起動したときに実行する常駐 reconciler。**外部化された状態を観測し、
-そこから一意に決まる遷移だけを実行する。**選出・claim・lease 発行・stale 回収・次の候補の提示を持つ。
-技術方針・製品判断・着手後にどこで人を待つかは持たない（`resolve` 側）。
+そこから一意に決まる遷移だけを実行する。**選出・claim・lease 発行・stale 回収・計画の失効判定・
+次の候補の提示を持つ。技術方針・製品判断・着手後にどこで人を待つかは持たない（`resolve` 側）。
+
+multiplexer への操作は `conductor/harness.md` に隔離してある（前半＝契約 / 後半＝現在の実装）。
+**別のターミナルへ乗り換えるときは後半だけを書き換える。**
 
 ### refine — 課題を計画済みにする
 
@@ -83,7 +89,7 @@ refine    → consult
 
 ### resolve — 課題 1 件の状態機械
 
-`/resolve` で課題を渡されたとき、またはStatus が計画済みで claim 済みの課題を渡されたときに実行する。
+`/resolve` で課題を渡されたとき、または claim 済みの課題を渡されたときに実行する。
 `interactive` / `managed` の 2 variant を持ち、**lease を誰が出すかは知らない**（空くまで idle で待つ）。
 計画の外部化・着手後の停止条件・作業単位の運用もここが SSOT（作業単位の原則自体は `~/.agents/AGENTS.md`）。
 
@@ -209,8 +215,6 @@ skill 間でデータ資産を共有するときは、本文への複製では�
 
 ```text
 agents/skills/
-├── conductor/
-│   └── harness.md                     # SSOT（multiplexer への操作。前半＝契約 / 後半＝差し替え点）
 ├── pr/
 │   └── sync-default.md                # SSOT（ローカル default の同期。ship からパス参照）
 ├── consult/
