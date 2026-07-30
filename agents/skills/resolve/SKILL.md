@@ -3,7 +3,7 @@ name: resolve
 description: >-
   課題 1 件を prepare → 実装 → finish → 検証 → 着地まで一気通貫で進める。
   ユーザーが /resolve で課題（Issue 番号・タスク説明）を渡したとき、
-  または Status が計画済みで claim 済みの課題を渡されたときに実行する。
+  または claim 済みの課題を渡されたときに実行する。
 ---
 
 # 課題解決
@@ -20,8 +20,12 @@ description: >-
 
 ## variant
 
-渡された課題が**計画済みで claim 済み**（Status が計画済み + その Issue 番号の remote branch +
+渡された課題が **claim 済み**（Status が進行中 + その Issue 番号の remote branch +
 assignee が自分）なら `managed`。それ以外は `interactive`。
+
+**見るのは「進行中」であって「計画済み」ではない。**claim はセッションを起こす前に Status を
+進行中へ移すので、渡された時点で計画済みは残っていない。計画済みで判定すると全部 `interactive` に
+落ち、lease を一度も待たないまま着地まで走る。
 
 | variant | lease |
 | --- | --- |
