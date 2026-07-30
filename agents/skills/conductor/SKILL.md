@@ -43,8 +43,8 @@ repo 固有の資源キー・容量・停止条件は project 差分（`conducto
 | --- | --- | --- |
 | worktree もセッションも無い | 未着手 | — |
 | **`refine-<番号>` のセッションがある**（worktree は無い） | refine 中 | read |
-| worktree の `HEAD` が default と**同一 SHA** | prepare 中 | read |
-| worktree + commit あり + PR 無し | 実装中 | write |
+| worktree の `HEAD` が default と**同一 SHA** かつ **clean** | prepare 中 | read |
+| worktree が **dirty**、または commit があって PR が無い | 実装中 | write |
 | PR あり + CI pending | CI 待ち | write |
 | PR あり + CI 緑 + 未 merge | 着地待ち | integration |
 | **`default..HEAD` が 0** かつ `HEAD` が default と**別 SHA** | 完了 | — |
@@ -55,6 +55,9 @@ repo 固有の資源キー・容量・停止条件は project 差分（`conducto
 **prepare 中も `default..HEAD` は 0 になる。**両者を分けるのは `HEAD` が default そのものか
 （まだ 1 つも commit していない）、自分の commit が default へ取り込まれた結果か。SHA を比べずに
 commit 数だけで見ると、着地済みの worktree を prepare 中と数え続けて枠が空かない。
+
+**commit の有無だけでも足りない。**`prepare` は書き込まない工程なので、**dirty な worktree は
+commit が 0 でも実装中**。clean かどうかを見ないと、書き換えの最中を read 枠で数え続ける。
 
 **lease は台帳ではなくこの表から復元する。**tick が記憶を持たなくてよいのはこのため。
 着地待ちが複数あるときは、PR の作成が早い方が integration lease を持つ。
@@ -90,7 +93,8 @@ flowchart TD
 スナップショットに入れるもの:
 
 - default の SHA
-- worktree ごとに commit が付いたか（**0 か 1 に丸める**。実装中の commit が増えるたびに起こさない）
+- worktree ごとに prepare を抜けたか（commit があるか dirty か。**0 か 1 に丸める**。
+  実装中にファイルが増えるたび起こさない）
 - open PR の番号と branch
 - 子セッションの名前と状態
 
