@@ -64,6 +64,14 @@ tick が読むもの。
 
 ### 片付ける
 
+**起こしたものによって片付ける対象が違う。**`refine` は worktree を持たないので、
+worktree 前提の手順をそのまま当てると何も片付かない。
+
+| 終わったもの | 片付けるもの |
+| --- | --- |
+| `refine` | セッションが載っている pane だけ |
+| `resolve` | 下記の 3 つ |
+
 着地した worktree は放置すると容量の判定を狂わせる。**checkout を消すだけでは足りない**
 （branch と `node_modules` が残る）ので、次の 3 つを 1 手で行う。
 
@@ -91,18 +99,25 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
-| 片付ける | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
-| 片付けに要る workspace ID | `herdr worktree list --json`（`open_workspace_id`） |
+| 片付ける（`refine`） | `herdr pane close <id>` |
+| 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
+| 片付けに要る workspace ID | **`herdr workspace list`**（`worktree.checkout_path` で絞る） |
 
-- **`herdr worktree list` は「今 focus している repo」を返す。**別 repo を触った瞬間、対象 repo の
-  worktree が観測から丸ごと消え、片付け済みと誤判定する。一覧は `git -C <repo>` を正とし、
-  herdr は workspace ID を引くためだけに使う
+- **`herdr worktree list` は使わない。**返るのは「UI がフォーカスしている workspace の repo」で、
+  conductor の cwd とは無関係。別 repo にフォーカスが移った瞬間、対象 repo の worktree が観測から
+  丸ごと消え、片付け済みと誤判定する。一覧は `git -C <repo>`、workspace ID は
+  **`herdr workspace list`**（repo に依存せず全 workspace を返す）から引く
 - `worktree create` は worktree・workspace・root pane を**一度に作る**。pane を別途 split しない
 - `agent start` に `--json` は無い（付けると exit 2 の構文エラー）。既定で JSON が返る
 - `agent_status` は `idle` / `working` / `done` / `blocked` の 4 値しか返らない
 - **`blocked` は人待ち**（選択肢の提示で止まっている）。詰まりの検知はここで引き、
   何を聞かれているかは `herdr pane read <id> --source visible` で読む
-- `--wait` を使わない。`--no-focus` でユーザーの focus を奪わない
+- **入力欄への送信は `agent prompt` 以外を使わない。**`pane send-keys <id> enter` も
+  `pane send-text` の改行も agent の入力欄を submit しない（キーは届くが送信されない）。
+  未送信の下書きが残っていても `agent prompt` はそれを捨てて自分の本文だけを送るので、
+  事前に消そうとしなくてよい
+- `--no-focus` でユーザーの focus を奪わない。`agent prompt --wait --until working` は
+  送信が通ったことの確認に使ってよい（完了を待つのとは別）
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
 - 片付けは**標準出力から成否が読めない**（通知の JSON しか返らない）。worktree 一覧と
   remote branch が両方消えたことで確認する。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
