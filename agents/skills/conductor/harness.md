@@ -103,7 +103,12 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - `agent_status` は `idle` / `working` / `done` / `blocked` の 4 値しか返らない
 - **`blocked` は人待ち**（選択肢の提示で止まっている）。詰まりの検知はここで引き、
   何を聞かれているかは `herdr pane read <id> --source visible` で読む
-- `--wait` を使わない。`--no-focus` でユーザーの focus を奪わない
+- **入力欄への送信は `agent prompt` 以外を使わない。**`pane send-keys <id> enter` も
+  `pane send-text` の改行も agent の入力欄を submit しない（キーは届くが送信されない）。
+  未送信の下書きが残っていても `agent prompt` はそれを捨てて自分の本文だけを送るので、
+  事前に消そうとしなくてよい
+- `--no-focus` でユーザーの focus を奪わない。`agent prompt --wait --until working` は
+  送信が通ったことの確認に使ってよい（完了を待つのとは別）
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
 - 片付けは**標準出力から成否が読めない**（通知の JSON しか返らない）。worktree 一覧と
   remote branch が両方消えたことで確認する。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
