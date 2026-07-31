@@ -66,6 +66,7 @@ resourceKeys: # 同時に触ると壊れるものの名前。並列判定に使�
   - <key>
 dependsOn: [<Issue 番号>]
 alsoResolves: [<Issue 番号>] # このブランチで一緒に片付ける Issue。二重着手の防止に使われる
+                            # 本文の `Same branch as #N` は最初からここへ写す
 ```
 <!-- /plan:v1 -->
 
@@ -204,6 +205,7 @@ managed で範囲が `expectedWrites` を超えたときは、**止めずに計�
 
 **別の Issue の内容まで片付けたら、その番号を `alsoResolves` に足す。**branch 名には自分の番号しか
 入らないので、宣言しないとその Issue が「未 claim」に見えて別セッションが起こされる。
+本文に `Same branch as #N` があるものは prepare の時点で写す（実装中に気づいたものは都度足す）。
 あわせてその Issue にも一言コメントして、人がボードを見て分かる状態にする。
 着地時は `pr` の closing keyword で全部の番号を閉じる。
 
