@@ -64,6 +64,14 @@ tick が読むもの。
 
 ### 片付ける
 
+**起こしたものによって片付ける対象が違う。**`refine` は worktree を持たないので、
+worktree 前提の手順をそのまま当てると何も片付かない。
+
+| 終わったもの | 片付けるもの |
+| --- | --- |
+| `refine` | セッションが載っている pane だけ |
+| `resolve` | 下記の 3 つ |
+
 着地した worktree は放置すると容量の判定を狂わせる。**checkout を消すだけでは足りない**
 （branch と `node_modules` が残る）ので、次の 3 つを 1 手で行う。
 
@@ -91,7 +99,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
-| 片付ける | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
+| 片付ける（`refine`） | `herdr pane close <id>` |
+| 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
 | 片付けに要る workspace ID | **`herdr workspace list`**（`worktree.checkout_path` で絞る） |
 
 - **`herdr worktree list` は使わない。**返るのは「UI がフォーカスしている workspace の repo」で、
