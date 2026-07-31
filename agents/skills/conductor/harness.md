@@ -92,11 +92,12 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
 | 片付ける | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
-| 片付けに要る workspace ID | `herdr worktree list --json`（`open_workspace_id`） |
+| 片付けに要る workspace ID | **`herdr workspace list`**（`worktree.checkout_path` で絞る） |
 
-- **`herdr worktree list` は「今 focus している repo」を返す。**別 repo を触った瞬間、対象 repo の
-  worktree が観測から丸ごと消え、片付け済みと誤判定する。一覧は `git -C <repo>` を正とし、
-  herdr は workspace ID を引くためだけに使う
+- **`herdr worktree list` は使わない。**返るのは「UI がフォーカスしている workspace の repo」で、
+  conductor の cwd とは無関係。別 repo にフォーカスが移った瞬間、対象 repo の worktree が観測から
+  丸ごと消え、片付け済みと誤判定する。一覧は `git -C <repo>`、workspace ID は
+  **`herdr workspace list`**（repo に依存せず全 workspace を返す）から引く
 - `worktree create` は worktree・workspace・root pane を**一度に作る**。pane を別途 split しない
 - `agent start` に `--json` は無い（付けると exit 2 の構文エラー）。既定で JSON が返る
 - `agent_status` は `idle` / `working` / `done` / `blocked` の 4 値しか返らない
