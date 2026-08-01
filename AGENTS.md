@@ -58,7 +58,7 @@
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - 最初は個別に書き、**2 つ目の harness が同じ中身を必要にした時点で** `agents/` へ昇格する（空の共通抽象を先に作らない）
 - 参照方向は常に **個別 → 共通** の一方通行。共通が特定 harness を知ってはいけない
-- `consult` / `review-loop` の `advisors.md` は候補（Claude / Codex / Grok）全員の起動ブロックを持つ単一表で、**実行中の自分を除いた 2 つを選ぶ**（再入防止）。harness ごとの上書きは置かない。実体は `consult/advisors.md`、`review-loop/advisors.md` は相対 symlink
+- `consult` / `zero-base-loop` の `references/advisors.md` は候補（Claude / Codex / Grok）全員の起動ブロックを持つ単一表で、**実行中の自分を除いた 2 つを選ぶ**（再入防止）。harness ごとの上書きは置かない。実体は `consult/references/advisors.md`、`zero-base-loop/references/advisors.md` は相対 symlink
 
 ### symlink の貼り方
 

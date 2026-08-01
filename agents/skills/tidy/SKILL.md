@@ -10,7 +10,7 @@ description: >-
 
 ## 契約
 
-レビュアーは subagent。委譲の契約は `review-contract.md`。親は指摘を下記の適用ゲートで再分類する。
+レビュアーは subagent。委譲の契約は `references/review-contract.md`。親は指摘を下記の適用ゲートで再分類する。
 
 レビューは 1 巡。適用後の再レビューはしない — 直した結果の妥当性は手順 4 の検証で確かめる。
 

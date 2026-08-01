@@ -1,1 +1,0 @@
-../tidy/review-contract.md
