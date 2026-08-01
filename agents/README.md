@@ -1,10 +1,32 @@
-# agents/skills
+# agents
 
-agent 共通 skills の SSOT。`~/.agents/skills` へ投影され、各 harness から参照される。harness ごとの配線方法は harness で異なり、`lib/inventory.sh` が SSOT（配置方針は dotfiles repo の `AGENTS.md`）。
+harness を問わず共通で使う agent 設定の SSOT。`~/.agents/` へ投影され、各 harness から参照される。
+配線は `lib/inventory.sh`、置き場所（共通 / harness 個別）の判断は [`../AGENTS.md`](../AGENTS.md)。
+
+| 実体 | 役割 | 投影先 |
+| --- | --- | --- |
+| `AGENTS.md` | 全 harness 共通の instructions | `~/.agents/AGENTS.md` / `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` ほか |
+| `skills/` | 発動条件を持つ手順の集合 | `~/.agents/skills`（Claude は harness 固有 overlay と union） |
+| `.skill-lock.json` | 外部由来 skill の取得元と hash | `~/.agents/.skill-lock.json` |
+
+`.skill-lock.json` は `up.sh` の `bunx skills update -y` が読む。**手で編集しない。**
 
 この README は**人が全体を把握するための見取り図**。harness が自動で読み込むものではないので、
-**規約をここだけに書かない** — 各 skill の手順詳細は `SKILL.md`、agent-facing 文書の書き方と
-その検査は `docs` の品質パスが SSOT。
+**規約をここだけに書かない** — 原則は `AGENTS.md`、各 skill の手順詳細は `SKILL.md`、
+agent-facing 文書の書き方とその検査は `docs` の品質パスが SSOT。
+
+## AGENTS.md と skills の関係
+
+[`AGENTS.md`](AGENTS.md) は全 harness に常時読み込まれる薄い層で、**製品に依存しない原則**だけを置く。
+skills は**発動条件を持つ手順**で、必要になったときだけ読まれる。
+
+skills は AGENTS.md を 2 通りに使う。**中身をここへ写さない**（写した瞬間に drift する）。
+
+- **判断の SSOT として引く** — 規模の定義（軽微 / 中規模 / 大規模）を `finish` が引いて工程を選ぶ、など
+- **反映先の判定に使う** — 学んだことを AGENTS.md / 共通 skill / project のどこへ書くか（層契約）
+
+project 固有の差分は各 repo が持つ。同名 `<skill>-project` があれば本体 skill が先に読み、
+**追加・具体化のみ**を適用する。基準・手順・完了条件を緩める記述は適用せず報告する。
 
 ## 全体像
 
@@ -231,8 +253,10 @@ agents/skills/
 - gitmoji 一覧（`commit/references/gitmoji.md`）と default 同期（`pr/sync-default.md`）はパス参照で共有しており、symlink は張らない（読む側が SKILL.md からパスで辿れれば足りる）
 - 新たに共有したくなったら、まず SSOT の置き場（最も主たる利用者の skill 配下）を決め、他方から相対 symlink かパス参照で辿る。両方に本文を持たせない
 
-## skill を追加・変更するとき
+## 追加・変更するとき
 
-1. 下位層の skill を束ねたくなったら、上位層の skill に書く（本 README は見取り図の更新のみ）
-2. この README を含む agent-facing 文書を触ったら `docs`（品質パス）→ `commit`
-3. 置き場所（共通 / harness 個別）の判断と配線手順は dotfiles repo の `AGENTS.md` に従う
+1. **書く先は [`AGENTS.md`](AGENTS.md) の層契約で決める。**この README には規約の本体を置かず、
+   見取り図だけを更新する
+2. 下位層の skill を束ねたくなったら、上位層の skill に書く
+3. この README を含む agent-facing 文書を触ったら `docs`（品質パス）→ `commit`
+4. 置き場所（共通 / harness 個別）の判断と配線手順は [`../AGENTS.md`](../AGENTS.md) に従う
