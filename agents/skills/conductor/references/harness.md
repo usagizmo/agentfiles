@@ -116,8 +116,12 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
   `pane send-text` の改行も agent の入力欄を submit しない（キーは届くが送信されない）。
   未送信の下書きが残っていても `agent prompt` はそれを捨てて自分の本文だけを送るので、
   事前に消そうとしなくてよい
-- `--no-focus` でユーザーの focus を奪わない。`agent prompt --wait --until working` は
-  送信が通ったことの確認に使ってよい（完了を待つのとは別）
+- **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後。**`--no-focus` は
+  `worktree create` / `pane split` にはあるが `agent prompt` には無い。前に置くと
+  **本文が unknown option として弾かれる**（`/refine ...` が option 名として報告されるので、
+  slash command のせいに見えて紛らわしい）
+- `agent prompt <名前> <本文> --wait --until working` は送信が通ったことの確認に使ってよい
+  （完了を待つのとは別）
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
 - 片付けは**標準出力から成否が読めない**（通知の JSON しか返らない）。worktree 一覧と
   remote branch が両方消えたことで確認する。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
