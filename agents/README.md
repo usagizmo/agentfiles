@@ -79,7 +79,7 @@ flowchart TB
 
 ```text
 conductor → refine / resolve → finish → consult / tidy / docs / commit / pr / ship / …
-conductor → herdr（harness の CLI 構文。差し替え点は conductor/harness.md）
+conductor → herdr（harness の CLI 構文。差し替え点は conductor/references/harness.md）
 refine    → consult
 ```
 
@@ -104,7 +104,7 @@ refine    → consult
 skill をまたぐので、どれか 1 つの `SKILL.md` には書けない不変条件:
 
 - **Status を計画済みへ進めるのは `refine` だけ。**`conductor` は自分でキューに積めない（自己増殖の禁止）
-- multiplexer への操作は `conductor/harness.md` に隔離してある（前半＝契約 / 後半＝現在の実装）。
+- multiplexer への操作は `conductor/references/harness.md` に隔離してある（前半＝契約 / 後半＝現在の実装）。
   **別のターミナルへ乗り換えるときは後半だけを書き換える**
 
 ## 1 件の進行
@@ -153,7 +153,7 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 | `issue` | `gh issue create` | Issue を作るとき常に。切り出しの判断は呼び出し元（作業単位は `~/.agents/AGENTS.md`） |
 
 `issue` / `merge` / `pr` / `ship` の gitmoji は `commit/references/gitmoji.md` を共有する。
-`pr` と `ship` は default 同期の手順（`pr/sync-default.md`）も共有する。
+`pr` と `ship` は default 同期の手順（`pr/references/sync-default.md`）も共有する。
 
 ## leaf: レビュー・品質系の対比
 
@@ -175,35 +175,40 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 
 | skill | 委譲先 | 契約の SSOT |
 | --- | --- | --- |
-| `consult` / `zero-base-loop` | 別 harness の CLI を read-only で並列起動（次節） | `consult/advisors.md` |
-| `docs` / `tidy` | 同 harness の subagent。書き手のバイアスを切るのが目的で、対象と判断基準だけを渡す | `tidy/review-contract.md` |
+| `consult` / `zero-base-loop` | 別 harness の CLI を read-only で並列起動（次節） | `consult/references/advisors.md` |
+| `docs` / `tidy` | 同 harness の subagent。書き手のバイアスを切るのが目的で、対象と判断基準だけを渡す | `tidy/references/review-contract.md` |
 
 ## アドバイザー構成（consult / zero-base-loop）
 
 **メインが手を動かし、別系統モデルが判断だけを検証する分業。**候補 harness から実行中の自分を
 除いたものをアドバイザーにするので、メインが Claude でも Codex でも同じ表から組み替わる。
-候補・起動手順・再入防止の条件は `consult/advisors.md` が SSOT。
+候補・起動手順・再入防止の条件は `consult/references/advisors.md` が SSOT。
 
 ## 物理構造（symlink の実例）
 
-skill 間でデータ資産を共有するときは、本文への複製ではなく**片方を SSOT にして相対 symlink** を張る。現在の実例:
+**`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場所が決まる。**大きさでは分けない。
+
+| ディレクトリ | モデルの扱い | 例 |
+| --- | --- | --- |
+| `references/` | **読む**（必要になったときだけ読み込む） | `gitmoji.md` `harness.md` `advisors.md` |
+| `scripts/` | **実行する** | — |
+| `assets/` | **成果物に使う**（テンプレート・画像・フォント） | `rabi-design/assets` |
+
+`SKILL.md` は発動時に常に読まれるので、**オンデマンドで足りるものは `references/` へ出す**。
+
+skill 間で共有するときは、本文への複製ではなく**片方を SSOT にして相対 symlink** を張る:
 
 ```text
 agents/skills/
-├── pr/
-│   └── sync-default.md                # SSOT（ローカル default の同期。ship からパス参照）
-├── consult/
-│   └── advisors.md                    # SSOT（アドバイザー起動表）
-├── zero-base-loop/
-│   └── advisors.md -> ../consult/advisors.md
-├── tidy/
-│   └── review-contract.md             # SSOT（レビュー委譲の契約）
-└── docs/
-    └── review-contract.md -> ../tidy/review-contract.md
+├── pr/references/sync-default.md                # SSOT（ローカル default の同期。ship からパス参照）
+├── consult/references/advisors.md               # SSOT（アドバイザー起動表）
+├── zero-base-loop/references/advisors.md        -> ../../consult/references/advisors.md
+├── tidy/references/review-contract.md           # SSOT（レビュー委譲の契約）
+└── docs/references/review-contract.md           -> ../../tidy/references/review-contract.md
 ```
 
 - 相対 symlink にするのは、repo の checkout 場所と `~/.agents/skills` への投影のどちらでも解決できるようにするため
-- gitmoji 一覧（`commit/references/gitmoji.md`）と default 同期（`pr/sync-default.md`）はパス参照で共有しており、symlink は張らない（読む側が SKILL.md からパスで辿れれば足りる）
+- gitmoji 一覧（`commit/references/gitmoji.md`）と default 同期（`pr/references/sync-default.md`）はパス参照で共有しており、symlink は張らない（読む側が SKILL.md からパスで辿れれば足りる）
 - 新たに共有したくなったら、まず SSOT の置き場（最も主たる利用者の skill 配下）を決め、他方から相対 symlink かパス参照で辿る。両方に本文を持たせない
 
 ## 追加・変更するとき

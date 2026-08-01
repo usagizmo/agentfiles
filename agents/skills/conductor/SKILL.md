@@ -100,7 +100,7 @@ flowchart TD
 - 子セッションの名前と状態
 
 **自分自身は入れない。**conductor の状態は応答のたびに変わるので、入れると全部ノイズになる。
-スナップショットの取り方は harness 依存（`harness.md`）。
+スナップショットの取り方は harness 依存（`references/harness.md`）。
 
 ## lease
 
@@ -182,7 +182,7 @@ integration だけが固定なのは、**merge が本当の直列化点**だか�
 1 件を止めるのはこの表。**全体を止めるのは conductor セッション自体の停止**で、
 認証不明・conductor の多重起動・計画 schema 不明・整合失敗の連続は全体 pause に倒す。
 
-**conductor は 1 つだけ動かす。**起動したら自分のセッションに固定名を付け（`harness.md`）、
+**conductor は 1 つだけ動かす。**起動したら自分のセッションに固定名を付け（`references/harness.md`）、
 tick の観測で**同名のセッションが自分以外にいたら自分を止めて報告する**。名前が付いていないと
 検知できないので、名乗るのを飛ばさない。
 
@@ -283,7 +283,7 @@ Status や assignee では排他できない — 同時に 2 つが「自分が�
 2. remote branch を代表の番号で一意に作成する。失敗したら候補を捨てて次へ
 3. Status を進行中にし、assignee を自分にする
 4. worktree を作る
-5. セッションを起こす（`harness.md`）
+5. セッションを起こす（`references/harness.md`）
 
 Project の更新失敗で claim をロールバックしない。**branch が真実**で、Status は台帳。
 ずれは次の tick が直す。base は常に default から切る。
@@ -298,7 +298,7 @@ branch 名は `{prefix}/{Issue 番号}-{slug}`（prefix の既定は `feat` / `f
 | ずれ | 判定 | 扱い |
 | --- | --- | --- |
 | claim だけ残っている | 進行中なのに branch も worktree もセッションも無い | **計画済み**へ戻し、経緯を Issue にコメントする |
-| 実体だけ残っている | 工程の判定表で**完了**なのに worktree / セッションがある | **稼働中に数えない。**自分が作ったものは片付ける（手順は `harness.md`） |
+| 実体だけ残っている | 工程の判定表で**完了**なのに worktree / セッションがある | **稼働中に数えない。**自分が作ったものは片付ける（手順は `references/harness.md`） |
 | worktree が prunable | checkout が消えている | 稼働中に数えない。自分が作ったものなら片付ける |
 
 完了かどうかは工程の判定表に従う。
