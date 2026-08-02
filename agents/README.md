@@ -103,7 +103,8 @@ refine    → consult
 
 skill をまたぐので、どれか 1 つの `SKILL.md` には書けない不変条件:
 
-- **Status を計画済みへ進めるのは `refine` だけ。**`conductor` は自分でキューに積めない（自己増殖の禁止）
+- **未計画 → 計画済みへ進めるのは `refine` だけ。**`conductor` は自分でキューに積めない（自己増殖の禁止）。
+  計画済みへ**戻す**のは別で、`conductor`（stale 回収）も `resolve`（停止条件）も行う
 - multiplexer への操作は `conductor/references/harness.md` に隔離してある（前半＝契約 / 後半＝現在の実装）。
   **別のターミナルへ乗り換えるときは後半だけを書き換える**
 
@@ -134,7 +135,7 @@ flowchart TD
     AP -.lease 発行.-> WW
     AP -.lease 発行.-> IW
     I -.設計判断が発生したら随時.-> C[consult]
-    I -.ユーザーが切り出すと決めたときのみ.-> IS[issue]
+    I -.着地後に残った技術的改善のみ.-> IS[issue]
 ```
 
 `finish` の中身（規模別にどの leaf を通るか）は `finish` が SSOT。

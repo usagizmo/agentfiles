@@ -128,7 +128,7 @@ flowchart TD
 **worktree 総数が上限なら、lease が空いていても claim しない**（claim 手順 4 で作るため）。
 
 integration だけが固定なのは、**merge が本当の直列化点**だから。他は増減させてよい。
-**PR 作成と CI は integration の外**で、write を持ったまま進む（CI はブランチごとに独立して回る）。
+**PR 作成と CI は integration の外**で、write を持ったまま進む（理由は `resolve` の工程表）。
 
 **`refine` は worktree を作らない**ので、worktree を持つのは `resolve` だけ。
 総数は lease の合計から導かず、独立の頭打ちとして置く（人待ちのセッションも worktree を残す）。
@@ -280,10 +280,8 @@ Issue 本文の **`Same branch as #N`** で結ばれた集合が group（宣言�
 ## Issue 契約
 
 **Status が計画済み = 「計画が済んでいる」という宣言。**項目は `refine` の Issue 契約が SSOT。
-**揃っているかを確認するだけ**で、欠けていたら着手せず不足項目を挙げて差し戻す。
-
-実行メタデータ（base・worktree path・セッション ID・候補 SHA）は本文に無いのが正しい。時間で
-変わるので Project field・branch・PR から引く。
+**揃っているかを確認するだけ**で、欠けていたら着手せず不足項目を挙げて差し戻す（戻し先は
+「硬い上限」の表）。
 
 ## claim
 
