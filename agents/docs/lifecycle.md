@@ -171,7 +171,7 @@ sequenceDiagram
     participant GH as GitHub
 
     C->>C: ledger が未計画 かつ progress が未着手
-    Note over C: 在庫と人待ちの上限を見る。<br/>揃っていない group の残りは<br/>どちらの上限も超えて起こす
+    Note over C: 在庫の上限と計画枠を見る。<br/>揃っていない group の残りは<br/>在庫の上限を超えて起こす
     C->>F: /refine #N
     F->>GH: Issue と関連コードを読む
     F->>F: consult で方針を確定
@@ -189,5 +189,5 @@ sequenceDiagram
     F->>GH: Status を計画済みへ
     Note over F,GH: これが着手承認そのもの。<br/>conductor は自分で積めない
     C->>C: 観測 → 計画セッションが終わっている
-    C->>C: pane を閉じる（read を空ける）
+    C->>C: pane を閉じる（計画枠を空ける）
 ```
