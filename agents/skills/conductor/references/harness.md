@@ -16,11 +16,22 @@ tick の観測で同じ名前が自分以外にも居たら止まる。
 ### 人待ちを観測する
 
 **セッションが「人の答え待ちで止まっている」ことを、中断と区別して返せること。**区別できないと
-conductor が人待ちを中断と読んで再開を送り続け、lease も返らない。
+conductor が人待ちを中断と読んで再開を送り続ける。
 
-Status では引けない形態がある（`refine` の質問待ちは未計画のまま、`resolve` の意図の確認は
-進行中のまま止まる）ので、**multiplexer 側の印が唯一の判定材料**になる。
-印を持たない harness では、最後の応答の 1 行（`resolve` が「何を待っているか」を書く規約）を読む。
+**印は無くてもよい**（人待ちの SSOT は Issue の記録で、印は即時観測用のキャッシュ）。
+印と記録が食い違ったときの判定は `../SKILL.md`。
+
+### 停止中のセッションが自走できないこと
+
+**禁じるのは自走**（外部入力なしに書き始めること）。止まっているセッションが誰にも触られずに
+再開できる harness だと、write を返したはずの課題が勝手に再開して交差を作る。
+
+**人がセッションへ直接答えるのは正常経路。**人待ちはそうやって解ける — 答えを受けた子が
+記録を `cleared` にし、次の tick で `待機` として観測され、conductor が枠を渡し直す。
+conductor が回答を仲介する必要はない（中身の解釈は conductor の領分ではない）。
+
+このとき必要になるのは grant 世代を持つ fencing token だが、**入力が conductor 経由でしか
+通らない限り不要**なので置かない。その前提が崩れる harness を足すときに入れる。
 
 ### 起こす
 
@@ -29,7 +40,7 @@ Status では引けない形態がある（`refine` の質問待ちは未計画�
 | 起こすもの | worktree | 渡すもの |
 | --- | --- | --- |
 | `refine` | **要らない**（読み取りのみ。既存の checkout で足りる） | `/refine <Issue 番号>` |
-| `resolve` | claim した branch の worktree を作る | `/resolve <Issue 番号>` |
+| `resolve` | claim した branch の worktree を作る（**既にあるなら pane だけ**） | `/resolve <代表> [成員…]`（group なら**対象集合の全番号**。復旧時も同じ） |
 
 どちらも **完了を待たない。**次の tick へ戻る（完了検知は tick の観測で足りる）。
 渡すのは Issue 番号だけで、起こされた側は Issue 本文を読んで自分で文脈を作る
@@ -50,8 +61,12 @@ prepare で読んだ文脈がそこに残っているのが、同一セッショ
 | **計画が失効した** | 交差した変更範囲と、再 plan が要ること |
 | **先行と資源が交差した** | 後発なので安全なチェックポイントで休止すること |
 
-セッションが失われていたら新規に起こす。その場合は Issue コメントの計画から文脈を復元させる
-（**セッション文脈はキャッシュ、外部化した計画は復旧契約**）。
+**渡したら、稼働したことを観測してから次へ進む。**確認しないと、まだ止まって見える課題へ同じ枠を
+もう一度渡せる（資源キーが交差する 2 つが同時に書く）。
+
+セッションが失われていたら新規に起こす。その場合は Issue コメントの計画と人待ちの記録から
+文脈を復元させる（**セッション文脈はキャッシュ、外部化した記録が復旧契約**）。
+起こされた側が起動時に記録を読む契約なので、conductor が中身を解釈して渡す必要はない。
 
 ### 観測する
 
@@ -59,19 +74,27 @@ tick が読むもの。
 
 | 見たいもの | 使い道 |
 | --- | --- |
-| 稼働中セッションの名前と状態 | 工程の判定・多重起動の検知・人待ちの検知 |
-| **対象 repo の** worktree 一覧 | 容量の計算・stale の回収 |
+| 稼働中セッションの名前と状態 | `runtime` の判定・多重起動の検知 |
+| **対象 repo の** worktree 一覧 | `capacity` が `あり` かの判定 |
+| **所有している workspace の一覧** | `capacity` が `prunable` かの判定（checkout が消えた残骸） |
 
 **worktree 一覧は repo を明示して取る。**conductor は複数 repo を跨ぐので、
 「今いる場所」に依存する手段だと、別 repo を触った瞬間に対象が観測から消える。
 
-セッションの状態表示だけでは工程は分からない。conductor 側の判定表（git と PR から引く）と
-必ず組み合わせる。
+セッションの状態表示だけでは `progress` は分からない。`progress` は git と PR からのみ引く。
 
 ### 起こされる
 
 状態のスナップショットを定期的に取り、**前回と違ったときだけ conductor を起こす**手段が要る
 （何を入れて何に丸めるかは `SKILL.md`）。
+
+### 実行器だけ止める
+
+**セッションを止め、worktree・workspace・branch・未コミットの変更は残せること。**差し戻しの前に
+実行器を黙らせるために要る（止めずに枠を移すと、書き続ける実行器と新しい借り手が衝突する）。
+
+**止まったことを観測できるまでは資源を解放しない。**止められない harness なら `Conflict` として
+報告する（黙って進めない）。
 
 ### 片付ける
 
@@ -83,12 +106,19 @@ worktree 前提の手順をそのまま当てると何も片付かない。
 | `refine` | セッションが載っている pane だけ |
 | `resolve` | 下記の 3 つ |
 
+**既存の worktree でセッションだけを起こし直すときは pane を作るだけ**（`worktree create` は
+既に checkout 済みの branch には使えない）。実装を残したまま実行器だけ差し替える経路がこれ。
+
 着地した worktree は放置すると容量の判定を狂わせる。**checkout を消すだけでは足りない**
 （branch と `node_modules` が残る）ので、次の 3 つを 1 手で行う。
 
 1. 重いディレクトリ（`node_modules` / `target` / `dist` / `.turbo`）を退避して background で消す
 2. worktree の checkout を消す
 3. branch を消す（**merge 済みのときだけ**。未マージなら残す）
+
+**例外は「計画が無効」の差し戻し。**claim を解くのが目的なので、**commit が無いことを確認して
+から claim branch を消す**（残すと `progress` が `準備中` のままで台帳が押し戻される）。
+commit があるなら差し戻さない。
 
 ### 差し替えの条件
 
@@ -110,6 +140,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
+| 実行器だけ止める | `herdr agent stop <名前>` の後 `herdr agent list` で `agent_status` が消えたことを確認（pane は閉じない） |
 | 片付ける（`refine`） | `herdr pane close <id>` |
 | 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
 | 片付けに要る workspace ID | **`herdr workspace list`**（`worktree.checkout_path` で絞る） |
@@ -131,8 +162,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
   `worktree create` / `pane split` にはあるが `agent prompt` には無い。前に置くと
   **本文が unknown option として弾かれる**（`/refine ...` が option 名として報告されるので、
   slash command のせいに見えて紛らわしい）
-- `agent prompt <名前> <本文> --wait --until working` は送信が通ったことの確認に使ってよい
-  （完了を待つのとは別）
+- **`agent prompt <名前> <本文> --wait --until working` で稼働を確認してから tick を終える**
+  （完了を待つのとは別。確認しないと、まだ `待機` に見える課題へ同じ枠をもう一度渡せる）
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
 - 片付けは**標準出力から成否が読めない**（通知の JSON しか返らない）。worktree 一覧と
   remote branch が両方消えたことで確認する。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
@@ -143,8 +174,12 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 スナップショットを 60 秒ごとに取り、前回と違ったときだけ 1 行出すプロセスを background で走らせる。
 
+**入れる項目は `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない。**省いた項目だけが変わる
+遷移は永久に起きない（checks が緑になっても起床しなければ integration は一生出ない）。
+
 - worktree 一覧は上記のとおり `git -C <repo>` で取る
 - **conductor 自身を除外する**（`.name != "conductor"`）。応答のたびに `working` ⇄ `idle` する
-- **Project の Status は毎回見ない。**GitHub の GraphQL 枠は他セッションと共有で、60 秒間隔で
-  叩くと枯渇する。Status が動くのは子セッションが終わったときなので、セッションの消滅で足りる
+- **GitHub 側は 1 回のクエリにまとめる。**Issue の state と Status、PR の state と checks、
+  固定 marker のコメントを個別に叩くと GraphQL 枠が枯渇する。**枠が足りないなら間隔を延ばす**
+  （項目を落とすと遷移が止まるが、間隔なら遅れるだけで済む）
 - 観測が丸ごと空になった回は握りつぶす（一時的な API 断で誤検知しない）

@@ -1,1 +1,1 @@
-../../refine/references/same-branch.md
+../../../shared/same-branch.md
