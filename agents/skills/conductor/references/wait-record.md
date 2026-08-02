@@ -1,0 +1,1 @@
+../../../shared/wait-record.md

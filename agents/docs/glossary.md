@@ -1,0 +1,94 @@
+# 用語
+
+**同じ書体で違う種別の語が混ざると読めなくなる。**`resolve` は skill、`tick` はループ 1 周、
+`prepare` は工程、`着地待ち` は conductor から見た状態 — 4 つとも種別が違う。
+
+規約の本体は各 `SKILL.md`。ここは種別と参照先だけ。
+
+## skill
+
+**発動条件を持つ手順の集合。**`~/.agents/skills/<name>/SKILL.md` が実体。
+文中では `conductor` のようにコード体で書く。
+
+| 語 | 層 | 何をするか |
+| --- | --- | --- |
+| `conductor` | orchestrator | 常駐して tick を繰り返し、キューを回す |
+| `refine` | work-item flow | 課題を計画済みにする（実装しない） |
+| `resolve` | work-item flow | 課題 1 件を着地まで進める |
+| `finish` | subflow | 規模別の仕上げを束ねる |
+| `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` `herdr` `skill-creator` `agent-browser` | leaf | 単体で完結する |
+
+## 工程
+
+**`resolve` から見た「今どこ」。**課題 1 件の内部進行で、SSOT は `resolve/SKILL.md` の工程表。
+**外部から指すときも名前で指す**（番号は増減する）。
+
+`prepare` / `write 待ち` / `実装` / `仕上げ` / `検証` / `意図の確認` / `提出` /
+`integration 待ち` / `着地`
+
+## 状態
+
+**`conductor` から見た同じ課題。**観測を正規化した 4 フィールドで、SSOT は `conductor/SKILL.md`。
+**工程より粗い** — 仕上げ・検証・意図の確認は成果物からは区別できないので、まとめて `実装中` になる。
+
+| フィールド | 値 |
+| --- | --- |
+| `progress` | `未着手` `準備中` `準備済み` `実装中` `提出中` `着地待ち` `着地済み` `取り下げ` |
+| `runtime` | `無し` `稼働中` `人待ち` `待機` |
+| `capacity` | `無し` / `あり` / `prunable`（**checkout は消えたが、片付け残りがある**） |
+| `ledger` | `未計画` `計画済み` `進行中` `完了` `退避先`（Project Status。名前は project 差分） |
+
+**`progress` と `runtime` は上から読んで最初に当たった行が値**（終端と人待ちが最上段）。
+複数の行に当たるのは正常で、順序が解決する。
+
+**`Conflict`** — ラダーでは決まらない状態。**触らずに人へ報告する**（fail-closed）。
+どれが該当するか、`ledger` をどの順で判定するかは `conductor/SKILL.md`。
+
+## ループ・操作
+
+| 語 | 種別 | 意味 |
+| --- | --- | --- |
+| `tick` | ループ 1 周 | 観測 → 正規化 → action を 1 つ実行。**冪等で、前回の続きを仮定しない** |
+| `action` | 1 回の変更 | tick が実行する 1 つの操作。上限は `conductor/SKILL.md` |
+| `claim` | 操作 | 課題を**引き受ける宣言**。二重に着手されないよう、remote branch を 1 つ作れた方が勝つ |
+| `reconcile` | 操作 | 今の状態と**あるべき状態**を見比べて、差を 1 つ埋める |
+
+## 資源
+
+**同時に走れる数を制限するための「枠」。**上限に達したら、空くまで待たされる。
+守るものが違うので 1 語にまとめない。SSOT は `conductor/SKILL.md` の資源表。
+
+- **lease（論理 lease）** — 「今この課題が書いてよい」という**貸出**。明示的に返さなくてよく、
+  状態が進めば自動で移る（`lock` と呼ばないのはこのため）。持ち主は**課題**
+- **物理枠** — 実体そのものの数（worktree がいくつあるか、セッションがいくつ動いているか）
+
+| 語 | 種別 | 保持者 |
+| --- | --- | --- |
+| 容量 | 物理枠 | worktree |
+| read | 物理枠 | 生存セッション |
+| write | 論理 lease | **課題** |
+| integration | 論理 lease | **課題** |
+
+**上限値と保持している条件（復元式）は `conductor/SKILL.md` の資源表が SSOT。**ここに写さない。
+
+**論理 lease の保持者は課題そのもの。**セッションは交換可能な実行器、worktree は交換可能な
+checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実体そのものを数える**（実体が消えれば空く）。
+
+## 記録
+
+**セッションは消える。外部化したものだけが復旧契約になる。**どちらも固定 marker 付きの Issue コメント。
+
+| 語 | marker | 書く人 | SSOT |
+| --- | --- | --- | --- |
+| claim の記録 | `claim:v1` | `conductor` | `agents/shared/same-branch.md` |
+| 計画 | `plan:v1` | `resolve` | `resolve/SKILL.md` |
+| 人待ちの記録 | `wait:v1` | `refine` / `resolve` | `agents/shared/wait-record.md` |
+| 失敗の記録 | `retry:v1` | `conductor` | `conductor/SKILL.md` |
+
+## 課題のまとまり
+
+| 語 | 意味 | SSOT |
+| --- | --- | --- |
+| group | `Same branch as #N` で結ばれた Issue の集合。**推移的に閉じる** | `agents/shared/same-branch.md` |
+| 代表 | group の最小番号。**claim 時点で固定**し、以後引き直さない | `agents/shared/same-branch.md` |
+| variant | **claim 済みとして渡されたか**。`managed` = 台帳と branch が claim を示す（枠が空くまで待つ）/ `interactive` = そうでない（待たずに進む）。**起動主体では決まらない** — 人が claim 済みの課題を直接渡せば `managed` | `resolve/SKILL.md` |
