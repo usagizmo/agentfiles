@@ -1,1 +1,1 @@
-../../tidy/references/review-contract.md
+../../../shared/review-contract.md

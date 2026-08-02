@@ -12,4 +12,4 @@ Issue を作成する。タイトル先頭に gitmoji。それ以外は通常の
 {gitmoji} {内容を凝縮した説明}
 ```
 
-gitmoji は `../commit/references/gitmoji.md`。
+gitmoji は `references/gitmoji.md`。

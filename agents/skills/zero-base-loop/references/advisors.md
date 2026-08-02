@@ -1,1 +1,1 @@
-../../consult/references/advisors.md
+../../../shared/advisors.md

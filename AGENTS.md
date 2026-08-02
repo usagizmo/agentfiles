@@ -58,7 +58,18 @@
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - 最初は個別に書き、**2 つ目の harness が同じ中身を必要にした時点で** `agents/` へ昇格する（空の共通抽象を先に作らない）
 - 参照方向は常に **個別 → 共通** の一方通行。共通が特定 harness を知ってはいけない
-- `consult` / `zero-base-loop` の `references/advisors.md` は候補（Claude / Codex / Grok）全員の起動ブロックを持つ単一表で、**実行中の自分を除いた 2 つを選ぶ**（再入防止）。harness ごとの上書きは置かない。実体は `consult/references/advisors.md`、`zero-base-loop/references/advisors.md` は相対 symlink
+- `advisors.md` は候補（Claude / Codex / Grok）全員の起動ブロックを持つ単一表で、**実行中の自分を除いた 2 つを選ぶ**（再入防止）。harness ごとの上書きは置かない
+
+### skill 間で実体を共有するとき
+
+**`agents/shared/<name>.md` を SSOT にし、使う skill から `references/<name>.md` へ相対 symlink を張る。**どの skill にも所有させない。
+
+- **所有者を決めない**のが要点。`review-contract`（tidy / docs）のように主従が無い資産で「どちらを SSOT にするか」を決められず、選定が恣意的になる
+- **同層への言及が構造的に消える。**参照先が skill でなくなるので、層契約（同じ層への依存・言及を作らない）を隠さずに満たせる
+- **skill 本文は自分の相対パスだけ**（`references/<name>.md`）。skill が自己完結し、投影先でも repo でも解決できる
+- **`shared/` に置く条件は 1 つ**: **2 つ以上の skill が同じものを使っている**。契約でも手順でもよい（`review-contract` は契約、`advisors` と `sync-default` は手順）。1 つの skill しか使わないものは、その skill の `references/` に実体で置く
+- `~/.agents/shared` への投影は要らない（skill が相対 symlink で辿るため）。skill 以外から参照したくなった時点で足す
+- 実体の一覧は `agents/docs/structure.md`（**導出した索引**。規約は本ファイルが SSOT）
 
 ### symlink の貼り方
 

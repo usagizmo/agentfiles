@@ -23,4 +23,4 @@ git merge --no-ff <branch> -m "{gitmoji} {変更の本質}
 ```
 
 - タイトルは `Merge branch '...'` にしない
-- gitmoji は `../commit/references/gitmoji.md`
+- gitmoji は `references/gitmoji.md`

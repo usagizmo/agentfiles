@@ -47,4 +47,4 @@ CI が通ったら完了。**merge はここでしない。**
 {gitmoji} {変更内容を凝縮した説明}
 ```
 
-gitmoji は `../commit/references/gitmoji.md`。
+gitmoji は `references/gitmoji.md`。
