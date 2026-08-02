@@ -241,8 +241,9 @@ Issue 単位で数えると、上限に達した瞬間に group の残りを計�
 
 ### 同一ブランチ group
 
-Issue 本文の **`Same branch as #N`** は「この課題は #N と 1 本のブランチで直す」という宣言。
-**group は 1 単位として claim する** — 代表は最小番号、branch は 1 本、`resolve` には全番号を渡す。
+Issue 本文の **`Same branch as #N`** で結ばれた集合が group（宣言の定義は
+`../refine/references/same-branch.md`）。**group は 1 単位として claim する** —
+代表は最小番号、branch は 1 本、`resolve` には全番号を渡す。
 
 `alsoResolves` だけでは **claim から計画コメント書き込みまでの窓が空く。**その間、同じ group の
 別 Issue が未 claim に見えて別セッションが起き、1 本で直すはずのものが複数ブランチに割れる。

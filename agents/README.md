@@ -204,12 +204,15 @@ agents/skills/
 ├── consult/references/advisors.md               # SSOT（アドバイザー起動表）
 ├── zero-base-loop/references/advisors.md        -> ../../consult/references/advisors.md
 ├── tidy/references/review-contract.md           # SSOT（レビュー委譲の契約）
-└── docs/references/review-contract.md           -> ../../tidy/references/review-contract.md
+├── docs/references/review-contract.md           -> ../../tidy/references/review-contract.md
+├── refine/references/same-branch.md             # SSOT（`Same branch as #N`。conductor からパス参照）
+└── resolve/references/same-branch.md            -> ../../refine/references/same-branch.md
 ```
 
 - 相対 symlink にするのは、repo の checkout 場所と `~/.agents/skills` への投影のどちらでも解決できるようにするため
 - gitmoji 一覧（`commit/references/gitmoji.md`）と default 同期（`pr/references/sync-default.md`）はパス参照で共有しており、symlink は張らない（読む側が SKILL.md からパスで辿れれば足りる）
 - 新たに共有したくなったら、まず SSOT の置き場（最も主たる利用者の skill 配下）を決め、他方から相対 symlink かパス参照で辿る。両方に本文を持たせない
+- **同じ層どうしは symlink、上位から下位はパス参照。**symlink だと読む側の `SKILL.md` に自分の相対パスしか出ないので、禁止している同層への言及が本文に現れない。上位 → 下位はもともと正参照なので隠す必要がない
 
 ## 追加・変更するとき
 
