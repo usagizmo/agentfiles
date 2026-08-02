@@ -46,7 +46,7 @@
 - `./agents/docs/` は人が全体を把握・監査するための資料。**agent へは投影しない**（`lib/inventory.sh` に載せない）。規約の本体は置かず、skills から導出した図と索引だけを持つ
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置かない
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.cursor/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイル（固有ルール + 共通 `~/.agents/AGENTS.md` への参照。Claude は `@~/.agents/AGENTS.md` import）への symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（空 overlay を先回りで作らない）
-- 共通 `agents/AGENTS.md` には harness 名や harness 固有の機能（モデル名・subagent 機構等）に依存するルールを書かない。書きたくなったら該当 harness の overlay へ移す
+- 共通 `agents/AGENTS.md` に書けるのは、**その機能が無い harness でも代替手段で成立するルール**まで（例: 判断材料を Artifact にする → 作れない harness では応答に出す）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ
 - `~/.claude` / `~/.codex` / `~/.copilot` / `~/.cursor` / `~/.config/devin` / `~/.grok` / `~/.pi` / `~/.agents` は実ディレクトリにし、必要なファイル・サブディレクトリだけ `init.sh` で symlink する
 
 ### 共通と個別の分け方
