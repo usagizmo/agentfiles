@@ -47,7 +47,8 @@
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置かない
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.cursor/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイル（固有ルール + 共通 `~/.agents/AGENTS.md` への参照。Claude は `@~/.agents/AGENTS.md` import）への symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（空 overlay を先回りで作らない）
 - 共通 `agents/AGENTS.md` に書けるのは、**その機能が無い harness でも代替手段で成立するルール**まで（例: 判断材料を Artifact にする → 作れない harness では応答に出す）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ
-- `~/.claude` / `~/.codex` / `~/.copilot` / `~/.cursor` / `~/.config/devin` / `~/.grok` / `~/.pi` / `~/.agents` は実ディレクトリにし、必要なファイル・サブディレクトリだけ `init.sh` で symlink する
+- **harness home（`~/.claude` / `~/.config/devin` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。どこに何を張るかの一覧は `lib/inventory.sh`
+- **tracked ファイルに絶対 home パス（`/Users/...` `/home/...`）を書かない。**`$HOME` / `~` を使う（別環境で壊れる）。`doctor.sh` が repo 全体の tracked ファイルを検査する。symlink 先に使う絶対パスは `$DOTFILES_DIR` 展開であって、リテラルの絶対パスではない
 
 ### 共通と個別の分け方
 
@@ -57,9 +58,9 @@
 | `harnesses/<agent>/` | overlay instructions / skills / agents / prompts / commands / hooks / settings | 1 harness 専用、またはそのランタイム表面に密着する（同名で agents を上書き可） |
 
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
-- 最初は個別に書き、**2 つ目の harness が同じ中身を必要にした時点で** `agents/` へ昇格する（空の共通抽象を先に作らない）
+- **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
 - 参照方向は常に **個別 → 共通** の一方通行。共通が特定 harness を知ってはいけない
-- `advisors.md` は候補（Claude / Codex / Grok）全員の起動ブロックを持つ単一表で、**実行中の自分を除いた 2 つを選ぶ**（再入防止）。harness ごとの上書きは置かない
+- `advisors.md` は候補（Claude / Codex / Grok）全員の起動ブロックを持つ**単一表**にし、harness ごとの上書きを置かない（どれを起動するかの選定規則は `agents/shared/advisors.md`）
 
 ### skill 間で実体を共有するとき
 
@@ -89,18 +90,21 @@ home 側は harness が cache / auth / vendor を同居させるため **実デ�
 | `lib/inventory.sh` | **配線一覧の唯一の正**。harness / symlink / skills union の追加はここだけ |
 | `lib/links.sh` | apply / check の primitive（触らなくてよいことが多い） |
 | `./init.sh` | `run_inventory apply` + パッケージ類のインストール副作用 |
-| `./doctor.sh` | `run_inventory check`（read-only。修復は init） |
+| `./up.sh` | 外部依存（agent skills / yazi plugins）の更新 + 配線の再適用 |
+| `./doctor.sh` | `run_inventory check` + tracked ファイルの絶対 home パス検査（read-only。修復は init） |
 
 新しい harness や symlink を足す手順:
 
 1. `lib/inventory.sh` の `inventory_define` に 1 ブロック追加（`inv_home` / `inv_symlink` / `inv_harness_skills` 等）
-2. `./init.sh` で配線
-3. `./doctor.sh` で検査
+2. 上の「スコープと絵文字の対応」に harness の行を追加する
+3. `./init.sh` で配線
+4. `./doctor.sh` で検査
 
-インストール副作用のルール:
+外部コマンド実行のルール（インストール・更新の副作用）:
 
 - パッケージ / プラグインのインストールは `init.sh` の `install_step "<助詞まで含む文節>" <cmd...>` で実行する（例: `install_step "tpm を" git clone ...`）。成否を握りつぶさず、失敗は件数を集計して summary で非ゼロ終了する
-- ツールが無いだけ（`mise` / `ya` 未インストール等）はスキップして ⚠️ に留め、失敗に数えない。インストールを試みて失敗した場合だけ数える
+- **ツール欠落の扱いは、欠いたまま完走したときにそのスクリプトの主目的が達成できるかで決まる**。達成できるならスキップして ⚠️ に留め、できないなら失敗に数える（`init.sh` は配線が主目的でインストールは全て付随物なのでスキップ、`up.sh` は skills 更新が主目的なので `bunx` 欠落は失敗・`ya` は付随物なのでスキップ）
+- 実行を試みて失敗した場合は、上によらず数える
 
 コレクション配線のルール:
 
@@ -108,12 +112,24 @@ home 側は harness が cache / auth / vendor を同居させるため **実デ�
 - **`~/.agents/skills` をネイティブに読む harness（pi / Codex）には `agents/skills` の union を張らない**（重複配布で衝突警告になる）。union は harness 固有 overlay の分のみ（`inv_collection "$HOME/.codex/skills" harnesses/codex/skills` 等）
 - 存在しない source dir はスキップする（`harnesses/<agent>/skills` 等は実体ができてから作る）
 - symlink は **絶対パス**（`$DOTFILES_DIR/...`）
-- repo 配下を指す管理下 symlink のうち、今回の配布対象に無いもの・壊れたものを削除する
-- repo 外を指す link・実ファイル・実ディレクトリ（vendor の `.system` や Grok bundled skills 等）は触らない
-- 外部ツールが実体化してきた実ファイルは、内容を repo 側へ取り込んでから symlink 化する（差分は git で確認・discard できる）。実ディレクトリと repo 外を指す symlink は触らず警告
-- **symlink であるべき箇所が実ディレクトリ / 実ファイルのとき、または `ln` が失敗したときは必ず ⚠️ を出し、件数を集計して非ゼロ終了する**（黙殺しない）。実 dir は自動削除しない
-- **`harnesses/<agent>/hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外**。外部ツールによる hooks 上書きの tripwire で、in-place 書き込みは git diff、実ファイル置換は上記の ❌ で検知する。空であること自体が基準線なので、中身を埋めたり配線を外したりしない
-- **hooks 専用 dir には `inv_guard_dir` を張る**。管理下 symlink と allowlist 以外のエントリを ⚠️ で報告し、別名ファイルの投下を検知する（read-only。自動削除はしない）。harness home 直下に hooks 設定がある場合（codex / cursor）は vendor ファイルと同居するため張らず、symlink check だけで守る
+
+配布先に既に何かある場合の扱いは、経路で違う:
+
+| 配布先の状態 | 単一ファイル（`inv_symlink`） | コレクション項目（`inv_collection` / `inv_harness_skills`） |
+|---|---|---|
+| repo 配下を指す symlink | 付け替える | 付け替える |
+| repo 外を指す symlink | ⚠️ 触らない | 付け替える |
+| 実ファイル | 内容を repo へ取り込んでから symlink 化（差分は git で確認・discard できる） | ⚠️ 拒否 |
+| 実ディレクトリ | ⚠️ 触らない | ⚠️ 触らない |
+
+- **⚠️ は必ず出し、件数を集計して非ゼロ終了する**（黙殺しない）。`ln` の失敗も同じ。実ディレクトリは自動削除しない
+- prune で消すのは **repo 配下を指す管理下 symlink のうち、配布対象に無いもの・壊れたもの**だけ。repo 外を指す link・実ファイル・実ディレクトリ（vendor の `.system` や Grok bundled skills 等）は触らない
+- doctor は実ファイル / 実ディレクトリを ❌ にする（read-only。修復は `init.sh`）
+
+hooks の tripwire:
+
+- **`harnesses/<agent>/hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外**。外部ツールによる hooks 上書きを 3 経路で検知する — symlink 経由の in-place 書き込みは repo 側の git diff、unlink して実ファイルで置換は doctor の ❌、別名ファイルの投下は `inv_guard_dir` の ⚠️。空であること自体が基準線なので、中身を埋めたり配線を外したりしない
+- **管理下 symlink 以外の投下を検知したい collection dir に `inv_guard_dir` を張る**（各 harness の hooks dir / `~/.pi/agent/extensions`）。管理下 symlink と allowlist 以外のエントリを ⚠️ で報告する（read-only。自動削除はしない）。設定が harness home 直下に置かれる場合（codex / cursor）は vendor ファイルと同居するため張らず、symlink check だけで守る
 
 ### コミット例
 

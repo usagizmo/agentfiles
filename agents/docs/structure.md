@@ -73,8 +73,8 @@ flowchart LR
 
 ## 共有している実体
 
-**SSOT は `agents/shared/`。どの skill にも所有させない。**使う skill が `references/` へ相対
-symlink を張る（`agents/skills/<name>/references/<file>` → `../../../shared/<file>`）。
+実体は `agents/shared/` にあり、使う skill が `references/` へ相対 symlink を張る
+（`agents/skills/<name>/references/<file>` → `../../../shared/<file>`）。
 
 ```mermaid
 flowchart LR
