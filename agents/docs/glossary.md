@@ -10,13 +10,14 @@
 **発動条件を持つ手順の集合。**`~/.agents/skills/<name>/SKILL.md` が実体。
 文中では `conductor` のようにコード体で書く。
 
-| 語 | 層 | 何をするか |
-| --- | --- | --- |
-| `conductor` | orchestrator | 常駐して tick を繰り返し、キューを回す |
-| `refine` | work-item flow | 課題を計画済みにする（実装しない） |
-| `resolve` | work-item flow | 課題 1 件を着地まで進める |
-| `finish` | subflow | 規模別の仕上げを束ねる |
-| `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` `herdr` `skill-creator` `agent-browser` | leaf | 単体で完結する |
+**層の割り当てと leaf の一覧は [`README.md`](README.md) の「層構造」。**ここは上位層が何をするかだけ。
+
+| 語 | 何をするか |
+| --- | --- |
+| `conductor` | 常駐して tick を繰り返し、キューを回す |
+| `refine` | 課題を計画済みにする（実装しない） |
+| `resolve` | 課題 1 件を着地まで進める |
+| `finish` | 規模別の仕上げを束ねる |
 
 ## 工程
 
