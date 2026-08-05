@@ -222,22 +222,32 @@ while IFS="	" read -r disp phys; do
 done <"$WORK/unique"
 
 # --- check numeric: 数値・既定値の多重記載（索引。判定はしない） ---------
-# 単位付きの値だけを拾い、正規化キーごとに 1 行へ集約する。
+# 2 通りで拾う。**単位が後ろに付く形**（`300 行`）と、**既定値の語が前に付く形**（`目安 4`）。
+# 後者を入れないと、単位を伴わない既定値が丸ごと網から漏れる。
 # 大小での足切りはしない（`2 巡` `300 行` のような実際の既定値が落ちる）。
 # 落とすのは「1 + 助数詞」だけ。これは既定値ではなく散文の数え方で
 # （`1 件を扱う skill` `理由を 1 行残す` `1 本で直す`）、恒久的に同じ行が
 # レビュアーへ流れると索引ごと読まれなくなる。
 : >"$WORK/nums"
 while IFS="	" read -r disp phys; do
-	awk -v disp="$disp" '{
-		while (match($0, /[0-9]+k?[ ]?(分|秒|時間|日|件|行|本|回|巡|個|箇所|文字|tokens)/)) {
-			key = substr($0, RSTART, RLENGTH)
-			gsub(/ /, "", key)
-			$0 = substr($0, RSTART + RLENGTH)
-			if (key ~ /^1(件|行|本|回|巡|個|箇所|文字)$/) continue
-			print key "\t" disp ":" NR
+	awk -v disp="$disp" '
+		function emit_key(k, l) { gsub(/ /, "", k); print k "\t" disp ":" l }
+		{
+			s = $0
+			while (match(s, /[0-9]+k?[ ]?(分|秒|時間|日|件|行|本|回|巡|個|箇所|文字|tokens)/)) {
+				key = substr(s, RSTART, RLENGTH)
+				s = substr(s, RSTART + RLENGTH)
+				gsub(/ /, "", key)
+				if (key ~ /^1(件|行|本|回|巡|個|箇所|文字)$/) continue
+				emit_key(key, NR)
+			}
+			s = $0
+			while (match(s, /(目安|既定|上限|最大|最小)[ ]?[0-9]+/)) {
+				emit_key(substr(s, RSTART, RLENGTH), NR)
+				s = substr(s, RSTART + RLENGTH)
+			}
 		}
-	}' "$phys" >>"$WORK/nums"
+	' "$phys" >>"$WORK/nums"
 done <"$WORK/unique"
 
 sort "$WORK/nums" | awk -F "	" '
