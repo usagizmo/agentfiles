@@ -47,6 +47,10 @@ remote branch）なら `managed`。それ以外は `interactive`。Status は cl
 | `interactive` | 要らない |
 | `managed` | write / integration lease が要る |
 
+**`interactive` が lease を待たないのは意図。**人が 1 件を直接頼んだときに、キューの都合で
+断らない・止まらないための設計で、単独で最後まで走りきる。**同じ課題をキューが同時に取りうるが、
+それは直接頼んだ側が引き受ける。**「二重着手の穴」として塞がない。
+
 **variant で着地の可否は変わらない。**違うのは lease を待つかどうかだけ。
 lease を**誰が出すかは知らない**。空くまで idle で待ち、渡されたら続きを進める。
 

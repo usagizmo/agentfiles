@@ -372,7 +372,8 @@ else
 
 	# 層構造の節に載る skill 名 ↔ 実ツリー。節を切り出して双方向に突き合わせる。
 	if [ -f "$DOCS_DIR/README.md" ]; then
-		awk '/^## 層構造/ { on = 1; next } on && /^## / { exit } on' "$DOCS_DIR/README.md" >"$WORK/layers_sec"
+		# 表の行だけを見る。散文のバッククォート語まで skill 名と見なすと誤検知が出る。
+		awk '/^## 層構造/ { on = 1; next } on && /^## / { exit } on && /^\|/' "$DOCS_DIR/README.md" >"$WORK/layers_sec"
 		awk '{ while (match($0, /`[a-z][a-z0-9-]*`/)) { print substr($0, RSTART + 1, RLENGTH - 2); $0 = substr($0, RSTART + RLENGTH) } }' \
 			"$WORK/layers_sec" | sort -u >"$WORK/doc_skills"
 		while read -r w; do
