@@ -5,32 +5,36 @@ description: PR の作成は理由・きっかけを問わず必ずこの skill 
 
 PR を作り、**merge 可能な状態まで**持っていく。タイトル先頭に gitmoji。
 
+## base — 順序はここだけで表す
+
+**他の PR を待たない。**順序が要るなら base に書き、要らないなら順序は無い。
+
+| その変更は | base | 結果 |
+| --- | --- | --- |
+| 未着地の PR の成果に依存する | **その PR の head ブランチ**（積み上げ） | 下から順にしか merge できない |
+| 依存しない | default | 順序は無い。いつ merge してもよい |
+
+**依存しないブランチを他のフィーチャーブランチへ rebase しない。**偽の依存が生まれ、
+本来不要な直列化を招く。
+
+**base の PR が既に着地しているなら、`gh pr edit <自分> --base "$DEFAULT"` で張り替えてから rebase する。**
+親の head ブランチが残る運用では GitHub は base を付け替えないので、放置すると merge できない。
+
 ## フロー
 
 CI が通るまで繰り返す:
 
-1. **先行 PR 待ち + rebase**（毎回の push 直前）
-   - **着地の順番が外から与えられている場合はこの待ちを省く**（二重待ちになるため）。rebase は行う
-   - 候補: 同一 repo・base が default の open PR のうち、自 `headRefName` 以外
-   - **CI 進行中**の SSOT: `gh pr checks <number> --json bucket` のいずれかが `pending`（CheckRun / StatusContext の差は gh が正規化する）
-   - **不変条件**: pending を一度でも見た候補は predecessor とし、その PR が `MERGED` または `CLOSED` になるまで待つ（checks が緑に戻っても open のままなら待ち続ける）。停滞・CI 失敗で進まなそうなら無限待ちせずユーザーに報告する
-   - 待機は best-effort（他エージェントとの完全排他ではない）。解除後・push 直前に候補を再列挙し、新たな pending があれば同じ不変条件で待つ
-   - クリア後（待機の有無に関わらず）: `references/sync-default.md` でローカル default を ff 前進させ、`git rebase "$DEFAULT"`。衝突は解消。tip が変わったら後続 push は `--force-with-lease`
-   ```bash
-   DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
-   HEAD=$(git branch --show-current)
-   for n in $(gh pr list --base "$DEFAULT" --state open --json number,headRefName \
-     | jq -r --arg h "$HEAD" '.[] | select(.headRefName != $h) | .number'); do
-     gh pr checks "$n" --json bucket --jq 'any(.[]; .bucket == "pending")' \
-       | grep -qx true && echo "predecessor #$n"
-   done
-   # 解除: gh pr view <n> --json state --jq .state  → MERGED | CLOSED
-   ```
+1. **base へ rebase**（毎回の push 直前）。base が default なら `references/sync-default.md` で
+   ローカル default を ff 前進させてから `git rebase "$DEFAULT"`。積み上げなら親の head へ rebase する。
+   衝突は解消。tip が変わったら後続 push は `--force-with-lease`
 2. 未同期なら `git push`（初回は `-u`。rebase 後は `--force-with-lease`）
-3. PR が無ければ `gh pr create`、あれば `gh pr edit` で title / body を更新
+3. PR が無ければ `gh pr create --base <base>`、あれば `gh pr edit` で title / body を更新
 4. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
 
 CI が通ったら完了。**merge はここでしない。**
+
+**CI 進行中の SSOT**: `gh pr checks <number> --json bucket` のいずれかが `pending`
+（CheckRun / StatusContext の差は gh が正規化する）。素の人間向け出力を読まない。
 
 ## Body / Issue 連携
 

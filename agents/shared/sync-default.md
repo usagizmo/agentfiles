@@ -4,6 +4,7 @@
 **default を checkout している worktree の中で ff merge する**:
 
 ```bash
+DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
 git fetch --prune origin
 DEFAULT_WT=$(git worktree list --porcelain \
   | awk -v ref="branch refs/heads/$DEFAULT" '/^worktree /{wt=substr($0,10)} $0==ref{print wt}')
