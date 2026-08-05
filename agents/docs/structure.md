@@ -130,6 +130,8 @@ flowchart LR
 
 **skill 固有の reference は `references/` に実体で置く**（`conductor/references/harness.md`、
 `docs/references/review-prompt.md`、`skill-creator/references/schemas.md`）。
+`scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査）と
+`skill-creator/scripts/`（vendored）。
 
 置く条件と張り方の規則は [`../../AGENTS.md`](../../AGENTS.md) が SSOT。ここには写さない。
 
