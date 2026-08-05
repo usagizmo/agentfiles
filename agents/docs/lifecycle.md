@@ -121,14 +121,14 @@ sequenceDiagram
     C->>M: worktree を作ってセッションを起こす
     M->>R: /resolve #N
 
-    R->>GH: 計画コメント（plan:v1）
+    R->>GH: 計画コメント（plan）
     R-->>C: 応答を終えて待機（何を待つか 1 行）
     C->>C: write が空いた
     C->>M: 実装を始めてよい
     M->>R: 再開
 
     alt Issue 本文に無い判断が必要
-        R->>GH: 人待ちの記録（wait:v1 / waiting）
+        R->>GH: 人待ちの記録（wait / waiting）
         R-->>C: 待機
         C->>C: write を返す。詰まりとして出す
         C-->>U: 状況ボードに「何を答えれば進むか」
@@ -191,6 +191,10 @@ sequenceDiagram
 
     F->>GH: Issue 契約を本文へ（6 項目）
     F->>GH: 同じブランチで直るものに Same branch as を相互に書く
+    F->>GH: 更新後の本文を取り直して digest を計算
+    F->>GH: 在庫の鮮度（ready）を upsert
+    Note over F,GH: 本文更新 → 本文再取得 → digest → ready → Status。<br/>順序を崩すと自分の更新で即座に不一致になる
+    F->>GH: 相互記載で本文を触った相手が計画済みなら、相手の ready も upsert
     F->>GH: Status を計画済みへ
     Note over F,GH: これが着手承認そのもの。<br/>conductor は自分で積めない
     C->>C: 観測 → 計画セッションが終わっている

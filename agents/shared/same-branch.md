@@ -64,12 +64,12 @@ group の全 Issue に帰属する** — branch 名に入るのは代表番号�
 branch を作った直後に、代表の Issue へ固定 marker で記録する。
 
 ````markdown
-<!-- claim:v1 -->
+<!-- claim -->
 ```yaml
 representative: <代表の Issue 番号>
 members: [<Issue 番号>]   # 代表を含む全員
 ```
-<!-- /claim:v1 -->
+<!-- /claim -->
 ````
 
 **Status と assignee は台帳であって集合の定義ではない。**記録にあるのに揃っていない成員は、

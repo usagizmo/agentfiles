@@ -1,0 +1,16 @@
+query($org:String!,$num:Int!,$status:String!,$endCursor:String){
+  rateLimit{ cost }
+  organization(login:$org){
+    projectV2(number:$num){
+      items(first:100, after:$endCursor){
+        pageInfo{ hasNextPage endCursor }
+        nodes{
+          content{ ... on Issue { number } }
+          fieldValueByName(name:$status){
+            ... on ProjectV2ItemFieldSingleSelectValue { name }
+          }
+        }
+      }
+    }
+  }
+}
