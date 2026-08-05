@@ -21,7 +21,7 @@ description: >-
 | 仕様変更・機能実装があった（中規模以上の仕上げ） | コミット前に project docs / agent-facing 文書の更新要否を判定し更新する |
 | AGENTS / skills / prompts / references を新規・編集した | コミット前に品質パスを実行する。規模不問 |
 | 使用した AGENTS / skills の不備（誤誘導・欠落・冗長・手順の摩擦）に気づいた | 反映先と可否は `~/.agents/AGENTS.md` の層契約に従う。直した agent-facing 文書は品質パスを通す |
-| **skills の構造を変えた**（状態・工程・層・共有ファイルの増減） | **`agents/docs/` の見取り図を引き直す。**文言修正では引き直さない。**leaf 以外の層で skill を増減したら** `scripts/audit-skills.sh` の `rank()` も直す（層数が変わらなくても要る） |
+| **skills の構造を変えた**（状態・工程・層・共有ファイルの増減） | **`agents/docs/` の図を引き直す**（図は機械検査に掛からない。索引のずれだけが手順 1 の `derived` で落ちる）。**leaf 以外の層で skill を増減したら** `scripts/layers.tsv` も直す。文言修正では引き直さない |
 
 規模 SSOT は `~/.agents/AGENTS.md`。
 
@@ -63,7 +63,7 @@ agent-facing 文書の品質 SSOT。global も project も同じ。
 
 手順:
 
-1. `sh <skills root>/docs/scripts/audit-skills.sh <skills root>` を実行する。**スクリプトも root も、編集している checkout のものを使う** — `~/.agents/skills` は別 checkout への symlink なので、worktree で既定に頼ると別のツリーを古いスクリプトで検査して通る。見るのは skills root 配下の `SKILL.md` と `references/` の Markdown だけなので、skills を持たない編集（project の AGENTS.md だけ等）では飛ばし、**飛ばしたことをレビュアーに伝える**（黙ると検査済みと誤認される）。**`SUMMARY` 行が出なければ検査は走っていない**（root 不在等）ので、root を直して実行し直す。`VIOLATION` は次へ進む前に直す。ただし層違反は `rank()` の更新漏れでも出る。**そのときの直す先はスクリプト側で、文書ではない。**`REVIEW` は機械では意味を判定できない候補なので、棄却せずレビュアーへ渡す。**取れるのは実在・形・重複だけで、しかも skill 名はバッククォート付きしか拾えない。**出力が空でも基準を満たした証明にはならない
+1. `sh <skills root>/docs/scripts/audit-skills.sh <skills root>` を実行する。**スクリプトも root も、編集している checkout のものを使う** — `~/.agents/skills` は別 checkout への symlink なので、worktree で既定に頼ると別のツリーを古いスクリプトで検査して通る。見るのは skills root 配下と、その隣の `shared/` `docs/`。どれにも触れていない編集（project の AGENTS.md だけ等）では飛ばし、**飛ばしたことをレビュアーに伝える**（黙ると検査済みと誤認される）。**`SUMMARY` 行が出なければ検査は走っていない**（root 不在等）ので、root を直して実行し直す。`VIOLATION` は次へ進む前に直す。ただし層違反は `scripts/layers.tsv` の更新漏れでも出る。**そのときの直す先はデータ側で、文書ではない。**`REVIEW` は機械では意味を判定できない候補なので、棄却せずレビュアーへ渡す。**取れるのは実在・形・重複だけで、しかも skill 名はバッククォート付きしか拾えない。**出力が空でも基準を満たした証明にはならない
 2. 節単位で書き直して基準へ適合させる。太字剥がし・言い換え削除だけの diff は不合格
 3. 大型 reference（約 300 行超）は、節ごとの書き直しで壊れた見出し階層・表 / fence を潰す第 2 パスを親が行う
 4. レビュアーに出す。渡すのは対象ファイルのパス（節を絞るならその名前）・上記の基準・`references/review-contract.md`・手順 1 の出力（`REVIEW` は棄却可否と実害を判定させる）・「前提を知らない読み手がこの文だけで実行できるか」という問い・下の探索観点。執筆意図・経緯・何を直したかは渡さず、git 履歴も参照させない

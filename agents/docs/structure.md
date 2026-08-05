@@ -14,7 +14,7 @@
 | `skills/<name>/scripts/` | **実行する** | 同上 |
 | `skills/<name>/assets/` | **成果物に使う** | 同上 |
 | `AGENTS.md` | **常時読み込まれる** | `~/.agents/AGENTS.md` ほか |
-| `shared/` | **読む**（skill から symlink 経由で） | skills の一部として投影される |
+| `shared/` | **読む / 実行する**（skill から symlink 経由で） | skills の一部として投影される |
 | `docs/` | **読まない**（人が読む） | 投影しない |
 
 `SKILL.md` は発動時に常に読まれるので、**オンデマンドで足りるものは `references/` へ出す**。
@@ -74,8 +74,9 @@ flowchart LR
 
 ## 共有している実体
 
-実体は `agents/shared/` にあり、使う skill が `references/` へ相対 symlink を張る
-（`agents/skills/<name>/references/<file>` → `../../../shared/<file>`）。
+実体は `agents/shared/` にあり、使う skill が相対 symlink を張る
+（`agents/skills/<name>/{references,scripts}/<file>` → `../../../shared/<file>`）。
+**張り先はモデルの扱いで決まる** — 読むものは `references/`、実行するものは `scripts/`。
 
 ```mermaid
 flowchart LR
@@ -102,6 +103,7 @@ flowchart LR
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
+        AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
         SD["sync-default.md<br/><small>default の同期</small>"]
     end
@@ -113,7 +115,9 @@ flowchart LR
     RS --> SB
     RS --> WR
     CS --> AD
+    CS --> AS
     ZB --> AD
+    ZB --> AS
     TD --> RC
     DC --> RC
     CM --> GM
@@ -130,8 +134,8 @@ flowchart LR
 
 **skill 固有の reference は `references/` に実体で置く**（`conductor/references/harness.md`、
 `docs/references/review-prompt.md`、`skill-creator/references/schemas.md`）。
-`scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査）と
-`skill-creator/scripts/`（vendored）。
+`scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
+`skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
 
 置く条件と張り方の規則は [`../../AGENTS.md`](../../AGENTS.md) が SSOT。ここには写さない。
 

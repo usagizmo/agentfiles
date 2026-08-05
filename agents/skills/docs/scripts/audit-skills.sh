@@ -18,18 +18,18 @@ set -u
 LC_ALL=C
 export LC_ALL
 
-# 層。参照は上位層 → 下位層の一方通行なので、rank が自分以下の skill を
-# 名指ししたら違反。未知の skill は leaf 扱いになる。
-# **leaf 以外に skill を足したらここへ書く。**書き忘れると leaf 扱いになり、
-# 正しい下位層参照が VIOLATION に見えて、文書の方を壊す圧力になる。
-# 層の機械可読な定義はここが唯一（agents/docs/ の図はここからの導出）。
+# 層の定義は layers.tsv（このスクリプトの隣）。leaf は書かないので既定 4。
+# 未知の skill が leaf に落ちるのは fail-closed。
+# **読めなければ落とす。**awk が開けないと rank が空を返し、比較がエラーになって
+# layer 検査だけが消え、SUMMARY は出るので「違反なし」に見える。
+LAYERS=$(dirname "$0")/layers.tsv
+
 rank() {
-	case "$1" in
-	conductor) echo 1 ;;
-	refine | resolve) echo 2 ;;
-	finish) echo 3 ;;
-	*) echo 4 ;;
-	esac
+	awk -F "	" -v s="$1" '
+		/^#/ || NF < 2 { next }
+		$2 == s { print $1; found = 1; exit }
+		END { if (!found) print 4 }
+	' "$LAYERS"
 }
 
 # skill 自体を対象にする skill。名指しは正当なので check layer から除く。
@@ -74,6 +74,7 @@ emit() {
 # root 自体が dir symlink（`~/.agents/skills` が repo を指す）でも、canon が返す
 # 物理パスと突き合わせられるように正規化する。投影前後で出力を同じにするため。
 ROOT_ARG=${1:-$HOME/.agents/skills}
+[ -f "$LAYERS" ] || fatal "層定義が無い: $LAYERS"
 [ -d "$ROOT_ARG" ] || fatal "skills root が無い: $ROOT_ARG"
 ROOT=$(CDPATH= cd -P -- "$ROOT_ARG" 2>/dev/null && pwd -P) || fatal "root を解決できない: $ROOT_ARG"
 
@@ -279,16 +280,18 @@ sort "$WORK/markers" | awk -F "	" '
 done
 
 # --- check shared: shared/ への symlink 健全性 ---------------------------
-# 規約は `skills/<name>/references/<file>` → `../../../shared/<同名>`。
+# 規約は `skills/<name>/{references,scripts}/<file>` → `../../../shared/<同名>`。
+# 張り先はモデルの扱い（読む / 実行する）で決まり、拡張子では決まらない。
 : >"$WORK/shared_use"
-for d in "$ROOT"/*/references; do
+for d in "$ROOT"/*/references "$ROOT"/*/scripts; do
 	[ -d "$d" ] || continue
-	skill=${d%/references}
+	skill=${d%/*}
 	skill=${skill##*/}
+	kind=${d##*/}
 	for f in "$d"/*; do
 		[ -L "$f" ] || continue
 		b=${f##*/}
-		disp="$skill/references/$b"
+		disp="$skill/$kind/$b"
 		t=$(readlink "$f")
 		case "$t" in
 		*shared/*) ;;
@@ -307,7 +310,7 @@ for d in "$ROOT"/*/references; do
 	done
 done
 
-# shared dir は規約（`references/<file>` → `../../../shared/<file>`）から直に組み立てる。
+# shared dir は規約（`<dir>/<file>` → `../../../shared/<file>`）から直に組み立てる。
 # 生きた symlink から逆引きすると、全部コピーへ置き換わった一番効くべき状況で
 # 探索が空振りし、以降の検査ごと素通りする。
 SHARED_DIR=$(CDPATH= cd -P -- "$ROOT/../shared" 2>/dev/null && pwd -P) || SHARED_DIR=""
@@ -317,9 +320,16 @@ if [ -z "$SHARED_DIR" ]; then
 else
 	# 使う skill が 2 つ未満なら shared に置く条件を満たさない。実体の側から
 	# 数える — symlink 側からだと、最後の利用者が消えた孤児が 0 件で素通りする。
-	for s in "$SHARED_DIR"/*.md; do
+	for s in "$SHARED_DIR"/*; do
 		[ -f "$s" ] || continue
 		printf '%s\t\n' "${s##*/}" >>"$WORK/shared_use"
+		# 実行する共有物は、壊れたまま配ると使う側で初めて落ちる。
+		case "$s" in
+		*.sh)
+			sh -n "$s" 2>/dev/null || emit VIOLATION shared "shared/${s##*/}" "note=shell 構文エラー"
+			[ -x "$s" ] || emit REVIEW shared "shared/${s##*/}" "note=実行ビットが無い"
+			;;
+		esac
 	done
 fi
 
@@ -330,20 +340,82 @@ sort -u "$WORK/shared_use" | awk -F "	" '
 	emit REVIEW shared "shared/$file" "users=$n at=$users note=2 skill 未満"
 done
 
-# shared に同名の実体があるのに references 側が通常ファイル = コピーによる重複。
+# shared に同名の実体があるのに skill 側が通常ファイル = コピーによる重複。
 if [ -n "$SHARED_DIR" ]; then
-	for d in "$ROOT"/*/references; do
+	for d in "$ROOT"/*/references "$ROOT"/*/scripts; do
 		[ -d "$d" ] || continue
-		skill=${d%/references}
+		skill=${d%/*}
 		skill=${skill##*/}
-		for f in "$d"/*.md; do
+		kind=${d##*/}
+		for f in "$d"/*; do
 			[ -f "$f" ] || continue
 			[ -L "$f" ] && continue
 			b=${f##*/}
 			[ -f "$SHARED_DIR/$b" ] &&
-				emit VIOLATION shared "$skill/references/$b" "note=shared/$b の実体があるのに通常ファイル"
+				emit VIOLATION shared "$skill/$kind/$b" "note=shared/$b の実体があるのに通常ファイル"
 		done
 	done
+fi
+
+# --- check derived: agents/docs/ が skills の実態からずれていないか --------
+# docs/ は「skills から導出した図と索引」と宣言されているのに導出は人手。
+# 生成はしない（POSIX shell で mermaid を吐く toolchain を増やさない）。
+# **ずれを落とすことだけ**やる。導出できない散文（意図・語義）は対象外。
+DOCS_DIR=$(CDPATH= cd -P -- "$ROOT/../docs" 2>/dev/null && pwd -P) || DOCS_DIR=""
+if [ -z "$DOCS_DIR" ]; then
+	emit REVIEW derived "../docs" "note=docs dir が無く導出物の検査を実行していない"
+else
+	for want in README.md structure.md glossary.md; do
+		[ -f "$DOCS_DIR/$want" ] ||
+			emit REVIEW derived "docs/$want" "note=無いので対応する導出物検査を実行していない"
+	done
+
+	# 層構造の節に載る skill 名 ↔ 実ツリー。節を切り出して双方向に突き合わせる。
+	if [ -f "$DOCS_DIR/README.md" ]; then
+		awk '/^## 層構造/ { on = 1; next } on && /^## / { exit } on' "$DOCS_DIR/README.md" >"$WORK/layers_sec"
+		awk '{ while (match($0, /`[a-z][a-z0-9-]*`/)) { print substr($0, RSTART + 1, RLENGTH - 2); $0 = substr($0, RSTART + RLENGTH) } }' \
+			"$WORK/layers_sec" | sort -u >"$WORK/doc_skills"
+		while read -r w; do
+			grep -qx "$w" "$SKILLS" ||
+				emit VIOLATION derived "docs/README.md" "note=層構造の $w が skills root に無い"
+		done <"$WORK/doc_skills"
+		while read -r s; do
+			grep -qx "$s" "$WORK/doc_skills" ||
+				emit VIOLATION derived "docs/README.md" "note=skill $s が層構造の節に無い"
+		done <"$SKILLS"
+	fi
+
+	# structure.md が挙げる shared 実体 ↔ 実際の agents/shared/*（.md 以外も含む）
+	if [ -f "$DOCS_DIR/structure.md" ] && [ -n "$SHARED_DIR" ]; then
+		: >"$WORK/shared_real"
+		for s in "$SHARED_DIR"/*; do
+			[ -f "$s" ] || continue
+			echo "${s##*/}" >>"$WORK/shared_real"
+			grep -qF "${s##*/}" "$DOCS_DIR/structure.md" ||
+				emit VIOLATION derived "docs/structure.md" "note=shared/${s##*/} が図にも一覧にも無い"
+		done
+		# 逆向き。shared 図に残った幽霊エントリもドリフト。
+		awk '/subgraph shared/ { on = 1; next } on && /^ *end/ { exit } on' "$DOCS_DIR/structure.md" |
+			awk '{ while (match($0, /[a-z][a-z0-9-]+\.(md|sh|tsv)/)) { print substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH) } }' |
+			sort -u | while read -r n; do
+			grep -qx "$n" "$WORK/shared_real" ||
+				emit VIOLATION derived "docs/structure.md" "note=図の $n は shared に実体が無い"
+		done
+	fi
+
+	# glossary の marker 索引 ↔ 実際の marker 定義（両方向）
+	if [ -f "$DOCS_DIR/glossary.md" ]; then
+		cut -f1 "$WORK/markers" 2>/dev/null | sort -u >"$WORK/marker_real"
+		while read -r m; do
+			grep -qF "$m" "$DOCS_DIR/glossary.md" ||
+				emit VIOLATION derived "docs/glossary.md" "note=marker $m が索引に無い"
+		done <"$WORK/marker_real"
+		awk '{ while (match($0, /[a-z][a-z0-9-]*:v[0-9]+/)) { print substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH) } }' \
+			"$DOCS_DIR/glossary.md" | sort -u | while read -r m; do
+			grep -qx "$m" "$WORK/marker_real" ||
+				emit VIOLATION derived "docs/glossary.md" "note=索引の marker $m は定義が無い"
+		done
+	fi
 fi
 
 # --- 出力 ---------------------------------------------------------------

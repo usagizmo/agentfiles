@@ -1,0 +1,10 @@
+# skill の層。参照は上位層 → 下位層の一方通行で、rank が自分以下の skill を
+# 名指ししたら違反。ここが層の機械可読な唯一の定義で、agents/docs/ の図と表は
+# ここからの導出。leaf は既定なので書かない（未知 = leaf = fail-closed）。
+# 層の呼び名は agents/docs/README.md 側。ここは順序だけを持つ。
+#
+# <rank>	<skill>
+1	conductor
+2	refine
+2	resolve
+3	finish
