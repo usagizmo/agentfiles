@@ -52,7 +52,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-同ディレクトリの `references/advisors.md` に従う（アドバイザー起動の SSOT。起動まわりの harness 差分もここだけ）。起動と回収は別コマンドに分ける。
+同ディレクトリの `references/advisors.md` に従う（アドバイザー起動の SSOT。起動まわりの harness 差分もここだけ）。
 
 ### 4. 統合して提示
 

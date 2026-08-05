@@ -82,7 +82,7 @@ refine    → consult
 
 - **禁止するのは下位から上位への逆参照と循環**。`resolve` は `conductor` を知らないし、leaf は flow を知らない
 - 同じ層どうしの依存・言及も作らない（leaf 同士は特に）。例外はデータ資産の共有だけで、張り方は [`structure.md`](structure.md)
-- 検出手順は `docs` skill の品質パス
+- 検出手順は `docs` skill の品質パス。**層の割り当ての正は `docs/scripts/layers.tsv`**（leaf は既定なので書かれない）。この節はその導出で、ずれると品質パスの `derived` 検査が落ちる
 
 ## 上位層の役割分担
 

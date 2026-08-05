@@ -10,13 +10,14 @@
 **発動条件を持つ手順の集合。**`~/.agents/skills/<name>/SKILL.md` が実体。
 文中では `conductor` のようにコード体で書く。
 
-| 語 | 層 | 何をするか |
-| --- | --- | --- |
-| `conductor` | orchestrator | 常駐して tick を繰り返し、キューを回す |
-| `refine` | work-item flow | 課題を計画済みにする（実装しない） |
-| `resolve` | work-item flow | 課題 1 件を着地まで進める |
-| `finish` | subflow | 規模別の仕上げを束ねる |
-| `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` `herdr` `skill-creator` `agent-browser` | leaf | 単体で完結する |
+**層の割り当てと leaf の一覧は [`README.md`](README.md) の「層構造」。**ここは上位層が何をするかだけ。
+
+| 語 | 何をするか |
+| --- | --- |
+| `conductor` | 常駐して tick を繰り返し、キューを回す |
+| `refine` | 課題を計画済みにする（実装しない） |
+| `resolve` | 課題 1 件を着地まで進める |
+| `finish` | 規模別の仕上げを束ねる |
 
 ## 工程
 
@@ -76,7 +77,7 @@ checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実
 
 ## 記録
 
-**セッションは消える。外部化したものだけが復旧契約になる。**どちらも固定 marker 付きの Issue コメント。
+**セッションは消える。外部化したものだけが復旧契約になる。**いずれも固定 marker 付きの Issue コメント。
 
 | 語 | marker | 書く人 | SSOT |
 | --- | --- | --- | --- |
@@ -85,10 +86,14 @@ checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実
 | 人待ちの記録 | `wait:v1` | `refine` / `resolve` | `agents/shared/wait-record.md` |
 | 失敗の記録 | `retry:v1` | `conductor` | `conductor/SKILL.md` |
 
+**判断材料の Artifact は marker コメントではない。**復旧契約ではなく、人が判断の根拠を読み返す
+ためのもの。URL は Issue 本文の「確定済みの製品判断」に併記する（SSOT は `refine/SKILL.md`）。
+
 ## 課題のまとまり
 
 | 語 | 意味 | SSOT |
 | --- | --- | --- |
+| 課題 | **1 branch で着地する 1 まとまり。**Issue 1 件とは限らず、group なら全 Issue で 1 件。`resolve` が進める単位・claim / 在庫 / lease を数える単位はこれ。**例外は `conductor` の正規化だけ**で、そこは Issue 単位で畳む（一部だけ計画済みの group を表せなくなるため） | `conductor/SKILL.md` |
 | group | `Same branch as #N` で結ばれた Issue の集合。**推移的に閉じる** | `agents/shared/same-branch.md` |
 | 代表 | group の最小番号。**claim 時点で固定**し、以後引き直さない | `agents/shared/same-branch.md` |
 | variant | **claim 済みとして渡されたか**。`managed` = 台帳と branch が claim を示す（枠が空くまで待つ）/ `interactive` = そうでない（待たずに進む）。**起動主体では決まらない** — 人が claim 済みの課題を直接渡せば `managed` | `resolve/SKILL.md` |

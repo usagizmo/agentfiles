@@ -14,14 +14,15 @@
 | `skills/<name>/scripts/` | **実行する** | 同上 |
 | `skills/<name>/assets/` | **成果物に使う** | 同上 |
 | `AGENTS.md` | **常時読み込まれる** | `~/.agents/AGENTS.md` ほか |
-| `shared/` | **読む**（skill から symlink 経由で） | skills の一部として投影される |
+| `shared/` | **読む / 実行する**（skill から symlink 経由で） | skills の一部として投影される |
 | `docs/` | **読まない**（人が読む） | 投影しない |
 
 `SKILL.md` は発動時に常に読まれるので、**オンデマンドで足りるものは `references/` へ出す**。
 
 ## skill 間の参照
 
-上位層 → 下位層の一方通行。同じ層への言及は作らない。
+上位層 → 下位層の一方通行。同じ層への言及は作らない。**参照関係のあるものだけを描く**
+（leaf の全一覧は [`README.md`](README.md) の「層構造」）。
 
 ```mermaid
 flowchart LR
@@ -73,8 +74,9 @@ flowchart LR
 
 ## 共有している実体
 
-実体は `agents/shared/` にあり、使う skill が `references/` へ相対 symlink を張る
-（`agents/skills/<name>/references/<file>` → `../../../shared/<file>`）。
+実体は `agents/shared/` にあり、使う skill が相対 symlink を張る
+（`agents/skills/<name>/{references,scripts}/<file>` → `../../../shared/<file>`）。
+**張り先はモデルの扱いで決まる** — 読むものは `references/`、実行するものは `scripts/`。
 
 ```mermaid
 flowchart LR
@@ -101,6 +103,7 @@ flowchart LR
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
+        AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
         SD["sync-default.md<br/><small>default の同期</small>"]
     end
@@ -112,7 +115,9 @@ flowchart LR
     RS --> SB
     RS --> WR
     CS --> AD
+    CS --> AS
     ZB --> AD
+    ZB --> AS
     TD --> RC
     DC --> RC
     CM --> GM
@@ -127,8 +132,17 @@ flowchart LR
 **層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ。**skill が別の skill の
 `references/` を覗く形が無くなるので、層契約（同じ層への言及を作らない）を隠さずに満たせる。
 
-**skill 固有の reference は `references/` に実体で置く**（`conductor/references/harness.md`、
-`docs/references/review-prompt.md`、`skill-creator/references/schemas.md`）。
+**skill 固有の reference は `references/` に実体で置く。**
+
+| skill | 実体 | 何を持つか |
+| --- | --- | --- |
+| `conductor` | `harness.md` / `protocols.md` / `scenarios.md` | multiplexer 差分 / 稀少パスの手順 / **tick の意味論を固定する代表シナリオ** |
+| `resolve` | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md` | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表） |
+| `docs` | `review-prompt.md` | 更新判定用 |
+| `skill-creator` | `schemas.md` | vendored |
+
+`scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
+`skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
 
 置く条件と張り方の規則は [`../../AGENTS.md`](../../AGENTS.md) が SSOT。ここには写さない。
 
