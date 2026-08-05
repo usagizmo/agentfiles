@@ -134,23 +134,39 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 契約 | herdr |
 | --- | --- |
 | 名乗る | `herdr agent rename "$HERDR_PANE_ID" conductor`（`--current` は無い。pane ID を渡す） |
-| worktree を作る（resolve のみ） | `herdr worktree create --cwd <repo> --branch <名> --base <default> --label "#<番号>" --no-focus --json` |
+| worktree を作る（resolve のみ） | `herdr worktree create --cwd <repo> --branch <名> --base <default> --label "#<番号>" --no-focus` |
 | pane を作る（refine） | `herdr pane split --current --direction right --cwd "$PWD" --no-focus` |
-| セッションを起こす | 得た pane_id に `herdr agent start <名前> --kind claude --pane <id> --timeout 90000` |
+| pane_id を得る | `pane split` は応答が返す。**`worktree create` は返さない**（`workspace` と `worktree` だけ）ので `herdr pane list --workspace <id>` で引く |
+| セッションを起こす | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い） |
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
 | 実行器だけ止める | `herdr agent stop <名前>` の後 `herdr agent list` で `agent_status` が消えたことを確認（pane は閉じない） |
 | 片付ける（`refine`） | `herdr pane close <id>` |
 | 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
-| 片付けに要る workspace ID | **`herdr workspace list`**（`worktree.checkout_path` で絞る） |
+| 片付けに要る workspace ID | **`herdr worktree list --cwd <repo>`** の `open_workspace_id` |
+| 孤児 workspace を洗う | **`herdr workspace list`**（repo 非依存） |
 
-- **`herdr worktree list` は使わない。**返るのは「UI がフォーカスしている workspace の repo」で、
-  conductor の cwd とは無関係。別 repo にフォーカスが移った瞬間、対象 repo の worktree が観測から
-  丸ごと消え、片付け済みと誤判定する。一覧は `git -C <repo>`、workspace ID は
-  **`herdr workspace list`**（repo に依存せず全 workspace を返す）から引く
+- **3 つの経路は、それぞれ別の問いに対して権威。**1 つに寄せない。
+  - **checkout があるか**（`capacity` が `あり`）は git。**herdr はそのキャッシュ**で、
+    conductor は着地を PR の `merged`、claim を remote branch と、常に権威側を見る。ここだけ
+    multiplexer に寄せると、socket が落ちた瞬間に全 tick が止まる
+  - **worktree と workspace の対応**は herdr しか知らない。**`open_workspace_id` を直接引き、
+    パスで join しない** — 文字列一致は symlink 解決差や `/private` 前置で silent に外れ、
+    外れると片付けが workspace を見つけられずに worktree が残る（容量が漏れる）。
+    **null なら開いている workspace が無い**。片付けの 3 手は変わらず要るので、
+    workspace ID を取る経路だけ落として git で 3 手を行う（**checkout を消すだけで済ませない**）
+  - **孤児 workspace**（checkout が消えた残骸）は repo 非依存に列挙するしかない。
+    `worktree list --cwd` は repo スコープなので、repo ごと消えたものが見えない。
+    **判定は `worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ。**
+    `worktree` キーが無い workspace は repo の本体 checkout であって孤児ではない
+    （実測で 16 中 9 がこれ。混同すると生きた workspace を片付けにいく）
+- **`herdr worktree list` に `--cwd` を必ず付ける。**省くと返るのは「UI がフォーカスしている
+  workspace の repo」で、conductor の cwd とは無関係。別 repo にフォーカスが移った瞬間、対象 repo の
+  worktree が観測から丸ごと消え、片付け済みと誤判定する
 - `worktree create` は worktree・workspace・root pane を**一度に作る**。pane を別途 split しない
-- `agent start` に `--json` は無い（付けると exit 2 の構文エラー）。既定で JSON が返る
+- **`--json` を付けない。**socket API 経由のコマンドは既定で JSON を返す。`agent start` は付けると
+  exit 2 の構文エラーになり、`worktree create` / `worktree remove` は受理はされるが冗長として非推奨
 - `agent_status` は `idle` / `working` / `done` / `blocked` の 4 値しか返らない
 - **`blocked` は人待ち**（選択肢の提示で止まっている）。詰まりの検知はここで引き、
   何を聞かれているかは `herdr pane read <id> --source visible` で読む
@@ -165,7 +181,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **`agent prompt <名前> <本文> --wait --until working` で稼働を確認してから tick を終える**
   （完了を待つのとは別。確認しないと、まだ `待機` に見える課題へ同じ枠をもう一度渡せる）
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
-- 片付けは**標準出力から成否が読めない**（通知の JSON しか返らない）。worktree 一覧と
+- 片付けは**標準出力から成否が読めない**（返る JSON は通知のエンベロープで、削除の結果ではない）。worktree 一覧と
   remote branch が両方消えたことで確認する。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
 
 `HERDR_ENV` が 1 でなければ herdr の外なので、conductor は起動できない。その旨を報告して止まる。
