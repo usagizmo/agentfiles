@@ -29,9 +29,7 @@ description: >-
 
 ## variant
 
-**起動したらまず人待ちの記録を読む**（`references/wait-record.md`）。`waiting` のまま起こされた
-なら、それは前のセッションが死んだということ。**質問を出し直して待つ**か、人が既に答えていれば
-解釈して `cleared` にしてから続ける。記録を書いた当人が居なくても、ここで復帰できる。
+**起動したら `references/wait-record.md` の「起こし直されたら」を実行する。**
 
 渡された課題が **claim 済み**（Status が進行中 + assignee が自分 + **渡された番号のいずれかの**
 remote branch）なら `managed`。それ以外は `interactive`。Status は claim から着地まで単調に進むので、
