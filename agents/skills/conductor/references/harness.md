@@ -165,8 +165,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
   workspace の repo」で、conductor の cwd とは無関係。別 repo にフォーカスが移った瞬間、対象 repo の
   worktree が観測から丸ごと消え、片付け済みと誤判定する
 - `worktree create` は worktree・workspace・root pane を**一度に作る**。pane を別途 split しない
-- **`--json` を付けない。**socket API 経由のコマンドは既定で JSON を返す。`agent start` は付けると
-  exit 2 の構文エラーになり、`worktree create` / `worktree remove` は受理はされるが冗長として非推奨
+- **`--json` を付けない。**socket API 経由のコマンドは既定で JSON を返す。
+  `agent start` に付けると exit 2 の構文エラーになる
 - `agent_status` は `idle` / `working` / `done` / `blocked` の 4 値しか返らない
 - **`blocked` は人待ち**（選択肢の提示で止まっている）。詰まりの検知はここで引き、
   何を聞かれているかは `herdr pane read <id> --source visible` で読む
