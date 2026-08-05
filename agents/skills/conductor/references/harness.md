@@ -136,7 +136,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 名乗る | `herdr agent rename "$HERDR_PANE_ID" conductor`（`--current` は無い。pane ID を渡す） |
 | worktree を作る（resolve のみ） | `herdr worktree create --cwd <repo> --branch <名> --base <default> --label "#<番号>" --no-focus` |
 | pane を作る（refine） | `herdr pane split --current --direction right --cwd "$PWD" --no-focus` |
-| セッションを起こす | 得た pane_id に `herdr agent start <名前> --kind claude --pane <id> --timeout 90000` |
+| pane_id を得る | `pane split` は応答が返す。**`worktree create` は返さない**（`workspace` と `worktree` だけ）ので `herdr pane list --workspace <id>` で引く |
+| セッションを起こす | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い） |
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
