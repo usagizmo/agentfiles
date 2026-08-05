@@ -132,8 +132,15 @@ flowchart LR
 **層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ。**skill が別の skill の
 `references/` を覗く形が無くなるので、層契約（同じ層への言及を作らない）を隠さずに満たせる。
 
-**skill 固有の reference は `references/` に実体で置く**（`conductor/references/harness.md`、
-`docs/references/review-prompt.md`、`skill-creator/references/schemas.md`）。
+**skill 固有の reference は `references/` に実体で置く。**
+
+| skill | 実体 | 何を持つか |
+| --- | --- | --- |
+| `conductor` | `harness.md` / `protocols.md` / `scenarios.md` | multiplexer 差分 / 稀少パスの手順 / **tick の意味論を固定する代表シナリオ** |
+| `resolve` | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md` | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表） |
+| `docs` | `review-prompt.md` | 更新判定用 |
+| `skill-creator` | `schemas.md` | vendored |
+
 `scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
 `skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
 
