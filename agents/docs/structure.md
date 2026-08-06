@@ -26,8 +26,8 @@
 
 ```mermaid
 flowchart LR
-    subgraph inter[interlocutor]
-        MG[manager]
+    subgraph obs[observer]
+        BS[board-status]
     end
     subgraph orch[orchestrator]
         CO[conductor]
@@ -50,9 +50,7 @@ flowchart LR
         IS[issue]
     end
 
-    MG --> CO
-    MG --> RF
-    MG --> RS
+    BS --> CO
     CO --> RF
     CO --> RS
     CO --> SH
@@ -70,8 +68,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    MG[manager] --> HD[herdr]
-    CO[conductor] --> HD
+    CO[conductor] --> HD[herdr]
     CO -.->|着地後に branch が残ることに依存| SH[ship]
 ```
 
@@ -104,9 +101,6 @@ flowchart LR
         PR[pr]
         SH[ship]
     end
-    subgraph inter[interlocutor]
-        MG[manager]
-    end
     subgraph shared["agents/shared/"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
@@ -120,7 +114,6 @@ flowchart LR
         SD["sync-default.md<br/><small>default の同期</small>"]
     end
 
-    MG --> AF
     RF --> AF
     RS --> AF
     CO --> SB
@@ -142,7 +135,6 @@ flowchart LR
     DC --> RC
     CM --> GM
     IS --> GM
-    MG --> GM
     PR --> GM
     SH --> GM
     PR --> SD
