@@ -1,7 +1,7 @@
 # Issue 本文の digest
 
 **本文が変わったことを別セッションが検知するための指紋。**`resolve` の `plan`（`issueDigests`）と
-`refine` の `ready`（`issueDigest`）が書き、`conductor` が現在の本文と突き合わせる。
+`refine` の `ready`（`issueDigest`）が書き、上位のキュー管理が現在の本文と突き合わせる。
 
 **書く側と読む側が別セッションなので、取り方が揃っていないと一致判定が一意にならない。**
 だから 1 箇所に置く。

@@ -30,6 +30,9 @@ conductor が人待ちを中断と読んで再開を送り続ける。
 記録を `cleared` にし、次の tick で `待機` として観測され、conductor が枠を渡し直す。
 conductor が回答を仲介する必要はない（中身の解釈は conductor の領分ではない）。
 
+**人が conductor 側に答えてしまったときだけ、当のセッションへ転記する**（条件は `relay.md`）。
+**起きる局面はこれ 1 つ** —— 自分から宛先を選んで運ぶことはしない。
+
 このとき必要になるのは grant 世代を持つ fencing token だが、**入力が conductor 経由でしか
 通らない限り不要**なので置かない。その前提が崩れる harness を足すときに入れる。
 
@@ -141,7 +144,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
-| 実行器だけ止める | `herdr agent stop <名前>` の後 `herdr agent list` で `agent_status` が消えたことを確認（pane は閉じない） |
+| 実行器だけ止める | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。**送っても `agent_status` が変わらないときだけ `Conflict`** |
 | 片付ける（`refine`） | `herdr pane close <id>` |
 | 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
 | 片付けに要る workspace ID | **`herdr worktree list --cwd <repo>`** の `open_workspace_id` |
@@ -271,6 +274,24 @@ worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプト
 1 周のコストはスクリプト自身が `rateLimit { cost }` で申告し、`--cost-limit` を超えたら起動を止める
 （`graphql.used` の差分では並走セッション分が混ざって自分のコストを測れない）。
 
+#### 間隔を決めるのは枠ではない
+
+**間隔を縮めても tick の回数は増えない。**watcher は指紋が変わったときだけ起こすので、
+増えるのは観測の回数だけで、tick の回数は盤面が実際に変わった回数で決まる。
+**増えるのは安い側（GitHub API と `git fetch`）だけで、高い側（conductor の context）は増えない。**
+だから**「枠の節約」を理由に間隔を伸ばさない** —— 伸ばして得るものは無く、失うのは検知の遅延だけ。
+
+既定の 60 秒を決めているのは **1 周の所要時間**（Project の GraphQL・Issue とコメントの REST・
+`gh pr list`・`git fetch`・worktree ごとの `git status`）。間隔がこれに近づくと実質常時観測になり、
+遅延の短縮が頭打ちになる。**`--deadline` を典型値と読み違えない** —— あれはハングを切る上限で、
+1 周の所要時間ではない。
+
+**GitHub の webhook でポーリングを置き換えない。**指紋のうち sessions・workspaces・worktree の
+dirty は GitHub に何も起こさず、**そのうち sessions が「枠が空いた」を伝える唯一の経路**。
+GitHub 側だけイベント化しても実効の間隔はローカル側が決めたままで、**いちばん速くしたい遷移が
+1 秒も縮まない**（受け口として公開 endpoint が要り、private repo の Issue 本文が第三者を経由する
+点も別途重い）。イベント化するとしたら multiplexer 側から。
+
 #### ラウンドの有効判定
 
 **判定は各取得の成功可否であって、空集合の有無ではない。**「非空 = 成功」にすると、
@@ -280,3 +301,25 @@ worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプト
 **観測できない状態が続いても fallback 起床は発火させる。**失敗を握りつぶして次の周へ送り続けると、
 rate limit 中に盲目のまま再試行し、**永久に起きない。**縮退の仕方（backoff・項目を間引かない・
 観測不能を状況ボードへ出す）は `../SKILL.md`。
+
+## 交代
+
+**context が尽きる前に、別 pane の後継へ渡して自分は退く。**tick は冪等で観測から組み立て直せるので、
+**渡すのは観測に出ないものだけ**。それ以外を書くと、後継が読むのに時間と context を二重に使う。
+
+**手順**（既存の受け口だけで足りる。新しい仕組みを作らない）。
+
+1. `pane split` で pane を作り、**別名**で `agent start`（同名で立てると多重起動の判定に触れる）
+2. `agent prompt` で `/conductor <引き継ぎ本文>` を渡す
+3. 後継が観測を始めたことを `agent list` で確認する
+4. **自分を別名へ rename してから、後継を本来の名前へ rename する**（逆順だと同名が 2 本並ぶ）
+5. 引き継ぎを応答に残して idle になる。**pane を閉じるのは人**
+
+| 引き継ぎに書く                                             | 書かない                                       |
+| ---------------------------------------------------------- | ---------------------------------------------- |
+| 外部化していない判断（渡した枠・伝えた休止・次に伝えること） | Issue / Status / branch / PR / 記録から読めるもの |
+| 自分が踏んだ失敗の型                                       | 成功した tick の履歴                           |
+| 未 push の commit（**人の領分なので触らない**）            | 状況ボードに出ている内容                       |
+
+**「観測すれば分かるが探す手間を省く」ものは、書いてよいが最後に置く。**先頭に置くと後継が
+**観測より先にそれを信じる** —— 「前回の続きを仮定しない」が崩れる。
