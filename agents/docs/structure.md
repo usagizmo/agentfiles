@@ -101,6 +101,8 @@ flowchart LR
     subgraph shared["agents/shared/"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
+        RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
+        BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
@@ -110,10 +112,15 @@ flowchart LR
 
     CO --> SB
     CO --> WR
+    CO --> RR
+    CO --> BD
     RF --> SB
     RF --> WR
+    RF --> RR
+    RF --> BD
     RS --> SB
     RS --> WR
+    RS --> BD
     CS --> AD
     CS --> AS
     ZB --> AD
@@ -142,6 +149,7 @@ flowchart LR
 | `skill-creator` | `schemas.md` | vendored |
 
 `scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
+`conductor/scripts/`（起床監視の実装。手順書ではなくここが観測の SSOT）、
 `skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
 
 置く条件と張り方の規則は [`../../AGENTS.md`](../../AGENTS.md) が SSOT。ここには写さない。

@@ -61,8 +61,7 @@ prepare で読んだ文脈がそこに残っているのが、同一セッショ
 | **計画が失効した** | 交差した変更範囲と、再 plan が要ること |
 | **先行と資源が交差した** | 後発なので安全なチェックポイントで休止すること |
 
-**渡したら、稼働したことを観測してから次へ進む。**確認しないと、まだ止まって見える課題へ同じ枠を
-もう一度渡せる（資源キーが交差する 2 つが同時に書く）。
+**稼働に移ったことを観測できる手段が要る**（使い道は `../SKILL.md`）。
 
 セッションが失われていたら新規に起こす。その場合は Issue コメントの計画と人待ちの記録から
 文脈を復元させる（**セッション文脈はキャッシュ、外部化した記録が復旧契約**）。
@@ -116,9 +115,10 @@ worktree 前提の手順をそのまま当てると何も片付かない。
 2. worktree の checkout を消す
 3. branch を消す（**merge 済みのときだけ**。未マージなら残す）
 
-**例外は「計画が無効」の差し戻し。**claim を解くのが目的なので、**commit が無いことを確認して
-から claim branch を消す**（残すと `progress` が `準備中` のままで台帳が押し戻される）。
-commit があるなら差し戻さない。
+**例外は「計画が無効」の差し戻し。**claim を解くのが目的なので、**claim branch も消す**
+（残すと `progress` が `準備中` のままで台帳が押し戻される）。
+**差し戻してよいかの述語は `../SKILL.md` の差し戻し表**。ここは消し方だけを持つ
+—— 述語を 2 箇所に置くと、片方だけ直したときに実装を消す経路が残る。
 
 ### 差し替えの条件
 
@@ -174,12 +174,20 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
   `pane send-text` の改行も agent の入力欄を submit しない（キーは届くが送信されない）。
   未送信の下書きが残っていても `agent prompt` はそれを捨てて自分の本文だけを送るので、
   事前に消そうとしなくてよい
+- **入力欄の文字列は観測材料ではない。**Claude Code のサジェストか人の未送信入力かを、
+  **見ただけでは区別できない。**だから**どちらの理由にも使わない**。
+  - **「人の入力かもしれない」で送信を控えない。**控えると、その pane へ渡す action が
+    **永久に選べなくなる**（実測で 11 tick 止めた）
+  - **見えた文字列を自分の本文へ写さない。**サジェストだった場合、
+    **誰も決めていないものを conductor が指示として確定させてしまう**
+  送るのは自分の本文だけでよい。`agent prompt` が入力欄を捨てるのは正しい挙動で、
+  サジェストなら捨てられるべきもの、人の入力なら本人が送り直せる。
+  中身が判断に関わりそうに見えたら、渡すのではなく**状況ボードへ出して人へ返す**
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後。**`--no-focus` は
   `worktree create` / `pane split` にはあるが `agent prompt` には無い。前に置くと
   **本文が unknown option として弾かれる**（`/refine ...` が option 名として報告されるので、
   slash command のせいに見えて紛らわしい）
-- **`agent prompt <名前> <本文> --wait --until working` で稼働を確認してから tick を終える**
-  （完了を待つのとは別。確認しないと、まだ `待機` に見える課題へ同じ枠をもう一度渡せる）
+- 稼働の確認は `agent prompt <名前> <本文> --wait --until working`
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
 - 片付けは**標準出力から成否が読めない**（返る JSON は通知のエンベロープで、削除の結果ではない）。worktree 一覧と
   remote branch が両方消えたことで確認する。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
@@ -188,14 +196,87 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 ### 起こされる仕組み
 
-スナップショットを 60 秒ごとに取り、前回と違ったときだけ 1 行出すプロセスを background で走らせる。
+**`scripts/watch.sh` を background で走らせる。**終了コードで受け方が変わる。
 
-**入れる項目は `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない。**省いた項目だけが変わる
-遷移は永久に起きない（checks が緑になっても起床しなければ integration は一生出ない）。
+| exit | 意味 | conductor がすること |
+| --- | --- | --- |
+| 0 | 変化を検知した / fallback / 観測不能が続いた | 次の tick に入る |
+| 2 | 引数不足・**コスト gate 超過** | **再起動しない。**状況ボードの「制約・異常」へ出して止まる |
 
-- worktree 一覧は上記のとおり `git -C <repo>` で取る
-- **conductor 自身を除外する**（`.name != "conductor"`）。応答のたびに `working` ⇄ `idle` する
-- **GitHub 側は 1 回のクエリにまとめる。**Issue の state と Status、PR の state と checks、
-  固定 marker のコメントを個別に叩くと GraphQL 枠が枯渇する。**枠が足りないなら間隔を延ばす**
-  （項目を落とすと遷移が止まるが、間隔なら遅れるだけで済む）
-- 観測が丸ごと空になった回は握りつぶす（一時的な API 断で誤検知しない）
+**2 で再起動しない**のが要点。形状バグを直さないまま起こし直すと、1 ラウンドずつ枠を焼きながら
+同じところで落ち続ける（gate が「止める」にならない）。
+
+**観測の実装 SSOT はスクリプト。**prose から同等物を書き直さない —— 毎セッション書き直すと、
+そのたびに別の形へ崩れる。**変えたいことがあるならスクリプトを直す。**
+
+project 固有値は引数で渡す（**座標は project 差分が持ち、実装は共通側が持つ**）。
+
+```
+scripts/watch.sh --repo <path> --gh-repo <owner/name>
+                 --project-org <org> --project-number <n> --status-field <name>
+                 --sessions-cmd <cmd> --workspaces-cmd <cmd>
+```
+
+`--sessions-cmd` / `--workspaces-cmd` を引数にしているのは、**スクリプトに multiplexer を
+知らせないため**（conductor 本体がここ以外で multiplexer を知らないのと同じ理由）。
+注入するコマンドの契約は 3 つ —— 整列済みの行を出す、**取得に失敗したら非 0**、
+**空になり得ない一覧なら空のときも非 0**（`| grep .` を末尾に付ける）。
+3 つ目が要るのは、**exit 0 で空が返るのが実際に起きる**から。
+Project の Status が一時的に空で返り、全 Issue の Status が消えたように見えて誤起床した。
+
+herdr なら:
+
+```bash
+# --sessions-cmd
+herdr agent list | jq -S -r '.result.agents[]? | select(.name != null)
+  | if .name == "conductor" then "conductor present"
+    elif (.name | test("^(refine|resolve)-[0-9]+$")) then
+      "\(.name) \(if .agent_status == "done" or .agent_status == "idle" then "waiting" else .agent_status end)"
+    else empty end' | sort | grep .
+
+# --workspaces-cmd
+herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.worktree.checkout_path // "-")"' | sort | grep .
+```
+
+**何を入れて何に畳むかは `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない**
+（省いた項目だけが変わる遷移は永久に起きない）。ここは herdr での写し方だけ。
+
+- **`.name // .pane_id` を使わない。**無名 pane まで拾ってしまい、別 repo の pane の状態変化で起床する
+- conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。
+  2 本目が居れば同じ行が 2 つ並ぶ
+- `done` と `idle` は `waiting` へ畳む。`working` と `blocked` はそのまま
+
+worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプトが `--repo` から行う）。
+
+#### コストは「リクエスト数」ではなくノード数で決まる
+
+**GraphQL のコスト = ceil(要求ノード総数 ÷ 100)**（最小 1）。ここを知らないと、正しい項目を
+正しい回数で取っていても枯れる。
+
+- **`gh project item-list` を観測に使わない。**item ごとに全 field 値を取る（`fieldValues(first:100)`）
+  ので**ノード数が `件数 × 100`** になる。実測で 300 件 = **406 pt**（枠 5,000 の 8%）。
+  `fieldValueByName` は connection ではなく単一ノードなので**ノード数が `件数`** で、
+  同じ 187 行が **2 pt**。`item-add` など mutation 系はそのままでよい
+- **REST は GraphQL とは別枠で 0 pt。**Issue 一覧を REST 経由にしてあるのは取りこぼしを塞ぐため
+  （`--limit N` は N を超えると**不完全なまま非 0 件で返る**ので使わない）。枠の節約は副次
+- **1 周のコストは O(items)。**Project の item は単調増加するので、いずれ効いてくる
+  （1,000 件でも 10 pt/周なので当面は問題にならない）
+
+**間隔は遅延の調整であって、形状バグの吸収に使わない。**間隔を倍にしても形状が悪ければ半分にしか
+ならず、枯れるものは枯れる（406 pt/周は間隔を 2 倍にしても 6,150 pt/時で枠を超える）。
+**直すのはクエリの形状。**
+
+**GraphQL 枠は全セッションの共有資源。**conductor 1 本と、並走する `refine` / `resolve` が
+同じトークンを使う。watcher が焼き切ると**`gh` を使う全セッションが同時に止まる**ので、
+1 周のコストはスクリプト自身が `rateLimit { cost }` で申告し、`--cost-limit` を超えたら起動を止める
+（`graphql.used` の差分では並走セッション分が混ざって自分のコストを測れない）。
+
+#### ラウンドの有効判定
+
+**判定は各取得の成功可否であって、空集合の有無ではない。**「非空 = 成功」にすると、
+子セッションが 0 件のときの一覧や open PR が無いときの一覧を失敗と読んで毎回無効化し、
+逆に**失敗して空を返した取得を正常として受理する。**
+
+**観測できない状態が続いても fallback 起床は発火させる。**失敗を握りつぶして次の周へ送り続けると、
+rate limit 中に盲目のまま再試行し、**永久に起きない。**縮退の仕方（backoff・項目を間引かない・
+観測不能を状況ボードへ出す）は `../SKILL.md`。

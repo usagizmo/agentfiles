@@ -9,14 +9,14 @@
 ## 形式
 
 ````markdown
-<!-- wait:v1 -->
+<!-- wait -->
 ```yaml
 state: waiting | cleared
 issues: [<Issue 番号>]   # group なら全番号
 phase: <止まった工程の名前>
 reason: <何が決まらないか。1 行>
 ```
-<!-- /wait:v1 -->
+<!-- /wait -->
 
 質問の本文を人が読む文で続ける（聞き方は `~/.agents/AGENTS.md`）。
 ````

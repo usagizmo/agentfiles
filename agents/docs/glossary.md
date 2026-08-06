@@ -81,10 +81,16 @@ checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実
 
 | 語 | marker | 書く人 | SSOT |
 | --- | --- | --- | --- |
-| claim の記録 | `claim:v1` | `conductor` | `agents/shared/same-branch.md` |
-| 計画 | `plan:v1` | `resolve` | `resolve/SKILL.md` |
-| 人待ちの記録 | `wait:v1` | `refine` / `resolve` | `agents/shared/wait-record.md` |
-| 失敗の記録 | `retry:v1` | `conductor` | `conductor/SKILL.md` |
+| claim の記録 | `claim` | `conductor` | `agents/shared/same-branch.md` |
+| 在庫の鮮度 | `ready` | `refine` | `agents/shared/ready-record.md` |
+| 計画 | `plan` | `resolve` | `resolve/SKILL.md` |
+| 人待ちの記録 | `wait` | `refine` / `resolve` | `agents/shared/wait-record.md` |
+| 失敗の記録 | `retry` | `conductor` | `conductor/SKILL.md` |
+
+**marker に版番号を付けない。**版で分岐する読み手が要るようになったことが一度も無く、
+**upsert は marker 文字列の一致で既存を探す**ので、版を上げると古いコメントが見つからなくなって
+新旧が併存する（移行経路を与えるどころか孤児を作る）。schema の不一致は block の必須キーの
+有無で検出でき、`conductor` の「計画 schema 不明 → 全体 pause」がそれを受ける。
 
 **判断材料の Artifact は marker コメントではない。**復旧契約ではなく、人が判断の根拠を読み返す
 ためのもの。URL は Issue 本文の「確定済みの製品判断」に併記する（SSOT は `refine/SKILL.md`）。
