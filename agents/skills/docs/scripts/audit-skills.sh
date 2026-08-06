@@ -1,7 +1,13 @@
 #!/bin/sh
 # skill 群の機械検査。品質パスがレビュアーへ渡す材料を作る。
 #
-#   sh audit-skills.sh [SKILLS_ROOT]     既定 ~/.agents/skills
+#   sh audit-skills.sh [SKILLS_ROOT] [--anchor DIR]... [--layers FILE]
+#
+#   SKILLS_ROOT  既定 ~/.agents/skills
+#   --anchor     参照解決の基準点を足す（repo root 相対か絶対）。skills root と
+#                repo root（.git を持つ祖先）は既定で入るので、それ以外の置き場を
+#                指す規約がある project だけ渡す
+#   --layers     project 側の層定義を足す（形式は layers.tsv と同じ）
 #
 # 出力は TSV 1 行 1 件: <LEVEL> <check> <location> <detail>
 #   VIOLATION  規約違反。レビューへ出す前に直す
@@ -24,12 +30,15 @@ export LC_ALL
 # layer 検査だけが消え、SUMMARY は出るので「違反なし」に見える。
 LAYERS=$(dirname "$0")/layers.tsv
 
+# `--layers` で project 側の定義を足せる。**global の定義だけで判定すると、
+# project 固有の skill が全部 leaf に落ちて互いを名指しできなくなる**
+# （leaf どうしの名指しは常に違反なので、正しい参照まで赤くなる）。
 rank() {
 	awk -F "	" -v s="$1" '
 		/^#/ || NF < 2 { next }
 		$2 == s { print $1; found = 1; exit }
 		END { if (!found) print 4 }
-	' "$LAYERS"
+	' $RANK_FILES
 }
 
 # skill 自体を対象にする skill。名指しは正当なので check layer から除く。
@@ -70,13 +79,76 @@ emit() {
 	printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >>"$FINDINGS"
 }
 
+# --- 引数 ---------------------------------------------------------------
+# **参照の基準点を 1 つに固定しない。**skills root からの相対しか解けないと、
+# repo 直下の `docs/**` や、project 固有の置き場を指す参照が全部 missing になる。
+# 実測で 38 件中 37 件が誤検知になり、**gate が常時赤で新しい違反を検出できなくなった。**
+ROOT_ARG=
+ANCHORS=
+EXTRA_LAYERS=
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--anchor)
+		[ $# -ge 2 ] || fatal "--anchor に値が無い"
+		ANCHORS="$ANCHORS
+$2"
+		shift 2
+		;;
+	--layers)
+		[ $# -ge 2 ] || fatal "--layers に値が無い"
+		EXTRA_LAYERS=$2
+		shift 2
+		;;
+	-*) fatal "不明なオプション: $1" ;;
+	*)
+		[ -z "$ROOT_ARG" ] || fatal "skills root は 1 つだけ: $ROOT_ARG と $1"
+		ROOT_ARG=$1
+		shift
+		;;
+	esac
+done
+[ -n "$ROOT_ARG" ] || ROOT_ARG=$HOME/.agents/skills
+
 # --- root ---------------------------------------------------------------
 # root 自体が dir symlink（`~/.agents/skills` が repo を指す）でも、canon が返す
 # 物理パスと突き合わせられるように正規化する。投影前後で出力を同じにするため。
-ROOT_ARG=${1:-$HOME/.agents/skills}
 [ -f "$LAYERS" ] || fatal "層定義が無い: $LAYERS"
+RANK_FILES=$LAYERS
+if [ -n "$EXTRA_LAYERS" ]; then
+	[ -f "$EXTRA_LAYERS" ] || fatal "--layers が実在しない: $EXTRA_LAYERS"
+	RANK_FILES="$LAYERS $EXTRA_LAYERS"
+fi
 [ -d "$ROOT_ARG" ] || fatal "skills root が無い: $ROOT_ARG"
 ROOT=$(CDPATH= cd -P -- "$ROOT_ARG" 2>/dev/null && pwd -P) || fatal "root を解決できない: $ROOT_ARG"
+
+# **repo root は自動で足す。**`docs/**` を指す参照は project の規約で repo 相対と
+# 決まっており、毎回 `--anchor` を渡させると渡し忘れが誤検知として残る。
+REPO_ROOT=
+rr_probe=$ROOT
+while [ "$rr_probe" != "/" ]; do
+	if [ -e "$rr_probe/.git" ]; then
+		REPO_ROOT=$rr_probe
+		break
+	fi
+	rr_probe=$(dirname "$rr_probe")
+done
+
+# 参照解決の基準点。順に試して 1 つでも当たれば実在とみなす。
+# skills root 相対を入れるのは、`<skill>/references/<file>.md` 形式の参照が
+# 参照元 dir からは解けないため（規約はこの形を要求している）。
+RESOLVE_BASES=$ROOT
+[ -n "$REPO_ROOT" ] && RESOLVE_BASES="$RESOLVE_BASES
+$REPO_ROOT"
+for a in $ANCHORS; do
+	[ -n "$a" ] || continue
+	case "$a" in
+	/*) ap=$a ;;
+	*) ap=${REPO_ROOT:-$ROOT}/$a ;;
+	esac
+	[ -d "$ap" ] || fatal "--anchor が実在しない: $a"
+	RESOLVE_BASES="$RESOLVE_BASES
+$ap"
+done
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/audit-skills.XXXXXX") || fatal "作業 dir を作れない"
 # signal ハンドラは自分で終了する。戻ると $WORK が消えたまま走り続け、
@@ -151,7 +223,19 @@ while IFS="	" read -r disp phys; do
 	}' "$phys" | sort -u | while IFS="	" read -r ln target; do
 		case "$target" in
 		"~"* | /* | *" "*) continue ;;
+		# **プレースホルダは参照ではない。**`<skill>/references/<file>.md` の
+		# ような書式の説明そのものが規約文に出てくる。パスとして解こうとすると
+		# 必ず missing になり、直しようがない違反が永久に残る。
+		*"<"* | *">"* | *"{"* | *"}"* | *"*"*) continue ;;
 		esac
+		hit=
+		for b in $RESOLVE_BASES; do
+			if [ -e "$b/$target" ]; then
+				hit=1
+				break
+			fi
+		done
+		[ -n "$hit" ] && continue
 		[ -e "$ROOT/$dir/$target" ] && continue
 		# 区切りを持つものはパスと断定できる。裸のファイル名は生成物の名前でも
 		# ありうるので REVIEW に落とす（見逃さないが、ゲートは止めない）。
