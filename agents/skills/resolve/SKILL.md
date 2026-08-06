@@ -24,7 +24,7 @@ description: >-
 | **仕上げ** | `finish`（規模別） | — |
 | **検証** | プロジェクトの検証 skill（例: `verify-app`）。レポートとセッションまとめを提示する | `references/session-report.md` |
 | **意図の確認** | **新しい API / CLI / 公開 surface・UI の見た目と操作・設計骨格を変えた**なら要る。それ以外（test に固定できた不具合修正・挙動を変えないリファクタ・docs のみ）は飛ばす | 要るときだけ `references/intent.md`（見せ方） |
-| **提出** | latest default へ追随して `pr`。**CI が緑になるまでここ**。セッションまとめを PR へコメントする | 残ったものの振り分けは `references/scope.md` |
+| **提出** | latest default へ追随して `pr`。**`managed` は base を default 以外にしない**（積み上げると着地の前提を満たせず、integration を握ったまま渡され続ける。順序は `Depends on` と選出が持つ）。**CI が緑になるまでここ**。セッションまとめを PR へコメントする | 残ったものの振り分けは `references/scope.md` |
 | **integration 待ち** | managed のみ。**merge だけが直列化点** | — |
 | **着地** | `ship` | — |
 
@@ -139,6 +139,7 @@ alsoResolves: [<Issue 番号>] # このブランチで一緒に片付ける Issu
 | 承認された製品境界を越える | 停止して確認する |
 | CI が詰まって進まない | 停止して報告する |
 | 実装中に Issue 本文が変わった | 停止して再承認を待つ |
+| **着地の前提が満たせない**（base が default でない等で merge へ進めない） | 停止して報告する |
 
 製品境界とは、**機能の追加・削除** / 新しいユーザー可視挙動 / 非目標への侵入 /
 新たな永続形式・migration / 認証・決済・外部送信・公開・破壊的操作の追加 / 設計骨格が変わる新事実。
