@@ -7,15 +7,15 @@
 
 **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場所が決まる。**大きさでは分けない。
 
-| ディレクトリ | モデルの扱い | 投影先 |
-| --- | --- | --- |
-| `skills/<name>/SKILL.md` | 発動時に**常に読む** | `~/.agents/skills/` |
-| `skills/<name>/references/` | **読む**（必要になったときだけ） | 同上 |
-| `skills/<name>/scripts/` | **実行する** | 同上 |
-| `skills/<name>/assets/` | **成果物に使う** | 同上 |
-| `AGENTS.md` | **常時読み込まれる** | `~/.agents/AGENTS.md` ほか |
-| `shared/` | **読む / 実行する**（skill から symlink 経由で） | skills の一部として投影される |
-| `docs/` | **読まない**（人が読む） | 投影しない |
+| ディレクトリ                | モデルの扱い                                     | 投影先                        |
+| --------------------------- | ------------------------------------------------ | ----------------------------- |
+| `skills/<name>/SKILL.md`    | 発動時に**常に読む**                             | `~/.agents/skills/`           |
+| `skills/<name>/references/` | **読む**（必要になったときだけ）                 | 同上                          |
+| `skills/<name>/scripts/`    | **実行する**                                     | 同上                          |
+| `skills/<name>/assets/`     | **成果物に使う**                                 | 同上                          |
+| `AGENTS.md`                 | **常時読み込まれる**                             | `~/.agents/AGENTS.md` ほか    |
+| `shared/`                   | **読む / 実行する**（skill から symlink 経由で） | skills の一部として投影される |
+| `docs/`                     | **読まない**（人が読む）                         | 投影しない                    |
 
 `SKILL.md` は発動時に常に読まれるので、**オンデマンドで足りるものは `references/` へ出す**。
 
@@ -26,6 +26,9 @@
 
 ```mermaid
 flowchart LR
+    subgraph inter[interlocutor]
+        MG[manager]
+    end
     subgraph orch[orchestrator]
         CO[conductor]
     end
@@ -48,6 +51,7 @@ flowchart LR
         MG[merge]
     end
 
+    MG --> CO
     CO --> RF
     CO --> RS
     CO --> SH
@@ -65,7 +69,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    CO[conductor] --> HD[herdr]
+    MG[manager] --> HD[herdr]
+    CO[conductor] --> HD
     CO -.->|着地後に branch が残ることに依存| SH[ship]
 ```
 
@@ -141,12 +146,12 @@ flowchart LR
 
 **skill 固有の reference は `references/` に実体で置く。**
 
-| skill | 実体 | 何を持つか |
-| --- | --- | --- |
-| `conductor` | `harness.md` / `protocols.md` / `scenarios.md` | multiplexer 差分 / 稀少パスの手順 / **tick の意味論を固定する代表シナリオ** |
-| `resolve` | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md` | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表） |
-| `docs` | `review-prompt.md` | 更新判定用 |
-| `skill-creator` | `schemas.md` | vendored |
+| skill           | 実体                                                                         | 何を持つか                                                                  |
+| --------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `conductor`     | `harness.md` / `protocols.md` / `scenarios.md`                               | multiplexer 差分 / 稀少パスの手順 / **tick の意味論を固定する代表シナリオ** |
+| `resolve`       | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md` | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）  |
+| `docs`          | `review-prompt.md`                                                           | 更新判定用                                                                  |
+| `skill-creator` | `schemas.md`                                                                 | vendored                                                                    |
 
 `scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
 `conductor/scripts/`（起床監視の実装。手順書ではなくここが観測の SSOT）、
