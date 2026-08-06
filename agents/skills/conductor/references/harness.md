@@ -174,6 +174,15 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
   `pane send-text` の改行も agent の入力欄を submit しない（キーは届くが送信されない）。
   未送信の下書きが残っていても `agent prompt` はそれを捨てて自分の本文だけを送るので、
   事前に消そうとしなくてよい
+- **入力欄の文字列は観測材料ではない。**Claude Code のサジェストか人の未送信入力かを、
+  **見ただけでは区別できない。**だから**どちらの理由にも使わない**。
+  - **「人の入力かもしれない」で送信を控えない。**控えると、その pane へ渡す action が
+    **永久に選べなくなる**（実測で 11 tick 止めた）
+  - **見えた文字列を自分の本文へ写さない。**サジェストだった場合、
+    **誰も決めていないものを conductor が指示として確定させてしまう**
+  送るのは自分の本文だけでよい。`agent prompt` が入力欄を捨てるのは正しい挙動で、
+  サジェストなら捨てられるべきもの、人の入力なら本人が送り直せる。
+  中身が判断に関わりそうに見えたら、渡すのではなく**状況ボードへ出して人へ返す**
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後。**`--no-focus` は
   `worktree create` / `pane split` にはあるが `agent prompt` には無い。前に置くと
   **本文が unknown option として弾かれる**（`/refine ...` が option 名として報告されるので、
@@ -226,7 +235,7 @@ herdr agent list | jq -S -r '.result.agents[]? | select(.name != null)
     else empty end' | sort | grep .
 
 # --workspaces-cmd
-herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.id) \(.worktree.checkout_path // "-")"' | sort | grep .
+herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.worktree.checkout_path // "-")"' | sort | grep .
 ```
 
 **何を入れて何に畳むかは `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない**
