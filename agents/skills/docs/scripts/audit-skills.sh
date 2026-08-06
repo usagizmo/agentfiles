@@ -142,6 +142,10 @@ $REPO_ROOT"
 for a in $ANCHORS; do
 	[ -n "$a" ] || continue
 	case "$a" in
+	# `~/...` は展開する。project skill が global skill の reference を指すのは正当で、
+	# その置き場は `~/.agents/skills` という規約上の名前でしか指せない（実体の絶対パスは
+	# checkout の場所に依存するので、渡す側に書かせるとマシンごとに違う値になる）。
+	"~/"*) ap=$HOME/${a#"~/"} ;;
 	/*) ap=$a ;;
 	*) ap=${REPO_ROOT:-$ROOT}/$a ;;
 	esac
