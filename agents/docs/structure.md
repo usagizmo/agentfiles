@@ -125,7 +125,6 @@ flowchart LR
     MG --> AF
     RF --> AF
     RS --> AF
-    CS --> AF
     CO --> RL
     CO --> SB
     CO --> WR
