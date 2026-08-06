@@ -26,13 +26,21 @@
 
 ```mermaid
 flowchart TB
-    U[/ユーザー/] -->|/conductor| AP
+    U[/ユーザー/] -->|/manager 問う・決める| MG
+    U -->|/conductor| AP
     U -->|/resolve 課題を直接渡す| RUN
     U -->|/refine Issue を直接渡す| G
+
+    subgraph MG["manager — 相手役・tick を持たない"]
+        ASK["問いに答える / 調べる<br/>Issue・skill・docs へ外部化する"]
+    end
 
     subgraph AP["conductor — 1 つだけ・常駐"]
         TICK["tick<br/>観測 → 正規化 → action を 1 つ"]
     end
+
+    ASK -->|人と同じ権限で書く| Q
+    ASK -.状況ボードを読む.-> TICK
 
     TICK -->|未計画を起こす| G["refine<br/>consult → 計画を Issue へ<br/>→ Status を計画済みへ"]
     G --> Q[("計画済み<br/>open + 未 claim")]
@@ -66,6 +74,7 @@ flowchart TB
 
 | 層 | skills | 契約 |
 | --- | --- | --- |
+| interlocutor | `manager` | 人の問いを受け、盤面を読んで外部化する。**tick を持たず、orchestrator の action は出さない** |
 | orchestrator | `conductor` | キューを回す。1 件の解決は work-item flow に委譲する |
 | work-item flow | `refine` `resolve` | 課題 1 件を扱う。`refine` は計画まで、`resolve` は着地まで |
 | subflow | `finish` | 工程の一部を束ねる |
@@ -74,6 +83,8 @@ flowchart TB
 参照は上の層から下の層への一方通行。
 
 ```text
+manager   → conductor（人の決定の伝達・観測のやり直しだけ）
+manager   → issue / docs / consult / herdr
 conductor → refine / resolve → finish → consult / tidy / docs / commit / pr / ship / …
 conductor → herdr（multiplexer の CLI 構文。差し替え点は conductor/references/harness.md）
 conductor → ship（着地後に branch が残ることに依存）
@@ -90,6 +101,7 @@ refine    → consult
 
 | skill | 持つもの | 持たないもの |
 | --- | --- | --- |
+| `manager` | 人の問いへの回答・調査・気づきの外部化・放置されたものの回収 | **orchestrator の action**（枠を渡す・片付ける・起こす・claim・差し戻す）・実装・計画・製品判断 |
 | `conductor` | 正規化・action の優先順・資源の貸し出し・差し戻し | 技術方針・製品判断・着手後にどこで人を待つか |
 | `refine` | 「何を作るか」を Issue に固定する | 実装・「どう作るか」 |
 | `resolve` | 課題 1 件の進行・計画の外部化・停止条件・作業単位の運用 | 資源を誰が出すか |
