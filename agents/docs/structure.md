@@ -113,7 +113,6 @@ flowchart LR
         RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
-        RL["relay.md<br/><small>転記の条件</small>"]
         AF["artifact.md<br/><small>読ませる面の条件</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
@@ -121,11 +120,9 @@ flowchart LR
         SD["sync-default.md<br/><small>default の同期</small>"]
     end
 
-    MG --> RL
     MG --> AF
     RF --> AF
     RS --> AF
-    CO --> RL
     CO --> SB
     CO --> WR
     CO --> RR
