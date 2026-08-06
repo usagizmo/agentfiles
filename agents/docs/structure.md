@@ -48,10 +48,11 @@ flowchart LR
         PR[pr]
         SH[ship]
         IS[issue]
-        MG[merge]
     end
 
     MG --> CO
+    MG --> RF
+    MG --> RS
     CO --> RF
     CO --> RS
     CO --> SH
@@ -109,12 +110,15 @@ flowchart LR
         RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
+        RL["relay.md<br/><small>転記の条件</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
         SD["sync-default.md<br/><small>default の同期</small>"]
     end
 
+    MG --> RL
+    CO --> RL
     CO --> SB
     CO --> WR
     CO --> RR

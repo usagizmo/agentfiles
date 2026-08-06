@@ -30,11 +30,8 @@ conductor が人待ちを中断と読んで再開を送り続ける。
 記録を `cleared` にし、次の tick で `待機` として観測され、conductor が枠を渡し直す。
 conductor が回答を仲介する必要はない（中身の解釈は conductor の領分ではない）。
 
-**人が conductor 側に答えてしまったときだけ、そのまま転記する。**「別の pane で打ち直して」と
-返すのは、原則の目的を守らずに形だけ守る動き。**転記してよいのは解釈を要さない回答だけ** ——
-提示済みの選択肢の採否や yes / no のように、**参照先が既に外部化されていて 1 対 1 で対応が付く**もの。
-**転記であることを明示し、要約・言い換え・補足をしない**（そこから解釈が入る）。
-判断が割れうる回答は転記せず、**当のセッションへ返してもらう**。
+**人が conductor 側に答えてしまったときだけ、当のセッションへ転記する**（条件は `relay.md`）。
+**起きる局面はこれ 1 つ** —— 自分から宛先を選んで運ぶことはしない。
 
 このとき必要になるのは grant 世代を持つ fencing token だが、**入力が conductor 経由でしか
 通らない限り不要**なので置かない。その前提が崩れる harness を足すときに入れる。
@@ -147,7 +144,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
-| 実行器だけ止める | `herdr agent stop <名前>` の後 `herdr agent list` で `agent_status` が消えたことを確認（pane は閉じない） |
+| 実行器だけ止める | **手段が無い**（`agent` に `stop` は無く、`list` / `get` / `read` / `send-keys` / `prompt` / `rename` / `focus` / `wait` / `attach` / `start` / `explain` だけ）。**pane ごと閉じるしかないので「止める」の契約を満たせない** —— 差し戻しで停止が要る場面は `Conflict` として人へ返す |
 | 片付ける（`refine`） | `herdr pane close <id>` |
 | 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
 | 片付けに要る workspace ID | **`herdr worktree list --cwd <repo>`** の `open_workspace_id` |
