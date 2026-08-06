@@ -14,7 +14,7 @@ usage() {
 usage: watch.sh --repo <path> --gh-repo <owner/name>
                 --project-org <org> --project-number <n> --status-field <name>
                 --sessions-cmd <cmd> --workspaces-cmd <cmd>
-                [--default-branch main] [--interval 120] [--max 1800]
+                [--default-branch main] [--interval 60] [--max 1800]
                 [--deadline 90] [--cost-limit 20] [--pr-limit 200]
 
   --sessions-cmd / --workspaces-cmd は multiplexer 依存なので呼び出し側が渡す
@@ -36,7 +36,7 @@ STATUS_FIELD=''
 SESSIONS_CMD=''
 WORKSPACES_CMD=''
 DEFAULT_BRANCH=main
-INTERVAL=120
+INTERVAL=60
 MAX=1800
 DEADLINE=90
 COST_LIMIT=20
