@@ -144,7 +144,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
-| 実行器だけ止める | **手段が無い**（`agent` に `stop` は無く、`list` / `get` / `read` / `send-keys` / `prompt` / `rename` / `focus` / `wait` / `attach` / `start` / `explain` だけ）。**pane ごと閉じるしかないので「止める」の契約を満たせない** —— 差し戻しで停止が要る場面は `Conflict` として人へ返す |
+| 実行器だけ止める | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。**送っても `agent_status` が変わらないときだけ `Conflict`** |
 | 片付ける（`refine`） | `herdr pane close <id>` |
 | 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
 | 片付けに要る workspace ID | **`herdr worktree list --cwd <repo>`** の `open_workspace_id` |

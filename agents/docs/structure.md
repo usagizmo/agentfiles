@@ -78,7 +78,7 @@ flowchart LR
 `conductor` が multiplexer の CLI を参照する箇所は **`references/harness.md` に隔離**してあり、
 本体はそれ以外の場所で multiplexer を知らない。
 
-## 共有している実体
+
 
 実体は `agents/shared/` にあり、使う skill が相対 symlink を張る
 （`agents/skills/<name>/{references,scripts}/<file>` → `../../../shared/<file>`）。
@@ -100,9 +100,12 @@ flowchart LR
         DC[docs]
         CM[commit]
         IS[issue]
-        MG[merge]
+        ME[merge]
         PR[pr]
         SH[ship]
+    end
+    subgraph inter[interlocutor]
+        MG[manager]
     end
     subgraph shared["agents/shared/"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
