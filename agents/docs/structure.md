@@ -114,6 +114,7 @@ flowchart LR
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         RL["relay.md<br/><small>転記の条件</small>"]
+        AF["artifact.md<br/><small>読ませる面の条件</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
@@ -121,6 +122,10 @@ flowchart LR
     end
 
     MG --> RL
+    MG --> AF
+    RF --> AF
+    RS --> AF
+    CS --> AF
     CO --> RL
     CO --> SB
     CO --> WR
