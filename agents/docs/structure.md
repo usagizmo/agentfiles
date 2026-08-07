@@ -71,7 +71,6 @@ flowchart LR
 `conductor` が multiplexer の CLI を参照する箇所は **`references/harness.md` に隔離**してあり、
 本体はそれ以外の場所で multiplexer を知らない。
 
-
 ## 共有の実体
 
 どの skill がどの共有実体を張っているか。**置く条件と張り方の規則は

@@ -12,12 +12,12 @@
 
 **層の割り当てと leaf の一覧は [`README.md`](README.md) の「層構造」**。ここは上位層が何をするかだけ。
 
-| 語             | 何をするか                                                                   |
-| -------------- | ---------------------------------------------------------------------------- |
-| `conductor`    | 常駐して tick を繰り返し、キューを回す                                       |
-| `refine`       | 課題を計画済みにする（実装しない）                                           |
-| `resolve`      | 課題 1 件を着地まで進める                                                    |
-| `finish`       | 規模別の仕上げを束ねる                                                       |
+| 語          | 何をするか                             |
+| ----------- | -------------------------------------- |
+| `conductor` | 常駐して tick を繰り返し、キューを回す |
+| `refine`    | 課題を計画済みにする（実装しない）     |
+| `resolve`   | 課題 1 件を着地まで進める              |
+| `finish`    | 規模別の仕上げを束ねる                 |
 
 ## 工程
 
@@ -63,12 +63,12 @@
   状態が進めば自動で移る（`lock` と呼ばないのはこのため）。持ち主は**課題**
 - **物理枠** — 実体そのものの数（worktree がいくつあるか、セッションがいくつ動いているか）
 
-| 語          | 種別       | 保持者                               |
-| ----------- | ---------- | ------------------------------------ |
-| 容量        | 物理枠     | worktree                             |
-| 計画枠      | 物理枠     | セッション                           |
-| write       | 論理 lease | **課題**                             |
-| integration | 論理 lease | **課題**                             |
+| 語          | 種別       | 保持者     |
+| ----------- | ---------- | ---------- |
+| 容量        | 物理枠     | worktree   |
+| 計画枠      | 物理枠     | セッション |
+| write       | 論理 lease | **課題**   |
+| integration | 論理 lease | **課題**   |
 
 **上限値と保持している条件（復元式）は `conductor/SKILL.md` の資源表が SSOT**。ここに写さない。
 
@@ -79,12 +79,12 @@ checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実
 
 **セッションは消える。外部化したものだけが復旧契約になる**。いずれも固定 marker 付きの Issue コメント。
 
-| 語           | marker  | 書く人               | SSOT                            |
-| ------------ | ------- | -------------------- | ------------------------------- |
-| claim の記録 | `claim` | `conductor`          | `agents/shared/same-branch.md`  |
-| 在庫の鮮度   | `ready` | `refine`             | `agents/shared/ready-record.md` |
-| 計画         | `plan`  | `resolve`            | `resolve/SKILL.md`              |
-| 人待ちの記録 | `wait`  | `refine` / `resolve` | `agents/shared/wait-record.md`  |
+| 語           | marker  | 書く人               | SSOT                                |
+| ------------ | ------- | -------------------- | ----------------------------------- |
+| claim の記録 | `claim` | `conductor`          | `agents/shared/same-branch.md`      |
+| 在庫の鮮度   | `ready` | `refine`             | `agents/shared/ready-record.md`     |
+| 計画         | `plan`  | `resolve`            | `resolve/SKILL.md`                  |
+| 人待ちの記録 | `wait`  | `refine` / `resolve` | `agents/shared/wait-record.md`      |
 | 休止の記録   | `yield` | `conductor`          | `conductor/references/protocols.md` |
 | 失敗の記録   | `retry` | `conductor`          | `conductor/references/protocols.md` |
 

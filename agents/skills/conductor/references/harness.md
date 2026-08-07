@@ -42,17 +42,17 @@ conductor が回答を仲介する必要はない（中身の解釈は conductor
 
 起こすものは 2 種類あり、**必要な隔離が違う**。
 
-| 起こすもの | worktree | 渡すもの |
-| --- | --- | --- |
-| `refine` | **要らない**（読み取りのみ。既存の checkout で足りる） | `/refine <Issue 番号>` |
-| `resolve` | claim した branch の worktree を作る（**既にあるなら pane だけ**） | `/resolve <代表> [成員…]`（group なら**対象集合の全番号**。復旧時も同じ） |
+| 起こすもの | worktree                                                           | 渡すもの                                                                  |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `refine`   | **要らない**（読み取りのみ。既存の checkout で足りる）             | `/refine <Issue 番号>`                                                    |
+| `resolve`  | claim した branch の worktree を作る（**既にあるなら pane だけ**） | `/resolve <代表> [成員…]`（group なら**対象集合の全番号**。復旧時も同じ） |
 
 **入れ物は 3 段で、上から「隔離が要る順」に選ぶ。**
 
-| 入れ物      | 使うとき                                                                  |
-| ----------- | ------------------------------------------------------------------------- |
-| `workspace` | **作業する木が変わる**とき。`resolve` の worktree がこれ                  |
-| `tab`       | `refine`。**何枚開いても既存の pane の幅を削らない**                     |
+| 入れ物      | 使うとき                                                                   |
+| ----------- | -------------------------------------------------------------------------- |
+| `workspace` | **作業する木が変わる**とき。`resolve` の worktree がこれ                   |
+| `tab`       | `refine`。**何枚開いても既存の pane の幅を削らない**                       |
 | `pane`      | conductor から**振られた作業**（自分の領分ではないもの）。自分のタブへ割る |
 
 **`refine` を pane 分割で作らない**。計画枠のぶんだけ同時に開くので、分割すると**人が読めない
@@ -83,13 +83,13 @@ conductor が回答を仲介する必要はない（中身の解釈は conductor
 止まっているセッションにも動いているセッションにも、**新しいセッションを作らず同じセッションに渡す**。
 prepare で読んだ文脈がそこに残っているのが、同一セッションで待たせる理由そのもの。
 
-| 渡す理由 | 渡す内容 |
-| --- | --- |
-| write lease が空いた | 実装を始めてよいこと |
-| integration lease が空いた | latest default へ追随してから着地してよいこと |
-| API エラー等での中断 | 中断した事実と、続きから進めること |
-| **計画が失効した** | 交差した変更範囲と、再 plan が要ること |
-| **先行と資源が交差した** | 後発なので安全なチェックポイントで休止すること |
+| 渡す理由                   | 渡す内容                                       |
+| -------------------------- | ---------------------------------------------- |
+| write lease が空いた       | 実装を始めてよいこと                           |
+| integration lease が空いた | latest default へ追随してから着地してよいこと  |
+| API エラー等での中断       | 中断した事実と、続きから進めること             |
+| **計画が失効した**         | 交差した変更範囲と、再 plan が要ること         |
+| **先行と資源が交差した**   | 後発なので安全なチェックポイントで休止すること |
 
 **稼働に移ったことを観測できる手段が要る**（使い道は `../SKILL.md`）。
 
@@ -101,10 +101,10 @@ prepare で読んだ文脈がそこに残っているのが、同一セッショ
 
 tick が読むもの。
 
-| 見たいもの | 使い道 |
-| --- | --- |
-| 稼働中セッションの名前と状態 | `runtime` の判定・多重起動の検知 |
-| **対象 repo の** worktree 一覧 | `capacity` が `あり` かの判定 |
+| 見たいもの                        | 使い道                                                     |
+| --------------------------------- | ---------------------------------------------------------- |
+| 稼働中セッションの名前と状態      | `runtime` の判定・多重起動の検知                           |
+| **対象 repo の** worktree 一覧    | `capacity` が `あり` かの判定                              |
 | **所有している workspace の一覧** | `capacity` が `prunable` かの判定（checkout が消えた残骸） |
 
 **worktree 一覧は repo を明示して取る**。conductor は複数 repo を跨ぐので、
@@ -130,15 +130,15 @@ tick が読むもの。
 **起こしたものによって片付ける対象が違う**。`refine` は worktree を持たないので、
 worktree 前提の手順をそのまま当てると何も片付かない。
 
-| 終わったもの | 片付けるもの |
-| --- | --- |
-| `refine`（`done`） | セッションが載っている pane だけ |
+| 終わったもの       | 片付けるもの                                                                     |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `refine`（`done`） | セッションが載っている pane だけ                                                 |
 | `refine`（`idle`） | **閉じない。`retired-refine-<番号>` へ rename するだけ**（理由は `../SKILL.md`） |
-| `resolve` | 下記の 3 つ |
+| `resolve`          | 下記の 3 つ                                                                      |
 
-| 操作 | herdr |
-| --- | --- |
-| rename する | `herdr agent rename <名前> retired-refine-<番号>` |
+| 操作                       | herdr                                                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| rename する                | `herdr agent rename <名前> retired-refine-<番号>`                                                                    |
 | 閉じる直前に生値を取り直す | `herdr agent get <名前>` の `agent_status`（一覧を撮ってから閉じるまでに人がタブを開くと `done` が `idle` に変わる） |
 
 **既存の worktree でセッションだけを起こし直すときは pane を作るだけ**（`worktree create` は
@@ -167,22 +167,22 @@ worktree 前提の手順をそのまま当てると何も片付かない。
 
 CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製しない。
 
-| 契約 | herdr |
-| --- | --- |
-| 名乗る | `herdr agent rename "$HERDR_PANE_ID" conductor`（`--current` は無い。pane ID を渡す） |
-| worktree を作る（resolve のみ） | `herdr worktree create --cwd <repo> --branch <名> --base <default> --label "#<番号>" --no-focus` |
-| tab を作る（refine） | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus` |
-| pane を作る（振られた作業） | `herdr pane split --current --direction right --cwd "$PWD" --no-focus` |
-| pane_id を得る | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く |
-| セッションを起こす | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い） |
-| 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
-| セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
-| worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
-| 実行器だけ止める | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。**送っても `agent_status` が変わらないときだけ `Conflict`** |
-| 片付ける（`refine`） | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る） |
-| 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
-| 片付けに要る workspace ID | **`herdr worktree list --cwd <repo>`** の `open_workspace_id` |
-| 孤児 workspace を洗う | **`herdr workspace list`**（repo 非依存） |
+| 契約                            | herdr                                                                                                                                                                                                                                                                             |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 名乗る                          | `herdr agent rename "$HERDR_PANE_ID" conductor`（`--current` は無い。pane ID を渡す）                                                                                                                                                                                             |
+| worktree を作る（resolve のみ） | `herdr worktree create --cwd <repo> --branch <名> --base <default> --label "#<番号>" --no-focus`                                                                                                                                                                                  |
+| tab を作る（refine）            | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                               |
+| pane を作る（振られた作業）     | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                            |
+| pane_id を得る                  | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                         |
+| セッションを起こす              | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い）                                                                                                                                                                               |
+| 課題を渡す・再開する            | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                      |
+| セッションを観測する            | `herdr agent list`（`name` / `agent_status` / `cwd`）                                                                                                                                                                                                                             |
+| worktree を観測する             | **`git -C <repo> worktree list --porcelain`**                                                                                                                                                                                                                                     |
+| 実行器だけ止める                | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。**送っても `agent_status` が変わらないときだけ `Conflict`** |
+| 片付ける（`refine`）            | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                         |
+| 片付ける（`resolve`）           | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`                                                                                                                                                                                                               |
+| 片付けに要る workspace ID       | **`herdr worktree list --cwd <repo>`** の `open_workspace_id`                                                                                                                                                                                                                     |
+| 孤児 workspace を洗う           | **`herdr workspace list`**（repo 非依存）                                                                                                                                                                                                                                         |
 
 - **3 つの経路は、それぞれ別の問いに対して権威**。1 つに寄せない。
   - **checkout があるか**（`capacity` が `あり`）は git。**herdr はそのキャッシュ**で、
@@ -221,9 +221,9 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
     **永久に選べなくなる**（実測で 11 tick 止めた）
   - **見えた文字列を自分の本文へ写さない**。サジェストだった場合、
     **誰も決めていないものを conductor が指示として確定させてしまう**
-  送るのは自分の本文だけでよい。`agent prompt` が入力欄を捨てるのは正しい挙動で、
-  サジェストなら捨てられるべきもの、人の入力なら本人が送り直せる。
-  中身が判断に関わりそうに見えたら、渡すのではなく**状況ボードへ出して人へ返す**
+    送るのは自分の本文だけでよい。`agent prompt` が入力欄を捨てるのは正しい挙動で、
+    サジェストなら捨てられるべきもの、人の入力なら本人が送り直せる。
+    中身が判断に関わりそうに見えたら、渡すのではなく**状況ボードへ出して人へ返す**
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は
   `worktree create` / `pane split` にはあるが `agent prompt` には無い。前に置くと
   **本文が unknown option として弾かれる**（`/refine ...` が option 名として報告されるので、
@@ -243,10 +243,10 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 **`scripts/watch.sh` を background で走らせる**。終了コードで受け方が変わる。
 
-| exit | 意味 | conductor がすること |
-| --- | --- | --- |
-| 0 | 変化を検知した / fallback / 観測不能が続いた | 次の tick に入る |
-| 2 | 引数不足・**コスト gate 超過** | **再起動しない**。状況ボードの「制約・異常」へ出して止まる |
+| exit | 意味                                         | conductor がすること                                       |
+| ---- | -------------------------------------------- | ---------------------------------------------------------- |
+| 0    | 変化を検知した / fallback / 観測不能が続いた | 次の tick に入る                                           |
+| 2    | 引数不足・**コスト gate 超過**               | **再起動しない**。状況ボードの「制約・異常」へ出して止まる |
 
 **2 で再起動しない**のが要点。形状バグを直さないまま起こし直すと、1 ラウンドずつ枠を焼きながら
 同じところで落ち続ける（gate が「止める」にならない）。
@@ -380,13 +380,13 @@ rate limit 中に盲目のまま再試行し、**永久に起きない**。縮�
 **書きたくなったものが出たら、まず「永続化できないか」を疑う** —— 書くべきものがあるという
 ことは、外部化すべきものが外部化されていないということ。
 
-| 書きたくなったもの                       | 本来の行き先                                   |
-| ---------------------------------------- | ---------------------------------------------- |
-| 優先順位・次に着手するもの               | ボードの並び順（規約上そこが SSOT）           |
-| 依存・同居の関係                         | Issue 本文の宣言行                             |
-| 渡した枠・伝えた休止・人待ち             | Issue の固定 marker 付きコメント               |
-| 踏んだ失敗の型・規約の穴                 | skill 本体（暫定なら Issue を立てて番号だけ渡す） |
-| 座標（org / Project 番号 / Status 名） | project 側の skill                             |
+| 書きたくなったもの                     | 本来の行き先                                      |
+| -------------------------------------- | ------------------------------------------------- |
+| 優先順位・次に着手するもの             | ボードの並び順（規約上そこが SSOT）               |
+| 依存・同居の関係                       | Issue 本文の宣言行                                |
+| 渡した枠・伝えた休止・人待ち           | Issue の固定 marker 付きコメント                  |
+| 踏んだ失敗の型・規約の穴               | skill 本体（暫定なら Issue を立てて番号だけ渡す） |
+| 座標（org / Project 番号 / Status 名） | project 側の skill                                |
 
 **それでも残るのは 2 つだけ**。どちらも観測に出ないので、**これだけは書く**。
 

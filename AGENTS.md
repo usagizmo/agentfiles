@@ -15,29 +15,50 @@
 
 ### スコープと絵文字の対応
 
-| 絵文字 | スコープ | 説明 |
-|-------|---------|------|
-| 🐟 | `[fish]` | Fish シェル設定 |
-| 🐚 | `[zsh]` | Zsh シェル設定 |
-| 🤖 | `[claude]` | `harnesses/claude` 配下の Claude Code 設定 |
-| 🤖 | `[codex]` | Codex 関連設定（`init.sh` の `~/.codex` 配線等） |
-| 🤖 | `[devin]` | `harnesses/devin` / `~/.config/devin` 配下の Devin CLI 設定 |
-| 🤖 | `[agents]` | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等） |
-| 🤖 | `[cursor]` | Cursor CLI / Agent 設定（`init.sh` の `~/.cursor` 配線等） |
-| 🤖 | `[pi]` | `harnesses/pi` / `~/.pi/agent` 配下の Pi 設定 |
-| 🤖 | `[grok]` | `harnesses/grok` / `~/.grok` 配下の Grok 設定 |
-| 🖥️ | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定 |
-| 🐙 | `[copilot]` | `harnesses/copilot` 配下の GitHub Copilot 設定 |
-| 📝 | `[nvim]` | Neovim 設定 |
-| 👻 | `[ghostty]` | Ghostty ターミナル設定 |
-| 🐏 | `[herdr]` | `herdr/` / `~/.config/herdr` 配下の herdr 設定 |
-| 📁 | `[yazi]` | Yazi ファイルマネージャー設定 |
-| 🔨 | `[mise]` | mise ランタイムバージョン管理設定 |
-| 🔧 | `[複数]` | 複数スコープにまたがる設定変更（例: `[fish][zsh]`） |
+| 絵文字 | スコープ       | 説明                                                                                     |
+| ------ | -------------- | ---------------------------------------------------------------------------------------- |
+| 🐟     | `[fish]`       | Fish シェル設定                                                                          |
+| 🐚     | `[zsh]`        | Zsh シェル設定                                                                           |
+| 🤖     | `[claude]`     | `harnesses/claude` 配下の Claude Code 設定                                               |
+| 🤖     | `[codex]`      | Codex 関連設定（`init.sh` の `~/.codex` 配線等）                                         |
+| 🤖     | `[devin]`      | `harnesses/devin` / `~/.config/devin` 配下の Devin CLI 設定                              |
+| 🤖     | `[agents]`     | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                      |
+| 🤖     | `[cursor]`     | Cursor CLI / Agent 設定（`init.sh` の `~/.cursor` 配線等）                               |
+| 🤖     | `[pi]`         | `harnesses/pi` / `~/.pi/agent` 配下の Pi 設定                                            |
+| 🤖     | `[grok]`       | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                            |
+| 🖥️     | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定                                                      |
+| 🐙     | `[copilot]`    | `harnesses/copilot` 配下の GitHub Copilot 設定                                           |
+| 📝     | `[nvim]`       | Neovim 設定                                                                              |
+| 👻     | `[ghostty]`    | Ghostty ターミナル設定                                                                   |
+| 🐏     | `[herdr]`      | `herdr/` / `~/.config/herdr` 配下の herdr 設定                                           |
+| 📁     | `[yazi]`       | Yazi ファイルマネージャー設定                                                            |
+| 🔨     | `[mise]`       | mise ランタイムバージョン管理設定                                                        |
+| 🎨     | `[lint]`       | oxlint / oxfmt の設定と commit gate（`.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
+| 🔧     | `[複数]`       | 複数スコープにまたがる設定変更（例: `[fish][zsh]`）                                      |
 
 ### 補足ルール
 
 - スコープに該当しない全体的な変更は、適切な汎用 gitmoji を使用（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）
+
+### コミット例
+
+```
+🐟 [fish] claude コマンドの短縮 abbreviation c を追加
+
+- `abbr -a c claude` を追加し、より素早く Claude を起動できるように改善
+```
+
+```
+🔧 [fish][zsh] LM Studio CLI パス設定を追加
+
+- 両シェルで LM Studio の CLI ツールを使用可能に
+```
+
+```
+🤖 [claude] ボーイスカウトルールの記述を統合し重複を削除
+
+- AGENTS.md とスキル内の重複した記述を整理
+```
 
 ## agent 設定の配置方針
 
@@ -52,10 +73,10 @@
 
 ### 共通と個別の分け方
 
-| 置く場所 | 対象 | 判定 |
-|---------|------|------|
-| `agents/` | instructions / skills | 2 つ以上の harness で同じ意味・手順を使いたい。本文から harness 名・固有 API を消せる。`~/.agents/` にも投影する |
-| `harnesses/<agent>/` | overlay instructions / skills / agents / prompts / commands / hooks / settings | 1 harness 専用、またはそのランタイム表面に密着する（同名で agents を上書き可） |
+| 置く場所             | 対象                                                                           | 判定                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `agents/`            | instructions / skills                                                          | 2 つ以上の harness で同じ意味・手順を使いたい。本文から harness 名・固有 API を消せる。`~/.agents/` にも投影する |
+| `harnesses/<agent>/` | overlay instructions / skills / agents / prompts / commands / hooks / settings | 1 harness 専用、またはそのランタイム表面に密着する（同名で agents を上書き可）                                   |
 
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
@@ -78,21 +99,21 @@
 
 home 側は harness が cache / auth / vendor を同居させるため **実ディレクトリ** とし、tracked な葉だけを repo へ symlink する。
 
-| パターン | 対象 | 例 |
-|---------|------|-----|
-| 単一ファイル | instructions / hooks / 設定 1 枚 | `agents/AGENTS.md` → `~/.claude/CLAUDE.md` |
-| ディレクトリ丸ごと | union 不要な SSOT 投影 | `agents/skills` → `~/.agents/skills` |
+| パターン                           | 対象                             | 例                                                                                |
+| ---------------------------------- | -------------------------------- | --------------------------------------------------------------------------------- |
+| 単一ファイル                       | instructions / hooks / 設定 1 枚 | `agents/AGENTS.md` → `~/.claude/CLAUDE.md`                                        |
+| ディレクトリ丸ごと                 | union 不要な SSOT 投影           | `agents/skills` → `~/.agents/skills`                                              |
 | 実 dir + 項目ごと symlink（union） | skills / agents 等のコレクション | `~/.claude/skills/<name>` ← `agents/skills` + `harnesses/claude/skills`（後勝ち） |
 
 ### 配線の SSOT（スケール用）
 
-| パス | 役割 |
-|------|------|
-| `lib/inventory.sh` | **配線一覧の唯一の正**。harness / symlink / skills union の追加はここだけ |
-| `lib/links.sh` | apply / check の primitive（触らなくてよいことが多い） |
-| `./init.sh` | `run_inventory apply` + パッケージ類のインストール副作用 |
-| `./up.sh` | 外部依存（agent skills / yazi plugins）の更新 + 配線の再適用 |
-| `./doctor.sh` | `run_inventory check` + tracked ファイルの絶対 home パス検査（read-only。修復は init） |
+| パス               | 役割                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `lib/inventory.sh` | **配線一覧の唯一の正**。harness / symlink / skills union の追加はここだけ                                 |
+| `lib/links.sh`     | apply / check の primitive（触らなくてよいことが多い）                                                    |
+| `./init.sh`        | `run_inventory apply` + `core.hooksPath` の設定 + パッケージ類のインストール副作用                        |
+| `./up.sh`          | 外部依存（agent skills / mise tools / yazi plugins）の更新 + 配線の再適用                                 |
+| `./doctor.sh`      | `run_inventory check` + commit gate 検査 + tracked ファイルの絶対 home パス検査（read-only。修復は init） |
 
 新しい harness や symlink を足す手順:
 
@@ -118,12 +139,12 @@ home 側は harness が cache / auth / vendor を同居させるため **実デ�
 
 配布先に既に何かある場合の扱いは、経路で違う:
 
-| 配布先の状態 | 単一ファイル（`inv_symlink`） | コレクション項目（`inv_collection` / `inv_harness_skills`） |
-|---|---|---|
-| repo 配下を指す symlink | 付け替える | 付け替える |
-| repo 外を指す symlink | ⚠️ 触らない | 付け替える |
-| 実ファイル | 内容を repo へ取り込んでから symlink 化（差分は git で確認・discard できる） | ⚠️ 拒否 |
-| 実ディレクトリ | ⚠️ 触らない | ⚠️ 触らない |
+| 配布先の状態            | 単一ファイル（`inv_symlink`）                                                | コレクション項目（`inv_collection` / `inv_harness_skills`） |
+| ----------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| repo 配下を指す symlink | 付け替える                                                                   | 付け替える                                                  |
+| repo 外を指す symlink   | ⚠️ 触らない                                                                  | 付け替える                                                  |
+| 実ファイル              | 内容を repo へ取り込んでから symlink 化（差分は git で確認・discard できる） | ⚠️ 拒否                                                     |
+| 実ディレクトリ          | ⚠️ 触らない                                                                  | ⚠️ 触らない                                                 |
 
 - **⚠️ は必ず出し、件数を集計して非ゼロ終了する**（黙殺しない）。`ln` の失敗も同じ。実ディレクトリは自動削除しない
 - prune で消すのは **repo 配下を指す管理下 symlink のうち、配布対象に無いもの・壊れたもの**だけ。repo 外を指す link・実ファイル・実ディレクトリ（vendor の `.system` や Grok bundled skills 等）は触らない
@@ -133,23 +154,3 @@ hooks の tripwire:
 
 - **`harnesses/<agent>/hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外**。外部ツールによる hooks 上書きを 3 経路で検知する — symlink 経由の in-place 書き込みは repo 側の git diff、unlink して実ファイルで置換は doctor の ❌、別名ファイルの投下は `inv_guard_dir` の ⚠️。空であること自体が基準線なので、中身を埋めたり配線を外したりしない
 - **管理下 symlink 以外の投下を検知したい collection dir に `inv_guard_dir` を張る**（各 harness の hooks dir / `~/.pi/agent/extensions`）。管理下 symlink と allowlist 以外のエントリを ⚠️ で報告する（read-only。自動削除はしない）。設定が harness home 直下に置かれる場合（codex / cursor）は vendor ファイルと同居するため張らず、symlink check だけで守る
-
-### コミット例
-
-```
-🐟 [fish] claude コマンドの短縮 abbreviation c を追加
-
-- `abbr -a c claude` を追加し、より素早く Claude を起動できるように改善
-```
-
-```
-🔧 [fish][zsh] LM Studio CLI パス設定を追加
-
-- 両シェルで LM Studio の CLI ツールを使用可能に
-```
-
-```
-🤖 [claude] ボーイスカウトルールの記述を統合し重複を削除
-
-- AGENTS.md とスキル内の重複した記述を整理
-```
