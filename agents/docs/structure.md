@@ -26,9 +26,6 @@
 
 ```mermaid
 flowchart LR
-    subgraph obs[observer]
-        BS[board-status]
-    end
     subgraph orch[orchestrator]
         CO[conductor]
     end
@@ -50,7 +47,6 @@ flowchart LR
         IS[issue]
     end
 
-    BS --> CO
     CO --> RF
     CO --> RS
     CO --> SH
