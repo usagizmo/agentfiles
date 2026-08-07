@@ -1,0 +1,1 @@
+../../../shared/ready-record.md

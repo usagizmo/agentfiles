@@ -1,9 +1,9 @@
 # agents ドキュメント
 
-**人が全体を把握し、整合性を監査するための資料。**agent は読まない（`~/.agents/` へ投影しない）ので、
+**人が全体を把握し、整合性を監査するための資料**。agent は読まない（`~/.agents/` へ投影しない）ので、
 図も表も必要なだけ細かく書いてよい。
 
-**規約の本体はここに無い。**ここにあるのは skills から導出した図と索引だけで、
+**規約の本体はここに無い**。ここにあるのは skills から導出した図と索引だけで、
 **矛盾を見つけたら skills が正**。直すのは skills 側で、ここはその後に引き直す。
 
 | 資料                           | 何が分かるか                                              |
@@ -26,21 +26,17 @@
 
 ```mermaid
 flowchart TB
-    U[/ユーザー/] -->|/manager 問う・決める| MG
-    U -->|/conductor| AP
+    U[/ユーザー/] -->|/conductor| AP
+    U -->|現在地を聞く・依頼を渡す| AP
     U -->|/resolve 課題を直接渡す| RUN
     U -->|/refine Issue を直接渡す| G
-
-    subgraph MG["manager — 相手役・tick を持たない"]
-        ASK["問いに答える / 調べる<br/>Issue・skill・docs へ外部化する"]
-    end
 
     subgraph AP["conductor — 1 つだけ・常駐"]
         TICK["tick<br/>観測 → 正規化 → action を 1 つ"]
     end
 
-    ASK -->|Issue を足す・退避先へ置く / 戻す| G
-    ASK -.状況ボードを読む.-> TICK
+    TICK -->|状況ボード<br/>現在地・詰まり・積み残し| U
+    TICK -.自分でやらない依頼は pane を割って振る.-> DEL[["振った先"]]
 
     TICK -->|未計画を起こす| G["refine<br/>consult → 計画を Issue へ<br/>→ Status を計画済みへ"]
     G --> Q[("計画済み<br/>open + 未 claim")]
@@ -65,7 +61,7 @@ flowchart TB
 
 読み方は 4 つ。
 
-- **人が返すのは製品判断だけ** — 計画中（`refine`）と実装中（`resolve`）で聞かれ、`manager` が盤面から拾って整えて渡す。それ以外はエージェントが決めきる
+- **人が返すのは製品判断だけ** — 計画中（`refine`）と実装中（`resolve`）で聞かれ、`conductor` が状況ボードに束ねて人へ返す。それ以外はエージェントが決めきる
 - **`refine` / `resolve` は単体でも起動できる** — 常時運転では conductor が起こすが、人が直接渡す経路も等価に存在する。**違いは「枠が空くのを待つかどうか」だけ**（claim 済みとして渡されたときだけ待つ。`resolve` の variant → [`glossary.md`](glossary.md)）
 - **並列できるかは資源が決める** — `#B` が待っているのは人の判断待ちではなく**枠の空き待ち**。貸出を記録した台帳は持たず、**今ある実体を数えれば貸出状況が分かる**（→ [`glossary.md`](glossary.md) の「資源」）
 - **着地は必ず 1 本ずつ** — 実装が何本並んでも default に入るのは直列。ここが本当のボトルネック
@@ -74,39 +70,29 @@ flowchart TB
 
 | 層             | skills                                                                                                                              | 契約                                                                                         |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| interlocutor   | `manager`                                                                                                                           | 人の問いを受け、盤面を読んで外部化する。**tick を持たず、orchestrator の action は出さない** |
-| orchestrator   | `conductor`                                                                                                                         | キューを回す。1 件の解決は work-item flow に委譲する                                         |
+| orchestrator   | `conductor`                                                                                                                         | キューを回す。盤面を人へ返し、1 件の解決は work-item flow に委譲する                         |
 | work-item flow | `refine` `resolve`                                                                                                                  | 課題 1 件を扱う。`refine` は計画まで、`resolve` は着地まで                                   |
 | subflow        | `finish`                                                                                                                            | 工程の一部を束ねる                                                                           |
 | leaf           | `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` `herdr` `skill-creator` `agent-browser` | それ自体で完結し、単体で invoke できる                                                       |
 
 参照は上の層から下の層への一方通行。
 
-```text
-manager   → conductor（観測のやり直しだけ）
-manager   → refine / resolve（委譲）
-manager   → herdr
-conductor → refine / resolve → finish → consult / tidy / docs / commit / pr / ship / …
-conductor → herdr（multiplexer の CLI 構文。差し替え点は conductor/references/harness.md）
-conductor → ship（着地後に branch が残ることに依存）
-refine    → consult
-```
+**依存の実体は [`structure.md`](structure.md) の図**（ここに写すと片方が古くなる）。
 
 - **禁止するのは下位から上位への逆参照と循環**。`resolve` は `conductor` を知らないし、leaf は flow を知らない
 - 同じ層どうしの依存・言及も作らない（leaf 同士は特に）。例外はデータ資産の共有だけで、張り方は [`structure.md`](structure.md)
-- 検出手順は `docs` skill の品質パス。**層の割り当ての正は `docs/scripts/layers.tsv`**（leaf は既定なので書かれない）。この節はその導出で、ずれると品質パスの `derived` 検査が落ちる
+- 検出手順は `docs` skill の品質パス。**層の割り当ての正は `agents/skills/docs/scripts/layers.tsv`**（leaf は既定なので書かれない）。この節はその導出で、ずれると品質パスの `derived` 検査が落ちる
 
 ## 上位層の役割分担
 
-**中身は各 `SKILL.md` が SSOT。**ここは「何を持つか」の索引だけ。
+**中身は各 `SKILL.md` が SSOT**。ここは「何を持つか」の索引だけ。
 
-| skill       | 持つもの                                                     | 持たないもの                                                                  |
-| ----------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `manager`   | 人の問いへの回答・調査・気づきの外部化・放置されたものの回収 | **orchestrator の action として定義されているもの全部**・実装・計画・製品判断 |
-| `conductor` | 正規化・action の優先順・資源の貸し出し・差し戻し            | 技術方針・製品判断・着手後にどこで人を待つか                                  |
-| `refine`    | 「何を作るか」を Issue に固定する                            | 実装・「どう作るか」                                                          |
-| `resolve`   | 課題 1 件の進行・計画の外部化・停止条件・作業単位の運用      | 資源を誰が出すか                                                              |
-| `finish`    | 規模別の仕上げフロー                                         | —                                                                             |
+| skill          | 持つもの                                                     | 持たないもの                                                                  |
+| -------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `conductor`    | 正規化・action の優先順・資源の貸し出し・差し戻し・状況ボード | 技術方針・製品判断・着手後にどこで人を待つか                                  |
+| `refine`       | 「何を作るか」を Issue に固定する                            | 実装・「どう作るか」                                                          |
+| `resolve`      | 課題 1 件の進行・計画の外部化・停止条件・作業単位の運用      | 資源を誰が出すか                                                              |
+| `finish`       | 規模別の仕上げフロー                                         | —                                                                             |
 
 **skill をまたぐ不変条件**（未計画 → 計画済みを進める主体、Status の単調性、multiplexer 操作の
 隔離）は [`../AGENTS.md`](../AGENTS.md) と各 `SKILL.md` が持つ。ここには写さない。
@@ -118,8 +104,8 @@ refine    → consult
 | skill            | 使う                                                                             | 使わない                      |
 | ---------------- | -------------------------------------------------------------------------------- | ----------------------------- |
 | `consult`        | 複数案が存在し得る設計判断・中規模以上の見込みで着手するとき（ユーザー明示不要） | 選択肢が実質 1 つの自明な変更 |
-| `zero-base-loop` | 大規模 diff を書き終えた後、コミット前。**指摘が尽きるまで回す**                 | 軽微・中規模                  |
-| `tidy`           | 中規模以上の実装完了後、コミット前。**レビューは 1 巡**                          | 軽微。設計妥当性の判定        |
+| `zero-base-loop` | 大規模 diff を書き終えた後、コミット前                                           | 軽微・中規模                  |
+| `tidy`           | 中規模以上の実装完了後、コミット前                                               | 軽微。設計妥当性の判定        |
 | `docs`           | 仕様変更・機能実装を文書へ反映するとき。agent-facing 文書を触った変更は規模不問  | 製品コード実装そのもの        |
 
 ### ゲート系（直接実行禁止）
@@ -142,8 +128,8 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 | `consult` / `zero-base-loop` | 別 harness の CLI を read-only で並列起動 | `agents/shared/advisors.md`        |
 | `docs` / `tidy`              | 同 harness の subagent                    | `agents/shared/review-contract.md` |
 
-候補 harness から**実行中の自分を除いた 2 つ**をアドバイザーにするので、メインが Claude でも
-Codex でも同じ表から組み替わる。
+**アドバイザーは実行中の自分を除いて選ぶ**ので、メインが Claude でも Codex でも同じ表から
+組み替わる（人数と選び方は上の SSOT）。
 
 ## この資料を更新するとき
 

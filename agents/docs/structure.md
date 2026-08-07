@@ -5,7 +5,7 @@
 
 ## ディレクトリの役割
 
-**`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場所が決まる。**大きさでは分けない。
+**`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場所が決まる**。大きさでは分けない。
 
 | ディレクトリ                | モデルの扱い                                     | 投影先                        |
 | --------------------------- | ------------------------------------------------ | ----------------------------- |
@@ -26,9 +26,6 @@
 
 ```mermaid
 flowchart LR
-    subgraph inter[interlocutor]
-        MG[manager]
-    end
     subgraph orch[orchestrator]
         CO[conductor]
     end
@@ -50,9 +47,6 @@ flowchart LR
         IS[issue]
     end
 
-    MG --> CO
-    MG --> RF
-    MG --> RS
     CO --> RF
     CO --> RS
     CO --> SH
@@ -70,8 +64,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    MG[manager] --> HD[herdr]
-    CO[conductor] --> HD
+    CO[conductor] --> HD[herdr]
     CO -.->|着地後に branch が残ることに依存| SH[ship]
 ```
 
@@ -79,10 +72,10 @@ flowchart LR
 本体はそれ以外の場所で multiplexer を知らない。
 
 
+## 共有の実体
 
-実体は `agents/shared/` にあり、使う skill が相対 symlink を張る
-（`agents/skills/<name>/{references,scripts}/<file>` → `../../../shared/<file>`）。
-**張り先はモデルの扱いで決まる** — 読むものは `references/`、実行するものは `scripts/`。
+どの skill がどの共有実体を張っているか。**置く条件と張り方の規則は
+[`../../AGENTS.md`](../../AGENTS.md) が SSOT。**
 
 ```mermaid
 flowchart LR
@@ -104,16 +97,12 @@ flowchart LR
         PR[pr]
         SH[ship]
     end
-    subgraph inter[interlocutor]
-        MG[manager]
-    end
     subgraph shared["agents/shared/"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
         RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
-        RL["relay.md<br/><small>転記の条件</small>"]
         AF["artifact.md<br/><small>読ませる面の条件</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
@@ -121,11 +110,8 @@ flowchart LR
         SD["sync-default.md<br/><small>default の同期</small>"]
     end
 
-    MG --> RL
-    MG --> AF
     RF --> AF
     RS --> AF
-    CO --> RL
     CO --> SB
     CO --> WR
     CO --> RR
@@ -133,6 +119,8 @@ flowchart LR
     RF --> SB
     RF --> WR
     RF --> RR
+    RS --> RR
+    ME --> GM
     RF --> BD
     RS --> SB
     RS --> WR
@@ -145,14 +133,13 @@ flowchart LR
     DC --> RC
     CM --> GM
     IS --> GM
-    MG --> GM
     PR --> GM
     SH --> GM
     PR --> SD
     SH --> SD
 ```
 
-**層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ。**skill が別の skill の
+**層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ**。skill が別の skill の
 `references/` を覗く形が無くなるので、層契約（同じ層への言及を作らない）を隠さずに満たせる。
 
 **skill 固有の reference は `references/` に実体で置く。**
@@ -164,7 +151,7 @@ flowchart LR
 | `docs`          | `review-prompt.md`                                                           | 更新判定用                                                                  |
 | `skill-creator` | `schemas.md`                                                                 | vendored                                                                    |
 
-`scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
+`scripts/` の実体は `agents/skills/docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
 `conductor/scripts/`（起床監視の実装。手順書ではなくここが観測の SSOT）、
 `skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
 

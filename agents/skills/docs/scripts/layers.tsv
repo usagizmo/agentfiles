@@ -4,8 +4,7 @@
 # 層の呼び名は agents/docs/README.md 側。ここは順序だけを持つ。
 #
 # <rank>	<skill>
-0	manager
-1	conductor
-2	refine
-2	resolve
-3	finish
+0	conductor
+1	refine
+1	resolve
+2	finish

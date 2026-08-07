@@ -126,7 +126,7 @@ snapshot() {
   # marker コメントの変化で起床する。upsert は必ず `updated_at` を更新するので、
   # `sort=updated` の窓に必ず入る。marker 名まで指紋に入れる（新設・消滅がそのまま digest に出る）。
   comments=$(gh api "repos/$GH_REPO/issues/comments?sort=updated&direction=desc&per_page=100" --jq '
-      .[] | "\(.id) \(.updated_at) \([.body | scan("<!-- (plan|claim|wait|retry|ready) -->")] | flatten | join(","))"') || return 1
+      .[] | "\(.id) \(.updated_at) \([.body | scan("<!-- (plan|claim|wait|yield|retry|ready) -->")] | flatten | join(","))"') || return 1
   comments=$(printf '%s\n' "$comments" | sort)
 
   sessions=$(eval "$SESSIONS_CMD") || return 1
@@ -135,9 +135,23 @@ snapshot() {
   # open PR は正当に 0 件になりうるので非空を要求しない。ただし**打ち切ったラウンドは失敗にする** ——
   # 上限外の PR の checks 変化は指紋に出ず、`提出中` → `着地待ち` が永久に起きない。
   # 不完全な一覧を baseline として受理する方が、ラウンドを捨てるより重い。
+  #
+  # **追跡していない PR の `checks` は固定文字列へ置く。**checks が遷移を駆動するのは PR が Issue に
+  # 紐づくときだけで、紐づけの唯一の手段が branch 名の番号。番号を持たない PR の checks は定義上
+  # どの `progress` も動かせないので、人が自分のブランチで CI を回すたびに conductor が起きる。
+  # **field は削らない** —— 落とすと「追跡していない」と「checks が無い」が区別できなくなる。
+  # 判定は**形だけ**（`<prefix>/<番号>-`）。prefix の集合は project が変えてよいと規約が明示して
+  # いるので、`feat|fix|chore` のような allowlist を焼き込まない —— project が prefix を 1 つ足した
+  # 瞬間、その課題だけ `提出中` → `着地待ち` が永久に起きなくなる。
+  # **判定できないものは残す側（fail-open）へ倒す** —— `headRefName` が取れないときは追跡中として
+  # 扱い、checks をそのまま指紋へ入れる。
   prs=$(gh pr list --repo "$GH_REPO" --state open --limit "$PR_LIMIT" \
     --json number,headRefName,state,isDraft,statusCheckRollup --jq '
-      .[] | "\(.number) \(.headRefName) \(.state) draft=\(.isDraft) checks=\([.statusCheckRollup[]? | (.conclusion // .state)] | sort | join(","))"') || return 1
+      .[] | . as $p
+      | ($p.headRefName != null and (($p.headRefName | test("^[^/]+/[0-9]+-")) | not)) as $untracked
+      | "\($p.number) \($p.headRefName) \($p.state) draft=\($p.isDraft) checks=\(
+          if $untracked then "untracked"
+          else ([$p.statusCheckRollup[]? | (.conclusion // .state)] | sort | join(",")) end)"') || return 1
   pr_count=$(printf '%s' "$prs" | grep -c . || true)
   if [ "$pr_count" -ge "$PR_LIMIT" ]; then
     echo "[watch] open PR が --pr-limit ${PR_LIMIT} に達した: 一覧が不完全なのでこのラウンドを捨てる" >&2
