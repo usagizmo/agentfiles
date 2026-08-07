@@ -47,6 +47,28 @@ conductor が回答を仲介する必要はない（中身の解釈は conductor
 | `refine` | **要らない**（読み取りのみ。既存の checkout で足りる） | `/refine <Issue 番号>` |
 | `resolve` | claim した branch の worktree を作る（**既にあるなら pane だけ**） | `/resolve <代表> [成員…]`（group なら**対象集合の全番号**。復旧時も同じ） |
 
+**入れ物は 3 段で、上から「隔離が要る順」に選ぶ。**
+
+| 入れ物      | 使うとき                                                                  |
+| ----------- | ------------------------------------------------------------------------- |
+| `workspace` | **作業する木が変わる**とき。`resolve` の worktree がこれ                  |
+| `tab`       | `refine`。**同時に 3 枠開いても既存の pane の幅を削らない**               |
+| `pane`      | conductor から**振られた作業**（自分の領分ではないもの）。自分のタブへ割る |
+
+**`refine` を pane 分割で作らない。**計画枠は同時に 3 つまで開くので、分割すると**人が読めない
+幅まで既存 pane が縮む**（実測で 17 文字まで縮み、人が中身を追えなくなった）。tab なら何枚開いても
+互いの幅に影響しない。**幅は人が読むための資源で、conductor が勝手に食ってよいものではない。**
+
+**振られた作業だけは pane でよい。**自分が動いているタブの中に置くので、
+どこへ振ったかが tick を回している人の視界に残る。
+
+**振られた作業のセッション名は `refine-` / `resolve-` で始めない。**内容が分かる名前を付ける
+（`investigate-ci-timeout` 等）。前置きを共有すると**選出と片付けが拾ってしまい、計画枠を数え違え、
+無関係な pane を「計画セッションを閉じる」で消す**。名前が唯一の区別なので、ここを崩さない。
+
+**振られた作業は容量にも計画枠にも数えない。**worktree を持たず、`refine-*` でもないので、
+どちらの述語にも当たらない（当たるなら名前が間違っている）。
+
 どちらも **完了を待たない**。次の tick へ戻る（完了検知は tick の観測で足りる）。
 渡すのは Issue 番号だけで、起こされた側は Issue 本文を読んで自分で文脈を作る
 （親セッションの文脈は引き継がれない前提で Issue 契約が要求されている）。
@@ -140,14 +162,15 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | --- | --- |
 | 名乗る | `herdr agent rename "$HERDR_PANE_ID" conductor`（`--current` は無い。pane ID を渡す） |
 | worktree を作る（resolve のみ） | `herdr worktree create --cwd <repo> --branch <名> --base <default> --label "#<番号>" --no-focus` |
-| pane を作る（refine） | `herdr pane split --current --direction right --cwd "$PWD" --no-focus` |
-| pane_id を得る | `pane split` は応答が返す。**`worktree create` は返さない**（`workspace` と `worktree` だけ）ので `herdr pane list --workspace <id>` で引く |
+| tab を作る（refine） | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus` |
+| pane を作る（振られた作業） | `herdr pane split --current --direction right --cwd "$PWD" --no-focus` |
+| pane_id を得る | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く |
 | セッションを起こす | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い） |
 | 課題を渡す・再開する | `herdr agent prompt <名前> "/refine <番号>"` |
 | セッションを観測する | `herdr agent list`（`name` / `agent_status` / `cwd`） |
 | worktree を観測する | **`git -C <repo> worktree list --porcelain`** |
 | 実行器だけ止める | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。**送っても `agent_status` が変わらないときだけ `Conflict`** |
-| 片付ける（`refine`） | `herdr pane close <id>` |
+| 片付ける（`refine`） | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る） |
 | 片付ける（`resolve`） | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes` |
 | 片付けに要る workspace ID | **`herdr worktree list --cwd <repo>`** の `open_workspace_id` |
 | 孤児 workspace を洗う | **`herdr workspace list`**（repo 非依存） |
