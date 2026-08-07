@@ -10,16 +10,17 @@ tick の分岐そのものではなく、**その action を選んだ後に何�
 
 ````markdown
 <!-- retry -->
+
 ```yaml
 count: <連続失敗回数>
 lastAction: <失敗した action の名前>
 ```
+
 <!-- /retry -->
 ````
 
 **同じコメントを書き換える**（`count` を +1 して upsert する。コメントを増やさない）。
 リセットの契機は本文「1 tick」が SSOT。ここは書式だけ。
-
 
 ## 休止の記録
 
@@ -29,11 +30,13 @@ lastAction: <失敗した action の名前>
 
 ````markdown
 <!-- yield -->
+
 ```yaml
-issues: [<Issue 番号>]   # 対象集合の全番号
+issues: [<Issue 番号>] # 対象集合の全番号
 to: <先発の Issue 番号>
 keys: [<交差した資源キー>]
 ```
+
 <!-- /yield -->
 ````
 

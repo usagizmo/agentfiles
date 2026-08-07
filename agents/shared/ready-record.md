@@ -12,12 +12,14 @@
 
 ````markdown
 <!-- ready -->
+
 ```yaml
 readySha: <計画時点の default の SHA>
 issueDigest: <この Issue の本文のハッシュ>
-invalidationScope:       # 変わると結論が崩れる範囲。空にしない
+invalidationScope: # 変わると結論が崩れる範囲。空にしない
   - <path / 契約>
 ```
+
 <!-- /ready -->
 ````
 

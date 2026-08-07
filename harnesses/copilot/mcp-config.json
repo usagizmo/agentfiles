@@ -1,25 +1,16 @@
 {
   "mcpServers": {
     "context7": {
-      "tools": [
-        "*"
-      ],
+      "tools": ["*"],
       "type": "local",
       "command": "bunx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ]
+      "args": ["-y", "@upstash/context7-mcp@latest"]
     },
     "fetch": {
-      "tools": [
-        "*"
-      ],
+      "tools": ["*"],
       "type": "local",
       "command": "uvx",
-      "args": [
-        "mcp-server-fetch"
-      ]
+      "args": ["mcp-server-fetch"]
     }
   }
 }
