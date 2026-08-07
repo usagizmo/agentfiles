@@ -107,7 +107,6 @@ flowchart LR
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
-        SD["sync-default.md<br/><small>default の同期</small>"]
     end
 
     RF --> AF
@@ -135,8 +134,6 @@ flowchart LR
     IS --> GM
     PR --> GM
     SH --> GM
-    PR --> SD
-    SH --> SD
 ```
 
 **層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ**。skill が別の skill の

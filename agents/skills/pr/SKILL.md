@@ -22,14 +22,15 @@ PR を作り、**merge 可能な状態まで**持っていく。タイトル先�
 
 ## フロー
 
-CI が通るまで繰り返す:
+1. **push は `scripts/sync-and-push.sh [<base>]` で行う。素の `git push` を使わない。**
+   base への追随（fetch → ローカル default の ff → rebase）と push を 1 つにまとめてある。
+   衝突が出たら解消して再実行する
+2. PR が無ければ `gh pr create --base <base>`、あれば `gh pr edit` で title / body を更新
+3. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
 
-1. **base へ rebase**（毎回の push 直前）。base が default なら `references/sync-default.md` で
-   ローカル default を ff 前進させてから `git rebase "$DEFAULT"`。積み上げなら親の head へ rebase する。
-   衝突は解消。tip が変わったら後続 push は `--force-with-lease`
-2. 未同期なら `git push`（初回は `-u`。rebase 後は `--force-with-lease`）
-3. PR が無ければ `gh pr create --base <base>`、あれば `gh pr edit` で title / body を更新
-4. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
+**commit を足したら必ず 1 へ戻る。CI が緑になったあとも同じ。**「もう通ったから push だけ」で
+追随を飛ばすと、base から離れたまま積み上がり、着地の直前に大きな rebase と衝突が出る。
+実物を見せて直した後の再 push がいちばん飛ばしやすい。
 
 CI が通ったら完了。**merge はここでしない。**
 

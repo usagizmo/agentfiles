@@ -70,7 +70,7 @@
 - **所有者を決めない**のが要点。`review-contract`（tidy / docs）のように主従が無い資産で「どちらを SSOT にするか」を決められず、選定が恣意的になる
 - **同層への言及が構造的に消える**。参照先が skill でなくなるので、層契約（同じ層への依存・言及を作らない）を隠さずに満たせる
 - **skill 本文は自分の相対パスだけ**。skill が自己完結し、投影先でも repo でも解決できる
-- **`shared/` に置く条件は 1 つ**: **2 つ以上の skill が同じものを使っている**。契約でも手順でもよい（`review-contract` は契約、`advisors` と `sync-default` は手順）。1 つの skill しか使わないものは、その skill の `references/` に実体で置く
+- **`shared/` に置く条件は 1 つ**: **2 つ以上の skill が同じものを使っている**。契約でも手順でもよい（`review-contract` は契約、`advisors` は手順）。1 つの skill しか使わないものは、その skill の `references/` に実体で置く
 - `~/.agents/shared` への投影は要らない（skill が相対 symlink で辿るため）。skill 以外から参照したくなった時点で足す
 - 実体の一覧は `agents/docs/structure.md`（**導出した索引**。規約は本ファイルが SSOT）
 

@@ -1,1 +1,0 @@
-../../../shared/sync-default.md
