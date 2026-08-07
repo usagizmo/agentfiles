@@ -1,13 +1,13 @@
 # 用語
 
-**同じ書体で違う種別の語が混ざると読めなくなる。**`resolve` は skill、`tick` はループ 1 周、
+**同じ書体で違う種別の語が混ざると読めなくなる**。`resolve` は skill、`tick` はループ 1 周、
 `prepare` は工程、`着地待ち` は conductor から見た状態 — 4 つとも種別が違う。
 
 規約の本体は各 `SKILL.md`。ここは種別と参照先だけ。
 
 ## skill
 
-**発動条件を持つ手順の集合。**`~/.agents/skills/<name>/SKILL.md` が実体。
+**発動条件を持つ手順の集合**。`~/.agents/skills/<name>/SKILL.md` が実体。
 文中では `conductor` のようにコード体で書く。
 
 **層の割り当てと leaf の一覧は [`README.md`](README.md) の「層構造」**。ここは上位層が何をするかだけ。
@@ -66,14 +66,14 @@
 | 語          | 種別       | 保持者                               |
 | ----------- | ---------- | ------------------------------------ |
 | 容量        | 物理枠     | worktree                             |
-| 計画枠      | 物理枠     | 生存している `refine-<番号>` のセッション（完全一致） |
+| 計画枠      | 物理枠     | セッション                           |
 | write       | 論理 lease | **課題**                             |
 | integration | 論理 lease | **課題**                             |
 
 **上限値と保持している条件（復元式）は `conductor/SKILL.md` の資源表が SSOT**。ここに写さない。
 
 **論理 lease の保持者は課題そのもの**。セッションは交換可能な実行器、worktree は交換可能な
-checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実体そのものを数える**（実体が消えれば空く）。
+checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実体そのものを数える。**
 
 ## 記録
 
@@ -86,7 +86,7 @@ checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実
 | 計画         | `plan`  | `resolve`            | `resolve/SKILL.md`              |
 | 人待ちの記録 | `wait`  | `refine` / `resolve` | `agents/shared/wait-record.md`  |
 | 休止の記録   | `yield` | `conductor`          | `conductor/references/protocols.md` |
-| 失敗の記録   | `retry` | `conductor`          | `conductor/SKILL.md`            |
+| 失敗の記録   | `retry` | `conductor`          | `conductor/references/protocols.md` |
 
 **marker に版番号を付けない**。版で分岐する読み手が要るようになったことが一度も無く、
 **upsert は marker 文字列の一致で既存を探す**ので、版を上げると古いコメントが見つからなくなって

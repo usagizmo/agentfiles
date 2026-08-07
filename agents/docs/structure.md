@@ -72,10 +72,10 @@ flowchart LR
 本体はそれ以外の場所で multiplexer を知らない。
 
 
+## 共有の実体
 
-実体は `agents/shared/` にあり、使う skill が相対 symlink を張る
-（`agents/skills/<name>/{references,scripts}/<file>` → `../../../shared/<file>`）。
-**張り先はモデルの扱いで決まる** — 読むものは `references/`、実行するものは `scripts/`。
+どの skill がどの共有実体を張っているか。**置く条件と張り方の規則は
+[`../../AGENTS.md`](../../AGENTS.md) が SSOT。**
 
 ```mermaid
 flowchart LR
@@ -119,6 +119,8 @@ flowchart LR
     RF --> SB
     RF --> WR
     RF --> RR
+    RS --> RR
+    ME --> GM
     RF --> BD
     RS --> SB
     RS --> WR
@@ -149,7 +151,7 @@ flowchart LR
 | `docs`          | `review-prompt.md`                                                           | 更新判定用                                                                  |
 | `skill-creator` | `schemas.md`                                                                 | vendored                                                                    |
 
-`scripts/` の実体は `docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
+`scripts/` の実体は `agents/skills/docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
 `conductor/scripts/`（起床監視の実装。手順書ではなくここが観測の SSOT）、
 `skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
 

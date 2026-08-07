@@ -77,16 +77,11 @@ flowchart TB
 
 参照は上の層から下の層への一方通行。
 
-```text
-conductor → refine / resolve → finish → consult / tidy / docs / commit / pr / ship / …
-conductor → herdr（multiplexer の CLI 構文。差し替え点は conductor/references/harness.md）
-conductor → ship（着地後に branch が残ることに依存）
-refine    → consult
-```
+**依存の実体は [`structure.md`](structure.md) の図**（ここに写すと片方が古くなる）。
 
 - **禁止するのは下位から上位への逆参照と循環**。`resolve` は `conductor` を知らないし、leaf は flow を知らない
 - 同じ層どうしの依存・言及も作らない（leaf 同士は特に）。例外はデータ資産の共有だけで、張り方は [`structure.md`](structure.md)
-- 検出手順は `docs` skill の品質パス。**層の割り当ての正は `docs/scripts/layers.tsv`**（leaf は既定なので書かれない）。この節はその導出で、ずれると品質パスの `derived` 検査が落ちる
+- 検出手順は `docs` skill の品質パス。**層の割り当ての正は `agents/skills/docs/scripts/layers.tsv`**（leaf は既定なので書かれない）。この節はその導出で、ずれると品質パスの `derived` 検査が落ちる
 
 ## 上位層の役割分担
 
@@ -109,8 +104,8 @@ refine    → consult
 | skill            | 使う                                                                             | 使わない                      |
 | ---------------- | -------------------------------------------------------------------------------- | ----------------------------- |
 | `consult`        | 複数案が存在し得る設計判断・中規模以上の見込みで着手するとき（ユーザー明示不要） | 選択肢が実質 1 つの自明な変更 |
-| `zero-base-loop` | 大規模 diff を書き終えた後、コミット前。**指摘が尽きるまで回す**                 | 軽微・中規模                  |
-| `tidy`           | 中規模以上の実装完了後、コミット前。**レビューは 1 巡**                          | 軽微。設計妥当性の判定        |
+| `zero-base-loop` | 大規模 diff を書き終えた後、コミット前                                           | 軽微・中規模                  |
+| `tidy`           | 中規模以上の実装完了後、コミット前                                               | 軽微。設計妥当性の判定        |
 | `docs`           | 仕様変更・機能実装を文書へ反映するとき。agent-facing 文書を触った変更は規模不問  | 製品コード実装そのもの        |
 
 ### ゲート系（直接実行禁止）
@@ -133,8 +128,8 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 | `consult` / `zero-base-loop` | 別 harness の CLI を read-only で並列起動 | `agents/shared/advisors.md`        |
 | `docs` / `tidy`              | 同 harness の subagent                    | `agents/shared/review-contract.md` |
 
-候補 harness から**実行中の自分を除いた 2 つ**をアドバイザーにするので、メインが Claude でも
-Codex でも同じ表から組み替わる。
+**アドバイザーは実行中の自分を除いて選ぶ**ので、メインが Claude でも Codex でも同じ表から
+組み替わる（人数と選び方は上の SSOT）。
 
 ## この資料を更新するとき
 
