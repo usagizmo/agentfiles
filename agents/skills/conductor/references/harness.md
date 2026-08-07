@@ -55,19 +55,21 @@ conductor が回答を仲介する必要はない（中身の解釈は conductor
 | `tab`       | `refine`。**同時に 3 枠開いても既存の pane の幅を削らない**               |
 | `pane`      | conductor から**振られた作業**（自分の領分ではないもの）。自分のタブへ割る |
 
-**`refine` を pane 分割で作らない。**計画枠は同時に 3 つまで開くので、分割すると**人が読めない
+**`refine` を pane 分割で作らない**。計画枠は同時に 3 つまで開くので、分割すると**人が読めない
 幅まで既存 pane が縮む**（実測で 17 文字まで縮み、人が中身を追えなくなった）。tab なら何枚開いても
 互いの幅に影響しない。**幅は人が読むための資源で、conductor が勝手に食ってよいものではない。**
 
-**振られた作業だけは pane でよい。**自分が動いているタブの中に置くので、
+**振られた作業だけは pane でよい**。自分が動いているタブの中に置くので、
 どこへ振ったかが tick を回している人の視界に残る。
 
-**振られた作業のセッション名は `refine-` / `resolve-` で始めない。**内容が分かる名前を付ける
-（`investigate-ci-timeout` 等）。前置きを共有すると**選出と片付けが拾ってしまい、計画枠を数え違え、
-無関係な pane を「計画セッションを閉じる」で消す**。名前が唯一の区別なので、ここを崩さない。
+**振られた作業のセッション名は `refine-` / `resolve-` で始めない**。内容が分かる名前を付ける
+（`investigate-ci-timeout` 等）。**述語に当たるからではない** —— 計画枠も選出も片付けも
+完全一致（`^(retired-)?(refine|resolve)-<番号>$`）で引くので、`refine-investigate` は当たらない。
+**理由は、名前だけで工程が読めなくなる方が損失が大きいから** —— 観測は名前しか手掛かりを持たず、
+`refine-` で始まる pane が計画セッションでないなら、一覧を見た人も次の conductor も毎回 pane を
+開いて確かめることになる。
 
-**振られた作業は容量にも計画枠にも数えない。**worktree を持たず、`refine-*` でもないので、
-どちらの述語にも当たらない（当たるなら名前が間違っている）。
+**振られた作業は容量にも計画枠にも数えない**。worktree を持たず、完全一致にも当たらない。
 
 どちらも **完了を待たない**。次の tick へ戻る（完了検知は tick の観測で足りる）。
 渡すのは Issue 番号だけで、起こされた側は Issue 本文を読んで自分で文脈を作る
@@ -124,13 +126,19 @@ tick が読むもの。
 
 ### 片付ける
 
-**起こしたものによって片付ける対象が違う。**`refine` は worktree を持たないので、
+**起こしたものによって片付ける対象が違う**。`refine` は worktree を持たないので、
 worktree 前提の手順をそのまま当てると何も片付かない。
 
 | 終わったもの | 片付けるもの |
 | --- | --- |
-| `refine` | セッションが載っている pane だけ |
+| `refine`（`done`） | セッションが載っている pane だけ |
+| `refine`（`idle`） | **閉じない。`retired-refine-<番号>` へ rename するだけ**（理由は `../SKILL.md`） |
 | `resolve` | 下記の 3 つ |
+
+| 操作 | herdr |
+| --- | --- |
+| rename する | `herdr agent rename <名前> retired-refine-<番号>` |
+| 閉じる直前に生値を取り直す | `herdr agent get <名前>` の `agent_status`（一覧を撮ってから閉じるまでに人がタブを開くと `done` が `idle` に変わる） |
 
 **既存の worktree でセッションだけを起こし直すときは pane を作るだけ**（`worktree create` は
 既に checkout 済みの branch には使えない）。実装を残したまま実行器だけ差し替える経路がこれ。
@@ -195,27 +203,35 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - `worktree create` は worktree・workspace・root pane を**一度に作る**。pane を別途 split しない
 - **`--json` を付けない**。socket API 経由のコマンドは既定で JSON を返す。
   `agent start` に付けると exit 2 の構文エラーになる
-- `agent_status` は `idle` / `working` / `done` / `blocked` の 4 値しか返らない
+- `agent_status` は `idle` / `working` / `done` / `blocked` / `unknown` の 5 値。意味は `herdr` skill が
+  SSOT で、**`idle` と `done` は別物** —— `idle` は「入力待ち **かつ** そのタブが focused UI で
+  seen」、`done` は「未 seen のまま background 作業が終わった」。**CLI から読んでも seen にはならない**
+- **`unknown` は「agent は居るが分類できない」**。**完了の証明ではない**ので `Conflict` へ写す
+  （`../SKILL.md` の `runtime`）
 - **`blocked` は人待ち**（選択肢の提示で止まっている）。詰まりの検知はここで引き、
   何を聞かれているかは `herdr pane read <id> --source visible` で読む
-- **入力欄への送信は `agent prompt` 以外を使わない。**`pane send-keys <id> enter` も
+- **入力欄への送信は `agent prompt` 以外を使わない**。`pane send-keys <id> enter` も
   `pane send-text` の改行も agent の入力欄を submit しない（キーは届くが送信されない）。
   未送信の下書きが残っていても `agent prompt` はそれを捨てて自分の本文だけを送るので、
   事前に消そうとしなくてよい
 - **入力欄の文字列は観測材料ではない**。Claude Code のサジェストか人の未送信入力かを、
-  **見ただけでは区別できない。**だから**どちらの理由にも使わない**。
+  **見ただけでは区別できない**。だから**どちらの理由にも使わない**。
   - **「人の入力かもしれない」で送信を控えない**。控えると、その pane へ渡す action が
     **永久に選べなくなる**（実測で 11 tick 止めた）
-  - **見えた文字列を自分の本文へ写さない。**サジェストだった場合、
+  - **見えた文字列を自分の本文へ写さない**。サジェストだった場合、
     **誰も決めていないものを conductor が指示として確定させてしまう**
   送るのは自分の本文だけでよい。`agent prompt` が入力欄を捨てるのは正しい挙動で、
   サジェストなら捨てられるべきもの、人の入力なら本人が送り直せる。
   中身が判断に関わりそうに見えたら、渡すのではなく**状況ボードへ出して人へ返す**
-- **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後。**`--no-focus` は
+- **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は
   `worktree create` / `pane split` にはあるが `agent prompt` には無い。前に置くと
   **本文が unknown option として弾かれる**（`/refine ...` が option 名として報告されるので、
   slash command のせいに見えて紛らわしい）
-- 稼働の確認は `agent prompt <名前> <本文> --wait --until working`
+- 稼働の確認は `agent prompt <名前> <本文> --wait --until working`。**ただし遷移を待つので、
+  既に `working` のセッションに使うと返らず timeout する**（実測 120 秒）。
+  **確かめるのは「送った後に目的の状態にあること」であって「遷移したこと」ではない** ——
+  既に目的の状態なら、その時点で確認は済んでいる。**timeout を失敗として数えない**
+  （届いているのに retry budget が伸び、正常な通知だけで `退避先` へ落ちる）
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
 - 片付けは**標準出力から成否が読めない**（返る JSON は通知のエンベロープで、削除の結果ではない）。worktree 一覧と
   remote branch が両方消えたことで確認する。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
@@ -258,8 +274,7 @@ herdr なら:
 # --sessions-cmd
 herdr agent list | jq -S -r '.result.agents[]? | select(.name != null)
   | if .name == "conductor" then "conductor present"
-    elif (.name | test("^(refine|resolve)-[0-9]+$")) then
-      "\(.name) \(if .agent_status == "done" or .agent_status == "idle" then "waiting" else .agent_status end)"
+    elif (.name | test("^(retired-)?(refine|resolve)-[0-9]+$")) then "\(.name) \(.agent_status)"
     else empty end' | sort | grep .
 
 # --workspaces-cmd
@@ -272,7 +287,11 @@ herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.wo
 - **`.name // .pane_id` を使わない**。無名 pane まで拾ってしまい、別 repo の pane の状態変化で起床する
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。
   2 本目が居れば同じ行が 2 つ並ぶ
-- `done` と `idle` は `waiting` へ畳む。`working` と `blocked` はそのまま
+- **`done` と `idle` を畳まない。**片付け方が違う（`done` は閉じる、`idle` は rename する）ので、
+  「正規化で同じ値になるもの」に当たらない。畳むと**人が入力を書いている最中の pane を閉じる
+  action が、指紋の上では `done` と区別できないまま起きる**
+- **`retired-refine-*` も拾う。**rename しても対象 Issue の再計画は塞ぐので、
+  指紋から落とすと**人が閉じて枠が本当に空いたことを観測できない**
 
 worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプトが `--repo` から行う）。
 
@@ -281,11 +300,17 @@ worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプト
 **GraphQL のコスト = ceil(要求ノード総数 ÷ 100)**（最小 1）。ここを知らないと、正しい項目を
 正しい回数で取っていても枯れる。
 
-- **`gh project item-list` を観測に使わない。**item ごとに全 field 値を取る（`fieldValues(first:100)`）
-  ので**ノード数が `件数 × 100`** になる。実測で 300 件 = **406 pt**（枠 5,000 の 8%）。
-  `fieldValueByName` は connection ではなく単一ノードなので**ノード数が `件数`** で、
-  同じ 187 行が **2 pt**。`item-add` など mutation 系はそのままでよい
-- **REST は GraphQL とは別枠で 0 pt。**Issue 一覧を REST 経由にしてあるのは取りこぼしを塞ぐため
+- **`gh project item-list` を使わない —— 観測でも書き込みでも**。item ごとに全 field 値を取る
+  （`fieldValues(first:100)`）ので**ノード数が `件数 × 100`** になる。実測で 300 件 = **406 pt**
+  （枠 5,000 の 8%）。`fieldValueByName` は connection ではなく単一ノードなので
+  **ノード数が `件数`** で、同じ 187 行が **2 pt**。`item-add` など mutation 系はそのままでよい
+- **書き込みに要る item ID は、ボードではなく Issue 側から引く**（`repository.issue(number:)` の
+  `projectItems` を project 番号で絞る。**1 pt**。具体のクエリは project 側のボード規約）。
+  Status の書き込みは頻繁なので（台帳を進める・claim は group 全員ぶん・差し戻し・退避）、
+  ボードを引いて番号で探すと**十数回で枠が枯れ、`gh` を使う全セッションが同時に止まる**。
+  **`--limit` で回避しない** —— コストが 2 桁上がるうえ、**「打ち切られた」と「そもそも載って
+  いない」がどちらも空**で返るので guard の行き先を誤る。**引けなかったら書かずに止める**
+- **REST は GraphQL とは別枠で 0 pt**。Issue 一覧を REST 経由にしてあるのは取りこぼしを塞ぐため
   （`--limit N` は N を超えると**不完全なまま非 0 件で返る**ので使わない）。枠の節約は副次
 - **1 周のコストは O(items)**。Project の item は単調増加するので、いずれ効いてくる
   （1,000 件でも 10 pt/周なので当面は問題にならない）
@@ -294,14 +319,14 @@ worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプト
 ならず、枯れるものは枯れる（406 pt/周は間隔を 2 倍にしても 6,150 pt/時で枠を超える）。
 **直すのはクエリの形状。**
 
-**GraphQL 枠は全セッションの共有資源。**conductor 1 本と、並走する `refine` / `resolve` が
+**GraphQL 枠は全セッションの共有資源**。conductor 1 本と、並走する `refine` / `resolve` が
 同じトークンを使う。watcher が焼き切ると**`gh` を使う全セッションが同時に止まる**ので、
 1 周のコストはスクリプト自身が `rateLimit { cost }` で申告し、`--cost-limit` を超えたら起動を止める
 （`graphql.used` の差分では並走セッション分が混ざって自分のコストを測れない）。
 
 #### 間隔を決めるのは枠ではない
 
-**間隔を縮めても tick の回数は増えない。**watcher は指紋が変わったときだけ起こすので、
+**間隔を縮めても tick の回数は増えない**。watcher は指紋が変わったときだけ起こすので、
 増えるのは観測の回数だけで、tick の回数は盤面が実際に変わった回数で決まる。
 **増えるのは安い側（GitHub API と `git fetch`）だけで、高い側（conductor の context）は増えない。**
 だから**「枠の節約」を理由に間隔を伸ばさない** —— 伸ばして得るものは無く、失うのは検知の遅延だけ。
@@ -340,7 +365,7 @@ rate limit 中に盲目のまま再試行し、**永久に起きない**。縮�
 4. **自分を `conductor-prev` へ rename してから、後継を `conductor` へ rename する**（逆順だと同名が 2 本並ぶ）
 5. 引き継ぎを応答に残して idle になる。**自分の pane は閉じない**
 
-**退く側と立つ側の名前を規約で固定するのは、後継が片付けられるようにするため。**名前が決まって
+**退く側と立つ側の名前を規約で固定するのは、後継が片付けられるようにするため**。名前が決まって
 いないと後継は消す相手を特定できず、**人が pane を閉じに来るまで残る**。`conductor-prev` なら
 **引き継ぎ本文なしで見つけて閉じられる**。
 
@@ -350,7 +375,7 @@ rate limit 中に盲目のまま再試行し、**永久に起きない**。縮�
 
 ### 引き継ぎに何も書かないのが既定
 
-**`/conductor` だけで立ち上がることを目標にする。**tick は観測から組み立て直せるので、
+**`/conductor` だけで立ち上がることを目標にする**。tick は観測から組み立て直せるので、
 **書きたくなったものが出たら、まず「永続化できないか」を疑う** —— 書くべきものがあるという
 ことは、外部化すべきものが外部化されていないということ。
 
@@ -362,13 +387,13 @@ rate limit 中に盲目のまま再試行し、**永久に起きない**。縮�
 | 踏んだ失敗の型・規約の穴                 | skill 本体（暫定なら Issue を立てて番号だけ渡す） |
 | 座標（org / Project 番号 / Status 名） | project 側の skill                             |
 
-**それでも残るのは 2 つだけ。**どちらも観測に出ないので、**これだけは書く**。
+**それでも残るのは 2 つだけ**。どちらも観測に出ないので、**これだけは書く**。
 
 - **人が口頭で示した判断で、まだ Issue にもボードにも落ちていないもの**（落とせるなら落として、
   書かずに済ませる）
 - **人の領分だと明示されたもの**（未 push の commit 等。**触らないこと自体が指示**なので、
   観測できても実行してはいけない）
 
-**「観測すれば分かるが探す手間を省く」ものは書かない。**先頭に置けば後継が**観測より先に
+**「観測すれば分かるが探す手間を省く」ものは書かない**。先頭に置けば後継が**観測より先に
 それを信じる**し、末尾に置いても読む context は消費する。**探す手間は tick 1 周ぶんで、
 誤った前提は全 tick に効く。**

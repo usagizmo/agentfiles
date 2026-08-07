@@ -35,7 +35,7 @@
 | フィールド | 値                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------- |
 | `progress` | `未着手` `準備中` `準備済み` `実装中` `提出中` `着地待ち` `着地済み` `取り下げ`     |
-| `runtime`  | `無し` `稼働中` `人待ち` `待機`                                                     |
+| `runtime`  | `無し` `稼働中` `人待ち` `休止` `待機`                                              |
 | `capacity` | `無し` / `あり` / `prunable`（**checkout は消えたが、片付け残りがある**）           |
 | `ledger`   | `未計画` `計画済み` `進行中` `完了` `退避先`（Project Status。名前は project 差分） |
 
@@ -66,7 +66,7 @@
 | 語          | 種別       | 保持者                               |
 | ----------- | ---------- | ------------------------------------ |
 | 容量        | 物理枠     | worktree                             |
-| 計画枠      | 物理枠     | 生存している `refine-*` のセッション |
+| 計画枠      | 物理枠     | 生存している `refine-<番号>` のセッション（完全一致） |
 | write       | 論理 lease | **課題**                             |
 | integration | 論理 lease | **課題**                             |
 
@@ -85,6 +85,7 @@ checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実
 | 在庫の鮮度   | `ready` | `refine`             | `agents/shared/ready-record.md` |
 | 計画         | `plan`  | `resolve`            | `resolve/SKILL.md`              |
 | 人待ちの記録 | `wait`  | `refine` / `resolve` | `agents/shared/wait-record.md`  |
+| 休止の記録   | `yield` | `conductor`          | `conductor/references/protocols.md` |
 | 失敗の記録   | `retry` | `conductor`          | `conductor/SKILL.md`            |
 
 **marker に版番号を付けない**。版で分岐する読み手が要るようになったことが一度も無く、
