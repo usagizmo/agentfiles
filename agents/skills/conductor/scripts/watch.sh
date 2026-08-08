@@ -125,8 +125,13 @@ snapshot() {
 
   # marker コメントの変化で起床する。upsert は必ず `updated_at` を更新するので、
   # `sort=updated` の窓に必ず入る。marker 名まで指紋に入れる（新設・消滅がそのまま digest に出る）。
+  #
+  # **marker 名を allowlist で列挙しない**。記録を 1 種類足すたびにここも直す形にすると、
+  # 直し忘れた種類だけが digest から消える —— 起床自体は `updated_at` が担保するので**壊れ方が
+  # 静か**で、「どの記録が動いたか」が diff から落ちたことに誰も気づけない（実際に `integration`
+  # と `intent` の 2 種類が列挙から漏れていた）。**形だけで拾い、種類は増えるに任せる**。
   comments=$(gh api "repos/$GH_REPO/issues/comments?sort=updated&direction=desc&per_page=100" --jq '
-      .[] | "\(.id) \(.updated_at) \([.body | scan("<!-- (plan|claim|wait|yield|retry|ready) -->")] | flatten | join(","))"') || return 1
+      .[] | "\(.id) \(.updated_at) \([.body | scan("<!-- ([a-z][a-z-]*) -->")] | flatten | join(","))"') || return 1
   comments=$(printf '%s\n' "$comments" | sort)
 
   sessions=$(eval "$SESSIONS_CMD") || return 1
