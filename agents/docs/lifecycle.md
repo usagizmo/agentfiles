@@ -132,6 +132,7 @@ sequenceDiagram
     M->>R: /resolve #N
 
     R->>GH: 計画コメント（plan）
+    R-->>U: 枚に実装計画を載せて提示（答えは待たない。人待ちの記録も書かない）
     R-->>C: 応答を終えて待機（何を待つか 1 行）
     C->>C: write が空いた
     C->>M: 実装を始めてよい
@@ -150,17 +151,25 @@ sequenceDiagram
     end
 
     R->>R: finish（規模別）→ 検証
-    R-->>U: 同じ枚のセッションまとめを書き直し、検証レポートと合わせて提示
-    opt 機械が正解を持たない成果物
-        R->>U: 実物を見せて意図を確認
-    end
+    R-->>U: 検証レポートを提示
     opt 直した範囲が受入条件を超えた
         R->>GH: 足された分を Issue にする
         Note over R,GH: PR の Closes で着地と同時に閉じる。<br/>元の受入条件が偽になったなら Issue ではなく<br/>本文を更新し、再承認を待って再 plan（PR へは進まない）
     end
     R->>GH: PR を作る（CI が緑になるまでここ）
-    R->>GH: セッションまとめを PR へコメント、枚の URL を PR 本文へ（着地の前）
+    R->>GH: 緑になったらセッションまとめを PR へコメント、枚の URL を PR 本文へ
+    R-->>U: 同じ枚にセッションまとめを載せて提示（可否を決める材料）
     Note over R,C: PR 作成と CI は integration の外。<br/>write を持ったまま進む
+
+    alt 意図の確認が要る変更（述語は intent-record）
+        R->>GH: 人待ちを waiting に → 意図の確認を pending に
+        R-->>U: 実物を項目ごとに見せる
+        U->>R: 項目ごとに承認する
+        R->>GH: 全項目そろったら confirmed → 人待ちを cleared に
+    else それ以外
+        R->>GH: 意図の確認を not-required に（理由と revision つき）
+    end
+
     R-->>C: 待機
     C->>C: integration は PR 作成が最も早い 1 件
     C->>M: 着地してよい
