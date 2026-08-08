@@ -45,11 +45,13 @@ flowchart LR
         PR[pr]
         SH[ship]
         IS[issue]
+        HD[herdr]
     end
 
     CO --> RF
     CO --> RS
-    CO --> SH
+    CO --> HD
+    CO -.->|着地後に branch が残ることに依存| SH
     RF --> CS
     RS --> CS
     RS --> FI
@@ -62,11 +64,7 @@ flowchart LR
     FI --> CM
 ```
 
-```mermaid
-flowchart LR
-    CO[conductor] --> HD[herdr]
-    CO -.->|着地後に branch が残ることに依存| SH[ship]
-```
+実線は起動、点線は挙動への依存。`conductor` が `ship` を名指しするのはこの 1 箇所だけで、起動はしない。
 
 `conductor` が multiplexer の CLI を参照する箇所は **`references/harness.md` に隔離**してあり、
 本体はそれ以外の場所で multiplexer を知らない。
@@ -157,9 +155,15 @@ flowchart LR
 | `docs`          | `review-prompt.md`                                                           | 更新判定用                                                                  |
 | `skill-creator` | `schemas.md`                                                                 | vendored                                                                    |
 
-`scripts/` の実体は `agents/skills/docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
-`conductor/scripts/`（起床監視の実装。手順書ではなくここが観測の SSOT）、
-`skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
+`scripts/` も同じく skill 固有で、共有するものだけ `shared/` に置く。
+
+| skill           | 実体                                                              | 何をするか                                           |
+| --------------- | ----------------------------------------------------------------- | ---------------------------------------------------- |
+| `conductor`     | `watch.sh` / `project-status.graphql`                             | 起床監視。**手順書ではなくここが観測の SSOT**        |
+| `docs`          | `audit-skills.sh` / `check-emphasis.mjs`                          | 品質パスの機械検査。層の定義 `layers.tsv` を伴う     |
+| `pr`            | `sync-and-push.sh`                                                | base への追随と push（素の `git push` を使わせない） |
+| `skill-creator` | —                                                                 | vendored                                             |
+| 共有            | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink） | アドバイザーの起動と回収                             |
 
 ## 追加・変更するとき
 
