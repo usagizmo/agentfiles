@@ -33,7 +33,7 @@
 | 🐏     | `[herdr]`      | `herdr/` / `~/.config/herdr` 配下の herdr 設定                                           |
 | 📁     | `[yazi]`       | Yazi ファイルマネージャー設定                                                            |
 | 🔨     | `[mise]`       | mise ランタイムバージョン管理設定                                                        |
-| 🎨     | `[lint]`       | oxlint / oxfmt の設定と commit gate（`.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
+| 🎨     | `[lint]`       | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 | 🔧     | `[複数]`       | 複数スコープにまたがる設定変更（例: `[fish][zsh]`）                                      |
 
 ### 補足ルール

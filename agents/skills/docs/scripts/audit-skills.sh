@@ -521,20 +521,13 @@ fi
 # --- check emphasis: 描画が壊れる強調 -------------------------------------
 # **正規表現では届かない。**flanking は開き / 閉じの対応まで見ないと結論が出ず、
 # 右 flanking は成立するのに相手が無くてリテラルへ落ちる `**` を取り逃す。
-# 対応を解く実体は隣の check-emphasis.mjs。
-# **runtime が無ければ飛ばす。**強調記法はこの検査の付随物で、欠いても本来の
-# 目的（実在・形・重複・層）は達成できる。飛ばしたことは SKIP で出す。
+# 描画して判定する実体は隣の check-emphasis.mjs。
+# **道具が無ければ飛ばす。**強調記法はこの検査の付随物で、欠いても本来の目的
+# （実在・形・重複・層）は達成できる。飛ばしたことは SKIP で出す。
 emphasis_self=$(canon "$0") || emphasis_self=$0
 EMPHASIS_JS=$(dirname "$emphasis_self")/check-emphasis.mjs
-JS_RUNTIME=
-for c in bun node; do
-	if command -v "$c" >/dev/null 2>&1; then
-		JS_RUNTIME=$c
-		break
-	fi
-done
-if [ -z "$JS_RUNTIME" ]; then
-	emit SKIP emphasis "-" "note=bun / node が無いので強調記法を検査していない"
+if ! command -v bun >/dev/null 2>&1; then
+	emit SKIP emphasis "-" "note=bun が無いので強調記法を検査していない"
 elif [ ! -f "$EMPHASIS_JS" ]; then
 	emit SKIP emphasis "-" "note=$EMPHASIS_JS が無いので強調記法を検査していない"
 else
@@ -546,9 +539,16 @@ else
 			done
 		fi
 	} >"$WORK/md_targets"
-	"$JS_RUNTIME" "$EMPHASIS_JS" <"$WORK/md_targets" | while IFS="	" read -r d ln snip; do
-		emit VIOLATION emphasis "$d:$ln" "note=強調が対応しない: $snip"
-	done
+	bun "$EMPHASIS_JS" <"$WORK/md_targets" >"$WORK/emphasis" 2>/dev/null
+	# exit 2 は依存の未インストール。0 / 1（違反の有無）と混ぜると、
+	# 入っていないだけの状態が「検査して緑」に見える
+	if [ $? -eq 2 ]; then
+		emit SKIP emphasis "-" "note=marked が入っていないので強調記法を検査していない（./init.sh）"
+	else
+		while IFS="	" read -r d ln snip; do
+			[ -n "$d" ] && emit VIOLATION emphasis "$d:$ln" "note=強調が対応しない: $snip"
+		done <"$WORK/emphasis"
+	fi
 fi
 
 # --- 出力 ---------------------------------------------------------------

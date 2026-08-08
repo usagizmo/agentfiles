@@ -1,13 +1,10 @@
 #!/bin/bash
-# commit gate: **index の内容**に oxfmt / oxlint をかけ、整形結果を index へ書き戻す。
+# commit gate: staged なファイルに oxfmt / oxlint をかけ、整形結果を stage へ戻す。
+# **対象と実行内容の SSOT は package.json の `lint-staged`。**ここには書かない。
 # 配線（core.hooksPath）は ./init.sh、配線の検査は ./doctor.sh。
 #
-# worktree ではなく index を見るのが要点。`git add -p` した後の worktree には
-# コミットしない変更が混ざっているので、そこを検査しても「stage した内容が正しいか」に答えられない。
-# lint-staged は未 stage 分を stash して worktree を index に合わせるが、ここでは stash せず
-# index を temp へ展開して見る（**worktree の未 stage 変更に一切触れない**）。
-#
-# 既知の制約: `git commit --only <path>` は一時 index を使うので、書き戻しが commit に載らない。
+# lint-staged は未 stage 変更を stash して worktree を index に合わせる。失敗時は
+# 自動で復元するが、**gate の実行中に別プロセスから worktree を触らない**こと。
 
 set -uo pipefail
 
@@ -17,68 +14,14 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # `mise activate` 済みの PATH を継承しないので、shims を自分で足す
 [ -d "$HOME/.local/share/mise/shims" ] && PATH="$PATH:$HOME/.local/share/mise/shims"
 
-# ACMR = 追加・コピー・変更・リネーム（削除は index に実体が無いので対象外）
-staged=()
-while IFS= read -r -d '' file; do
-  staged+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACMR -z)
-[ ${#staged[@]} -eq 0 ] && exit 0
-
-# .editorconfig / .oxfmtrc.json / .oxlintrc.json も同じ相対位置に要るので index を丸ごと出す。
-# 相対パスのまま実行するので、診断に出るパスは repo 相対のままになる
-index_tree="$(mktemp -d)" || exit 1
-trap 'rm -rf "$index_tree"' EXIT
-git checkout-index -a --prefix="$index_tree/" || exit 1
-
-# 展開先にも mise/config.toml が出てくる。mise の shim は cwd から設定を探して
-# untrusted なら止まるので、自分の index から出したものとして信頼させる
-export MISE_TRUSTED_CONFIG_PATHS="$index_tree"
-
-if ! (cd "$index_tree" && oxfmt --no-error-on-unmatched-pattern "${staged[@]}" >/dev/null); then
-  echo "❌ oxfmt を実行できませんでした（未インストールなら ./init.sh）" >&2
+if ! command -v bun >/dev/null 2>&1; then
+  echo "❌ bun がありません（./init.sh）" >&2
   exit 1
 fi
 
-# lint は検査のみ（--fix は挙動を変えうるので commit 時には当てない）。整形後の内容を見る
-failed=0
-(cd "$index_tree" && oxlint --no-error-on-unmatched-pattern "${staged[@]}") || failed=1
-
-# 整形で変わったものを index へ書き戻す。
-# worktree が整形前の index と同一だったファイルは、コミット直後に差分として
-# 残らないよう worktree も揃える。未 stage 変更を持つファイルは index だけ直す
-synced=()
-index_only=()
-for file in "${staged[@]}"; do
-  mode="$(git ls-files --stage -- "$file" | cut -c1-6)"
-  # symlink（120000）や gitlink は整形対象にしない
-  case "$mode" in 100644 | 100755) ;; *) continue ;; esac
-
-  before="$(git rev-parse ":$file")" || continue
-  after="$(git hash-object -w -- "$index_tree/$file")" || continue
-  [ "$after" = "$before" ] && continue
-
-  git update-index --cacheinfo "$mode,$after,$file" || exit 1
-  if [ -f "$file" ] && [ "$(git hash-object -- "$file")" = "$before" ]; then
-    cp "$index_tree/$file" "$file"
-    synced+=("$file")
-  else
-    index_only+=("$file")
-  fi
-done
-
-if [ ${#synced[@]} -gt 0 ]; then
-  echo "🔧 oxfmt で整形しました:"
-  printf '   %s\n' "${synced[@]}"
-fi
-if [ ${#index_only[@]} -gt 0 ]; then
-  echo "🔧 oxfmt で整形しました（stage 分のみ。worktree の未 stage 変更は触っていません）:"
-  printf '   %s\n' "${index_only[@]}"
-fi
-
-if [ "$failed" -ne 0 ]; then
-  echo "" >&2
-  echo "❌ lint に通らないので commit を中断しました（飛ばすなら git commit --no-verify）" >&2
+if [ ! -d node_modules ]; then
+  echo "❌ 開発依存が入っていません（./init.sh か bun install）" >&2
   exit 1
 fi
 
-exit 0
+exec bunx lint-staged

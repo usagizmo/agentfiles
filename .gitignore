@@ -1,6 +1,9 @@
 # misc
 .DS_Store
 
+# this repo's dev dependencies (lint / format / commit gate)
+/node_modules/
+
 # externally installed agent skills
 /agents/skills/agent-browser/
 /agents/skills/herdr/
