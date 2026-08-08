@@ -4,9 +4,13 @@
 // 出力 (stdout): 1 行 1 件 `<display>\t<行>\t<抜粋>`
 // exit: 0=壊れなし / 1=壊れあり（出力あり） / 2=marked が入っていない
 //
-// **正規表現では判定できない。**CommonMark の flanking は開き / 閉じの対応まで
-// 見ないと結論が出ず、右 flanking は成立するのに相手が無くてリテラルへ落ちる
-// `**` を取り逃す。描画して `**` が残るかを見るのが唯一確実な判定。
+// **判定は描画結果そのもの。**知りたいのは「GitHub で `**` が記号のまま出るか」で、
+// flanking 規則を自前で解くと開き / 閉じの対応まで見ないと結論が出ないうえ、
+// block の切り方が CommonMark とずれた分だけ誤検知と見逃しが残る。
+//
+// **block の分割は lexer に任せる。**強調が閉じられる範囲は block 構造で決まるので、
+// 空行やマーカーで自前に切ると引用・setext 見出し・fence の境界で必ずずれる。
+// トップレベル token なら `raw` の積算がソース位置と一致するので、行番号も正確に出る。
 //
 // marked は GFM。GitHub でどう出るかが知りたいことなので、素の CommonMark より合う。
 
@@ -21,61 +25,28 @@ try {
 
 // **描画結果からタグとコードを取り除いてから探す。**残すとテキスト以外の `**` を数える —
 // 規約を逐語で説明する `` `**` ``、HTML コメント、属性値。いずれも表示上は強調ではない。
-const broken = (text) =>
-  marked
-    .parseInline(text)
-    .replace(/<code>[\s\S]*?<\/code>/g, "")
+const broken = (html) =>
+  html
+    .replace(/<code[^>]*>[\s\S]*?<\/code>/g, "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<[^>]*>/g, "")
     .includes("**");
 
-// 強調が閉じられる範囲の先頭。**空行だけで切ると足りない** — 別々のリスト項目や
-// 表の行にある未対応の `**` どうしが 1 つの塊に見え、対応したことになって見逃す。
-const BLOCK_HEAD = /^ {0,3}(?:[-*+]|\d+[.)])\s|^ {0,3}#{1,6}\s|^ {0,3}>|^ {0,3}\|/;
-// 見出しと表の行は 1 行で閉じる。リスト項目と引用は継続行を持つので閉じない
-const ONE_LINE = /^ {0,3}#{1,6}\s|^ {0,3}\|/;
-const INDENT_CODE = /^(?: {4}|\t)/;
-
-/** 強調が閉じられる範囲（inline container）ごとに `{ no, text }[]` を返す。 */
-function containers(src) {
-  const out = [];
-  let cur = null;
-  let fence = null;
-  const flush = () => {
-    if (cur) out.push(cur);
-    cur = null;
-  };
-  src.split("\n").forEach((text, i) => {
-    // fence は開いた記号と同じ文字・同じ長さ以上でしか閉じない
-    const f = text.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (f) {
-      const ch = f[1][0];
-      if (fence === null) fence = { ch, len: f[1].length };
-      else if (fence.ch === ch && f[1].length >= fence.len) fence = null;
-      flush();
-      return;
-    }
-    if (fence !== null) return;
-    if (text.trim() === "") return flush();
-    // 段落の外側にある字下げはコードブロック（段落の途中なら継続行なので残す）
-    if (!cur && INDENT_CODE.test(text)) return;
-    if (BLOCK_HEAD.test(text)) flush();
-    if (!cur) cur = [];
-    cur.push({ no: i + 1, text });
-    if (ONE_LINE.test(text)) flush();
-  });
-  flush();
-  return out;
-}
-
 /** 壊れている行を `{ no, text }` で返す。判定の入口はここ 1 つ（test もこれを見る）。 */
 export function brokenLines(src) {
   const out = [];
-  for (const c of containers(src)) {
-    if (!broken(c.map((l) => l.text).join("\n"))) continue;
-    // 範囲が壊れている。原因の行まで絞る。行をまたぐ 1 組なら両端とも残る。
-    const lines = c.filter((l) => broken(l.text));
-    out.push(...(lines.length ? lines : [c[0]]));
+  let offset = 0;
+  for (const token of marked.lexer(src)) {
+    const start = offset;
+    offset += token.raw.length;
+    // コードブロックは本文ではない（規約そのものを逐語で載せたブロックがある）
+    if (token.type === "space" || token.type === "code") continue;
+    if (!broken(marked.parser([token]))) continue;
+    // この block が壊れている。原因は中の `**` を持つ行。
+    const base = src.slice(0, start).split("\n").length;
+    token.raw.split("\n").forEach((text, i) => {
+      if (text.includes("**")) out.push({ no: base + i, text });
+    });
   }
   return out;
 }
