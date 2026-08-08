@@ -104,6 +104,7 @@ flowchart LR
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         AF["artifact.md<br/><small>読ませる面の条件</small>"]
         IR["integration-record.md<br/><small>merge の枠の記録</small>"]
+        IT["intent-record.md<br/><small>意図の確認の記録</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
@@ -127,6 +128,10 @@ flowchart LR
     RS --> BD
     CO --> IR
     RS --> IR
+    CO --> IT
+    RS --> IT
+    SH --> IT
+    SH --> SB
     CS --> AD
     CS --> AS
     ZB --> AD
@@ -148,6 +153,7 @@ flowchart LR
 | --------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `conductor`     | `harness.md` / `protocols.md` / `scenarios.md`                               | multiplexer 差分 / 稀少パスの手順 / **tick の意味論を固定する代表シナリオ** |
 | `resolve`       | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md` | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）  |
+| `ship`          | `sync-default.md`                                                            | 着地後にローカル default を最新化する手順                                   |
 | `docs`          | `review-prompt.md`                                                           | 更新判定用                                                                  |
 | `skill-creator` | `schemas.md`                                                                 | vendored                                                                    |
 

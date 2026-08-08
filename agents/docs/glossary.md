@@ -24,13 +24,14 @@
 **`resolve` から見た「今どこ」**。課題 1 件の内部進行で、SSOT は `resolve/SKILL.md` の工程表。
 **外部から指すときも名前で指す**（番号は増減する）。
 
-`prepare` / `write 待ち` / `実装` / `仕上げ` / `検証` / `意図の確認` / `提出` /
+`prepare` / `write 待ち` / `実装` / `仕上げ` / `検証` / `提出` / `意図の確認` /
 `integration 待ち` / `着地`
 
 ## 状態
 
 **`conductor` から見た同じ課題**。観測を正規化した 4 フィールドで、SSOT は `conductor/SKILL.md`。
-**工程より粗い** — 仕上げ・検証・意図の確認は成果物からは区別できないので、まとめて `実装中` になる。
+**工程より粗い** — 仕上げと検証は成果物からは区別できないのでまとめて `実装中` になり、
+意図の確認は提出の後ろなので `提出中` / `着地待ち` に見える。
 
 | フィールド | 値                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------- |
@@ -79,14 +80,16 @@ checkout で、課題だけが復旧後も同一性を持つ。**物理枠は実
 
 **セッションは消える。外部化したものだけが復旧契約になる**。いずれも固定 marker 付きの Issue コメント。
 
-| 語           | marker  | 書く人               | SSOT                                |
-| ------------ | ------- | -------------------- | ----------------------------------- |
-| claim の記録 | `claim` | `conductor`          | `agents/shared/same-branch.md`      |
-| 在庫の鮮度   | `ready` | `refine`             | `agents/shared/ready-record.md`     |
-| 計画         | `plan`  | `resolve`            | `resolve/SKILL.md`                  |
-| 人待ちの記録 | `wait`  | `refine` / `resolve` | `agents/shared/wait-record.md`      |
-| 休止の記録   | `yield` | `conductor`          | `conductor/references/protocols.md` |
-| 失敗の記録   | `retry` | `conductor`          | `conductor/references/protocols.md` |
+| 語               | marker        | 書く人               | SSOT                                  |
+| ---------------- | ------------- | -------------------- | ------------------------------------- |
+| claim の記録     | `claim`       | `conductor`          | `agents/shared/same-branch.md`        |
+| 在庫の鮮度       | `ready`       | `refine`             | `agents/shared/ready-record.md`       |
+| 計画             | `plan`        | `resolve`            | `resolve/SKILL.md`                    |
+| 人待ちの記録     | `wait`        | `refine` / `resolve` | `agents/shared/wait-record.md`        |
+| 意図の確認の記録 | `intent`      | `resolve`            | `agents/shared/intent-record.md`      |
+| 渡しの記録       | `integration` | `conductor`          | `agents/shared/integration-record.md` |
+| 休止の記録       | `yield`       | `conductor`          | `conductor/references/protocols.md`   |
+| 失敗の記録       | `retry`       | `conductor`          | `conductor/references/protocols.md`   |
 
 **marker に版番号を付けない**。版で分岐する読み手が要るようになったことが一度も無く、
 **upsert は marker 文字列の一致で既存を探す**ので、版を上げると古いコメントが見つからなくなって

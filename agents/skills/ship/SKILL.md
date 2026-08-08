@@ -10,8 +10,12 @@ CI が通った PR を merge し、後始末まで見る。
 - CI が通っている（`gh pr checks <number> --json bucket` に pending / failure が無い）
 - **base が default**（`gh pr view <number> --json baseRefName`）。別 PR の head が base なら積み上げの途中
 - 配信してよい（判断基準は project 差分。既定は「その変更の検証を終えている」）
+- **意図の確認が済んでいる** —— 判定は `references/intent-record.md`「着地の前に確かめる」
 
 満たさないなら merge せず、満たしていない側を報告する。
+
+**意図の確認だけは variant を問わず必ず見る**。人が 1 件を直接頼んだ課題はキュー管理を通らずに
+ここへ来るので、**ここが最後の砦になる。**
 
 ## フロー
 

@@ -10,6 +10,7 @@ default 更新のたびに計画を作り直すことになる。
 | `baseSha..default` が `invalidationScope` か同じ `resourceKeys` に触れた | 再 plan                                                               |
 | 実装中に前提誤り・未宣言の資源が判明した                                 | 再 plan                                                               |
 | default が無関係な場所だけ進んだ                                         | **rebase のみ**。計画は再利用する                                     |
+| **提出前に宣言を実体へ狭めた**                                           | **再 plan ではない**。`baseSha` も動かさない（手順は `../SKILL.md`）  |
 
 **再 plan では最初に `baseSha` を今の default へ更新する**。外から失効を判定する側は
 **交差が消えたことでしか収束を知れない**ので、後回しにすると同じ失効通知が届き続ける。

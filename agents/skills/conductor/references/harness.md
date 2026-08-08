@@ -285,6 +285,12 @@ herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.wo
 **何を入れて何に畳むかは `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない**
 （省いた項目だけが変わる遷移は永久に起きない）。ここは herdr での写し方だけ。
 
+**この 2 つはそのまま渡す。手で書き直さない**。素直に書くと
+`select(.name != null) | "\(.name) \(.agent_status)"` になり、**conductor 自身の状態が指紋に入る** ——
+tick の最後に watcher を起こす規約なので、baseline を撮った直後に自分が `working` から `idle` へ
+落ち、**自分の状態変化だけで即座に起こされる**。実測 3 回、diff が自分の 1 行だけの空 tick になった。
+下の畳み方はどれも同じ形の失敗を 1 つずつ塞いでいるので、**要約すると塞いだものが戻る**。
+
 - **`.name // .pane_id` を使わない**。無名 pane まで拾ってしまい、別 repo の pane の状態変化で起床する
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。
   2 本目が居れば同じ行が 2 つ並ぶ
