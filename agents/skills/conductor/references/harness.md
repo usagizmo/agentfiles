@@ -219,7 +219,7 @@ worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプト
 
 既定の 60 秒を決めているのは **1 周の所要時間**（Project の GraphQL・Issue とコメントの REST・`gh pr list`・`git fetch`・worktree ごとの `git status`）。間隔がこれに近づくと実質常時観測になり、遅延の短縮が頭打ちになる。**`--deadline` を典型値と読み違えない** —— あれはハングを切る上限。
 
-**GitHub の webhook でポーリングを置き換えない**。指紋のうち sessions・workspaces・worktree の dirty は GitHub に何も起こさず、**そのうち sessions が「枠が空いた」を伝える唯一の経路**。GitHub 側だけイベント化しても実効の間隔はローカル側が決めたままで、いちばん速くしたい遷移が 1 秒も縮まない（公開 endpoint が要り、private repo の Issue 本文が第三者を経由する点も別途重い）。イベント化するとしたら multiplexer 側から。
+**GitHub の webhook でポーリングを置き換えない**。指紋のうち sessions・workspaces・worktree の dirty は GitHub に何も起こさず、**そのうち sessions が「枠が空いた」を伝える唯一の経路**。GitHub 側だけイベント化しても実効の間隔はローカル側が決めたままで、いちばん速くしたい遷移が 1 秒も縮まない。イベント化するとしたら multiplexer 側から。
 
 #### ラウンドの有効判定
 
