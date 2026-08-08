@@ -61,7 +61,7 @@ AGENTS.md / Skills / project docs。機能と矛盾していれば直す提案�
 
 残さない: 一回限りの判断、未検証の一般化、コードや既存 docs から自明なこと、一般知識、プロジェクト横断の汎用原則。
 
-記録先: 既存 skill / references へ追記を優先。新設の可否と書き方は `docs` skill の品質パス（基準 + 手順）に従う。
+記録先: 既存 skill / references へ追記を優先。新設の可否と書き方は `docs` skill の品質パスに従う。
 
 ## 更新原則
 
