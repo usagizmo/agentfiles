@@ -9,10 +9,9 @@
     "oxlint": "^1.77.0"
   },
   "lint-staged": {
-    "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": [
-      "oxfmt",
-      "oxlint"
-    ],
-    "*.{json,jsonc}": "oxfmt"
+    "*": [
+      "oxfmt --no-error-on-unmatched-pattern",
+      "oxlint --no-error-on-unmatched-pattern"
+    ]
   }
 }

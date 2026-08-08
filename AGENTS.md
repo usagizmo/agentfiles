@@ -15,26 +15,26 @@
 
 ### スコープと絵文字の対応
 
-| 絵文字 | スコープ       | 説明                                                                                     |
-| ------ | -------------- | ---------------------------------------------------------------------------------------- |
-| 🐟     | `[fish]`       | Fish シェル設定                                                                          |
-| 🐚     | `[zsh]`        | Zsh シェル設定                                                                           |
-| 🤖     | `[claude]`     | `harnesses/claude` 配下の Claude Code 設定                                               |
-| 🤖     | `[codex]`      | Codex 関連設定（`init.sh` の `~/.codex` 配線等）                                         |
-| 🤖     | `[devin]`      | `harnesses/devin` / `~/.config/devin` 配下の Devin CLI 設定                              |
-| 🤖     | `[agents]`     | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                      |
-| 🤖     | `[cursor]`     | Cursor CLI / Agent 設定（`init.sh` の `~/.cursor` 配線等）                               |
-| 🤖     | `[pi]`         | `harnesses/pi` / `~/.pi/agent` 配下の Pi 設定                                            |
-| 🤖     | `[grok]`       | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                            |
-| 🖥️     | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定                                                      |
-| 🐙     | `[copilot]`    | `harnesses/copilot` 配下の GitHub Copilot 設定                                           |
-| 📝     | `[nvim]`       | Neovim 設定                                                                              |
-| 👻     | `[ghostty]`    | Ghostty ターミナル設定                                                                   |
-| 🐏     | `[herdr]`      | `herdr/` / `~/.config/herdr` 配下の herdr 設定                                           |
-| 📁     | `[yazi]`       | Yazi ファイルマネージャー設定                                                            |
-| 🔨     | `[mise]`       | mise ランタイムバージョン管理設定                                                        |
+| 絵文字 | スコープ       | 説明                                                                                                      |
+| ------ | -------------- | --------------------------------------------------------------------------------------------------------- |
+| 🐟     | `[fish]`       | Fish シェル設定                                                                                           |
+| 🐚     | `[zsh]`        | Zsh シェル設定                                                                                            |
+| 🤖     | `[claude]`     | `harnesses/claude` 配下の Claude Code 設定                                                                |
+| 🤖     | `[codex]`      | Codex 関連設定（`init.sh` の `~/.codex` 配線等）                                                          |
+| 🤖     | `[devin]`      | `harnesses/devin` / `~/.config/devin` 配下の Devin CLI 設定                                               |
+| 🤖     | `[agents]`     | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
+| 🤖     | `[cursor]`     | Cursor CLI / Agent 設定（`init.sh` の `~/.cursor` 配線等）                                                |
+| 🤖     | `[pi]`         | `harnesses/pi` / `~/.pi/agent` 配下の Pi 設定                                                             |
+| 🤖     | `[grok]`       | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
+| 🖥️     | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定                                                                       |
+| 🐙     | `[copilot]`    | `harnesses/copilot` 配下の GitHub Copilot 設定                                                            |
+| 📝     | `[nvim]`       | Neovim 設定                                                                                               |
+| 👻     | `[ghostty]`    | Ghostty ターミナル設定                                                                                    |
+| 🐏     | `[herdr]`      | `herdr/` / `~/.config/herdr` 配下の herdr 設定                                                            |
+| 📁     | `[yazi]`       | Yazi ファイルマネージャー設定                                                                             |
+| 🔨     | `[mise]`       | mise ランタイムバージョン管理設定                                                                         |
 | 🎨     | `[lint]`       | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
-| 🔧     | `[複数]`       | 複数スコープにまたがる設定変更（例: `[fish][zsh]`）                                      |
+| 🔧     | `[複数]`       | 複数スコープにまたがる設定変更（例: `[fish][zsh]`）                                                       |
 
 ### 補足ルール
 

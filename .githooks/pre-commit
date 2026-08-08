@@ -1,10 +1,11 @@
 #!/bin/bash
-# commit gate: staged なファイルに oxfmt / oxlint をかけ、整形結果を stage へ戻す。
+# commit gate: staged なファイルに oxfmt / oxlint をかけ、整形結果を stage へ戻してから test を回す。
 # **対象と実行内容の SSOT は package.json の `lint-staged`。**ここには書かない。
 # 配線（core.hooksPath）は ./init.sh、配線の検査は ./doctor.sh。
 #
-# lint-staged は未 stage 変更を stash して worktree を index に合わせる。失敗時は
-# 自動で復元するが、**gate の実行中に別プロセスから worktree を触らない**こと。
+# lint-staged は未 stage 変更を stash して worktree を index に合わせる（失敗時は自動で復元）。
+# **設定ファイルは worktree 側が読まれる。**`.oxfmtrc.json` / `package.json` を未 stage で
+# 持ったまま commit すると、commit されていない設定で整形される。設定は設定ごと stage する。
 
 set -uo pipefail
 
@@ -14,14 +15,12 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # `mise activate` 済みの PATH を継承しないので、shims を自分で足す
 [ -d "$HOME/.local/share/mise/shims" ] && PATH="$PATH:$HOME/.local/share/mise/shims"
 
-if ! command -v bun >/dev/null 2>&1; then
-  echo "❌ bun がありません（./init.sh）" >&2
-  exit 1
-fi
+# **bunx で呼ばない。**bunx は node_modules に無ければ registry から引いてくるので、
+# lockfile と無関係な版が黙って gate を通る。repo-local の実体だけを使う。
+# **足りないときの診断はここに書かない** — 起動に失敗して commit は止まるし、
+# 何が足りないかは ./doctor.sh が言う（揃えるのは ./init.sh）
+node_modules/.bin/lint-staged || exit 1
 
-if [ ! -d node_modules ]; then
-  echo "❌ 開発依存が入っていません（./init.sh か bun install）" >&2
-  exit 1
-fi
-
-exec bunx lint-staged
+# **テストは対象を絞らない。**「この実装を変えたらこの test」の対応を lint-staged の
+# glob で持つと、対応を書き忘れた変更が黙って通る。全体でも数百 ms なので常に回す
+bun test

@@ -539,16 +539,27 @@ else
 			done
 		fi
 	} >"$WORK/md_targets"
-	bun "$EMPHASIS_JS" <"$WORK/md_targets" >"$WORK/emphasis" 2>/dev/null
-	# exit 2 は依存の未インストール。0 / 1（違反の有無）と混ぜると、
-	# 入っていないだけの状態が「検査して緑」に見える
-	if [ $? -eq 2 ]; then
+	bun "$EMPHASIS_JS" <"$WORK/md_targets" >"$WORK/emphasis" 2>"$WORK/emphasis_err"
+	emphasis_rc=$?
+	# 契約は 0=壊れなし / 1=壊れあり（出力あり） / 2=marked が無い。
+	# **それ以外と、1 なのに出力が空の場合は落とす。**checker 自体が落ちた状態を
+	# 「違反なし」と見分けられないまま通すと、緑のまま検査されなくなる
+	case $emphasis_rc in
+	0) ;;
+	1)
+		[ -s "$WORK/emphasis" ] ||
+			fatal "emphasis checker が出力なしで失敗した: $(tr '\n' ' ' <"$WORK/emphasis_err" | cut -c1-200)"
+		;;
+	2)
 		emit SKIP emphasis "-" "note=marked が入っていないので強調記法を検査していない（./init.sh）"
-	else
-		while IFS="	" read -r d ln snip; do
-			[ -n "$d" ] && emit VIOLATION emphasis "$d:$ln" "note=強調が対応しない: $snip"
-		done <"$WORK/emphasis"
-	fi
+		;;
+	*)
+		fatal "emphasis checker が異常終了した (rc=$emphasis_rc): $(tr '\n' ' ' <"$WORK/emphasis_err" | cut -c1-200)"
+		;;
+	esac
+	while IFS="	" read -r d ln snip; do
+		[ -n "$d" ] && emit VIOLATION emphasis "$d:$ln" "note=強調が対応しない: $snip"
+	done <"$WORK/emphasis"
 fi
 
 # --- 出力 ---------------------------------------------------------------
