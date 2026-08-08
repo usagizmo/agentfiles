@@ -55,13 +55,13 @@ fencing token（grant 世代つき）は**入力が conductor 経由でしか通
 | `pane`      | conductor から**振られた作業**（自分の領分ではないもの）。自分のタブへ割る |
 
 **`refine` を pane 分割で作らない**。計画枠のぶんだけ同時に開くので、分割すると人が読めない
-幅まで既存 pane が縮む（実測で 17 文字）。**幅は人が読むための資源。**
+幅まで既存 pane が縮む（実測で 17 文字）。幅は人が読むための資源。
 **振られた作業だけは pane でよい** —— どこへ振ったかが tick を回している人の視界に残る。
 
 **振られた作業のセッション名は `refine-` / `resolve-` で始めない**。内容が分かる名前を付ける
-（`investigate-ci-timeout` 等）。**述語に当たるからではない** —— 計画枠も選出も片付けも完全一致で
-引くので `refine-investigate` は当たらず、容量にも計画枠にも数えない。**名前だけで工程が読めなく
-なる方が損失が大きい** —— 観測は名前しか手掛かりを持たないので、`refine-` で始まる pane が計画
+（`investigate-ci-timeout` 等）。述語に当たるからではない —— 計画枠も選出も片付けも完全一致で
+引くので `refine-investigate` は当たらず、容量にも計画枠にも数えない。名前だけで工程が読めなく
+なる方が損失が大きい —— 観測は名前しか手掛かりを持たないので、`refine-` で始まる pane が計画
 セッションでないなら、一覧を見た人も次の conductor も毎回 pane を開いて確かめることになる。
 
 どちらも **完了を待たない**。次の tick へ戻る（完了検知は tick の観測で足りる）。
@@ -159,11 +159,11 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **3 つの経路は、それぞれ別の問いに対して権威。1 つに寄せない。**
   - **checkout があるか**（`capacity` が `あり`）は git。herdr はそのキャッシュ。ここだけ
     multiplexer に寄せると、socket が落ちた瞬間に全 tick が止まる
-  - **worktree と workspace の対応**は herdr しか知らない。**`open_workspace_id` を直接引き、
-    パスで join しない** — 文字列一致は symlink 解決差や `/private` 前置で silent に外れ、
+  - **worktree と workspace の対応**は herdr しか知らない。`open_workspace_id` を直接引き、
+    パスで join しない — 文字列一致は symlink 解決差や `/private` 前置で silent に外れ、
     片付けが workspace を見つけられずに worktree が残る（容量が漏れる）。
-    **null なら開いている workspace が無い**ので、workspace ID を取る経路だけ落として git で
-    3 手を行う（**checkout を消すだけで済ませない**）
+    null なら開いている workspace が無いので、workspace ID を取る経路だけ落として git で
+    3 手を行う（checkout を消すだけで済ませない）
   - **孤児 workspace**（checkout が消えた残骸）は `workspace list` で repo 非依存に列挙するしかない
     （`worktree list --cwd` は repo スコープなので、repo ごと消えたものが見えない）。
     **判定は `worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ** ——
@@ -254,10 +254,10 @@ herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.wo
 （省いた項目だけが変わる遷移は永久に起きない）。ここは herdr での写し方だけ。
 
 **この 2 つはそのまま渡す。手で書き直さない**。素直に書くと
-`select(.name != null) | "\(.name) \(.agent_status)"` になり、**conductor 自身の状態が指紋に入る** ——
+`select(.name != null) | "\(.name) \(.agent_status)"` になり、conductor 自身の状態が指紋に入る ——
 tick の最後に watcher を起こす規約なので、baseline を撮った直後に自分が `working` から `idle` へ
 落ち、自分の状態変化だけで即座に起こされる（実測 3 回、diff が自分の 1 行だけの空 tick）。
-下の畳み方はどれも同じ形の失敗を 1 つずつ塞いでいるので、**要約すると塞いだものが戻る。**
+下の畳み方はどれも同じ形の失敗を 1 つずつ塞いでいるので、要約すると塞いだものが戻る。
 
 - **`.name // .pane_id` を使わない**。無名 pane まで拾ってしまい、別 repo の pane の状態変化で起床する
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。
@@ -282,9 +282,10 @@ worktree 一覧は上記のとおり `git -C <repo>` で取る（スクリプト
 - **書き込みに要る item ID は、ボードではなく Issue 側から引く**（`repository.issue(number:)` の
   `projectItems` を project 番号で絞る。1 pt。具体のクエリは project 側のボード規約）。
   Status の書き込みは頻繁なので（台帳を進める・claim は group 全員ぶん・差し戻し・退避）、
-  ボードを引いて番号で探すと**十数回で枠が枯れ、`gh` を使う全セッションが同時に止まる**。
-  **`--limit` で回避しない** —— コストが 2 桁上がるうえ、「打ち切られた」と「そもそも載って
-  いない」がどちらも空で返るので guard の行き先を誤る。**引けなかったら書かずに止める**
+  ボードを引いて番号で探すと十数回で枠が枯れ、`gh` を使う全セッションが同時に止まる
+  - **`--limit` で回避しない** —— コストが 2 桁上がるうえ、「打ち切られた」と「そもそも載って
+    いない」がどちらも空で返るので guard の行き先を誤る
+  - **引けなかったら書かずに止める**
 - **REST は GraphQL とは別枠で 0 pt**。Issue 一覧を REST 経由にしてあるのは取りこぼしを塞ぐため
   （`--limit N` は N を超えると不完全なまま非 0 件で返るので使わない）。枠の節約は副次
 - **1 周のコストは O(items)**。Project の item は単調増加する（1,000 件でも 10 pt/周）
@@ -300,8 +301,8 @@ watcher が焼き切ると `gh` を使う全セッションが同時に止まる
 #### 間隔を決めるのは枠ではない
 
 **間隔を縮めても tick の回数は増えない**。watcher は指紋が変わったときだけ起こすので、増えるのは
-観測の回数だけ。増えるのは安い側（GitHub API と `git fetch`）で、**高い側（conductor の context）は
-増えない**。だから **「枠の節約」を理由に間隔を伸ばさない** —— 得るものは無く、失うのは検知の遅延だけ。
+観測の回数だけ。増えるのは安い側（GitHub API と `git fetch`）で、高い側（conductor の context）は
+増えない。だから **「枠の節約」を理由に間隔を伸ばさない** —— 得るものは無く、失うのは検知の遅延だけ。
 
 既定の 60 秒を決めているのは **1 周の所要時間**（Project の GraphQL・Issue とコメントの REST・
 `gh pr list`・`git fetch`・worktree ごとの `git status`）。間隔がこれに近づくと実質常時観測になり、
