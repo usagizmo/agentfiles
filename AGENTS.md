@@ -21,13 +21,9 @@
 | 🐚     | `[zsh]`        | Zsh シェル設定                                                                                            |
 | 🤖     | `[claude]`     | `harnesses/claude` 配下の Claude Code 設定                                                                |
 | 🤖     | `[codex]`      | Codex 関連設定（`init.sh` の `~/.codex` 配線等）                                                          |
-| 🤖     | `[devin]`      | `harnesses/devin` / `~/.config/devin` 配下の Devin CLI 設定                                               |
 | 🤖     | `[agents]`     | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
-| 🤖     | `[cursor]`     | Cursor CLI / Agent 設定（`init.sh` の `~/.cursor` 配線等）                                                |
-| 🤖     | `[pi]`         | `harnesses/pi` / `~/.pi/agent` 配下の Pi 設定                                                             |
 | 🤖     | `[grok]`       | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
 | 🖥️     | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定                                                                       |
-| 🐙     | `[copilot]`    | `harnesses/copilot` 配下の GitHub Copilot 設定                                                            |
 | 📝     | `[nvim]`       | Neovim 設定                                                                                               |
 | 👻     | `[ghostty]`    | Ghostty ターミナル設定                                                                                    |
 | 🐏     | `[herdr]`      | `herdr/` / `~/.config/herdr` 配下の herdr 設定                                                            |
@@ -66,9 +62,9 @@
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - `./agents/docs/` は人が全体を把握・監査するための資料。**agent へは投影しない**（`lib/inventory.sh` に載せない）。規約の本体は置かず、skills から導出した図と索引だけを持つ
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置かない
-- harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.cursor/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイル（固有ルール + 共通 `~/.agents/AGENTS.md` への参照。Claude は `@~/.agents/AGENTS.md` import）への symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（空 overlay を先回りで作らない）
+- harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイル（固有ルール + 共通 `~/.agents/AGENTS.md` への参照。Claude は `@~/.agents/AGENTS.md` import）への symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（空 overlay を先回りで作らない）
 - 共通 `agents/AGENTS.md` に書けるのは、**その機能が無い harness でも代替手段で成立するルール**まで（例: 判断材料を Artifact にする → 作れない harness では応答に出す）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ
-- **harness home（`~/.claude` / `~/.config/devin` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。どこに何を張るかの一覧は `lib/inventory.sh`
+- **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。どこに何を張るかの一覧は `lib/inventory.sh`
 - **tracked ファイルに絶対 home パス（`/Users/...` `/home/...`）を書かない。**`$HOME` / `~` を使う（別環境で壊れる）。`doctor.sh` が repo 全体の tracked ファイルを検査する。symlink 先に使う絶対パスは `$DOTFILES_DIR` 展開であって、リテラルの絶対パスではない
 
 ### 共通と個別の分け方
@@ -133,7 +129,7 @@ home 側は harness が cache / auth / vendor を同居させるため **実デ�
 コレクション配線のルール:
 
 - **source 列は優先度低→高**。後から渡した source が同名を上書きする（harness skills: `agents/skills` < `harnesses/<agent>/skills`）
-- **`~/.agents/skills` をネイティブに読む harness（pi / Codex）には `agents/skills` の union を張らない**（重複配布で衝突警告になる）。union は harness 固有 overlay の分のみ（`inv_collection "$HOME/.codex/skills" harnesses/codex/skills` 等）
+- **`~/.agents/skills` をネイティブに読む harness（Codex 等）には `agents/skills` の union を張らない**（重複配布で衝突警告になる）。union は harness 固有 overlay の分のみ（`inv_collection "$HOME/.codex/skills" harnesses/codex/skills` 等）
 - 存在しない source dir はスキップする（`harnesses/<agent>/skills` 等は実体ができてから作る）
 - symlink は **絶対パス**（`$DOTFILES_DIR/...`）
 
@@ -153,4 +149,4 @@ home 側は harness が cache / auth / vendor を同居させるため **実デ�
 hooks の tripwire:
 
 - **`harnesses/<agent>/hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外**。外部ツールによる hooks 上書きを 3 経路で検知する — symlink 経由の in-place 書き込みは repo 側の git diff、unlink して実ファイルで置換は doctor の ❌、別名ファイルの投下は `inv_guard_dir` の ⚠️。空であること自体が基準線なので、中身を埋めたり配線を外したりしない
-- **管理下 symlink 以外の投下を検知したい collection dir に `inv_guard_dir` を張る**（各 harness の hooks dir / `~/.pi/agent/extensions`）。管理下 symlink と allowlist 以外のエントリを ⚠️ で報告する（read-only。自動削除はしない）。設定が harness home 直下に置かれる場合（codex / cursor）は vendor ファイルと同居するため張らず、symlink check だけで守る
+- **管理下 symlink 以外の投下を検知したい collection dir に `inv_guard_dir` を張る**（各 harness の hooks dir）。管理下 symlink と allowlist 以外のエントリを ⚠️ で報告する（read-only。自動削除はしない）。設定が harness home 直下に置かれる場合（codex）は vendor ファイルと同居するため張らず、symlink check だけで守る
