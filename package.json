@@ -2,6 +2,9 @@
   "name": "dotfiles",
   "private": true,
   "type": "module",
+  "scripts": {
+    "format": "oxfmt"
+  },
   "devDependencies": {
     "lint-staged": "^17.3.0",
     "marked": "^18.0.9",
