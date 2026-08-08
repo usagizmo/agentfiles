@@ -139,6 +139,7 @@ sequenceDiagram
 
     alt Issue 本文に無い判断が必要
         R->>GH: 人待ちの記録（wait / waiting）
+        R-->>U: 同じ枚を書き直して判断を提示する
         R-->>C: 待機
         C->>C: write を返す。詰まりとして出す
         C-->>U: 状況ボードに「何を答えれば進むか」
@@ -149,6 +150,7 @@ sequenceDiagram
     end
 
     R->>R: finish（規模別）→ 検証
+    R-->>U: 同じ枚のセッションまとめを書き直し、検証レポートと合わせて提示
     opt 機械が正解を持たない成果物
         R->>U: 実物を見せて意図を確認
     end
@@ -157,7 +159,7 @@ sequenceDiagram
         Note over R,GH: PR の Closes で着地と同時に閉じる。<br/>元の受入条件が偽になったなら Issue ではなく<br/>本文を更新し、再承認を待って再 plan（PR へは進まない）
     end
     R->>GH: PR を作る（CI が緑になるまでここ）
-    R->>GH: セッションまとめを PR へコメント（着地の前）
+    R->>GH: セッションまとめを PR へコメント、枚の URL を PR 本文へ（着地の前）
     Note over R,C: PR 作成と CI は integration の外。<br/>write を持ったまま進む
     R-->>C: 待機
     C->>C: integration は PR 作成が最も早い 1 件
@@ -190,16 +192,24 @@ sequenceDiagram
     C->>F: /refine #N
     F->>GH: Issue と関連コードを読む
     F->>F: consult で方針を確定
+    F-->>U: 課題の Artifact を引き当てて計画を書く（無ければ作る）
+    Note over F,U: 聞くことが無くても必ず作る。<br/>URL を本文へ入れるので本文更新より先
 
     alt 製品判断が要る項目が埋まらない
+        F->>GH: 埋まった項目を先に本文へ書ききる
+        Note over F,GH: ここで落ちても埋めた判断が消えない。<br/>それでも Status は動かさない
         F->>GH: 人待ちの記録（waiting）
+        F-->>U: 枚に判断待ちを書き、記録を指す短い問いだけ出す
         F-->>C: 待機
         C-->>U: 状況ボードに出す
         U->>F: 答える
         F->>GH: 記録を cleared に
+    else 記録が waiting のまま起こし直された
+        F->>GH: Status を退避先へ、記録を cleared に
+        Note over F,GH: 待たずに終えて計画枠を空ける。<br/>人が未計画へ戻すまで拾われない
     end
 
-    F->>GH: Issue 契約を本文へ（6 項目）
+    F->>GH: 契約の 6 項目と Artifact の URL を 1 回の本文更新で書く
     F->>GH: 同じブランチで直るものに Same branch as を相互に書く
     F->>GH: 更新後の本文を取り直して digest を計算
     F->>GH: 在庫の鮮度（ready）を upsert
