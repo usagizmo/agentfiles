@@ -1,0 +1,17 @@
+{
+  "name": "dotfiles",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "lint-staged": "^17.3.0",
+    "marked": "^18.0.9",
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0"
+  },
+  "lint-staged": {
+    "*": [
+      "oxfmt --no-error-on-unmatched-pattern",
+      "oxlint --no-error-on-unmatched-pattern"
+    ]
+  }
+}

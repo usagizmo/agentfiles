@@ -12,6 +12,7 @@
 # 出力は TSV 1 行 1 件: <LEVEL> <check> <location> <detail>
 #   VIOLATION  規約違反。レビューへ出す前に直す
 #   REVIEW     候補。機械では意味を判定できないので、棄却可否はレビュアーが判定する
+#   SKIP       検査を飛ばした。緑と区別がつくよう必ず出す（黙ると検査済みに見える）
 # location は `<path>:<行>`。行を持たない検査（shared）はパスだけ、複数箇所を
 # 1 行へ畳む検査（numeric / marker）は集約キーが入り、位置は detail の at= に
 # 並ぶ（at= は同じ行を畳むので count とは一致しない）。
@@ -517,11 +518,57 @@ else
 	fi
 fi
 
+# --- check emphasis: 描画が壊れる強調 -------------------------------------
+# **正規表現では届かない。**flanking は開き / 閉じの対応まで見ないと結論が出ず、
+# 右 flanking は成立するのに相手が無くてリテラルへ落ちる `**` を取り逃す。
+# 描画して判定する実体は隣の check-emphasis.mjs。
+# **道具が無ければ飛ばす。**強調記法はこの検査の付随物で、欠いても本来の目的
+# （実在・形・重複・層）は達成できる。飛ばしたことは SKIP で出す。
+emphasis_self=$(canon "$0") || emphasis_self=$0
+# 既定はスクリプトの隣。test が異常系の checker を差し込めるように上書きを許す
+EMPHASIS_JS=${EMPHASIS_JS:-$(dirname "$emphasis_self")/check-emphasis.mjs}
+if ! command -v bun >/dev/null 2>&1; then
+	emit SKIP emphasis "-" "note=bun が無いので強調記法を検査していない"
+elif [ ! -f "$EMPHASIS_JS" ]; then
+	emit SKIP emphasis "-" "note=$EMPHASIS_JS が無いので強調記法を検査していない"
+else
+	{
+		cat "$WORK/unique"
+		if [ -n "$DOCS_DIR" ]; then
+			for f in "$DOCS_DIR"/*.md; do
+				[ -f "$f" ] && printf 'docs/%s\t%s\n' "${f##*/}" "$f"
+			done
+		fi
+	} >"$WORK/md_targets"
+	bun "$EMPHASIS_JS" <"$WORK/md_targets" >"$WORK/emphasis" 2>"$WORK/emphasis_err"
+	emphasis_rc=$?
+	# 契約は 0=壊れなし / 1=壊れあり（出力あり） / 2=marked が無い。
+	# **それ以外と、1 なのに出力が空の場合は落とす。**checker 自体が落ちた状態を
+	# 「違反なし」と見分けられないまま通すと、緑のまま検査されなくなる
+	case $emphasis_rc in
+	0) ;;
+	1)
+		[ -s "$WORK/emphasis" ] ||
+			fatal "emphasis checker が出力なしで失敗した: $(tr '\n' ' ' <"$WORK/emphasis_err" | cut -c1-200)"
+		;;
+	2)
+		emit SKIP emphasis "-" "note=marked が入っていないので強調記法を検査していない（./init.sh）"
+		;;
+	*)
+		fatal "emphasis checker が異常終了した (rc=$emphasis_rc): $(tr '\n' ' ' <"$WORK/emphasis_err" | cut -c1-200)"
+		;;
+	esac
+	while IFS="	" read -r d ln snip; do
+		[ -n "$d" ] && emit VIOLATION emphasis "$d:$ln" "note=強調が対応しない: $snip"
+	done <"$WORK/emphasis"
+fi
+
 # --- 出力 ---------------------------------------------------------------
 LC_ALL=C sort "$FINDINGS"
 v=$(grep -c '^VIOLATION	' "$FINDINGS")
 r=$(grep -c '^REVIEW	' "$FINDINGS")
-printf 'SUMMARY\troot=%s\tviolations=%s\treviews=%s\n' "$ROOT_ARG" "$v" "$r"
+s=$(grep -c '^SKIP	' "$FINDINGS")
+printf 'SUMMARY\troot=%s\tviolations=%s\treviews=%s\tskips=%s\n' "$ROOT_ARG" "$v" "$r" "$s"
 
 [ "$v" -gt 0 ] && exit 1
 exit 0
