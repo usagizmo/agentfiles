@@ -108,7 +108,7 @@
 
 ### lint / format
 
-- **linter / formatter は repo の依存に入れ、global に置かない**。global にあると設定ファイルの無い repo でも既定値のまま完走するので、Prettier repo で `oxfmt .` を叩くと全ファイルが別の規則で書き換わる。global に置くのはランタイム（node / bun / uv 等）まで
+- **linter / formatter は repo の依存に入れ、global に置かない**。global にあると設定ファイルの無い repo でも既定値のまま完走するので、Prettier repo で `oxfmt .` を叩くと全ファイルが別の規則で書き換わる。global に置くのはランタイム（node / bun 等）まで
 - **設定ファイルが在る repo でだけ走らせる**。**コマンドが在ることは採用の根拠にならない**
 - 新規に入れるなら oxlint / oxfmt。既に ESLint / Prettier がある repo はそれに従う
 
