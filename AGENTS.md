@@ -32,9 +32,7 @@
 | 🎨     | `[lint]`       | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 | 🔧     | `[複数]`       | 複数スコープにまたがる設定変更（例: `[fish][zsh]`）                                                       |
 
-### 補足ルール
-
-- スコープに該当しない全体的な変更は、適切な汎用 gitmoji を使用（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）
+スコープに該当しない全体的な変更は、汎用 gitmoji を使う（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）。
 
 ### コミット例
 
@@ -42,18 +40,6 @@
 🐟 [fish] claude コマンドの短縮 abbreviation c を追加
 
 - `abbr -a c claude` を追加し、より素早く Claude を起動できるように改善
-```
-
-```
-🔧 [fish][zsh] LM Studio CLI パス設定を追加
-
-- 両シェルで LM Studio の CLI ツールを使用可能に
-```
-
-```
-🤖 [claude] ボーイスカウトルールの記述を統合し重複を削除
-
-- AGENTS.md とスキル内の重複した記述を整理
 ```
 
 ## agent 設定の配置方針
@@ -81,8 +67,7 @@
 
 ### skill 間で実体を共有するとき
 
-**`agents/shared/<name>` を SSOT にし、使う skill から相対 symlink を張る**。どの skill にも所有させない。
-**張り先はモデルの扱いで決まる**（拡張子ではない）: 読むものは `references/<name>.md`、実行するものは `scripts/<name>.sh`。
+**`agents/shared/<name>` を SSOT にし、使う skill から相対 symlink を張る**。どの skill にも所有させない。**張り先はモデルの扱いで決まる**（拡張子ではない）: 読むものは `references/<name>.md`、実行するものは `scripts/<name>.sh`。
 
 - **所有者を決めない**のが要点。`review-contract`（tidy / docs）のように主従が無い資産で「どちらを SSOT にするか」を決められず、選定が恣意的になる
 - **同層への言及が構造的に消える**。参照先が skill でなくなるので、層契約（同じ層への依存・言及を作らない）を隠さずに満たせる
@@ -92,8 +77,6 @@
 - 実体の一覧は `agents/docs/structure.md`（**導出した索引**。規約は本ファイルが SSOT）
 
 ### symlink の貼り方
-
-home 側は harness が cache / auth / vendor を同居させるため **実ディレクトリ** とし、tracked な葉だけを repo へ symlink する。
 
 | パターン                           | 対象                             | 例                                                                                |
 | ---------------------------------- | -------------------------------- | --------------------------------------------------------------------------------- |
