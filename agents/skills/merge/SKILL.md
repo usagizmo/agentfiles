@@ -7,8 +7,7 @@ description: >-
 
 指定ブランチを `--no-ff` でマージする。
 
-**通常は使わない**。変更を default へ入れる既定の経路は PR。
-この skill は PR を経由せずにローカルで統合すると決めたときだけ発動する。
+**通常は使わない**。変更を default へ入れる既定の経路は PR。この skill は PR を経由せずにローカルで統合すると決めたときだけ発動する。
 
 1. 対象ブランチ名を取得する
 2. `git log --oneline HEAD..<branch>` と `git diff HEAD...<branch>` で変更を把握する

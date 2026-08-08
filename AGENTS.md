@@ -67,8 +67,7 @@
 
 ### skill 間で実体を共有するとき
 
-**`agents/shared/<name>` を SSOT にし、使う skill から相対 symlink を張る**。どの skill にも所有させない。
-**張り先はモデルの扱いで決まる**（拡張子ではない）: 読むものは `references/<name>.md`、実行するものは `scripts/<name>.sh`。
+**`agents/shared/<name>` を SSOT にし、使う skill から相対 symlink を張る**。どの skill にも所有させない。**張り先はモデルの扱いで決まる**（拡張子ではない）: 読むものは `references/<name>.md`、実行するものは `scripts/<name>.sh`。
 
 - **所有者を決めない**のが要点。`review-contract`（tidy / docs）のように主従が無い資産で「どちらを SSOT にするか」を決められず、選定が恣意的になる
 - **同層への言及が構造的に消える**。参照先が skill でなくなるので、層契約（同じ層への依存・言及を作らない）を隠さずに満たせる

@@ -1,7 +1,6 @@
 # ローカル default の同期
 
-`$DEFAULT:$DEFAULT` 形式の fetch は default が worktree で checkout 中だと拒否されるため、
-**default を checkout している worktree の中で ff merge する**:
+`$DEFAULT:$DEFAULT` 形式の fetch は default が worktree で checkout 中だと拒否されるため、**default を checkout している worktree の中で ff merge する**:
 
 ```bash
 DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
@@ -15,5 +14,4 @@ else
 fi
 ```
 
-ff 不可（default worktree が dirty・分岐）ならローカル更新だけ skip して報告し、
-rebase 等は `origin/$DEFAULT` 基準で続行する。
+ff 不可（default worktree が dirty・分岐）ならローカル更新だけ skip して報告し、rebase 等は `origin/$DEFAULT` 基準で続行する。

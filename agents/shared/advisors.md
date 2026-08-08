@@ -1,14 +1,12 @@
 # アドバイザー起動表
 
-候補は Claude / Codex / Grok。**実行中の自分自身を除いた 2 つ**を起動する（再入防止）。
-自分が候補に無い harness や自分がどれか不確かな場合は Claude と Codex の 2 つ。
+候補は Claude / Codex / Grok。**実行中の自分自身を除いた 2 つ**を起動する（再入防止）。自分が候補に無い harness や自分がどれか不確かな場合は Claude と Codex の 2 つ。
 
 一言伝えてから起動する。モデル / effort の上書きはしない。
 
 ## 起動と回収
 
-**起動と回収は別コマンドで実行する**。アドバイザーは 10 分以上かかることがあり、
-1 回の実行の中で完了を待つと harness 側のタイムアウトで打ち切られ、片方しか回収できない。
+**起動と回収は別コマンドで実行する**。アドバイザーは 10 分以上かかることがあり、1 回の実行の中で完了を待つと harness 側のタイムアウトで打ち切られ、片方しか回収できない。
 
 この skill の `scripts/advisors.sh` を使う。
 
@@ -17,10 +15,7 @@ scripts/advisors.sh start <prompt-file> <advisor>...   # run dir を stdout へ�
 scripts/advisors.sh collect <run-dir> [秒]             # 出揃うまで待って出力
 ```
 
-- **prompt は `mktemp` で作ったファイルに書いて渡す**。
-  `PROMPT=$(mktemp "${TMPDIR:-/tmp}/<skill 名>-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、
-  **出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、
-  以降の各コマンドで再設定する）
+- **prompt は `mktemp` で作ったファイルに書いて渡す**。`PROMPT=$(mktemp "${TMPDIR:-/tmp}/<skill 名>-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、**出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、以降の各コマンドで再設定する）
 - **`start` が返した run dir を控え、`collect` にそのまま渡す**（shell 変数はコマンド間で保持されない）
 - **1 run 1 回**。回収済みの run dir を渡すと落ちる。古いパスを貼っても前回の出力は返らない
 - 待ち時間の既定はスクリプト側。足りなければ第 2 引数で伸ばす。未完了があれば非ゼロで終了する
@@ -29,9 +24,7 @@ scripts/advisors.sh collect <run-dir> [秒]             # 出揃うまで待っ�
 
 ## 不変条件
 
-**アドバイザーにコードを変更させない**。スクリプトが Codex に `-s read-only`、
-Claude / Grok に `--permission-mode plan` を付けて担保する（`--tools` は調査に使うツールの
-絞り込みであって担保ではない）。**advisor を足すときは同等の read-only 手段を必ず付ける。**
+**アドバイザーにコードを変更させない**。スクリプトが Codex に `-s read-only`、Claude / Grok に `--permission-mode plan` を付けて担保する（`--tools` は調査に使うツールの絞り込みであって担保ではない）。**advisor を足すときは同等の read-only 手段を必ず付ける。**
 
 ## 失敗時
 

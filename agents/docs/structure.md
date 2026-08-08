@@ -1,7 +1,6 @@
 # ファイル構造と依存
 
-規約の本体は各 `SKILL.md` と [`../../AGENTS.md`](../../AGENTS.md)（置き場所の判断と配線）。
-ここは実体の対応表。
+規約の本体は各 `SKILL.md` と [`../../AGENTS.md`](../../AGENTS.md)（置き場所の判断と配線）。ここは実体の対応表。
 
 ## ディレクトリの役割
 
@@ -21,8 +20,7 @@
 
 ## skill 間の参照
 
-上位層 → 下位層の一方通行。同じ層への言及は作らない。**参照関係のあるものだけを描く**
-（leaf の全一覧は [`README.md`](README.md) の「層構造」）。
+上位層 → 下位層の一方通行。同じ層への言及は作らない。**参照関係のあるものだけを描く**（leaf の全一覧は [`README.md`](README.md) の「層構造」）。
 
 ```mermaid
 flowchart LR
@@ -66,13 +64,11 @@ flowchart LR
 
 実線は起動、点線は挙動への依存。`conductor` が `ship` を名指しするのはこの 1 箇所だけで、起動はしない。
 
-`conductor` が multiplexer の CLI を参照する箇所は **`references/harness.md` に隔離**してあり、
-本体はそれ以外の場所で multiplexer を知らない。
+`conductor` が multiplexer の CLI を参照する箇所は **`references/harness.md` に隔離**してあり、本体はそれ以外の場所で multiplexer を知らない。
 
 ## 共有の実体
 
-どの skill がどの共有実体を張っているか。**置く条件と張り方の規則は
-[`../../AGENTS.md`](../../AGENTS.md) が SSOT**。ここには写さない。
+どの skill がどの共有実体を張っているか。**置く条件と張り方の規則は [`../../AGENTS.md`](../../AGENTS.md) が SSOT**。ここには写さない。
 
 ```mermaid
 flowchart LR
@@ -142,8 +138,7 @@ flowchart LR
     SH --> GM
 ```
 
-**層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ**。skill が別の skill の
-`references/` を覗く形が無くなるので、層契約（同じ層への言及を作らない）を隠さずに満たせる。
+**層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ**。skill が別の skill の `references/` を覗く形が無くなるので、層契約（同じ層への言及を作らない）を隠さずに満たせる。
 
 **skill 固有の reference は `references/` に実体で置く。**
 
@@ -167,6 +162,4 @@ flowchart LR
 
 ## 追加・変更するとき
 
-手順は [`../AGENTS.md`](../AGENTS.md) の層契約と [`../../AGENTS.md`](../../AGENTS.md) の配置方針。
-**この資料の側でやることは 1 つだけ** — 構造を変えたら [`README.md`](README.md) と
-[`lifecycle.md`](lifecycle.md) の図を引き直す。
+手順は [`../AGENTS.md`](../AGENTS.md) の層契約と [`../../AGENTS.md`](../../AGENTS.md) の配置方針。**この資料の側でやることは 1 つだけ** — 構造を変えたら [`README.md`](README.md) と [`lifecycle.md`](lifecycle.md) の図を引き直す。
