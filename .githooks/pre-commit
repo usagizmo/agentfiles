@@ -15,11 +15,11 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # `mise activate` 済みの PATH を継承しないので、shims を自分で足す
 [ -d "$HOME/.local/share/mise/shims" ] && PATH="$PATH:$HOME/.local/share/mise/shims"
 
-# **bunx で呼ばない。**bunx は node_modules に無ければ registry から引いてくるので、
-# lockfile と無関係な版が黙って gate を通る。repo-local の実体だけを使う。
+# **bunx ではなく bun run。**bunx は node_modules に無ければ registry から引いてくるので、
+# lockfile と無関係な版が黙って gate を通る。bun run は node_modules/.bin までしか見ない。
 # **足りないときの診断はここに書かない** — 起動に失敗して commit は止まるし、
 # 何が足りないかは ./doctor.sh が言う（揃えるのは ./init.sh）
-node_modules/.bin/lint-staged || exit 1
+bun run lint-staged || exit 1
 
 # **テストは対象を絞らない。**「この実装を変えたらこの test」の対応を lint-staged の
 # glob で持つと、対応を書き忘れた変更が黙って通る。全体でも数百 ms なので常に回す
