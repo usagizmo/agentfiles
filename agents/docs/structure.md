@@ -147,13 +147,13 @@ flowchart LR
 
 **skill 固有の reference は `references/` に実体で置く。**
 
-| skill           | 実体                                                                         | 何を持つか                                                                  |
-| --------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `conductor`     | `harness.md` / `protocols.md` / `scenarios.md`                               | multiplexer 差分 / 稀少パスの手順 / **tick の意味論を固定する代表シナリオ** |
-| `resolve`       | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md` | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）  |
-| `ship`          | `sync-default.md`                                                            | 着地後にローカル default を最新化する手順                                   |
-| `docs`          | `review-prompt.md`                                                           | 更新判定用                                                                  |
-| `skill-creator` | `schemas.md`                                                                 | vendored                                                                    |
+| skill           | 実体                                                                          | 何を持つか                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `conductor`     | `harness.md` / `protocols.md` / `intake.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
+| `resolve`       | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md`  | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                          |
+| `ship`          | `sync-default.md`                                                             | 着地後にローカル default を最新化する手順                                                                           |
+| `docs`          | `review-prompt.md`                                                            | 更新判定用                                                                                                          |
+| `skill-creator` | `schemas.md`                                                                  | vendored                                                                                                            |
 
 `scripts/` も同じく skill 固有で、共有するものだけ `shared/` に置く。
 

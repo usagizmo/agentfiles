@@ -1,7 +1,28 @@
-# 稀少パスの手順
+# 選んだ後の手順
 
-tick の分岐そのものではなく、その action を選んだ後に何をどう書くか。
+tick の分岐そのものではなく、**その action を選んだ後に何をどう書くか**。
 選ぶ条件は本文「action の優先順」が SSOT。
+
+## claim する
+
+**remote branch の一意作成が二重着手の最後の防壁**なので、順序を守る。
+
+1. Issue 契約を検証する（group なら全員分）
+2. remote branch を代表の番号で一意に作成する。失敗したら候補を捨てて次へ
+3. **claim の記録を代表の Issue へ書く**（代表と全員の番号。形式は `same-branch.md`）
+4. **記録した全員**の Status を進行中にし、assignee を自分にする（group でも代表だけにしない）
+5. worktree を作る
+6. セッションを起こす（`harness.md`）
+
+**4 が誰か 1 人でも失敗したらセッションを起こさない**。`resolve` は Status が進行中であることで
+`managed` と判定するので、台帳がずれたまま起こすと lease を一度も待たない `interactive` として
+着地まで走る（`integration` が常に 1 という唯一の直列化点が破れる）。branch は残し、次の tick へ返す。
+
+**Project の更新失敗で claim をロールバックしない**。branch が真実で、Status は台帳。
+ずれは次の tick が直す。
+
+**base は常に default から切る** —— 他 branch から切ると、着地判定の commit 包含と計画の
+`baseSha` からの失効判定が両方壊れる。
 
 ## 失敗の記録
 
