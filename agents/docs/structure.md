@@ -74,7 +74,7 @@ flowchart LR
 ## 共有の実体
 
 どの skill がどの共有実体を張っているか。**置く条件と張り方の規則は
-[`../../AGENTS.md`](../../AGENTS.md) が SSOT。**
+[`../../AGENTS.md`](../../AGENTS.md) が SSOT**。ここには写さない。
 
 ```mermaid
 flowchart LR
@@ -160,8 +160,6 @@ flowchart LR
 `scripts/` の実体は `agents/skills/docs/scripts/audit-skills.sh`（品質パスの機械検査。層の定義 `layers.tsv` を伴う）、
 `conductor/scripts/`（起床監視の実装。手順書ではなくここが観測の SSOT）、
 `skill-creator/scripts/`（vendored）、および共有の `shared/advisors.sh`。
-
-置く条件と張り方の規則は [`../../AGENTS.md`](../../AGENTS.md) が SSOT。ここには写さない。
 
 ## 追加・変更するとき
 

@@ -17,7 +17,10 @@ scripts/advisors.sh start <prompt-file> <advisor>...   # run dir を stdout へ�
 scripts/advisors.sh collect <run-dir> [秒]             # 出揃うまで待って出力
 ```
 
-- prompt は `mktemp` で作ったファイルに書いて渡す
+- **prompt は `mktemp` で作ったファイルに書いて渡す**。
+  `PROMPT=$(mktemp "${TMPDIR:-/tmp}/<skill 名>-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、
+  **出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、
+  以降の各コマンドで再設定する）
 - **`start` が返した run dir を控え、`collect` にそのまま渡す**（shell 変数はコマンド間で保持されない）
 - **1 run 1 回**。回収済みの run dir を渡すと落ちる。古いパスを貼っても前回の出力は返らない
 - 待ち時間の既定はスクリプト側。足りなければ第 2 引数で伸ばす。未完了があれば非ゼロで終了する

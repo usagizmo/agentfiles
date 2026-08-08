@@ -26,7 +26,7 @@ description: >-
 
 ### 2. プロンプトを一時ファイルへ
 
-`PROMPT=$(mktemp "${TMPDIR:-/tmp}/consult-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、**出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、以降の各コマンドで再設定する）。軽量なら観点を絞って短くてよい:
+作り方は `references/advisors.md`。軽量なら観点を絞って短くてよい:
 
 ```markdown
 あなたは設計判断のレビュアーです。コードは変更せず分析と提案だけ返してください。
