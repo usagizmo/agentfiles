@@ -52,3 +52,26 @@ test("skills root が無ければ検査せずに落ちる（緑に見せない�
   expect(stdout).not.toContain("SUMMARY");
   expect(exitCode).toBe(2);
 });
+
+// --- checker の異常系（EMPHASIS_JS で差し替える） -------------------------
+// **「落ちた」と「違反なし」を取り違えないこと**が要点。緑で通ると検査が消える。
+
+const checker = (name) => ({ EMPHASIS_JS: `${ROOT}test/fixtures/checker/${name}.mjs` });
+
+test("checker が出力なしで失敗したら audit ごと落ちる", async () => {
+  const { stdout, exitCode } = await audit(fixture("emphasis-clean"), checker("silent-fail"));
+  expect(exitCode).toBe(2);
+  expect(stdout).not.toContain("SUMMARY");
+});
+
+test("契約に無い exit code でも audit ごと落ちる", async () => {
+  const { stdout, exitCode } = await audit(fixture("emphasis-clean"), checker("unexpected-code"));
+  expect(exitCode).toBe(2);
+  expect(stdout).not.toContain("SUMMARY");
+});
+
+test("依存が無い（exit 2）は SKIP として通す", async () => {
+  const { stdout } = await audit(fixture("emphasis-clean"), checker("no-dep"));
+  expect(stdout).toContain("SKIP\temphasis");
+  expect(stdout).toContain("skips=1");
+});

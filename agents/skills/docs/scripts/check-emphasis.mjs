@@ -19,8 +19,11 @@
 let marked = null;
 try {
   ({ marked } = await import("marked"));
-} catch {
-  // CLI は import.meta.main 側で exit 2。import した側には throw させる
+} catch (e) {
+  // **未導入だけを 2 に落とす。**壊れた依存も初期化例外もまとめて畳むと、
+  // 「入っていない」と「壊れている」が同じ SKIP になって検査が黙って消える
+  if (e?.code !== "ERR_MODULE_NOT_FOUND") throw e;
+  // CLI は import.meta.main 側で exit 2。import した側には次の参照で throw させる
 }
 
 // **描画結果からタグとコードを取り除いてから探す。**残すとテキスト以外の `**` を数える —
@@ -45,7 +48,9 @@ export function brokenLines(src) {
     // この block が壊れている。原因は中の `**` を持つ行。
     const base = src.slice(0, start).split("\n").length;
     token.raw.split("\n").forEach((text, i) => {
-      if (text.includes("**")) out.push({ no: base + i, text });
+      // コードスパンの中の `**` は原因ではない。block 全体が壊れているとき、
+      // 逐語で `**` を書いているだけの行まで挙げると指す位置がぶれる
+      if (text.replace(/`+[^`]*`+/g, "").includes("**")) out.push({ no: base + i, text });
     });
   }
   return out;

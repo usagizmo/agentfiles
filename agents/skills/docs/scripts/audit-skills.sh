@@ -525,7 +525,8 @@ fi
 # **道具が無ければ飛ばす。**強調記法はこの検査の付随物で、欠いても本来の目的
 # （実在・形・重複・層）は達成できる。飛ばしたことは SKIP で出す。
 emphasis_self=$(canon "$0") || emphasis_self=$0
-EMPHASIS_JS=$(dirname "$emphasis_self")/check-emphasis.mjs
+# 既定はスクリプトの隣。test が異常系の checker を差し込めるように上書きを許す
+EMPHASIS_JS=${EMPHASIS_JS:-$(dirname "$emphasis_self")/check-emphasis.mjs}
 if ! command -v bun >/dev/null 2>&1; then
 	emit SKIP emphasis "-" "note=bun が無いので強調記法を検査していない"
 elif [ ! -f "$EMPHASIS_JS" ]; then
