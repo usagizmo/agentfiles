@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "lint": "oxlint"
   },
   "devDependencies": {
     "lint-staged": "^17.3.0",
