@@ -110,6 +110,7 @@ flowchart LR
 
     RF --> AF
     RS --> AF
+    CO --> AF
     CO --> SB
     CO --> WR
     CO --> RR
