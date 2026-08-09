@@ -93,6 +93,7 @@ flowchart LR
     subgraph shared["agents/shared/"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
+        XR["exhaust-record.md<br/><small>実行器の枯渇の記録</small>"]
         RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
@@ -109,16 +110,19 @@ flowchart LR
     CO --> AF
     CO --> SB
     CO --> WR
+    CO --> XR
     CO --> RR
     CO --> BD
     RF --> SB
     RF --> WR
+    RF --> XR
     RF --> RR
     RS --> RR
     ME --> GM
     RF --> BD
     RS --> SB
     RS --> WR
+    RS --> XR
     RS --> BD
     CO --> IR
     RS --> IR
