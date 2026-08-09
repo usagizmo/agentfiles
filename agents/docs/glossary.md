@@ -73,7 +73,6 @@
 | 在庫の鮮度       | `ready`       | `refine`             | `agents/shared/ready-record.md`       |
 | 計画             | `plan`        | `resolve`            | `resolve/SKILL.md`                    |
 | 人待ちの記録     | `wait`        | `refine` / `resolve` | `agents/shared/wait-record.md`        |
-| 枯渇の記録       | `exhaust`     | `refine` / `resolve` | `agents/shared/exhaust-record.md`     |
 | 意図の確認の記録 | `intent`      | `resolve`            | `agents/shared/intent-record.md`      |
 | 渡しの記録       | `integration` | `conductor`          | `agents/shared/integration-record.md` |
 | 休止の記録       | `yield`       | `conductor`          | `conductor/references/protocols.md`   |
