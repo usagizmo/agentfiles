@@ -26,6 +26,8 @@ PR を作り、**merge 可能な状態まで**持っていく。タイトル先�
 
 **commit を足したら必ず 1 へ戻る。CI が緑になったあとも同じ。**「もう通ったから push だけ」で追随を飛ばすと、base から離れたまま積み上がり、着地の直前に大きな rebase と衝突が出る。実物を見せて直した後の再 push がいちばん飛ばしやすい。
 
+**CI 起因でない修正は、洗いきってから 1 回で push する。**check は SHA 単位で回り直し、path フィルタは PR base との差分を見るので docs だけの commit でも縮まない。1 つ出たのは洗い切れていない合図なので、その場で push せず同種の残りを先に全部探す。
+
 CI が通ったら完了。**merge はここでしない。**
 
 **CI 進行中の SSOT**: `gh pr checks <number> --json bucket` のいずれかが `pending`（CheckRun / StatusContext の差は gh が正規化する）。素の人間向け出力を読まない。
