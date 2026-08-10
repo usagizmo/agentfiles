@@ -1,0 +1,27 @@
+#!/bin/sh
+# watch.sh 用の偽 gh。**post-jq の行だけを出す**（本物の gh は `--jq` を自分で適用するので、
+# 呼び出し側から見えるのは畳んだ後の行）。graphql だけは watch.sh が自前で jq に通すので JSON を返す。
+set -eu
+
+case "$1 ${2:-}" in
+  "api graphql")
+    cat <<'JSON'
+{"data":{"rateLimit":{"cost":2},"organization":{"projectV2":{"items":{"nodes":[
+  {"content":{"number":1},"fieldValueByName":{"name":"In progress"}}
+]}}}}}
+JSON
+    ;;
+  "api repos/"*"/issues/comments?"*)
+    echo "100 2000-01-01T00:00:00Z plan"
+    ;;
+  "api repos/"*"/issues?"*)
+    echo "1 open 2000-01-01T00:00:00Z tester"
+    ;;
+  "pr list")
+    # open PR 0 件は正当。行を出さない
+    ;;
+  *)
+    echo "fake gh: unexpected args: $*" >&2
+    exit 1
+    ;;
+esac

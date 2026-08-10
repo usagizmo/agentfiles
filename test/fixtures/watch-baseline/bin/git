@@ -1,0 +1,31 @@
+#!/bin/sh
+# watch.sh 用の偽 git。`-C <path>` を剥がしてから subcommand で分岐する。
+set -eu
+
+if [ "${1:-}" = "-C" ]; then
+  shift 2
+fi
+
+case "${1:-} ${2:-}" in
+  "fetch origin")
+    ;;
+  "rev-parse origin/main")
+    echo "1111111111111111111111111111111111111111"
+    ;;
+  "rev-parse HEAD")
+    echo "2222222222222222222222222222222222222222"
+    ;;
+  "branch -r")
+    echo "  origin/main"
+    ;;
+  "worktree list")
+    printf 'worktree /fake/wt\nHEAD 2222222222222222222222222222222222222222\nbranch refs/heads/main\n\n'
+    ;;
+  "status --porcelain=v1")
+    # clean
+    ;;
+  *)
+    echo "fake git: unexpected args: $*" >&2
+    exit 1
+    ;;
+esac

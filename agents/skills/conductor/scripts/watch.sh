@@ -1,21 +1,35 @@
 #!/bin/bash
-# conductor の起床監視。正規化と action が読むものすべての指紋を取り、前回と違ったら exit 0 する。
+# conductor の起床監視。正規化と action が読むものすべての指紋を取る。
 #
 # **この実装が観測の SSOT。**手順書（`../references/harness.md`）は起動の契約だけを持ち、
 # ここと同等物を prose から書き直さない。
 #
+# **mode は 2 つで排他。**
+#   --snapshot <path>  1 回だけ観測して書き出す。**tick の観測入口**
+#   --baseline <path>  その file を「前回」として監視する。違ったら exit 0
+#
+# **baseline を自分で取らない**のが要点。起動時に取り直すと、tick が action を決めるのに使った
+# 観測から baseline までの隙間に入った遷移が baseline に吸われ、以後どのラウンドでも差分に
+# 出ない（fallback まで盲目になる）。tick が読んだ観測をそのまま渡させることで、「前回」が
+# **tick が評価した観測**に一意化され、窓そのものが無くなる。
+#
 # 終了コード
-#   0  起こす（変化を検知した / fallback / 観測不能が続いた）
-#   2  起動を止める（引数不足・コスト gate 超過）
+#   0  --baseline: 起こす（変化を検知した / fallback / 観測不能が続いた） / --snapshot: 書き出した
+#   1  --snapshot: 観測に失敗した（--baseline は失敗しても backoff して続けるので返さない）
+#   2  起動を止める（引数不足・baseline が読めない・コスト gate 超過）
 set -uo pipefail
 
 usage() {
   cat >&2 <<'USAGE'
-usage: watch.sh --repo <path> --gh-repo <owner/name>
+usage: watch.sh (--snapshot <path> | --baseline <path>)
+                --repo <path> --gh-repo <owner/name>
                 --project-org <org> --project-number <n> --status-field <name>
                 --sessions-cmd <cmd> --workspaces-cmd <cmd>
                 [--default-branch main] [--interval 60] [--max 1800]
                 [--deadline 90] [--cost-limit 20] [--pr-limit 200]
+
+  --snapshot と --baseline はどちらか一方が必須。**baseline を渡さずに監視は始められない**
+  （始められると、起床側が自分で baseline を取り、tick の観測との隙間が窓になる）。
 
   --sessions-cmd / --workspaces-cmd は multiplexer 依存なので呼び出し側が渡す
   （このスクリプトは multiplexer を知らない）。契約:
@@ -28,6 +42,8 @@ USAGE
   exit 2
 }
 
+SNAPSHOT_OUT=''
+BASELINE_IN=''
 REPO=''
 GH_REPO=''
 ORG=''
@@ -44,26 +60,57 @@ PR_LIMIT=200
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo) REPO=$2; shift 2 ;;
-    --gh-repo) GH_REPO=$2; shift 2 ;;
-    --project-org) ORG=$2; shift 2 ;;
-    --project-number) NUM=$2; shift 2 ;;
-    --status-field) STATUS_FIELD=$2; shift 2 ;;
-    --sessions-cmd) SESSIONS_CMD=$2; shift 2 ;;
-    --workspaces-cmd) WORKSPACES_CMD=$2; shift 2 ;;
-    --default-branch) DEFAULT_BRANCH=$2; shift 2 ;;
-    --interval) INTERVAL=$2; shift 2 ;;
-    --max) MAX=$2; shift 2 ;;
-    --deadline) DEADLINE=$2; shift 2 ;;
-    --cost-limit) COST_LIMIT=$2; shift 2 ;;
-    --pr-limit) PR_LIMIT=$2; shift 2 ;;
+    --snapshot|--baseline|--repo|--gh-repo|--project-org|--project-number|--status-field) ;;
+    --sessions-cmd|--workspaces-cmd|--default-branch|--interval|--max|--deadline) ;;
+    --cost-limit|--pr-limit) ;;
     *) echo "unknown option: $1" >&2; usage ;;
   esac
+  # **既知の option はすべて値を 1 つ取る。**欠落はここで弾く —— 各 arm に `$2` を読ませると
+  # `set -u` が exit 1 で落とし、`--snapshot` の観測失敗と同じ終了コードになる。呼び出し側は
+  # 引数の誤りを「観測できなかった」と読み、直せば済むものを障害として扱う。
+  [ $# -ge 2 ] || { echo "missing value for $1" >&2; usage; }
+  case "$1" in
+    --snapshot) SNAPSHOT_OUT=$2 ;;
+    --baseline) BASELINE_IN=$2 ;;
+    --repo) REPO=$2 ;;
+    --gh-repo) GH_REPO=$2 ;;
+    --project-org) ORG=$2 ;;
+    --project-number) NUM=$2 ;;
+    --status-field) STATUS_FIELD=$2 ;;
+    --sessions-cmd) SESSIONS_CMD=$2 ;;
+    --workspaces-cmd) WORKSPACES_CMD=$2 ;;
+    --default-branch) DEFAULT_BRANCH=$2 ;;
+    --interval) INTERVAL=$2 ;;
+    --max) MAX=$2 ;;
+    --deadline) DEADLINE=$2 ;;
+    --cost-limit) COST_LIMIT=$2 ;;
+    --pr-limit) PR_LIMIT=$2 ;;
+  esac
+  shift 2
 done
 
 for v in REPO GH_REPO ORG NUM STATUS_FIELD SESSIONS_CMD WORKSPACES_CMD; do
   [ -n "${!v}" ] || { echo "missing option for ${v}" >&2; usage; }
 done
+
+# **mode は排他で、どちらか一方が必須。**両方を許すと「観測しながら監視する」形が生まれ、
+# どちらの時点が baseline なのかが呼び出し側から見えなくなる。
+if [ -n "$SNAPSHOT_OUT" ] && [ -n "$BASELINE_IN" ]; then
+  echo "--snapshot and --baseline are exclusive" >&2; usage
+fi
+if [ -z "$SNAPSHOT_OUT" ] && [ -z "$BASELINE_IN" ]; then
+  echo "one of --snapshot / --baseline is required" >&2; usage
+fi
+
+MODE=snapshot
+if [ -n "$BASELINE_IN" ]; then
+  MODE=watch
+  # **読めない・空の baseline は起動を止める。**自分で取り直す側へ倒すと、tick の観測との
+  # 隙間が窓になる（mode を分けているのはこのため）。止まれば状況ボードに出る。
+  [ -f "$BASELINE_IN" ] || { echo "baseline not found: $BASELINE_IN" >&2; exit 2; }
+  [ -s "$BASELINE_IN" ] || { echo "baseline is empty: $BASELINE_IN" >&2; exit 2; }
+fi
+
 # 数値引数は先に弾く。文字列が混ざると算術評価が壊れ、**sleep が 0 になって暴走するか、
 # fallback の判定が常に偽になって永久に起きない**。
 # **0 も弾く。**`--deadline 0` は即 kill、`--pr-limit 0` は常に打ち切り、`--max 0` は毎周 fallback で、
@@ -76,8 +123,8 @@ DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 QUERY_FILE="$DIR/project-status.graphql"
 [ -f "$QUERY_FILE" ] || { echo "not found: $QUERY_FILE" >&2; exit 2; }
 
-# 起動のたびに使い捨てる。**起動直後に必ず再ベースラインを取る**設計なので、
-# 前回の snapshot を残しても比較される前に上書きされる（残すと watcher 起動のたびに散らかる）。
+# 起動のたびに使い捨てる。**外へ残すのは `--snapshot` で明示的に指定された path だけ**
+# （呼び出し側がその file の寿命を持ち、次の起動で baseline として渡す）。
 STATE_DIR=$(mktemp -d) || exit 2
 PREV="$STATE_DIR/snapshot.prev"
 CUR="$STATE_DIR/snapshot.cur"
@@ -245,7 +292,11 @@ snapshot_bounded() {
     # **起床上限を per-round の deadline より先に見る。**逆にすると `--deadline >= --max` の
     # 設定で deadline 側が先に成立し、健全なラウンドを切っただけなのに「観測不能」と報告される。
     # 上限に達したという事実の方が権威なので、両方成立したら常にこちらが勝つ。
-    if [ $(( $(date +%s) - start )) -ge "$MAX" ]; then
+    #
+    # **`--snapshot` には起床上限が無い。**あれは「変化が無いまま何秒経ったら起こすか」で、
+    # 1 回きりの観測には意味を持たない。掛けると `--deadline` より短い `--max` を渡しただけで
+    # 健全な観測が切られ、tick が観測できなくなる。
+    if [ "$MODE" = watch ] && [ $(( $(date +%s) - start )) -ge "$MAX" ]; then
       kill_child_group
       wait "$pid" 2>/dev/null
       return 2
@@ -279,9 +330,38 @@ report_cost() {
 
 start=$(date +%s)
 fails=0
-have_base=0
 
-# **起動直後に必ず再ベースラインを取る**（conductor は直前に tick を終えている）。
+# --snapshot: 1 回だけ観測して書き出す。tick はこの出力を観測に使い、**同じ file を次の
+# --baseline として渡す**。監視と同じ実装が作った同じ形なので、baseline と「tick が action を
+# 決めるのに使った観測」が定義上おなじ実体になる（近い時刻ではなく、同じもの）。
+if [ "$MODE" = snapshot ]; then
+  snapshot_bounded "$DEADLINE"
+  case $? in
+    0) report_cost || exit 2 ;;
+    *) echo "[watch] snapshot failed" >&2; exit 1 ;;
+  esac
+  [ -s "$CUR" ] || { echo "[watch] snapshot came back empty" >&2; exit 1; }
+
+  # **渡してから置き換える。**この順序が「置いてある snapshot は tick が受け取った観測」を保つ。
+  # 逆にすると、stdout へ渡す前に死んだ場合に**誰も評価していない観測**が固定 path に残り、
+  # 観測できなかった tick がそれを `--baseline` として渡す —— tick が最後に評価した観測から
+  # そこまでの遷移が baseline に吸われる。**baseline を取り直すのと同じ形**なので、順序で閉じる。
+  cat "$CUR" || { echo "[watch] failed to hand the snapshot to the caller" >&2; exit 1; }
+
+  # **生成物を直接上書きしない。**temp へ置いてから mv する。
+  #
+  # **失敗しても既存の snapshot を壊さないことが、観測できなかった tick の復帰経路そのもの。**
+  # 呼び出し側は直前に成功した観測をそのまま `--baseline` に渡して監視を続けられる（古い観測は
+  # 差分が余計に出るだけで、見逃しは増えない）。ここで `>` を使って 0 バイトにすると、渡せる
+  # baseline が消えて誰も conductor を起こせなくなる ―― 起床漏れが最も重い障害。
+  cp "$CUR" "$SNAPSHOT_OUT.part" || exit 1
+  mv "$SNAPSHOT_OUT.part" "$SNAPSHOT_OUT" || exit 1
+  exit 0
+fi
+
+# --baseline: 渡された観測を「前回」として始める。**自分では取り直さない。**
+cp "$BASELINE_IN" "$PREV" || exit 2
+
 # 観測が失敗し続けても、下の fallback 判定を必ず通る形にしておく
 # —— ここで握りつぶして次の周へ送ると、rate limit 中に盲目のまま永久に起きない。
 while :; do
@@ -303,13 +383,9 @@ while :; do
     0)
       report_cost || exit 2
       fails=0
-      if [ "$have_base" -eq 0 ]; then
-        cp "$CUR" "$PREV"
-        have_base=1
-      elif ! cmp -s "$CUR" "$PREV"; then
+      if ! cmp -s "$CUR" "$PREV"; then
         echo "=== conductor: state changed ==="
         diff "$PREV" "$CUR" | head -60
-        cp "$CUR" "$PREV"
         exit 0
       fi
       ;;
