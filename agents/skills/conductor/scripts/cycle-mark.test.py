@@ -19,21 +19,22 @@
 # **git のバージョンに依存する期待値は無い。**材料は `status --porcelain=v1`（git が安定を
 # 明示している形式）とこちらが書いた中身だけで、`git diff` のテキストは入らない。
 #
-# **落ちない検査は残さない。**スクリプトを故意に壊して落ちることを実測済み ——
-# `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_COUNT` / `GIT_CONFIG_PARAMETERS` の無効化を外す、
+# **落ちない検査は残さない。**スクリプトを故意に壊して落ちることを実測済み（28 通りのうち
+# 25）—— `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_COUNT` / `GIT_CONFIG_PARAMETERS` の無効化を外す、
 # `--untracked-files` / `--ignore-submodules` の固定を外す、並びを locale 依存にする、symlink を
 # 辿る、長さ前置きと長さの検算を外す、`-source` / `-status` / `-index` / `head-source` /
 # `schema` / `cycle-kind` を落とす、path をレコード名へ埋める、tracked と untracked の名前を
 # 混ぜる、実行ビットの区別を落とす、種別を畳む、観測の失敗を空へ畳む、空文字を「無い」へ畳む、
-# submodule を directory へ畳む、untracked の消失を吸う、`--repo` の検証を外す。
+# 禁止引数を truthiness で判定する、submodule を directory へ畳む、untracked の消失を吸う、
+# HEAD の再確認を外す、`--repo` の検証を外す。
 #
 # **押さえていないのは「その状況を作れないもの」だけ**（黙って落とさない）。競合を検出する
 # 分岐そのものは `test_fail_closed_branches` が直接呼んで押さえてある —— **「競合の再現」と
 # 「競合を検出する分岐の検査」を分ける。**
 #
 #   - 読んでいる最中に大きさが変わる file / 列挙された untracked が消える競合 / 観測の途中で
-#     HEAD が動く競合 / 予期しない rename・copy —— 並行して書き換えるか git の挙動を変える
-#     必要があり、検査から決定的に作れない（**分岐はどれも押さえてある**）
+#     HEAD が動く競合 / 予期しない rename・copy —— **実 race は検査から作れない**
+#     （分岐はどれも押さえてある）
 #   - `GIT_DEADLINE` の値 —— 打ち切る仕組みは押さえてある（`test_fail_closed_branches` が
 #     実際に止まる `status` を 2 秒で切る）。**定数そのものは検査が上書きするので効かない**
 #   - `core.fsmonitor=false` / `core.untrackedCache=false` / `GIT_ATTR_NOSYSTEM` —— pin して
@@ -47,8 +48,8 @@
 #     書いてある
 #   - **untracked な nested repository の中身** —— git が `nested/` の 1 件に畳む。畳むのは
 #     判断（理由は下の `test_special_kinds`）で、規約の「見えないもの」にも書いてある
-#   - `LC_ALL` / `LANG` —— **そもそも指紋に効かない**。並びは Python 側で生バイト昇順に
-#     取り直すので、揃えているのは失敗したときの stderr の言語だけ
+#   - **観測の途中で書かれた成果** —— commit だけは前後の HEAD で閉じてあるが、index と
+#     worktree の残りは開いたまま。撮り直しても窓は縮むだけで消えない（規約に明記）
 
 import hashlib
 import importlib.util
@@ -887,6 +888,29 @@ def test_fail_closed_branches(tmp):
     finally:
         module.GIT_DEADLINE = deadline
 
+    # **観測の途中で HEAD が動く分岐。**実 race は作れないが、2 回目の `rev-parse HEAD` だけを
+    # 差し替えれば分岐は決定的に通せる —— **いちばん効く分岐を「作れない」側へ分類しない。**
+    moving = os.path.join(tmp, "moving-head")
+    make_repo(moving)
+    real_git = module.git
+    seen = [0]
+
+    def moving_head(cwd, *args):
+        if args[:2] == ("rev-parse", "HEAD"):
+            seen[0] += 1
+            if seen[0] > 1:
+                return b"0000000000000000000000000000000000000000\n"
+        return real_git(cwd, *args)
+
+    module.git = moving_head
+    try:
+        raises(
+            "観測の最中に HEAD が動いた",
+            lambda: module.encode_resolve(module.Encoder(), module.parse_args(resolve_argv(moving, worktree=moving))),
+        )
+    finally:
+        module.git = real_git
+
     # rename / copy は `--no-renames` を渡している限り出ないので、git の出力を差し替えて
     # 分岐だけを通す。
     original = module.git
@@ -951,6 +975,13 @@ def test_failures(tmp):
         ("解決の周に --issue-body", resolve_argv(repo, worktree=repo) + ["--issue-body", "1:" + plan], 2),
         ("計画の周に --repo", ["--ledger", "未計画", "--repo", repo, "--issue-body", "1:" + plan,
                               "--no-wait-record"], 2),
+        # **空文字の禁止引数も弾く。**truthiness で判定すると「渡していない」に化ける。
+        ("計画の周に空の --repo", ["--ledger", "未計画", "--repo", "", "--issue-body", "1:" + plan,
+                                 "--no-wait-record"], 2),
+        ("計画の周に空の --worktree", ["--ledger", "未計画", "--worktree", "", "--issue-body", "1:" + plan,
+                                     "--no-wait-record"], 2),
+        ("計画の周に空の --progress", ["--ledger", "未計画", "--progress", "", "--issue-body", "1:" + plan,
+                                     "--no-wait-record"], 2),
         ("計画の周に --issue-body が無い", ["--ledger", "未計画", "--no-wait-record"], 2),
         ("--issue-body の番号が重複",
          ["--ledger", "未計画", "--issue-body", "1:" + plan, "--issue-body", "1:" + plan,

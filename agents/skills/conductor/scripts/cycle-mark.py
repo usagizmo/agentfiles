@@ -30,10 +30,15 @@
 # 進んでいない課題を退避させることはない）。撮り直して突き合わせても窓が縮むだけで消えず、
 # 費用は倍になる。
 #
-# **例外が 1 つだけあるので、そこは閉じる。**観測の途中で commit が入ると「古い HEAD ＋
-# commit 後の clean な worktree」が出る。これは前の周の指紋と**一致しうる**（前の周も同じ
-# HEAD で clean だったなら）ので、commit した周が成果ゼロとして数えられる —— 唯一、進んだ
-# 課題を退避させる向きに倒れる。HEAD を前後で撮って、動いていたら観測の失敗にする。
+# **いちばん広い窓だけは閉じる。**観測の途中で commit が入ると「古い HEAD ＋ commit 後の
+# clean な worktree」が出る。これは前の周の指紋と**一致しうる**（前の周も同じ HEAD で clean
+# だったなら）ので、commit した周が成果ゼロとして数えられる —— 進んだ課題を退避させる向きに
+# 倒れる数少ない経路で、commit は 1 回で全成分を動かすぶん窓が最も広い。HEAD を前後で撮って、
+# 動いていたら観測の失敗にする。
+#
+# **残りは閉じない。**index や worktree を読んだ後にそこだけ書き換えられると、同じ向きの
+# 取りこぼしが残る。全成分を前後で撮り直せば窓は縮むが消えず、費用は倍になる。**残余は規約の
+# 「見えないもの」に書いてある。**
 #
 # **git が見ないものはこちらも見えない。**`skip-worktree` / `assume-unchanged` が立った path は
 # 中身を書き換えても `status` に出ないので、成果ゼロに見える。全 tracked を毎周読めば塞げるが、
@@ -578,8 +583,14 @@ def require_pair(parser, name, value, negative):
 
 
 def forbid(parser, kind, **values):
+    """その周では渡してはいけない引数を弾く。
+
+    **truthiness で判定しない** —— 空文字が「渡していない」に化け、`--repo ""` を付けた
+    呼び出しが付けていない呼び出しと同じ指紋になる。渡していないことを表すのは、文字列の
+    `None`・flag の `False`・繰り返し引数の `[]` の 3 つだけ。
+    """
     for name, value in sorted(values.items()):
-        if value:
+        if value is not None and value is not False and value != []:
             parser.error("--{} は{}の周では渡さない".format(name.replace("_", "-"), kind))
 
 
