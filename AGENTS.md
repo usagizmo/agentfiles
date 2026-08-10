@@ -1,5 +1,11 @@
 # dotfiles プロジェクト固有の設定
 
+## この repo は public
+
+**private な案件の repo 名・Issue / PR 番号・社内固有の文言を、tracked ファイルにも commit message にも書かない。** 由来を残したいときは、何を直したかだけを書く。**リンクの曖昧さを完全修飾で解こうとしない** —— `#123` が自分の repo を指してしまうからと `org/private-repo#123` へ直すと、曖昧さの代わりに repo 名が公開される。
+
+**共通 instructions / skills の変更は、直すと決めた工程がその場で commit する。push と merge だけは人が行う** —— merge した瞬間に全 project の全工程へ配布されるので、取り消しの範囲が commit 単位で閉じない。
+
 ## コミットメッセージ規約
 
 スコープごとに固定の gitmoji を使う。

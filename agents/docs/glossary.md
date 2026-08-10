@@ -77,6 +77,7 @@
 | 渡しの記録       | `integration` | `conductor`          | `agents/shared/integration-record.md` |
 | 休止の記録       | `yield`       | `conductor`          | `conductor/references/protocols.md`   |
 | 失敗の記録       | `retry`       | `conductor`          | `conductor/references/protocols.md`   |
+| 周回の記録       | `cycle`       | `conductor`          | `conductor/references/protocols.md`   |
 
 **marker に版番号を付けない**。版で分岐する読み手が要るようになったことが一度も無く、upsert は marker 文字列の一致で既存を探すので、版を上げると古いコメントが見つからなくなって新旧が併存する（移行経路を与えるどころか孤児を作る）。schema の不一致は block の必須キーの有無で検出でき、`conductor` の「計画 schema 不明 → 全体 pause」がそれを受ける。
 
