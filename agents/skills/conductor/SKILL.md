@@ -45,7 +45,7 @@ description: >-
 
 **指紋に入る材料は `scripts/watch.sh --snapshot` から読む**。**同じ実装を使うことが、起床の baseline と一致する条件そのもの**（下の「いつ打つか」）—— 別経路で取ると形が揃わず、渡した観測が baseline として成立しない。取った file は捨てず、tick を終えるときに `--baseline` として渡す。
 
-別に取るのは snapshot に無いものだけ —— Issue 本文、固定 marker のコメント本文、default に含まれる commit。**コストは増えない**（snapshot が観測 1 周ぶんで、それが tick の 1 周になる）。
+別に取るのは snapshot に無いものだけ —— Issue 本文、固定 marker のコメント本文、default に含まれる commit、成果の指紋（`scripts/cycle-mark.py`。snapshot が持つ worktree の dirty は 0/1 だけで、diff と untracked の中身は入っていない）。**コストは増えない**（snapshot が観測 1 周ぶんで、それが tick の 1 周になる。指紋は GitHub を叩かず、ローカルの git と渡した本文 / 記録の file だけを見る）。
 
 **観測の最初に default を fetch する**（snapshot が行う）。古い default を基準にすると、着地済みのものを稼働中と数えて枠が埋まったままになる。tick が「前回の続きを仮定しない」のは、ここを毎回やり直すため。
 
