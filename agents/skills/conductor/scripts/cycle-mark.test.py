@@ -13,36 +13,51 @@
 #      期待値は `cycle-mark.py` の出力を写していない
 #   2. **凍結した定数**（`FROZEN_*`）。1 の参照実装ごと書き換える変更を止める
 #   3. **分離**。成果に当たる成分を 1 つ変えた観測が、必ず別の指紋になること
-#   4. **不変性**。locale・カレントディレクトリ・利用者の git 設定・index の鮮度を変えても
-#      値が動かないこと
+#   4. **不変性**。locale・カレントディレクトリ・利用者の git 設定・index の鮮度・filter を
+#      変えても値が動かないこと
 #
-# **git のバージョンに依存する期待値は無い。**材料は plumbing（`diff-index --raw -z`）と
-# こちらが書いた中身だけで、porcelain の diff テキストは入らない。
+# **git のバージョンに依存する期待値は無い。**材料は `status --porcelain=v1`（git が安定を
+# 明示している形式）とこちらが書いた中身だけで、`git diff` のテキストは入らない。
 #
-# **落ちない検査は残さない。**スクリプトを故意に壊して落ちることを実測済み（20 通りのうち
-# 18）—— `--exclude-standard` / `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_COUNT` / `GIT_CONFIG_PARAMETERS`
-# の無効化 / blob id による候補の確認を外す、並びを locale 依存にする、symlink を辿る、
-# 長さ前置きを外す、`-source` を落とす、path をレコード名へ埋める、tracked と untracked の
-# 名前を混ぜる、実行ビットの区別を落とす、種別を畳む、`head-source` を潰す、`schema` /
-# `cycle-kind` を落とす、観測の失敗を空へ畳む、空文字を「無い」へ畳む。
+# **落ちない検査は残さない。**スクリプトを故意に壊して落ちることを実測済み ——
+# `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_COUNT` / `GIT_CONFIG_PARAMETERS` の無効化を外す、
+# `--untracked-files` / `--ignore-submodules` の固定を外す、並びを locale 依存にする、symlink を
+# 辿る、長さ前置きと長さの検算を外す、`-source` / `-status` / `-index` / `head-source` /
+# `schema` / `cycle-kind` を落とす、path をレコード名へ埋める、tracked と untracked の名前を
+# 混ぜる、実行ビットの区別を落とす、種別を畳む、観測の失敗を空へ畳む、空文字を「無い」へ畳む、
+# submodule を directory へ畳む、untracked の消失を吸う、`--repo` の検証を外す。
 #
-# **押さえていないものが 4 つある**（黙って落とさない）。
+# **押さえていないのは「その状況を作れないもの」だけ**（黙って落とさない）。競合を検出する
+# 分岐そのものは `test_fail_closed_branches` が直接呼んで押さえてある —— **「競合の再現」と
+# 「競合を検出する分岐の検査」を分ける。**
 #
-#   - `--no-renames` —— plumbing は `-M` を渡さない限り rename を検出しないので、検査から
-#     rename entry を作れない。代わりに parser 側で R / C を観測の失敗にしてある
-#   - **列挙された untracked が消える競合** —— `ls-files` と `lstat` の間で消す必要があり、
-#     検査から再現できない
-#   - `GIT_ATTR_NOSYSTEM` —— system の attributes file を作るには root が要る。global 側は
-#     `GIT_CONFIG_GLOBAL` の検査が押さえているので、外れても同じ形の穴だけが残る
+#   - 読んでいる最中に大きさが変わる file / 列挙された untracked が消える競合 / 観測の途中で
+#     HEAD が動く競合 / 予期しない rename・copy —— 並行して書き換えるか git の挙動を変える
+#     必要があり、検査から決定的に作れない（**分岐はどれも押さえてある**）
+#   - `GIT_DEADLINE` の値 —— 打ち切る仕組みは押さえてある（`test_fail_closed_branches` が
+#     実際に止まる `status` を 2 秒で切る）。**定数そのものは検査が上書きするので効かない**
+#   - `core.fsmonitor=false` / `core.untrackedCache=false` / `GIT_ATTR_NOSYSTEM` —— pin して
+#     あるが、stale な hook・cache や system の attributes file を検査から作れない
+#     （後者には root が要る）
+#
+# **仕組みとして塞いでいないものが 3 つある。**
+#
+#   - `skip-worktree` / `assume-unchanged` —— **git 自身が見ない**ので `status` にも出ない。
+#     塞ぐには全 tracked を毎周読むしかなく、費用が釣り合わない。実装と規約に既知の穴として
+#     書いてある
+#   - **untracked な nested repository の中身** —— git が `nested/` の 1 件に畳む。畳むのは
+#     判断（理由は下の `test_special_kinds`）で、規約の「見えないもの」にも書いてある
 #   - `LC_ALL` / `LANG` —— **そもそも指紋に効かない**。並びは Python 側で生バイト昇順に
-#     取り直し、材料は plumbing なので、揃えているのは失敗したときの stderr の言語だけ
+#     取り直すので、揃えているのは失敗したときの stderr の言語だけ
 
 import hashlib
+import importlib.util
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "cycle-mark.py")
@@ -56,7 +71,6 @@ FROZEN_PLAN = "db95fd304fbda3b98ecf57090207c433c4fd0eaa30d2025f915d6ef7e79b8bbb"
 
 FAILURES = []
 CHECKS = [0]
-NOTES = []
 
 
 def check(label, got, want):
@@ -119,14 +133,24 @@ def ref_resolve(progress, head_source, head, tracked, untracked, plan_comment, w
 
 
 def ref_entries(prefix, entries):
+    """`tracked` は `(path, status, index, kind, body)`、`untracked` は `(path, kind, body)`。"""
     if entries is None:
         return [(prefix + "-source", utf8("absent"))]
     records = [(prefix + "-source", utf8("worktree"))]
-    for path, kind, body in entries:
-        records.append((prefix + "-path", path))
-        records.append((prefix + "-kind", utf8(kind)))
-        records.append((prefix + "-body", body))
+    for entry in entries:
+        records.append((prefix + "-path", entry[0]))
+        if len(entry) == 5:
+            records.append((prefix + "-status", utf8(entry[1])))
+            records.append((prefix + "-index", entry[2]))
+        records.append((prefix + "-kind", utf8(entry[-2])))
+        records.append((prefix + "-body", entry[-1]))
     return records
+
+
+def index_meta(repo, path, mode=b"100644"):
+    """index の `<mode> <oid> <stage>`。oid は `rev-parse :<path>` で独立に引く。"""
+    oid = git(repo, "rev-parse", ":" + path).decode().strip().encode("ascii")
+    return mode + b" " + oid + b" 0"
 
 
 def ref_plan(ledger, issues, wait_record):
@@ -179,12 +203,15 @@ def mark(argv, env_extra=None, cwd=None, expect_ok=True):
     env = os.environ.copy()
     if env_extra:
         env.update(env_extra)
+    # **止まったら落とす。**FIFO を掴んで無期限に待つ壊れ方は、指紋が違うことより重い
+    # （tick ごと固まる）ので、検査が待ち続けてはいけない。
     proc = subprocess.run(
         [sys.executable, SCRIPT] + argv,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd or os.sep,
         env=env,
+        timeout=60,
     )
     out = proc.stdout.decode()
     if expect_ok:
@@ -304,6 +331,28 @@ def test_untracked_kinds(tmp):
     check_distinct("untracked の種別が分離されない", variants)
 
 
+def test_untracked_nested_dir(tmp):
+    """untracked なディレクトリの中身が畳まれないこと。
+
+    `status` の既定（`normal`）は中を `dir/` の 1 行に畳むので、**中で何を書いても指紋が
+    動かない**。`--untracked-files=all` で 1 file ずつ出させる。
+    """
+    repo = os.path.join(tmp, "untracked-dir")
+    head = make_repo(repo)
+    write(os.path.join(repo, "dir", "a.txt"), b"one\n")
+    first = mark(resolve_argv(repo, worktree=repo))
+    check(
+        "untracked なディレクトリの中身",
+        first,
+        ref_resolve("実装中", "worktree", head, [], [(b"dir/a.txt", "file", b"one\n")], None, None),
+    )
+    write(os.path.join(repo, "dir", "b.txt"), b"two\n")
+    check_distinct(
+        "untracked なディレクトリの中で増やしても動かない",
+        [("1 file", first), ("2 file", mark(resolve_argv(repo, worktree=repo)))],
+    )
+
+
 def test_untracked_order(tmp):
     """列挙順が作成順に依らないこと。並びは生バイトの昇順で固定。
 
@@ -343,7 +392,7 @@ def test_tracked_matrix(tmp):
         head = make_repo(repo)
         write(os.path.join(repo, "tracked.txt"), body)
         got = mark(resolve_argv(repo, worktree=repo))
-        want = ref_resolve("実装中", "worktree", head, [(b"tracked.txt", "file", body)], [], None, None)
+        want = ref_resolve("実装中", "worktree", head, [(b"tracked.txt", " M", index_meta(repo, "tracked.txt"), "file", body)], [], None, None)
         check("tracked の中身: " + label, got, want)
         digests.append((label, got))
     check_distinct("tracked の中身が分離されない", digests)
@@ -369,7 +418,7 @@ def test_tracked_states(tmp):
     check(
         "tracked の削除",
         got,
-        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", "absent", b"")], [], None, None),
+        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", " D", index_meta(repo, "tracked.txt"), "absent", b"")], [], None, None),
     )
     variants.append(("削除", got))
 
@@ -380,7 +429,7 @@ def test_tracked_states(tmp):
     check(
         "tracked の mode 変更（中身は同じ）",
         got,
-        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", "executable-file", b"base\n")], [], None, None),
+        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", " M", index_meta(repo, "tracked.txt"), "executable-file", b"base\n")], [], None, None),
     )
     variants.append(("mode 変更", got))
 
@@ -392,7 +441,7 @@ def test_tracked_states(tmp):
     check(
         "tracked が symlink に変わった",
         got,
-        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", "symlink", b"base\n")], [], None, None),
+        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", " T", index_meta(repo, "tracked.txt"), "symlink", b"base\n")], [], None, None),
     )
     variants.append(("型変更", got))
 
@@ -404,7 +453,7 @@ def test_tracked_states(tmp):
     check(
         "staged な追加",
         got,
-        ref_resolve("実装中", "worktree", head, [(b"added.txt", "file", b"new\n")], [], None, None),
+        ref_resolve("実装中", "worktree", head, [(b"added.txt", "A ", index_meta(repo, "added.txt"), "file", b"new\n")], [], None, None),
     )
     variants.append(("staged な追加", got))
 
@@ -418,6 +467,10 @@ def test_special_kinds(tmp):
     tick ごと固まる。
     """
     # ネストした git repo は `nested/` という path で untracked に出る（中身は展開されない）。
+    #
+    # **中は畳む**（tracked の submodule は落とすのと非対称）。あちらは記録された状態の一部で
+    # tip が成果そのものだが、こちらは課題の成果物ではない外部の物体で、落とすと迷い込んだ
+    # clone 1 つで健全な課題の照合が毎周止まる。
     repo = os.path.join(tmp, "nested-repo")
     head = make_repo(repo)
     inner = os.path.join(repo, "nested")
@@ -438,7 +491,7 @@ def test_special_kinds(tmp):
     check(
         "tracked が FIFO に化けた",
         as_fifo,
-        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", "fifo", b"")], [], None, None),
+        ref_resolve("実装中", "worktree", head, [(b"tracked.txt", " M", index_meta(repo, "tracked.txt"), "fifo", b"")], [], None, None),
     )
 
     repo = os.path.join(tmp, "tracked-empty")
@@ -453,22 +506,19 @@ def test_special_kinds(tmp):
 def test_stale_index(tmp):
     """index の鮮度で値が動かないこと。
 
-    `diff-index` は stat が古いと中身の同じ path も変更として返す。**`update-index --refresh`
-    は index を書くので観測が副作用を持つ** —— 代わりに blob id で確かめて落とす。
-    落とさないと、誰かが index を refresh しただけの周に成果があったことになる。
+    **これは characterization test。**`status` は中身で比べるので、この性質は材料の選び方から
+    自動的に従い、1 行の書き換えでは壊せない（`diff-index --raw` のような stat 依存の材料へ
+    戻すしかない）。それでも残すのは、**材料を選び直すときに最初に落ちる場所**だから ——
+    stat 依存へ戻すと、誰かが index を refresh しただけの周に成果があったことになる。
     """
     repo = os.path.join(tmp, "stale")
     make_repo(repo)
     baseline = mark(resolve_argv(repo, worktree=repo))
 
-    # 中身を変えずに stat だけ動かす（書き直して mtime を進める）。
+    # 中身を変えずに stat だけ動かす。
     path = os.path.join(repo, "tracked.txt")
     write(path, b"base\n")
     os.utime(path, (1700000042, 1700000042))
-
-    candidates = git(repo, "diff-index", "--raw", "-z", "--no-renames", "HEAD")
-    if b"tracked.txt" not in candidates:
-        NOTES.append("stale index: git が候補に出さなかったので、この検査は素通りしている")
     check("index が古くても値が動かない", mark(resolve_argv(repo, worktree=repo)), baseline)
 
 
@@ -698,6 +748,159 @@ def test_local_config_invariance(tmp):
     )
 
 
+def test_clean_filter(tmp):
+    """filter 越しに clean な path が指紋に出ないこと。
+
+    `core.autocrlf` があると worktree の生バイト（CRLF）と HEAD の blob（LF）は一致しない
+    （実測）。**「変わったか」を自分で計算すると、この path が毎周 dirty に見える** ——
+    誰かが index を refresh するたびに指紋が動き、成果ゼロの上限が育たない。判定は git に任せる。
+    """
+    repo = os.path.join(tmp, "clean-filter")
+    head = make_repo(repo)
+    git(repo, "config", "core.autocrlf", "true")
+    write(os.path.join(repo, "crlf.txt"), b"k\n")
+    git(repo, "add", "crlf.txt")
+    git(repo, "commit", "--quiet", "-m", "crlf")
+    head = git(repo, "rev-parse", "HEAD").decode().strip()
+    os.unlink(os.path.join(repo, "crlf.txt"))
+    git(repo, "checkout", "--quiet", "--", "crlf.txt")
+
+    with open(os.path.join(repo, "crlf.txt"), "rb") as handle:
+        check("fixture: worktree は CRLF になっている", handle.read(), b"k\r\n")
+    os.utime(os.path.join(repo, "crlf.txt"), (1700000042, 1700000042))
+    check(
+        "filter 越しに clean な path は出ない",
+        mark(resolve_argv(repo, worktree=repo)),
+        ref_resolve("実装中", "worktree", head, [], [], None, None),
+    )
+
+
+def test_index_only(tmp):
+    """index だけが HEAD と違う周が、clean と分かれること。"""
+    repo = os.path.join(tmp, "index-only")
+    make_repo(repo)
+    clean = mark(resolve_argv(repo, worktree=repo))
+
+    path = os.path.join(repo, "tracked.txt")
+    write(path, b"base\nstaged\n")
+    git(repo, "add", "tracked.txt")
+    write(path, b"base\n")  # worktree は HEAD と同じに戻す
+    staged_a = mark(resolve_argv(repo, worktree=repo))
+
+    # **index の中身まで見ていないと、ここが同じ値になる。**worktree はどちらも HEAD と
+    # 同じなので、XY だけでは A と B が分かれない。
+    write(path, b"base\nstaged 2\n")
+    git(repo, "add", "tracked.txt")
+    write(path, b"base\n")
+    staged_b = mark(resolve_argv(repo, worktree=repo))
+
+    check_distinct(
+        "index だけの変更が指紋に出ない",
+        [("clean", clean), ("index が A", staged_a), ("index が B", staged_b)],
+    )
+
+
+def test_gitlink(tmp):
+    """submodule は畳まずに落ちること。
+
+    worktree の側からはディレクトリにしか見えないので、種別だけ書くと tip が動いた周と
+    動いていない周が同じ値になる。**符号化を決めていないものを黙って同値にしない。**
+    """
+    repo = os.path.join(tmp, "gitlink")
+    make_repo(repo)
+    sub = os.path.join(repo, "sub")
+    sub_head = make_repo(sub)
+    git(repo, "update-index", "--add", "--cacheinfo", "160000,{},sub".format(sub_head))
+    git(repo, "commit", "--quiet", "-m", "gitlink")
+    write(os.path.join(sub, "tracked.txt"), b"moved\n")
+    git(sub, "commit", "--quiet", "-am", "move")
+
+    code, out = mark(resolve_argv(repo, worktree=repo), expect_ok=False)
+    check("失敗: submodule の終了コード", code, 1)
+    check("失敗: submodule では指紋を出さない", out, "")
+
+    # **repo-local の設定で隠させない。**`--ignore-submodules=none` を渡していないと、
+    # status に出ないまま clean と同じ指紋を返す（実測）。
+    for key, value in (("diff.ignoreSubmodules", "all"), ("submodule.sub.ignore", "all")):
+        git(repo, "config", key, value)
+        code, out = mark(resolve_argv(repo, worktree=repo), expect_ok=False)
+        check("失敗: {} でも落ちる".format(key), code, 1)
+        check("失敗: {} でも指紋を出さない".format(key), out, "")
+
+
+def load_script():
+    """検査対象を module として読み込む。**分岐を直接呼ぶため。**
+
+    競合そのもの（読んでいる最中に大きさが変わる・列挙された untracked が消える）は検査から
+    決定的に作れないが、**それを検出する分岐は作れる**。2 つを分けて、後者は押さえる。
+    """
+    spec = importlib.util.spec_from_file_location("cycle_mark_under_test", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_fail_closed_branches(tmp):
+    """競合を検出する分岐が、実際に観測の失敗を投げること。"""
+    module = load_script()
+
+    def raises(label, call):
+        CHECKS[0] += 1
+        try:
+            call()
+        except module.ObservationError:
+            return
+        except Exception as exc:  # noqa: BLE001 - 想定外の例外も失敗として出す
+            FAILURES.append("{}: ObservationError ではなく {!r}".format(label, exc))
+            return
+        FAILURES.append("{}: 何も投げなかった".format(label))
+
+    raises("流した量が宣言より少ない", lambda: module.Encoder().record_stream("body", 5, (b"ab",)))
+    raises("流した量が宣言より多い", lambda: module.Encoder().record_stream("body", 1, (b"ab",)))
+
+    repo = os.path.join(tmp, "branches")
+    make_repo(repo)
+    raises(
+        "列挙された untracked が消えている",
+        lambda: module.emit_entity(module.Encoder(), "untracked", repo, b"gone.txt", allow_absent=False),
+    )
+
+    # **止まった git を観測の失敗にする。**repo-local の clean filter で `status` は実際に
+    # 止まる（実測）。止まったまま待つと exit 1 の fail-closed ではなく conductor 全体の停止に
+    # なるので、ここは最も重い壊れ方。
+    slow = os.path.join(tmp, "slow-filter")
+    make_repo(slow)
+    write(os.path.join(slow, ".gitattributes"), b"tracked.txt filter=slow\n")
+    git(slow, "add", ".gitattributes")
+    git(slow, "commit", "--quiet", "-m", "filter")
+    git(slow, "config", "filter.slow.clean", "sleep 120; cat")
+    # **大きさは変えない。**size が違うと git は filter を通さずに「変更あり」と決められる。
+    write(os.path.join(slow, "tracked.txt"), b"Base\n")
+    deadline = module.GIT_DEADLINE
+    module.GIT_DEADLINE = 2
+    try:
+        started = time.time()
+        raises("git が戻らない", lambda: module.status_entries(slow))
+        CHECKS[0] += 1
+        if time.time() - started > 30:
+            FAILURES.append("git が戻らない: deadline で打ち切れていない")
+    finally:
+        module.GIT_DEADLINE = deadline
+
+    # rename / copy は `--no-renames` を渡している限り出ないので、git の出力を差し替えて
+    # 分岐だけを通す。
+    original = module.git
+    module.git = lambda cwd, *args: b"R  old.txt\0new.txt\0"
+    try:
+        raises("rename / copy が出た", lambda: module.status_entries(repo))
+        module.git = lambda cwd, *args: b"XX\0"
+        raises("status の行が読めない", lambda: module.status_entries(repo))
+        module.git = lambda cwd, *args: b"100644 abc 0 no-tab\0"
+        raises("ls-files の行が読めない", lambda: module.index_entries(repo))
+    finally:
+        module.git = original
+
+
 def test_failures(tmp):
     """受入条件 4 —— 失敗は指紋を返さない。**空へ畳まない。**"""
     repo = os.path.join(tmp, "failures")
@@ -705,8 +908,19 @@ def test_failures(tmp):
     os.makedirs(os.path.join(repo, "sub"))
     plan = os.path.join(tmp, "plan")
     write(plan, b"x\n")
+    not_a_repo = os.path.join(tmp, "not-a-repo")
+    os.makedirs(not_a_repo)
+    fifo = os.path.join(tmp, "plan.fifo")
+    os.mkfifo(fifo)
 
     cases = [
+        # **実体を渡さない周でも `--repo` を確かめる。**確かめないと、存在しない path を
+        # 渡した周が「実体なし」の正常な指紋になる。
+        ("実体なしの周で repo が repo でない",
+         ["--ledger", "進行中", "--repo", not_a_repo, "--progress", "実装中", "--no-branch",
+          "--no-worktree", "--no-plan-comment", "--no-wait-record"], 1),
+        # **渡された file も worktree と同じ経路で読む。**FIFO を掴んで止まると tick ごと固まる。
+        ("計画コメントが FIFO", resolve_argv(repo, worktree=repo, plan_comment=fifo), 1),
         ("worktree が無い", resolve_argv(repo, worktree=os.path.join(tmp, "gone")), 1),
         ("worktree root ではない", resolve_argv(repo, worktree=os.path.join(repo, "sub")), 1),
         ("repo が無い", ["--ledger", "進行中", "--repo", os.path.join(tmp, "gone"), "--progress", "実装中",
@@ -768,6 +982,7 @@ def main():
             test_untracked_matrix,
             test_untracked_paths,
             test_untracked_kinds,
+            test_untracked_nested_dir,
             test_untracked_order,
             test_tracked_matrix,
             test_tracked_states,
@@ -779,16 +994,18 @@ def main():
             test_component_sensitivity,
             test_binary_tracked,
             test_ignored_not_counted,
+            test_clean_filter,
+            test_index_only,
+            test_gitlink,
             test_env_invariance,
             test_local_config_invariance,
+            test_fail_closed_branches,
             test_failures,
         ):
             test(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    for note in NOTES:
-        sys.stderr.write("[note] {}\n".format(note))
     if FAILURES:
         sys.stderr.write("\n".join(FAILURES) + "\n")
         sys.stderr.write("\n{} 件の検査のうち {} 件が落ちた\n".format(CHECKS[0], len(FAILURES)))

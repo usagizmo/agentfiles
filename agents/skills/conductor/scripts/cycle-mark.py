@@ -10,15 +10,34 @@
 #
 # **指紋は content の関数にする。**「同じ観測」を破る経路は名前と順序だけではない。
 #
-#   - **porcelain の出力を材料にしない** —— `git diff` のテキストは git のバージョンで形が動く。
-#     使うのは plumbing の `diff-index --raw -z` で、表示系の設定にも `core.abbrev` にも
-#     影響されない（実測）
-#   - **index の鮮度に依存しない** —— `diff-index` は stat が古いと中身が同じ path も変更として
-#     返す。`update-index --refresh` は index を書くので観測が副作用を持つ。代わりに**候補として
-#     受け取り、blob id で確かめて落とす**
+#   - **`git diff` のテキストを材料にしない** —— 出力の形が git のバージョンで動く。変わった
+#     path の集合は `status --porcelain=v1 -z` から取る。**`--porcelain=v1` は「バージョンと
+#     利用者の設定を越えて安定」と git が明示している契約**で、表示系の設定にも `core.abbrev`
+#     にも影響されない
+#   - **index の鮮度に依存しない** —— `diff-index --raw` は stat が古いと中身が同じ path も
+#     返す。`status` は中身で比べるので、`update-index --refresh`（index を書く＝観測が副作用を
+#     持つ）を通さずに済む
+#   - **filter を自分で再現しない** —— `core.autocrlf` や `text=auto` があると worktree の生
+#     バイトと HEAD の blob は一致しない（実測）。「変わったか」の判定は git に任せ、こちらは
+#     worktree の中身をそのまま指紋へ入れる
 #   - **git の設定を環境から注入させない** —— global / system に加えて `GIT_CONFIG_COUNT` と
 #     `GIT_CONFIG_PARAMETERS` も閉じる。`core.excludesFile` を注入すると untracked の集合が
 #     変わる（実測）
+#
+# **観測を atomic にはしない。**status・index・worktree の中身は別々の時点で撮るので、
+# 並行して書かれていれば実在しなかった混成の状態が出る。lock を取らないのは意図で、
+# **ずれた周は次の周と値が違う ＝ 成果ありの側へ倒れる**（成果ゼロを数え損なうだけで、
+# 進んでいない課題を退避させることはない）。撮り直して突き合わせても窓が縮むだけで消えず、
+# 費用は倍になる。
+#
+# **例外が 1 つだけあるので、そこは閉じる。**観測の途中で commit が入ると「古い HEAD ＋
+# commit 後の clean な worktree」が出る。これは前の周の指紋と**一致しうる**（前の周も同じ
+# HEAD で clean だったなら）ので、commit した周が成果ゼロとして数えられる —— 唯一、進んだ
+# 課題を退避させる向きに倒れる。HEAD を前後で撮って、動いていたら観測の失敗にする。
+#
+# **git が見ないものはこちらも見えない。**`skip-worktree` / `assume-unchanged` が立った path は
+# 中身を書き換えても `status` に出ないので、成果ゼロに見える。全 tracked を毎周読めば塞げるが、
+# 費用が釣り合わない —— **規約側にも書いてある既知の穴**（`../references/protocols.md`）。
 #
 # **python3 で書くのは、指紋の入力が任意のバイト列だから。**NUL を含むバイナリ・改行を含む
 # path・symlink の link target が入る。shell 変数は NUL を保持できず、`readlink` は末尾改行を
@@ -36,6 +55,7 @@ import argparse
 import hashlib
 import os
 import re
+import signal
 import stat
 import subprocess
 import sys
@@ -69,7 +89,7 @@ GIT_ENV_OVERRIDES = {
     "GIT_PAGER": "cat",
     "GIT_TERMINAL_PROMPT": "0",
     # **index を書かせない。**観測は副作用を持たない —— 別の実行器が同じ worktree を同時に
-    # 観測しても壊れない。stat が古いことによる誤検出は blob id で落とす（下の `changed_paths`）。
+    # 観測しても壊れない。`status` は index を書かなくても中身で比べるので、これで値は変わらない。
     "GIT_OPTIONAL_LOCKS": "0",
     # **これは指紋のためではない。**並びは Python 側で生バイト昇順に取り直し、材料は plumbing
     # なので locale は値に効かない。揃えるのは失敗したときの stderr で、実行環境ごとに別の
@@ -91,14 +111,24 @@ GIT_ENV_DROP = (
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
 )
 
-# `--raw -z` は plumbing の形式。`--no-renames` は R / C の 2 path 形式を作らせないため
-# （形が 1 つに決まると、読み違えようが無い）。
-CHANGED_FLAGS = ("--raw", "-z", "--no-renames", "--ignore-submodules=none")
+# **設定で動く欄を引数で固定する。**`--untracked-files` は `status.showUntrackedFiles` を
+# 打ち消すため（既定の `normal` だと untracked なディレクトリが `dir/` に畳まれ、中の変化が
+# 出ない）、`--no-renames` は R / C の 2 path 形式を作らせないため（形が 1 つに決まると、
+# 読み違えようが無い）。**ignore 対象は既定で出ないので、打ち消しは要らない**
+# （`--ignored` は CLI だけの指定で、config から有効にはならない）。
+STATUS_FLAGS = (
+    "--porcelain=v1",
+    "-z",
+    "--no-renames",
+    "--untracked-files=all",
+    # **submodule を隠させない。**`diff.ignoreSubmodules` / `submodule.<name>.ignore` が
+    # repo-local にあると tip の動いた submodule が status に出ず、下の fail-closed へ届かない
+    # まま clean と同じ指紋になる（実測）。
+    "--ignore-submodules=none",
+)
 
-# git の mode と、こちらが lstat から付ける種別の対応。**変更の確認にしか使わない。**
-MODE_FOR_KIND = {"file": b"100644", "executable-file": b"100755", "symlink": b"120000"}
-
-NULL_OID = re.compile(r"\A0+\Z")
+UNTRACKED_STATUS = b"??"
+GITLINK_MODE = b"160000 "
 
 
 class ObservationError(Exception):
@@ -120,13 +150,28 @@ class Encoder:
         self._digest = hashlib.sha256()
 
     def record(self, name, content):
-        assert RECORD_NAME.match(name), name
         assert isinstance(content, bytes), name
+        self.record_stream(name, len(content), (content,))
+
+    def record_stream(self, name, length, chunks):
+        """**中身をメモリに溜めずに流し込む。**大きな dirty file 1 件で tick を落とさない。
+
+        **長さは先に宣言し、流し終えてから実際の量と突き合わせる** —— 途中で書き換えられて
+        いたら framing が壊れた指紋になるので、観測の失敗にする。
+        """
+        assert RECORD_NAME.match(name), name
         self._digest.update(name.encode("ascii"))
         self._digest.update(b"\n")
-        self._digest.update(str(len(content)).encode("ascii"))
+        self._digest.update(str(length).encode("ascii"))
         self._digest.update(b"\n")
-        self._digest.update(content)
+        seen = 0
+        for chunk in chunks:
+            seen += len(chunk)
+            if seen > length:
+                raise ObservationError("読んでいる最中に {} が伸びた".format(name))
+            self._digest.update(chunk)
+        if seen != length:
+            raise ObservationError("読んでいる最中に {} が縮んだ".format(name))
         self._digest.update(b"\n")
 
     def text(self, name, value):
@@ -144,28 +189,48 @@ def git_env():
     return env
 
 
+# repo-local から観測の見え方を変えられる設定を潰す。**どちらも成功を返しながら変更を隠す** ——
+# stale な fsmonitor hook は tracked の変更を、stale な untracked cache は新しい untracked を
+# 落とす（directory の mtime を信用できない filesystem で起きる）。落ちる向きが「成果ゼロ」＝
+# 退避が早まる側なので、既定に任せない。
+GIT_CONFIG_PINS = ("core.fsmonitor=false", "core.untrackedCache=false")
+
+# git が戻らなくなったら観測の失敗にする。**外部 filter・壊れた repository・止まった I/O で
+# 待ち続けると、exit 1 の fail-closed ではなく conductor 全体の停止になる**（起床漏れと同じ
+# クラスの障害）。`watch.sh` が同じ理由で deadline を持っている。
+GIT_DEADLINE = 60
+
+
 def git(cwd, *args):
     """git を回して stdout をバイト列で返す。失敗は観測の失敗。"""
-    argv = ["git", "-C", cwd, "--no-pager"] + list(args)
+    argv = ["git", "-C", cwd, "--no-pager"]
+    for pin in GIT_CONFIG_PINS:
+        argv += ["-c", pin]
+    argv += list(args)
     try:
-        proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=git_env())
+        # **process group ごと落とせるようにする。**`terminate()` は直下の子しか殺さないので、
+        # clean filter のような孫が握ったまま残る。
+        proc = subprocess.Popen(
+            argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=git_env(), start_new_session=True
+        )
     except OSError as exc:
         raise ObservationError("git を起動できない: {}".format(exc))
+    try:
+        out, err = proc.communicate(timeout=GIT_DEADLINE)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        proc.communicate()
+        raise ObservationError("git {} が {} 秒で戻らない".format(" ".join(args), GIT_DEADLINE))
     if proc.returncode != 0:
         raise ObservationError(
             "git {} が {} で終わった: {}".format(
-                " ".join(args), proc.returncode, proc.stderr.decode("utf-8", "replace").strip()
+                " ".join(args), proc.returncode, err.decode("utf-8", "replace").strip()
             )
         )
-    return proc.stdout
-
-
-def read_bytes(path, label):
-    try:
-        with open(path, "rb") as handle:
-            return handle.read()
-    except OSError as exc:
-        raise ObservationError("{} を読めない: {}".format(label, exc))
+    return out
 
 
 def verify_worktree(path):
@@ -202,8 +267,8 @@ def classify(mode):
     return "unknown"
 
 
-def read_regular(full):
-    """通常ファイルを、開いてから種別を確かめて読む。
+def open_regular(full, label):
+    """通常ファイルを開いて（fd, stat）を返す。
 
     **`lstat` の結果を信じて開かない。**並行して symlink や FIFO へ差し替えられると、
     参照先を読む（`O_NOFOLLOW` で防ぐ）か、開いたまま無期限に止まる（`O_NONBLOCK` で防ぐ）。
@@ -213,26 +278,58 @@ def read_regular(full):
     try:
         fd = os.open(full, flags)
     except OSError as exc:
-        raise ObservationError("untracked / tracked を開けない: {}".format(exc))
+        raise ObservationError("{} を開けない: {}".format(label, exc))
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
-            raise ObservationError("開いた先が通常ファイルではない: {!r}".format(full))
-        chunks = []
-        while True:
+            raise ObservationError("{} が通常ファイルではない: {!r}".format(label, full))
+    except Exception:
+        os.close(fd)
+        raise
+    return fd, info
+
+
+def read_chunks(fd, label):
+    while True:
+        try:
             chunk = os.read(fd, 1 << 20)
-            if not chunk:
-                break
-            chunks.append(chunk)
-    except OSError as exc:
-        raise ObservationError("読めない: {}".format(exc))
+        except OSError as exc:
+            raise ObservationError("{} を読めない: {}".format(label, exc))
+        if not chunk:
+            return
+        yield chunk
+
+
+def emit_file(enc, name, full, label):
+    """呼び出し側が渡した file を 1 レコードとして流す。
+
+    **worktree の中身と同じ経路で開く** —— 渡された path が FIFO なら開いた時点で止まり、
+    symlink なら意図しない先を指紋へ入れることになる。種別は書かない（conductor が書いた
+    file なので、通常ファイルでなければ観測の失敗が正しい）。
+    """
+    fd, info = open_regular(full, label)
+    try:
+        enc.record_stream(name, info.st_size, read_chunks(fd, label))
     finally:
         os.close(fd)
-    return b"".join(chunks)
 
 
-def observe_entity(worktree, path, allow_absent):
-    """worktree 上の 1 entry を（種別, 中身）で返す。
+def emit_worktree_regular(enc, prefix, full, label):
+    """worktree の通常ファイル。
+
+    **種別も長さも開いた fd から取る** —— `lstat` の側から取ると、間に差し替えられたとき、
+    差し替え前の実行ビットと差し替え後の中身を組み合わせた指紋を正常に返す。
+    """
+    fd, info = open_regular(full, label)
+    try:
+        enc.text(prefix + "-kind", classify(info.st_mode))
+        enc.record_stream(prefix + "-body", info.st_size, read_chunks(fd, label))
+    finally:
+        os.close(fd)
+
+
+def emit_entity(enc, prefix, worktree, path, allow_absent):
+    """worktree 上の 1 entry の種別と中身をレコードへ書き出す。
 
     tracked と untracked で同じ形にする —— 片方だけ別の表現にすると、同じ中身の entry が
     どちらに居たかで別の枝を通ることになる。
@@ -243,9 +340,11 @@ def observe_entity(worktree, path, allow_absent):
     except FileNotFoundError:
         # tracked の削除は「無い」が正しい状態。untracked で消えていたら、直前に git が
         # 列挙したものが失われているので観測の失敗。
-        if allow_absent:
-            return ("absent", b"")
-        raise ObservationError("列挙された untracked が消えている: {!r}".format(path))
+        if not allow_absent:
+            raise ObservationError("列挙された untracked が消えている: {!r}".format(path))
+        enc.text(prefix + "-kind", "absent")
+        enc.record(prefix + "-body", b"")
+        return
     except OSError as exc:
         raise ObservationError("stat できない: {}".format(exc))
 
@@ -254,80 +353,71 @@ def observe_entity(worktree, path, allow_absent):
         # **参照先ではなく link target を書く** —— 辿ると、指す先が外部で変わっただけの周に
         # 成果があったことになる。
         try:
-            return (kind, os.readlink(full))
+            target = os.readlink(full)
         except OSError as exc:
             raise ObservationError("symlink を読めない: {}".format(exc))
+        enc.text(prefix + "-kind", kind)
+        enc.record(prefix + "-body", target)
+        return
     if kind in ("file", "executable-file"):
-        return (kind, read_regular(full))
+        emit_worktree_regular(enc, prefix, full, "worktree の entry")
+        return
     # FIFO / socket / device / directory。**読みにいかない**（FIFO は開いた時点で止まる）。
     # 観測の失敗ではないので種別として残す —— 空へ畳んで通常ファイルと混ぜない。
-    return (kind, b"")
+    enc.text(prefix + "-kind", kind)
+    enc.record(prefix + "-body", b"")
 
 
-def blob_id(object_format, kind, body):
-    """worktree の entry を git の blob id へ写す。変更の確認にしか使わない。"""
-    algorithm = hashlib.sha1 if object_format == "sha1" else hashlib.sha256
-    digest = algorithm()
-    digest.update(b"blob " + str(len(body)).encode("ascii") + b"\0")
-    digest.update(body)
-    return digest.hexdigest().encode("ascii")
+def status_entries(worktree):
+    """変わった tracked と untracked の path を、それぞれバイト昇順で返す。
 
-
-def changed_paths(worktree, object_format):
-    """HEAD と中身が違う tracked の entry を、path のバイト昇順で返す。
-
-    `diff-index` が返すのは**候補**。stat が古いだけの path が混ざるので（index を書かずに
-    観測するにはそれを受け入れるしかない）、mode と blob id で確かめて落とす。落とさないと、
-    誰かが index を refresh しただけの周に成果があったことになる。
-    """
-    raw = git(worktree, "diff-index", *(CHANGED_FLAGS + ("HEAD",)))
-    fields = [f for f in raw.split(b"\0")]
-    if fields and fields[-1] == b"":
-        fields.pop()
-    if len(fields) % 2 != 0:
-        raise ObservationError("diff-index の出力が meta と path の対になっていない")
-
-    entries = []
-    for index in range(0, len(fields), 2):
-        meta, path = fields[index], fields[index + 1]
-        if not meta.startswith(b":"):
-            raise ObservationError("diff-index の meta が読めない: {!r}".format(meta))
-        parts = meta[1:].split(b" ")
-        if len(parts) < 5:
-            raise ObservationError("diff-index の meta の欄が足りない: {!r}".format(meta))
-        src_mode, src_oid, status = parts[0], parts[2], parts[4]
-        # **rename / copy は 1 entry が 2 path を占める。**plumbing は `-M` を渡さない限り
-        # 検出しないので `--no-renames` と併せて起きないはずだが、起きたら対の読み方が
-        # ずれて別の path の中身を別の path に紐づける。黙って進めずに観測の失敗にする。
-        if status[:1] in (b"R", b"C"):
-            raise ObservationError("rename / copy が検出された: {!r}".format(meta))
-        kind, body = observe_entity(worktree, path, allow_absent=True)
-        if (
-            kind != "absent"
-            and MODE_FOR_KIND.get(kind) == src_mode
-            and not NULL_OID.match(src_oid.decode("ascii", "replace"))
-            and blob_id(object_format, kind, body) == src_oid
-        ):
-            continue
-        entries.append((path, kind, body))
-    return sorted(entries, key=lambda entry: entry[0])
-
-
-def untracked_entries(worktree):
-    """untracked を path のバイト昇順で返す。
-
-    **`--exclude-standard` を落とさない** —— build 成果物・OS ファイル・ログが毎周動くので、
-    ignore 対象を混ぜると指紋が常に変わって成果ゼロの上限が実質発火しない。
+    **中身はここでは読まない** —— 読むのは書き出す直前の 1 件だけにして、dirty な worktree の
+    総量ぶんをメモリに載せない。
 
     **並びは生バイトの昇順**（`LC_ALL=C` と同じ順序）。locale で順が変わると同じ観測から
     別の値になる。
+
+    **ignore 対象は入らない** —— build 成果物・OS ファイル・ログが毎周動くので、混ぜると
+    指紋が常に変わって成果ゼロの上限が実質発火しない。
     """
-    raw = git(worktree, "ls-files", "--others", "--exclude-standard", "--full-name", "-z")
-    entries = []
-    for path in sorted(p for p in raw.split(b"\0") if p):
-        kind, body = observe_entity(worktree, path, allow_absent=False)
-        entries.append((path, kind, body))
-    return entries
+    raw = git(worktree, "status", *STATUS_FLAGS)
+    tracked, untracked = [], []
+    for field in raw.split(b"\0"):
+        if not field:
+            continue
+        if len(field) < 4 or field[2:3] != b" ":
+            raise ObservationError("status の行が読めない: {!r}".format(field))
+        status, path = field[:2], field[3:]
+        # **rename / copy は 1 entry が 2 path を占める。**`--no-renames` を渡しているので
+        # 起きないはずだが、起きたら対の読み方がずれて別の path の中身を別の path へ
+        # 紐づける。黙って進めずに観測の失敗にする。
+        if b"R" in status or b"C" in status:
+            raise ObservationError("rename / copy が検出された: {!r}".format(field))
+        if status == UNTRACKED_STATUS:
+            untracked.append(path)
+        else:
+            tracked.append((path, status.decode("ascii", "replace")))
+    return sorted(tracked, key=lambda entry: entry[0]), sorted(untracked)
+
+
+def index_entries(worktree):
+    """index の `<mode> <oid> <stage>` を path ごとにまとめる。
+
+    **index の中身が指紋に要る** —— XY だけだと、worktree を HEAD に戻したまま staged の
+    blob を差し替えた周が clean と同じ値になる。**index の oid は clean 済み**なので、
+    `core.autocrlf` があっても実行環境で動かない。
+
+    **競合中は同じ path に stage が複数ある**。全部を並べて 1 つの値にする。
+    """
+    table = {}
+    for field in git(worktree, "ls-files", "-s", "-z").split(b"\0"):
+        if not field:
+            continue
+        meta, tab, path = field.partition(b"\t")
+        if not tab:
+            raise ObservationError("ls-files の行が読めない: {!r}".format(field))
+        table.setdefault(path, []).append(meta)
+    return dict((path, b"\n".join(sorted(metas))) for path, metas in table.items())
 
 
 def encode_resolve(enc, args):
@@ -338,11 +428,17 @@ def encode_resolve(enc, args):
     """
     enc.text("progress", args.progress)
 
+    # **`--repo` は使う前に確かめる。**`--no-branch --no-worktree` では参照しないので、
+    # 検証しないと存在しない path を渡した周が「実体なし」の正常な指紋になる。
+    git(args.repo, "rev-parse", "--git-dir")
+
     worktree = verify_worktree(args.worktree) if args.worktree else None
 
+    head_before = None
     if worktree:
+        head_before = git(worktree, "rev-parse", "HEAD").decode("utf-8").strip()
         enc.text("head-source", "worktree")
-        enc.text("head", git(worktree, "rev-parse", "HEAD").decode("utf-8").strip())
+        enc.text("head", head_before)
     elif args.branch:
         # worktree を消した後でも branch が残っていれば head は撮れる。
         ref = "refs/remotes/{}/{}".format(REMOTE, args.branch)
@@ -355,29 +451,36 @@ def encode_resolve(enc, args):
         enc.text("head", "")
 
     if worktree:
-        object_format = git(worktree, "rev-parse", "--show-object-format").decode("utf-8").strip()
+        tracked, untracked = status_entries(worktree)
+        index = index_entries(worktree)
         enc.text("tracked-source", "worktree")
-        emit_entries(enc, "tracked", changed_paths(worktree, object_format))
+        for path, status in tracked:
+            meta = index.get(path, b"")
+            if meta.startswith(GITLINK_MODE) or b"\n" + GITLINK_MODE in meta:
+                # **submodule は畳まずに落ちる。**指している commit が worktree の側からは
+                # ディレクトリにしか見えないので、種別だけ書くと tip が動いた周と動いて
+                # いない周が同じ値になる。符号化を決めていないものを黙って同値にしない。
+                raise ObservationError("submodule は未対応: {!r}".format(path))
+            enc.record("tracked-path", path)
+            enc.text("tracked-status", status)
+            enc.record("tracked-index", meta)
+            emit_entity(enc, "tracked", worktree, path, allow_absent=True)
         enc.text("untracked-source", "worktree")
-        emit_entries(enc, "untracked", untracked_entries(worktree))
+        for path in untracked:
+            enc.record("untracked-path", path)
+            emit_entity(enc, "untracked", worktree, path, allow_absent=False)
+        # **HEAD が動いていないことを最後に確かめる。**成分は別々の時点で撮るので、commit が
+        # 途中に入ると「古い HEAD ＋ commit 後の clean な worktree」という実在しない状態が
+        # 出る。それが前の周の指紋と一致すると、**commit した周が成果ゼロとして数えられる** ——
+        # 混成が成果ありの側へ倒れるという一般則の唯一の例外なので、ここだけ閉じる。
+        if git(worktree, "rev-parse", "HEAD").decode("utf-8").strip() != head_before:
+            raise ObservationError("観測の最中に HEAD が動いた")
     else:
         enc.text("tracked-source", "absent")
         enc.text("untracked-source", "absent")
 
     encode_optional_file(enc, "plan-comment", args.plan_comment)
     encode_optional_file(enc, "wait-record", args.wait_record)
-
-
-def emit_entries(enc, prefix, entries):
-    """**path・種別・中身をそれぞれ長さ前置きで置く。**
-
-    中身まで入れるのは、path と状態だけ（`git status --porcelain` の類）にすると、既に
-    dirty なファイルをさらに書いた周が成果ゼロになるから。真偽値への丸めも同じ理由で不可。
-    """
-    for path, kind, body in entries:
-        enc.record(prefix + "-path", path)
-        enc.text(prefix + "-kind", kind)
-        enc.record(prefix + "-body", body)
 
 
 def encode_plan(enc, args):
@@ -389,7 +492,7 @@ def encode_plan(enc, args):
         enc.text("issue-number", str(number))
         # **本文をそのまま入れる。**外側で SHA-256 を取るので、先に digest へ畳んでも
         # 識別力は同じ。畳まないぶん、呼び出し側が digest を撮り損なう経路が消える。
-        enc.record("issue-body", read_bytes(path, "Issue 本文"))
+        emit_file(enc, "issue-body", os.fsencode(path), "Issue 本文")
     encode_optional_file(enc, "wait-record", args.wait_record)
 
 
@@ -404,7 +507,9 @@ def encode_optional_file(enc, name, path):
         enc.record(name, b"")
     else:
         enc.text(name + "-source", "present")
-        enc.record(name, read_bytes(path, name))
+        # **worktree の中身と同じ経路で読む** —— 渡された path が FIFO なら開いた時点で
+        # 止まり、symlink なら意図しない先を指紋へ入れることになる。
+        emit_file(enc, name, os.fsencode(path), name)
 
 
 def issue_body_arg(value):
