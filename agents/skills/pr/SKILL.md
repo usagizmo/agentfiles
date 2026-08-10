@@ -20,7 +20,7 @@ PR を作り、**merge 可能な状態まで**持っていく。タイトル先�
 
 ## フロー
 
-1. **push は `scripts/sync-and-push.sh [<base>]` で行う。素の `git push` を使わない。** base への追随（fetch → ローカル default の ff → rebase）と push を 1 つにまとめてある。衝突が出たら解消して再実行する
+1. **push は `sh <skills root>/pr/scripts/sync-and-push.sh [<base>]` で行う。素の `git push` を使わない。** base への追随（fetch → ローカル default の ff → rebase）と push を 1 つにまとめてある。衝突が出たら解消して再実行する。**path は skill 側の実体を指す** —— cwd 相対で書くと作業中の repo の下を探して `No such file or directory` で落ち、等価な手順を毎回組み直すことになる（実測で、追随を飛ばした push が混ざる経路になった）
 2. PR が無ければ `gh pr create --base <base>`、あれば `gh pr edit` で title / body を更新
 3. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
 
