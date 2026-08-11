@@ -154,10 +154,25 @@ export type Decision =
       readonly target: Target;
       readonly evidence: Evidence;
     }
+  | { readonly kind: "settle-record"; readonly settlement: Settlement }
   | { readonly kind: "constraint"; readonly constraint: ConstraintKind; readonly detail: string }
   | { readonly kind: "non-action"; readonly nonAction: NonActionKind; readonly detail: string }
   | { readonly kind: "conflict"; readonly conflicts: readonly Conflict[] }
   | { readonly kind: "idle" };
+
+/**
+ * action の選択とは独立に行う精算。**action として書かない** ——
+ * `退避先` にはどの action も当たらないことがあるので、action にすると
+ * 「選択 → 無し → 終了」に落ちて一度も揃わない。
+ *
+ * **action 上限には数えない。ただし実際に書いたら観測からやり直す**（記録は指紋に入る）。
+ */
+export type Settlement = {
+  readonly target: Target;
+  /** `退避先` を観測したので、失敗の記録と周回の記録の `count` を 0 に揃える */
+  readonly kind: "退避先の count を 0 に揃える";
+  readonly detail: string;
+};
 
 /** action の対象。**実体を触る action は代表の番号で 1 回**なので、group ごと持つ。 */
 export type Target = {

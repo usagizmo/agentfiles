@@ -89,5 +89,24 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   integrationRecordCount: present(0),
 
   prunableWorkspace: present(false),
+
+  failureRecord: present({ count: 0, lastAction: null }),
+  cycleRecord: present({ count: 0, mark: null }),
+  currentMark: present("mark-0"),
+  readyRecordStale: present(false),
+
+  bodyMatchesPlan: present(true),
+  planInvalidated: present(false),
+  // **既定は「キーの一覧を持たない project」ではなく「交差しない」**。
+  // 既定を `absent` にすると全行が `unknown` = 全直列になり、交差を語らない行まで
+  // 資源で説明が付いてしまう（行が語っていない前提を掴む）。
+  resourceKeys: present([]),
+  blocksEntry: false,
+
+  dependsOn: [],
+  sameBranchAs: [],
+
+  boardOrder: 0,
+  claimedAt: absent(),
   ...over,
 });

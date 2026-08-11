@@ -107,4 +107,39 @@ export type IssueObservation = {
 
   /** checkout は無いが所有している workspace が残っている */
   readonly prunableWorkspace: Observed<boolean>;
+
+  // -------------------------------------------------------------------------
+  // 記録。**どれも指紋に入る**ので、書いたら観測からやり直す。
+  // -------------------------------------------------------------------------
+
+  /** 失敗の記録。数える失敗と数えない失敗の区別は `decide` の外（実行側）が持つ */
+  readonly failureRecord: Observed<{ readonly count: number; readonly lastAction: string | null }>;
+  /** 周回の記録。`mark` と現在の指紋が一致したまま上限に達したら `退避先` へ落ちる */
+  readonly cycleRecord: Observed<{ readonly count: number; readonly mark: string | null }>;
+  /** いまの成果の指紋。**作れない周でも action の選択は続ける**（照合を飛ばすだけ） */
+  readonly currentMark: Observed<string>;
+  /** 在庫の記録が陳腐化しているか（判定は `ready-record.md`） */
+  readonly readyRecordStale: Observed<boolean>;
+
+  /** 本文が計画の記録と一致しているか */
+  readonly bodyMatchesPlan: Observed<boolean>;
+  /** 計画が失効したか（統合先の変更が `invalidationScope` / `resourceKeys` に交差） */
+  readonly planInvalidated: Observed<boolean>;
+  /**
+   * 資源キー。**path ではなく「同時に触ると壊れるもの」の名前**。
+   * 読めなければ `unknown` = 全交差（`incompatible` として扱う）。
+   */
+  readonly resourceKeys: Observed<readonly string[]>;
+  /** 入場を止める宣言を持っているか（宣言の形は project の領分） */
+  readonly blocksEntry: boolean;
+
+  /** `Depends on #N` */
+  readonly dependsOn: readonly number[];
+  /** `Same branch as #N`。**group は 1 単位で claim する** */
+  readonly sameBranchAs: readonly number[];
+
+  /** ボード上の並び順。**人が並べた順**なので、同数のときの tie-break に使う */
+  readonly boardOrder: number;
+  /** claim の順序キー。**PR 作成の早さで選ばない**（PR を持たない課題が選外へ落ちる） */
+  readonly claimedAt: Observed<number>;
 };
