@@ -521,6 +521,30 @@ describe("group", () => {
     const unplanned = observation({ issue: 2, ledger: present("未計画"), sameBranchAs: [1] });
     expectAction([planned, unplanned], "計画を起こす");
   });
+
+  test("在庫の陳腐化は、古くなった成員だけを戻す", () => {
+    const fresh = observation({
+      issue: 1,
+      ledger: present("計画済み"),
+      sameBranchAs: [2],
+      readyRecordStale: present(false),
+    });
+    const stale = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      sameBranchAs: [1],
+      readyRecordStale: present(true),
+    });
+    const d = tick([fresh, stale]);
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "差し戻す",
+      to: "未計画",
+    });
+    expect(d.kind === "action" ? d.target : d.kind).toMatchObject({
+      representative: 2,
+      members: [2],
+    });
+  });
 });
 
 describe("入場を止める宣言", () => {
@@ -602,6 +626,22 @@ describe("硬い上限", () => {
     );
     const candidate = observation({ issue: 1, ledger: present("未計画") });
     expectIdle([...planning, candidate]);
+  });
+
+  test("retry budget の戻し先は TickConfig の値で決まる", () => {
+    const d = decide({
+      observations: [
+        implementing({
+          session: session.none,
+          failureRecord: present({ count: 2, lastAction: null }),
+        }),
+      ],
+      config: { ...DEFAULT_CONFIG, retryBudget: 2 },
+    });
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "差し戻す",
+      to: "退避先",
+    });
   });
 });
 

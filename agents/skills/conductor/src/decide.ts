@@ -219,17 +219,21 @@ const revertTarget = (
     return "未計画";
   }
 
-  // **claim が構造的に止まっているあいだは陳腐化を評価しない。**
-  if (
-    r.ledger === "計画済み" &&
-    r.progress === "未着手" &&
-    !claimStructurallyBlocked(g) &&
-    value(o.readyRecordStale) === true
-  ) {
-    return "未計画";
-  }
   return undefined;
 };
+
+/**
+ * 在庫の陳腐化。**この事象だけ戻す単位が Issue** —— 鮮度の記録は成員ごとに別々に書かれるので、
+ * group へ畳むと古くなっていない成員まで一緒に戻る。ラダー上は `revertTarget` の直後に置く
+ * （4 事象より下位という順序を保つ）。
+ *
+ * **claim が構造的に止まっているあいだは評価しない。**
+ */
+const stockStale = (g: Group): boolean =>
+  g.lead.ledger === "計画済み" &&
+  g.lead.progress === "未着手" &&
+  !claimStructurallyBlocked(g) &&
+  value(g.leadObservation.readyRecordStale) === true;
 
 const hasArtifacts = (g: Group): boolean =>
   g.observations.some((o) =>
@@ -317,7 +321,8 @@ const byPriority = (groups: readonly Group[]) => (a: Group, b: Group) => {
 // ---------------------------------------------------------------------------
 
 type Rung = {
-  readonly params: (g: Group) => ActionParams;
+  /** **`ctx.config` で組み立てる。**`DEFAULT_CONFIG` を直接読むと `match` と判定がずれる。 */
+  readonly params: (g: Group, ctx: Context) => ActionParams;
   readonly why: string;
   readonly match: (g: Group, ctx: Context) => boolean;
   /**
@@ -395,9 +400,15 @@ const LADDER: readonly Rung[] = [
     },
   },
   {
-    params: (g) => ({ action: "差し戻す", to: revertTarget(g, DEFAULT_CONFIG) ?? "未計画" }),
-    why: "差し戻しの 5 事象のどれかに当たった",
+    params: (g, ctx) => ({ action: "差し戻す", to: revertTarget(g, ctx.config) ?? "未計画" }),
+    why: "差し戻しの 4 事象のどれかに当たった",
     match: (g, ctx) => !isShelved(g) && revertTarget(g, ctx.config) !== undefined,
+  },
+  {
+    params: () => ({ action: "差し戻す", to: "未計画" }),
+    unit: "issue",
+    why: "計画済みの在庫が陳腐化した",
+    match: (g) => !isShelved(g) && stockStale(g),
   },
   {
     params: () => ({ action: "本文の変更を伝える" }),
@@ -656,7 +667,7 @@ export const decide = (input: TickInput): Decision => {
     const candidates = rung.unit === "issue" ? solo : ordered;
     const hit = candidates.find((g) => rung.match(g, ctx));
     if (hit === undefined) continue;
-    if (rung.params(hit).action === "報告して止める") {
+    if (rung.params(hit, ctx).action === "報告して止める") {
       const conflicts: Conflict[] = hit.records.flatMap((r) => [...r.conflicts]);
       if (terminalMixedInGroup(hit)) {
         conflicts.push({
@@ -669,7 +680,7 @@ export const decide = (input: TickInput): Decision => {
     }
     return {
       kind: "action",
-      params: rung.params(hit),
+      params: rung.params(hit, ctx),
       target: target(hit),
       evidence: {
         progress: hit.lead.progress,
