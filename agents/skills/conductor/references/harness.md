@@ -17,7 +17,7 @@ conductor が terminal multiplexer に対して行う操作。**差し替える�
 | **起動が非同期**（親が子の完了をブロックしない）                                        | tick が子の完了まで返らない                                                        |
 | **稼働中のセッションを一覧で観測できる**                                                | tick が現実を読めない                                                              |
 
-**「前回」は時点ではなく実体**。tick が読んだ観測そのものを起床側へ渡し、起床側はそれを取り直さない。取り直すと、渡された観測との隙間に入った遷移が吸われ、以後どのラウンドでも差分に出ない（fallback まで盲目）。**窓の長さでは抑えられない**（理由と実測は `../SKILL.md` の「いつ打つか」）。
+**「前回」は時点ではなく実体**。tick が読んだ観測そのものを起床側へ渡し、起床側はそれを取り直さない。取り直すと、渡された観測との隙間に入った遷移が吸われ、以後どのラウンドでも差分に出ない（fallback まで盲目）。**窓の長さでは抑えられない**。
 
 **人待ちの印は無くてもよい**（人待ちの SSOT は Issue の記録で、印は即時観測用のキャッシュ）。印と記録が食い違ったときの判定は `../SKILL.md`。
 
@@ -53,7 +53,7 @@ fencing token（grant 世代つき）は**入力が conductor 経由でしか通
 | `tab`       | `refine`。**何枚開いても既存の pane の幅を削らない**                       |
 | `pane`      | conductor から**振られた作業**（自分の領分ではないもの）。自分のタブへ割る |
 
-**`refine` を pane 分割で作らない**。計画枠のぶんだけ同時に開くので、分割すると人が読めない幅まで既存 pane が縮む（実測で 17 文字）。幅は人が読むための資源。**振られた作業だけは pane でよい** —— どこへ振ったかが tick を回している人の視界に残る。
+**`refine` を pane 分割で作らない**。計画枠のぶんだけ同時に開くので、分割すると人が読めない幅まで既存 pane が縮む。幅は人が読むための資源。**振られた作業だけは pane でよい** —— どこへ振ったかが tick を回している人の視界に残る。
 
 **振られた作業のセッション名は `refine-` / `resolve-` で始めない**。内容が分かる名前を付ける（`investigate-ci-timeout` 等）。述語に当たるからではない —— 計画枠も選出も片付けも完全一致で引くので `refine-investigate` は当たらず、容量にも計画枠にも数えない。名前だけで工程が読めなくなる方が損失が大きい —— 観測は名前しか手掛かりを持たないので、`refine-` で始まる pane が計画セッションでないなら、一覧を見た人も次の conductor も毎回 pane を開いて確かめることになる。
 
@@ -175,7 +175,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **3 つの経路は、それぞれ別の問いに対して権威。1 つに寄せない。**
   - **checkout があるか**（`capacity` が `あり`）は git。herdr はそのキャッシュ。ここだけ multiplexer に寄せると、socket が落ちた瞬間に全 tick が止まる
   - **worktree と workspace の対応**は herdr しか知らない。`open_workspace_id` を直接引き、パスで join しない — 文字列一致は symlink 解決差や `/private` 前置で silent に外れ、片付けが workspace を見つけられずに worktree が残る（容量が漏れる）。null なら開いている workspace が無いので、workspace ID を取る経路だけ落として git で 3 手を行う（checkout を消すだけで済ませない）
-  - **孤児 workspace**（checkout が消えた残骸）は `workspace list` で repo 非依存に列挙するしかない（`worktree list --cwd` は repo スコープなので、repo ごと消えたものが見えない）。**判定は `worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ** ——`worktree` キーが無い workspace は repo の本体 checkout であって孤児ではない（実測で 16 中 9 がこれ。混同すると生きた workspace を片付けにいく）
+  - **孤児 workspace**（checkout が消えた残骸）は `workspace list` で repo 非依存に列挙するしかない（`worktree list --cwd` は repo スコープなので、repo ごと消えたものが見えない）。**判定は `worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ** ——`worktree` キーが無い workspace は repo の本体 checkout であって孤児ではない
 - **`herdr worktree list` に `--cwd` を必ず付ける**。省くと返るのは「UI がフォーカスしている workspace の repo」で、conductor の cwd とは無関係。別 repo にフォーカスが移った瞬間、対象 repo の worktree が観測から丸ごと消え、片付け済みと誤判定する
 - `worktree create` は worktree・workspace・root pane を**一度に作る**。pane を別途 split しない
 - **`--json` を付けない**。socket API 経由のコマンドは既定で JSON を返す。`agent start` に付けると exit 2 の構文エラーになる
@@ -184,10 +184,10 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **`blocked` は人待ち**（選択肢の提示で止まっている）。詰まりの検知はここで引き、何を聞かれているかは `herdr pane read <id> --source visible` で読む
 - **入力欄への送信は `agent prompt` 以外を使わない**。`pane send-keys <id> enter` も `pane send-text` の改行も agent の入力欄を submit しない（キーは届くが送信されない）。未送信の下書きが残っていても `agent prompt` はそれを捨てて自分の本文だけを送るので、事前に消そうとしなくてよい
 - **入力欄の文字列は観測材料ではない**。サジェストか人の未送信入力かを見ただけでは区別できないので、**どちらの理由にも使わない**。`agent prompt` が入力欄を捨てるのは正しい挙動で、サジェストなら捨てられるべきもの、人の入力なら本人が送り直せる。
-  - **「人の入力かもしれない」で送信を控えない**。控えると、その pane へ渡す action が永久に選べなくなる（実測で 11 tick 止めた）
+  - **「人の入力かもしれない」で送信を控えない**。控えると、その pane へ渡す action が永久に選べなくなる
   - **見えた文字列を自分の本文へ写さない**。サジェストだった場合、誰も決めていないものを conductor が指示として確定させる。判断に関わりそうに見えたら、渡すのではなく状況ボードへ出す
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は `worktree create` / `pane split` にはあるが `agent prompt` には無い。前に置くと本文が unknown option として弾かれる（`/refine ...` が option 名として報告されるので、slash command のせいに見えて紛らわしい）
-- 稼働の確認は `agent prompt <名前> <本文> --wait --until working`。**ただし遷移を待つので、既に `working` のセッションに使うと返らず timeout する**（実測 120 秒）。確かめるのは「送った後に目的の状態にあること」であって「遷移したこと」ではないので、**timeout を失敗として数えない**（届いているのに retry budget が伸び、正常な通知だけで `退避先` へ落ちる）
+- 稼働の確認は `agent prompt <名前> <本文> --wait --until working`。**ただし遷移を待つので、既に `working` のセッションに使うと返らず timeout する**。確かめるのは「送った後に目的の状態にあること」であって「遷移したこと」ではないので、**timeout を失敗として数えない**（届いているのに retry budget が伸び、正常な通知だけで `退避先` へ落ちる）
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わない
 - 片付けは**標準出力から成否が読めない**（返る JSON は通知のエンベロープで、削除の結果ではない）。**確認するのは、実際に消す対象にしたものだけ**（面ごとの worktree 一覧、**merge 済みで消したローカル branch、**制御面の claim remote branch）**。未マージのまま残した branch の消滅を条件にしない** —— `取り下げ` は未マージ branch を意図的に残すので、条件にすると片付けが永久に完了しない。**remote branch の消滅だけで確認しない** —— 二次面の branch はローカルにしか無いので、削除に失敗しても「最初から remote に無い」が成功に見え、次に同じ名前を作るときに落ちる。同じスクリプトは popup（`prefix+shift+X`）からも呼べる
 
@@ -260,7 +260,7 @@ herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.wo
 
 **何を入れて何に畳むかは `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない**（省いた項目だけが変わる遷移は永久に起きない）。ここは herdr での写し方だけ。
 
-**この 2 つはそのまま渡す。手で書き直さない**。素直に書くと `select(.name != null) | "\(.name) \(.agent_status)"` になり、conductor 自身の状態が指紋に入る —— baseline は tick が動いている最中の観測なので自分は `working` で、ターンを終えた瞬間に `idle` へ落ち、自分の状態変化だけで即座に起こされる（実測 3 回、diff が自分の 1 行だけの空 tick）。下の畳み方はどれも同じ形の失敗を 1 つずつ塞いでいるので、要約すると塞いだものが戻る。
+**この 2 つはそのまま渡す。手で書き直さない**。素直に書くと `select(.name != null) | "\(.name) \(.agent_status)"` になり、conductor 自身の状態が指紋に入る —— baseline は tick が動いている最中の観測なので自分は `working` で、ターンを終えた瞬間に `idle` へ落ち、自分の状態変化だけで即座に起こされる。下の畳み方はどれも同じ形の失敗を 1 つずつ塞いでいるので、要約すると塞いだものが戻る。
 
 - **`.name // .pane_id` を使わない**。無名 pane まで拾ってしまい、別 repo の pane の状態変化で起床する
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
@@ -273,7 +273,7 @@ worktree 一覧は上記のとおり面ごとの checkout から取る（スク�
 
 **GraphQL のコスト = ceil(要求ノード総数 ÷ 100)**（最小 1）。ここを知らないと、正しい項目を正しい回数で取っていても枯れる。
 
-- **`gh project item-list` を使わない —— 観測でも書き込みでも**。item ごとに全 field 値を取る（`fieldValues(first:100)`）のでノード数が `件数 × 100` になる。実測で 300 件 = 406 pt（枠 5,000 の 8%）。`fieldValueByName` は単一ノードなのでノード数が `件数` で、同じ 187 行が 2 pt。`item-add` など mutation 系はそのままでよい
+- **`gh project item-list` を使わない —— 観測でも書き込みでも**。item ごとに全 field 値を取る（`fieldValues(first:100)`）のでノード数が `件数 × 100` になる。`fieldValueByName` は単一ノードなのでノード数が `件数` で、同じ 187 行が 2 pt。`item-add` など mutation 系はそのままでよい
 - **書き込みに要る item ID は、ボードではなく Issue 側から引く**（`repository.issue(number:)` の `projectItems` を project 番号で絞る。1 pt。具体のクエリは project 側のボード規約）。Status の書き込みは頻繁なので（台帳を進める・claim は group 全員ぶん・差し戻し・退避）、ボードを引いて番号で探すと十数回で枠が枯れ、`gh` を使う全セッションが同時に止まる
   - **`--limit` で回避しない** —— コストが 2 桁上がるうえ、「打ち切られた」と「そもそも載っていない」がどちらも空で返るので guard の行き先を誤る
   - **引けなかったら書かずに止める**
@@ -318,7 +318,7 @@ prose が消えたため）。**それでも節ごと消さない** —— 実�
 
 **後継は毎 tick、`agent list` で `conductor-prev` を探し、居たら pane を閉じる**（`tab_id` ではなく `pane_id` を閉じる。交代は pane 単位）。**自分では閉じない** ——自分の pane を閉じる操作は自分の実行器を落とすので、最後まで実行された保証が取れない。
 
-**「起動直後に 1 回だけ」にしない**。rename（手順 4）は後継が観測を始めた後に行うので、**起動直後の後継から見ると `conductor-prev` はまだ存在しない**（退く側はその時点でまだ `conductor`）。1 回だけ探す形にすると必ず空振りし、以後もう探さないので**退いた pane が人の操作まで残る**（実測で 25 分）。手順の順序を先に変える案は採らない —— rename を先へ出すと `conductor` が一時的に不在になり、その窓で人が `/conductor` を叩くと多重起動になる。
+**「起動直後に 1 回だけ」にしない**。rename（手順 4）は後継が観測を始めた後に行うので、**起動直後の後継から見ると `conductor-prev` はまだ存在しない**（退く側はその時点でまだ `conductor`）。1 回だけ探す形にすると必ず空振りし、以後もう探さないので**退いた pane が人の操作まで残る**。手順の順序を先に変える案は採らない —— rename を先へ出すと `conductor` が一時的に不在になり、その窓で人が `/conductor` を叩くと多重起動になる。
 
 **`agent list` を直接引く**。起床スナップショットは conductor 自身の状態を `conductor present` へ畳むので、**`conductor-prev` はそこに現れない**（畳み方の理由は「起床の監視」）。毎 tick の追加コストは `agent list` 1 回で、`conductor-prev` は交代のときにしか現れないので空振りは安い。
 
