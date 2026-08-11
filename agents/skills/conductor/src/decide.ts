@@ -14,7 +14,7 @@ import {
   planSlotUsage,
   worktreeCount,
 } from "./resources.ts";
-import { normalize } from "./normalize.ts";
+import { ledgerAhead, ledgerBehind, normalize } from "./normalize.ts";
 import type {
   ActionParams,
   Conflict,
@@ -126,27 +126,6 @@ const target = (g: Group): Target => ({ representative: g.representative, member
 const TERMINAL: readonly Progress[] = ["着地済み", "取り下げ"];
 const WRITE_STAGES: readonly Progress[] = ["準備済み", "実装中", "提出中"];
 
-/** `progress` から期待される `ledger`。`取り下げ` は触らない（人が置いた状態を尊重する）。 */
-const expectedLedger = (p: Progress): readonly Ledger[] => {
-  if (p === "未着手") return ["未計画", "計画済み"];
-  if (p === "着地済み") return ["完了"];
-  if (p === "取り下げ") return LEDGER_ANY;
-  return ["進行中"];
-};
-const LEDGER_ANY: readonly Ledger[] = ["未計画", "計画済み", "進行中", "完了", "退避先"];
-
-const LEDGER_ORDER: readonly Ledger[] = ["未計画", "計画済み", "進行中", "完了"];
-const ledgerRank = (l: Ledger): number => LEDGER_ORDER.indexOf(l);
-
-/** `ledger` が期待より手前か。**前進のみ**で、後退は「差し戻す」だけが行う。 */
-const ledgerBehind = (r: NormalizedIssue): boolean => {
-  const expected = expectedLedger(r.progress);
-  if (expected === LEDGER_ANY || expected.includes(r.ledger)) return false;
-  const current = ledgerRank(r.ledger);
-  if (current < 0) return false; // `退避先` はこの軸に乗らない
-  return expected.every((e) => current < ledgerRank(e));
-};
-
 /** group 内で終端と非終端が混在しているか。共有実体をどちらに倒しても壊れる。 */
 const terminalMixedInGroup = (g: Group): boolean => {
   const terminal = g.records.filter((r) => TERMINAL.includes(r.progress)).length;
@@ -229,11 +208,18 @@ const revertTarget = (
  *
  * **claim が構造的に止まっているあいだは評価しない。**
  */
-const stockStale = (g: Group): boolean =>
+const stockStale = (g: Group, ctx: Context): boolean =>
   g.lead.ledger === "計画済み" &&
   g.lead.progress === "未着手" &&
-  !claimStructurallyBlocked(g) &&
+  // **停止の判定は成員ではなく group で行う。**`unit: "issue"` は solo group を渡すので、
+  // そのまま評価すると「group の一部だけが計画済み」という停止が消え、揃っていない
+  // group の計画済み側が交差のたびに未計画へ戻される。
+  !claimStructurallyBlocked(parentOf(g, ctx)) &&
   value(g.leadObservation.readyRecordStale) === true;
+
+/** solo group から元の group を引く。`unit: "issue"` の rung が group の述語を使うときだけ要る。 */
+const parentOf = (g: Group, ctx: Context): Group =>
+  ctx.groups.find((x) => x.members.includes(g.representative)) ?? g;
 
 const hasArtifacts = (g: Group): boolean =>
   g.observations.some((o) =>
@@ -408,7 +394,12 @@ const LADDER: readonly Rung[] = [
     params: () => ({ action: "差し戻す", to: "未計画" }),
     unit: "issue",
     why: "計画済みの在庫が陳腐化した",
-    match: (g) => !isShelved(g) && stockStale(g),
+    match: (g, ctx) => !isShelved(g) && stockStale(g, ctx),
+  },
+  {
+    params: () => ({ action: "報告して止める" }),
+    why: "ledger が期待より先で、差し戻しのどの事象にも当たらない",
+    match: (g) => !isShelved(g) && g.records.some(ledgerAhead),
   },
   {
     params: () => ({ action: "本文の変更を伝える" }),
@@ -674,6 +665,14 @@ export const decide = (input: TickInput): Decision => {
           reason: "group の終端が混在",
           evidence: ["group 内で終端と非終端が混在している"],
           issues: hit.members,
+        });
+      }
+      for (const r of hit.records) {
+        if (!ledgerAhead(r)) continue;
+        conflicts.push({
+          reason: "ledger が期待より先",
+          evidence: [`progress が ${r.progress} なのに ledger が ${r.ledger}`],
+          issues: [r.issue],
         });
       }
       return { kind: "conflict", conflicts };

@@ -208,6 +208,48 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
 };
 
 /** **正規化は Issue 単位で行う**。group を 1 レコードに畳まない。 */
+/**
+ * `progress` から期待される `ledger`。`取り下げ` は触らない（人が置いた状態を尊重する）。
+ * **軸をここに置くのは、期待より手前（前進）と期待より先（Conflict）が同じ表を読むため。**
+ */
+const expectedLedger = (p: Progress): readonly Ledger[] => {
+  if (p === "未着手") return ["未計画", "計画済み"];
+  if (p === "着地済み") return ["完了"];
+  if (p === "取り下げ") return LEDGER_ANY;
+  return ["進行中"];
+};
+const LEDGER_ANY: readonly Ledger[] = ["未計画", "計画済み", "進行中", "完了", "退避先"];
+
+const LEDGER_ORDER: readonly Ledger[] = ["未計画", "計画済み", "進行中", "完了"];
+const ledgerRank = (l: Ledger): number => LEDGER_ORDER.indexOf(l);
+
+/** `ledger` が期待より手前か。**前進のみ**で、後退は「差し戻す」だけが行う。 */
+export const ledgerBehind = (r: NormalizedIssue): boolean => {
+  const expected = expectedLedger(r.progress);
+  if (expected === LEDGER_ANY || expected.includes(r.ledger)) return false;
+  const current = ledgerRank(r.ledger);
+  if (current < 0) return false; // `退避先` はこの軸に乗らない
+  return expected.every((e) => current < ledgerRank(e));
+};
+
+/**
+ * `ledger` が期待より先か。**ラダーの 5 段目**。前進で直せないので Conflict へ倒す ——
+ * 落とすと、どの action にも当たらない課題が `idle` として静かに滞留する。
+ *
+ * **ここで Conflict を立てない。**ラダーは差し戻し（2 段目）を先に評価するので、
+ * 正規化の時点で立てると `進行中` × `未着手` の差し戻しが全部 Conflict に食われる。
+ * 判定は `decide` のラダーが、差し戻しの rung より後で行う。
+ */
+export const ledgerAhead = (r: NormalizedIssue): boolean => {
+  const ledger = r.ledger;
+  const progress = r.progress;
+  const expected = expectedLedger(progress);
+  if (expected === LEDGER_ANY || expected.includes(ledger)) return false;
+  const current = ledgerRank(ledger);
+  if (current < 0) return false; // `退避先` はこの軸に乗らない
+  return expected.every((e) => current > ledgerRank(e));
+};
+
 export const normalize = (o: IssueObservation): NormalizedIssue => {
   const progress = normalizeProgress(o);
   // 読めなかったときの `未計画` は**この値を誰も読まないことが前提**の詰め物。

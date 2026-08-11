@@ -116,6 +116,10 @@ describe("台帳と実体のずれ", () => {
     );
   });
 
+  test("3c: 行 3 と同じ 進行中 × 未着手 だが、claim の記録が無い", () => {
+    expectConflict([observation({ ledger: present("進行中") })], "ledger が期待より先");
+  });
+
   test("4: Issue 契約が欠けているが commit がある", () => {
     expectConflict(
       [implementing({ issueContractComplete: present(false) })],
@@ -313,6 +317,57 @@ describe("外から状態が動く", () => {
     );
   });
 
+  test("8: PR は緑だが、その後 default が進んで計画の資源キーに交差した", () => {
+    expectAction(
+      [awaitingLanding({ planInvalidated: present(true), session: session.running })],
+      "計画の失効を伝える",
+    );
+  });
+
+  test("8b: 在庫のまま default が進み、ready の invalidationScope に交差した", () => {
+    expectRevert(
+      [observation({ ledger: present("計画済み"), readyRecordStale: present(true) })],
+      "未計画",
+    );
+  });
+
+  test("8b2: 揃っていない group の成員が在庫のまま交差した", () => {
+    const stale = observation({
+      issue: 1,
+      ledger: present("計画済み"),
+      readyRecordStale: present(true),
+      sameBranchAs: [2],
+    });
+    const unplanned = observation({ issue: 2, ledger: present("未計画"), sameBranchAs: [1] });
+    // claim が構造的に止まっているので陳腐化を評価せず、未計画側の成員に「計画を起こす」が当たる。
+    expectAction([stale, unplanned], "計画を起こす");
+  });
+
+  test("8b3: 容量が目安を超えているだけの在庫が交差した", () => {
+    const busy = Array.from({ length: 4 }, (_, i) =>
+      implementing({
+        issue: 10 + i,
+        claimRecord: present({ members: [10 + i], landing: ["control"] }),
+        session: session.running,
+      }),
+    );
+    expectRevert(
+      [
+        ...busy,
+        observation({ issue: 1, ledger: present("計画済み"), readyRecordStale: present(true) }),
+      ],
+      "未計画",
+    );
+  });
+
+  test("9b: 行 9 を伝えたが、受け手が計画の記録を更新しないまま tick が進む", () => {
+    // 再送は冪等。同じ観測が続くあいだ同じ action を返す（失敗として数えるのは実行側）。
+    expectAction(
+      [implementing({ bodyMatchesPlan: present(false), session: session.running })],
+      "本文の変更を伝える",
+    );
+  });
+
   test("9c: 資源キーが交差する write 保持者が 2 つ。どちらにも休止の記録が無い", () => {
     const a = implementing({
       issue: 1,
@@ -355,6 +410,68 @@ describe("外から状態が動く", () => {
       [awaitingLanding({ pauseRecordExists: true, session: session.running })],
       "失効した記録を片付ける",
     );
+  });
+
+  test("9i: 先発が提出前に宣言を実体へ狭めた結果、後発との交差が消えた", () => {
+    const lead = implementing({
+      issue: 1,
+      resourceKeys: present(["ui"]),
+      submissionEvidence: present(true),
+      openPr: present(true),
+      checks: present({ running: 1, green: false }),
+      // 行の観測は先発も `待機` だが、そこは先発自身も枠の候補になる。この行が固定するのは
+      // **後発へ渡ること**なので、先発が競らない `稼働中` で置く。
+      session: session.running,
+    });
+    const follower = implementing({
+      issue: 2,
+      claimRecord: present({ members: [2], landing: ["control"] }),
+      resourceKeys: present(["api"]),
+      pauseRecordExists: true,
+      session: session.idle,
+    });
+    const d = tick([lead, follower]);
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "枠を渡す",
+      lease: "write",
+    });
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
+  });
+
+  test("9j: 行 9i のあと先発が宣言を広げ直し、交差が戻った", () => {
+    const lead = implementing({
+      issue: 1,
+      resourceKeys: present(["ui", "api"]),
+      submissionEvidence: present(true),
+      openPr: present(true),
+      checks: present({ running: 1, green: false }),
+      session: session.running,
+    });
+    const follower = implementing({
+      issue: 2,
+      claimRecord: present({ members: [2], landing: ["control"] }),
+      resourceKeys: present(["api"]),
+      session: session.running,
+    });
+    expectAction([lead, follower], "交差を解消する");
+  });
+
+  test("9h: 先発が push して 着地待ち から 提出中 へ戻り、write を取り直した", () => {
+    const lead = implementing({
+      issue: 1,
+      resourceKeys: present(["api"]),
+      submissionEvidence: present(true),
+      openPr: present(true),
+      checks: present({ running: 1, green: false }),
+      session: session.running,
+    });
+    const follower = implementing({
+      issue: 2,
+      claimRecord: present({ members: [2], landing: ["control"] }),
+      resourceKeys: present(["api"]),
+      session: session.running,
+    });
+    expectAction([lead, follower], "交差を解消する");
   });
 
   test("9f: 提出中 のまま CI が全部 cancel され、実行中の checks が 0 件になった", () => {
@@ -430,6 +547,144 @@ describe("外から状態が動く", () => {
       }),
     ]);
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
+  });
+
+  test("10b: 実行環境が DELETE を拒否し、枠を渡すが休止の記録を消せない", () => {
+    // 消せないこと自体は decide の外。選び続けることだけを固定する。
+    expectLease([implementing({ pauseRecordExists: true, session: session.idle })], "write");
+  });
+
+  test("10c: 枠を渡すで 1 周回り、commit が 1 本積まれてまた 待機 になった", () => {
+    expectLease([implementing({ session: session.idle })], "write");
+  });
+
+  test("10d: 行 10c と同じ形だが、指紋が前の周と同じ", () => {
+    expectLease(
+      [
+        implementing({
+          session: session.idle,
+          cycleRecord: present({ count: 1, mark: "mark-0" }),
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("10f2: PR は緑・使わない面のまとめが出ない。意図の確認は confirmed", () => {
+    expectLease(
+      [
+        implementing({
+          session: session.idle,
+          submissionEvidence: present(true),
+          openPr: present(true),
+          checks: present({ running: 0, green: true }),
+          intentRecord: intent.confirmed,
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("10i: refine が閉じられては起こし直されるが、本文も ledger も動いていない", () => {
+    expectAction(
+      [
+        observation({
+          ledger: present("未計画"),
+          cycleRecord: present({ count: 1, mark: "mark-0" }),
+        }),
+      ],
+      "計画を起こす",
+    );
+  });
+
+  test("10m: 人待ちのまま起こし直しを繰り返し、成果が何も出ていない", () => {
+    expectAction(
+      [implementing({ waitRecord: wait.waiting, session: session.none })],
+      "解決を起こし直す",
+    );
+  });
+
+  test("10n: 上限に達したまま人待ちへ入り、人が答えて 待機 に落ちた", () => {
+    expectLease(
+      [
+        implementing({
+          waitRecord: wait.cleared,
+          session: session.idle,
+          // 人待ちの記録が指紋に入っているので、聞いた時点と答えた時点で mark が動いている。
+          cycleRecord: present({ count: 3, mark: "mark-prev" }),
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("10o: セッションが無い状態から起こして成功した。指紋は不変", () => {
+    expectAction([implementing({ session: session.none })], "解決を起こし直す");
+  });
+
+  test("10p: count が上限に達した後、新規 commit 無しに 提出中 へ進んだ", () => {
+    const d = tick([
+      implementing({
+        session: session.idle,
+        submissionEvidence: present(true),
+        openPr: present(true),
+        checks: present({ running: 1, green: false }),
+        // `progress` が指紋に入っているので、提出中 へ進んだ時点で mark が動いている。
+        cycleRecord: present({ count: 3, mark: "mark-prev" }),
+      }),
+    ]);
+    expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
+  });
+
+  test("10q: 準備中 のまま枠を渡すが成功し続け、計画コメントも commit も出ない", () => {
+    expectLease(
+      [
+        observation({
+          ledger: present("進行中"),
+          claimBranchExists: present(true),
+          claimRecord: present({ members: [1], landing: ["control"] }),
+          surfaces: [surface({ hasCheckout: present(true) })],
+          planCommentExists: present(true),
+          session: session.idle,
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("10s: 未着手 から claim する。branch も worktree もまだ無い", () => {
+    expectAction([observation({ ledger: present("計画済み") })], "claim する");
+  });
+
+  test("10t: 問いの空な waiting を書いては止まる往復", () => {
+    expectLease(
+      [
+        implementing({
+          // 無効な `waiting` は指紋の人待ち成分から外れるので、自動で `cleared` にした周も
+          // 成果ゼロとして数え続ける（`mark` が動かない）。
+          waitRecord: wait.cleared,
+          session: session.idle,
+          cycleRecord: present({ count: 1, mark: "mark-0" }),
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("10x: 終端に達し、周回の記録だけが残っている", () => {
+    expectAction(
+      [
+        implementing({
+          surfaces: [surface({ terminal: present(true) })],
+          submissionEvidence: present(true),
+          claimBranchExists: present(false),
+          claimRecord: { kind: "absent" },
+          ledger: present("完了"),
+          cycleRecord: present({ count: 2, mark: "mark-0" }),
+        }),
+      ],
+      "片付ける",
+    );
   });
 });
 
@@ -603,7 +858,7 @@ describe("順序", () => {
 });
 
 describe("硬い上限", () => {
-  test("容量が目安に達していたら claim しない", () => {
+  test("10: 人が直接 resolve を走らせ、worktree が目安を超えた", () => {
     const busy = Array.from({ length: 4 }, (_, i) =>
       implementing({
         issue: 10 + i,

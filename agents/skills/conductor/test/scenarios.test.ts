@@ -38,36 +38,22 @@ const testedIds = (): Set<string> => {
 };
 
 /**
+ * `decide` の外にある行。**移していないのではなく、この層では判定できない。**
+ * 混ぜると、移せないものを永遠に移そうとするか、移せる行の未着手が隠れる。
+ */
+const OUT_OF_KERNEL: readonly string[] = [
+  // 記録が無い在庫を陳腐化へ倒すのは観測側（`src/observe.ts` の `stalenessOf`）。
+  "8c",
+  // dispatch が届かなかったときの精算。decide は dispatch の結果を観測しない。
+  "10j",
+];
+
+/**
  * まだテストへ移していない行。**減らす方向にしか動かさない。**
  * 移したらここから消す。ここに足すのは、表へ行を増やしてテストを書かなかったときだけで、
  * それは「表が SSOT を名乗ったまま実装と割れる」ことそのものなので、原則やらない。
  */
 const UNPORTED: readonly string[] = [
-  "3c",
-  "8",
-  "8b",
-  "8b2",
-  "8b3",
-  "8c",
-  "9b",
-  "9h",
-  "9i",
-  "9j",
-  "10",
-  "10b",
-  "10c",
-  "10d",
-  "10f2",
-  "10i",
-  "10j",
-  "10m",
-  "10n",
-  "10o",
-  "10p",
-  "10q",
-  "10s",
-  "10t",
-  "10x",
   "12b",
   "12c",
   "12d",
@@ -111,7 +97,7 @@ describe("代表シナリオとテストの対応", () => {
     const rows = rowIds();
     const tested = testedIds();
     const missing = sorted([...rows].filter((id) => !tested.has(id)));
-    expect(missing).toEqual(sorted(UNPORTED));
+    expect(missing).toEqual(sorted([...UNPORTED, ...OUT_OF_KERNEL]));
   });
 
   test("表に無い行 ID を名乗るテストは無い", () => {

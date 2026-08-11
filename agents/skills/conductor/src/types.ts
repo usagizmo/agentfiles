@@ -58,6 +58,7 @@ export const CONFLICT_REASONS = [
   "観測できない",
   "証跡が矛盾している",
   "ledger が解釈不能",
+  "ledger が期待より先",
   "group の終端が混在",
   "着地面が解決できない",
   "着地済みだが提出の証跡が無い",
