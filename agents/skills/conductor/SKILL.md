@@ -21,7 +21,7 @@ description: >-
 | その action を選んだ後                       | `references/protocols.md`（手順）・`references/harness.md`（multiplexer 操作）                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | 人が tick の外から何か渡してきたとき         | `references/intake.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 状況ボードを引き当てるとき                   | `references/artifact.md`（題名の条件）                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| 本文の条件・既定値・優先順を書き換えるとき   | `references/scenarios.md`（期待 action の回帰）・`references/tick.md`（正規化と action の論証）・`references/resources.md`（資源の論証）                                                                                                                                                                                                                                                                                                                                                        |
+| tick の意味論を書き換えるとき                | `references/scenarios.md`（射程の定義と期待 action の回帰）・`references/tick.md`（正規化と action の論証）・`references/resources.md`（資源の論証）                                                                                                                                                                                                                                                                                                                                            |
 
 **1 行目を「action を選んだ後」に丸めない**。そこに挙げた記録は本文に述語を置いていないので、選ぶ前に読まないと `runtime` の最上段・差し戻しの 1 つ・`Conflict` の 2 つが毎 tick 判定できない。「観測」の SSOT 表が指す先がここに揃う。
 
@@ -218,7 +218,7 @@ flowchart TD
 
 **1 つ実行したら観測からやり直す**。git・GitHub・multiplexer は同時に撮れるスナップショットではないので、同じ観測に複数の変更を続けて適用すると別の競合を作る。
 
-**この節・優先順・正規化・資源を書き換えるときは `references/scenarios.md` を先に確認する。** 代表シナリオの期待 action が変わるなら意味論を変えている。
+**tick の意味論を決める節を書き換えるときは `references/scenarios.md` を先に確認する**（射程も、期待 action が変わったときの扱いも、そちらが定める）。
 
 空キューは**終了条件ではなく idle**。次の観測まで待つ。
 
