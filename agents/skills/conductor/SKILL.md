@@ -15,14 +15,24 @@ description: >-
 
 `references/` を毎 tick 読ま**ない**。正規化も発火条件も `cli.ts` が返す。
 
-| いつ                                 | どれ                                                                                                                             |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| action を実行するとき                | `references/protocols.md`（手順）・`references/harness.md`（multiplexer 操作）                                                   |
-| 人が tick の外から何か渡してきたとき | `references/intake.md`                                                                                                           |
-| 状況ボードを引き当てるとき           | `references/artifact.md`（題名の条件）                                                                                           |
-| tick の意味論を書き換えるとき        | `references/scenarios.md`（射程と期待）・`references/tick.md`（正規化と action の論証）・`references/resources.md`（資源の論証） |
+| いつ                                 | どれ                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| action を実行するとき                | `references/protocols.md`（手順）・`references/harness.md`（multiplexer 操作） |
+| 人が tick の外から何か渡してきたとき | `references/intake.md`                                                         |
+| 状況ボードを引き当てるとき           | `references/artifact.md`（題名の条件）                                         |
+| tick の意味論を書き換えるとき        | 下記                                                                           |
 
 意味論を変えるなら、先にテストを変える。期待の SSOT は `test/decide.test.ts` と `test/normalize.test.ts` で、`references/scenarios.md` は同じ行 ID の解説。表だけを直しても何も変わら**ない**。
+
+**触る関数の周りだけを読まない。**規則の理由は doc comment に置いてあり、**述語の理由は関数の直上、順序と単位の理由は `LADDER` と `Rung` の定義側**にある。離れているので、部分だけ開くと**順序が意味を持つことに気づかないまま行を入れ替えられる**。
+
+| 変えるもの          | 全文を読むファイル                                      |
+| ------------------- | ------------------------------------------------------- |
+| 正規化              | `src/normalize.ts` + `references/tick.md`               |
+| action の選択・順序 | `src/decide.ts` + `references/tick.md`                  |
+| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`          |
+| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `scripts/watch.sh` |
+| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`   |
 
 自分がやるのは 5 つ**だけ** —— 実行器へ渡す prompt 本文、`Conflict` の人向け説明、状況ボードの文章、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。
 
