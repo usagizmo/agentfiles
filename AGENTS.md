@@ -17,6 +17,18 @@
 この repo に対して 1 度だけ据え置いたもの。**手順と検査（dirty・HEAD・祖先関係・失敗したら止まる）は
 そのまま適用する。**
 
+## 切り出しの受け皿
+
+**この repo は受け皿を持たない**（GitHub Issues は無効）。`~/.agents/AGENTS.md`「作業単位」の
+「切り出すと決めたものは受け皿へ置く」は、ここでは成立しない。
+
+**だから、気づいたものは現在のブランチで直しきる**。直しきれないものだけ、行き先の決定を人へ返す
+（**まとめに書いて終わりにしない** —— そこが実測で発見が消えた経路）。統合は `temp` へ `--no-ff` で
+積んで `main` へ落とす形で、待ち行列ではない。
+
+**受け皿を持つ project では、その project の AGENTS.md が置き場と最優先の位置を定める**
+（例: Project board を持つ project なら `Backlog` の最上段）。
+
 ## dotfiles への依存
 
 **配線 primitive と inventory API は dotfiles の `lib/links.sh` が SSOT**。`lib/bootstrap.sh` が読み込み、在処は `DOTFILES_REPO` > 兄弟ディレクトリ の順に解決する。**見つからなければ止まる** —— 関数が未定義のまま進むと、どの `inv_*` も no-op になり「成功したのに何も張られていない」で終わる。
@@ -89,6 +101,9 @@
 - **同層への言及が構造的に消える**。参照先が skill でなくなるので、層契約（同じ層への依存・言及を作らない）を隠さずに満たせる
 - **skill 本文は自分の相対パスだけ**。skill が自己完結し、投影先でも repo でも解決できる
 - **`shared/` に置く条件は 1 つ**: **2 つ以上の skill が同じものを使っている**。契約でも手順でもよい（`review-contract` は契約、`advisors` は手順）。1 つの skill しか使わないものは、その skill の `references/` に実体で置く
+- **ドメインで 2 段に分ける**。`shared/` は普遍（どの project でも意味が通る）、`shared/queue/` はキュー機構専用（Issue・Status・claim・着地面・記録 marker を前提にするもの）。**`shared/queue/` を張れるのは queue package の構成員だけ**（一覧は `agents/skills/docs/scripts/audit-skills.sh` の `QUEUE_MEMBERS`）
+- **軸は skill の rank ではなくドメイン**。rank は将来ずれる代理でしかない —— キュー専用の subflow が rank 2 に増えたとき、rank 境界だと正当な参照まで落ちる
+- **`shared/` が層契約の抜け道になっていた**。参照先が skill でなくなるぶん層検査に当たらないので、キュー専用の概念が leaf へ流れる経路がそこ 1 本だけ開いていた（実測で、`merge` が `landing-surface.md` を 1 本引いただけで、推移閉包で 8 本が leaf に生えた）
 - `~/.agents/shared` への投影は要らない（skill が相対 symlink で辿るため）。skill 以外から参照したくなった時点で足す
 - 実体の一覧は `agents/docs/structure.md`（**導出した索引**。規約は本ファイルが SSOT）
 

@@ -1,1 +1,1 @@
-../../../shared/artifact.md
+../../../shared/queue/artifact.md

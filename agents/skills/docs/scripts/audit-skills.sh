@@ -31,6 +31,16 @@ export LC_ALL
 # layer 検査だけが消え、SUMMARY は出るので「違反なし」に見える。
 LAYERS=$(dirname "$0")/layers.tsv
 
+# **queue package の構成員。**キュー機構専用の共有実体（`shared/queue/`）を張ってよい skill。
+# **rank ではなくドメインで決める** —— rank 2 の subflow が queue adapter になることがあり、
+# rank 境界だと正当な参照まで落ちる。project 差分の adapter は `--queue-member` で足す。
+QUEUE_MEMBERS="conductor
+refine
+resolve"
+is_queue_member() {
+	printf '%s\n' "$QUEUE_MEMBERS" | grep -qx "$1"
+}
+
 # `--layers` で project 側の定義を足せる。**global の定義だけで判定すると、
 # project 固有の skill が全部 leaf に落ちて互いを名指しできなくなる**
 # （leaf どうしの名指しは常に違反なので、正しい参照まで赤くなる）。
@@ -379,6 +389,8 @@ sort "$WORK/markers" | awk -F "	" '
 done
 
 # --- check shared: shared/ への symlink 健全性 ---------------------------
+# queue 判定に実体の在処が要るので、symlink 検査より前に解決しておく。
+SHARED_ROOT=$(CDPATH= cd -P -- "$ROOT/../shared" 2>/dev/null && pwd -P) || SHARED_ROOT=""
 # 規約は `skills/<name>/{references,scripts}/<file>` → `../../../shared/<同名>`。
 # 張り先はモデルの扱い（読む / 実行する）で決まり、拡張子では決まらない。
 : >"$WORK/shared_use"
@@ -399,8 +411,18 @@ for d in "$ROOT"/*/references "$ROOT"/*/scripts; do
 			continue
 			;;
 		esac
-		[ "$t" = "../../../shared/$b" ] ||
-			emit VIOLATION shared "$disp" "target=$t want=../../../shared/$b"
+		# **queue 実体は queue package の構成員だけが張れる。**普遍の shared は誰でもよい。
+		# 軸は skill の rank ではなくドメイン（rank は将来ずれる代理でしかない）。
+		want="../../../shared/$b"
+		[ -f "$SHARED_ROOT/queue/$b" ] && want="../../../shared/queue/$b"
+		[ "$t" = "$want" ] ||
+			emit VIOLATION shared "$disp" "target=$t want=$want"
+		case "$want" in
+		*/queue/*)
+			is_queue_member "$skill" ||
+				emit VIOLATION queue "$disp" "note=queue 専用の実体を queue package の外から張っている"
+			;;
+		esac
 		if p=$(canon "$f") && [ -f "$p" ]; then
 			echo "${p##*/}	$skill" >>"$WORK/shared_use"
 		else
@@ -412,7 +434,7 @@ done
 # shared dir は規約（`<dir>/<file>` → `../../../shared/<file>`）から直に組み立てる。
 # 生きた symlink から逆引きすると、全部コピーへ置き換わった一番効くべき状況で
 # 探索が空振りし、以降の検査ごと素通りする。
-SHARED_DIR=$(CDPATH= cd -P -- "$ROOT/../shared" 2>/dev/null && pwd -P) || SHARED_DIR=""
+SHARED_DIR=$SHARED_ROOT
 if [ -z "$SHARED_DIR" ]; then
 	# 黙って飛ばさない。検査を落としたまま「違反なし」に見えるのを防ぐ。
 	emit REVIEW shared "../shared" "note=shared dir が無く copy / 孤児検査を実行していない"
@@ -487,8 +509,10 @@ else
 
 	# structure.md が挙げる shared 実体 ↔ 実際の agents/shared/*（.md 以外も含む）
 	if [ -f "$DOCS_DIR/structure.md" ] && [ -n "$SHARED_DIR" ]; then
+		# **queue package の実体も棚卸しに含める。**含めないと、`shared/queue/` へ移した
+		# 実体が索引から静かに落ち、図だけが古い場所を指したまま violation にならない。
 		: >"$WORK/shared_real"
-		for s in "$SHARED_DIR"/*; do
+		for s in "$SHARED_DIR"/* "$SHARED_DIR"/queue/*; do
 			[ -f "$s" ] || continue
 			echo "${s##*/}" >>"$WORK/shared_real"
 			grep -qF "${s##*/}" "$DOCS_DIR/structure.md" ||

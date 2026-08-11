@@ -1,1 +1,1 @@
-../../../shared/issue-contract.md
+../../../shared/queue/issue-contract.md

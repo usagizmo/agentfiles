@@ -1,1 +1,1 @@
-../../../shared/landing-surface.md
+../../../shared/queue/landing-surface.md

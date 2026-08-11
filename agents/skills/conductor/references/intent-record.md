@@ -1,1 +1,1 @@
-../../../shared/intent-record.md
+../../../shared/queue/intent-record.md

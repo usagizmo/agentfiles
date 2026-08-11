@@ -1,1 +1,1 @@
-../../../shared/same-branch.md
+../../../shared/queue/same-branch.md
