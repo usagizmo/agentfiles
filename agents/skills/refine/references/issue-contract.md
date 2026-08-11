@@ -1,0 +1,1 @@
+../../../shared/issue-contract.md

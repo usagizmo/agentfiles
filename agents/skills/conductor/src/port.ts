@@ -6,8 +6,9 @@
 import { createHash } from "node:crypto";
 import type { ProjectConfig } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
-import { planRecord } from "./records.ts";
+import { entryBlockRecord, planRecord } from "./records.ts";
 import { bodyMatchesPlan, planInvalidated } from "./plan.ts";
+import { issueContractComplete } from "./contract.ts";
 import type { Observed } from "./types.ts";
 import { absent, present, unobservable } from "./types.ts";
 
@@ -224,18 +225,16 @@ export const createPort = (options: PortOptions): ObservePort => {
       const owned = new RegExp(`^[^/]+/${issue}-`);
       const mine = prs.kind === "present" ? prs.value.filter((p) => owned.test(p.head.ref)) : [];
       const body = bodies.get(issue);
+      const commentText = (comments.get(issue) ?? []).join("\n\n");
 
       return {
-        // **6 項目は本文の散文なので、機械では充足を判定できない**（`refine` の Issue 契約）。
-        // 空の本文だけは確実に不足と言えるので、そこだけ `false`。残りは `unobservable` にして
-        // 選出を fail-closed で止める —— **`true` へ倒すと契約の欠けた課題が claim される。**
-        // 判定できる形（項目の見出しを機械可読にする）は規約側の課題。
+        // **見出しの字面で判定する**（SSOT は `references/issue-contract.md`）。
+        // **本文を読めないときは `false` に倒さない** —— 倒すと、観測できなかっただけの課題が
+        // 差し戻され、実装のある課題では `Conflict` になる。
         issueContractComplete:
           body === undefined || body.kind !== "present"
             ? unobservable("本文を読めない")
-            : body.value.trim() === ""
-              ? present(false)
-              : unobservable("Issue 契約に機械可読な形が無い"),
+            : issueContractComplete(body.value),
         prMerged:
           prs.kind === "present"
             ? present(mine.some((p) => p.merged_at !== null))
@@ -246,8 +245,8 @@ export const createPort = (options: PortOptions): ObservePort => {
                 mine.length > 0 && mine.every((p) => p.state === "closed" && p.merged_at === null),
               )
             : unobservable("PR 一覧を読めない"),
-        // **置き場は project 差分が定める。**持っていないあいだは宣言が無いものとして扱う。
-        blocksEntry: false,
+        // **壊れている宣言を「無い」と読まない** —— 読むと、止めているつもりの横で claim が進む。
+        blocksEntry: entryBlockRecord(commentText).kind !== "absent",
         claimedAt: claimTimes.get(issue) ?? absent(),
       };
     },

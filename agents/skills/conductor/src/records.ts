@@ -23,6 +23,7 @@ export const MARKERS = [
   "intent",
   "integration",
   "report",
+  "entry-block",
 ] as const;
 export type Marker = (typeof MARKERS)[number];
 
@@ -241,3 +242,18 @@ export const planRecord = (body: string): Observed<PlanRecord> => {
   const also = (parsed.value as { alsoResolves?: unknown }).alsoResolves;
   return present({ ...parsed.value, alsoResolves: isNumberArray(also) ? also : [] });
 };
+
+/**
+ * 入場を止める宣言。**運び方は `issue-contract.md` が固定し、いつ置くかは project の領分。**
+ * **壊れている宣言を「無い」と読まない** —— 読むと、止めているつもりの課題の横で claim が進む。
+ */
+export type EntryBlockRecord = { readonly issues: readonly number[]; readonly reason: string };
+
+const isEntryBlock = (v: unknown): v is EntryBlockRecord =>
+  isRecord(v) &&
+  isNumberArray(v["issues"]) &&
+  typeof v["reason"] === "string" &&
+  v["reason"] !== "";
+
+export const entryBlockRecord = (body: string): Observed<EntryBlockRecord> =>
+  parseYaml(extractMarker(body, "entry-block"), isEntryBlock);
