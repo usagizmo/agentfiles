@@ -214,3 +214,30 @@ const isYield = (v: unknown): v is YieldRecord =>
 
 export const yieldRecord = (body: string): Observed<YieldRecord> =>
   parseYaml(extractMarker(body, "yield"), isYield);
+
+export type PlanRecord = {
+  readonly baseSha: string;
+  /** 対象集合の全件。**キーが無いものは不一致として扱う**（fail-closed） */
+  readonly issueDigests: Readonly<Record<string, string>>;
+  /** ここが変わったら計画が無効になる。**空にしない** */
+  readonly invalidationScope: readonly string[];
+  /** 同時に触ると壊れるものの名前。**path ではない** */
+  readonly resourceKeys: readonly string[];
+  /** このブランチで一緒に片付ける Issue */
+  readonly alsoResolves: readonly number[];
+};
+
+const isPlan = (v: unknown): v is PlanRecord =>
+  isRecord(v) &&
+  typeof v["baseSha"] === "string" &&
+  isStringMap(v["issueDigests"]) &&
+  isStringArray(v["invalidationScope"]) &&
+  v["invalidationScope"].length > 0 &&
+  isStringArray(v["resourceKeys"]);
+
+export const planRecord = (body: string): Observed<PlanRecord> => {
+  const parsed = parseYaml(extractMarker(body, "plan"), isPlan);
+  if (parsed.kind !== "present") return parsed;
+  const also = (parsed.value as { alsoResolves?: unknown }).alsoResolves;
+  return present({ ...parsed.value, alsoResolves: isNumberArray(also) ? also : [] });
+};
