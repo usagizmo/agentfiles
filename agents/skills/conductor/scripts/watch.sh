@@ -554,7 +554,13 @@ snapshot() {
   require_nonempty live "$live" || return 1
   require_nonempty worktrees "$worktrees" || return 1
 
+  # **節の集合と並びは実質 API。**読む側（`src/decode.ts`）が節の欠落を fail-closed で
+  # 弾けるよう版数を先頭に置く。**節を足す・消す・名前を変えたら上げる** —— 上げずに変えると、
+  # 読む側は古い形のつもりで新しい出力を解釈し、欠けた節を「値が無い」と読む。
+  # baseline との比較は全文の digest なので、定数行が 1 本増えても差分の意味は変わらない。
   cat <<SNAP
+--- schema ---
+1
 --- default ---
 $default
 --- landing tips ---

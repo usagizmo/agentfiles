@@ -21,6 +21,10 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # 何が足りないかは ./doctor.sh が言う（揃えるのは ./init.sh）
 bun run lint-staged || exit 1
 
+# **oxlint は型を見ない。**correctness カテゴリは構文と制御フローの検査なので、
+# decode 境界の union の取りこぼしは tsc でしか落ちない
+bun run typecheck || exit 1
+
 # **テストは対象を絞らない。**「この実装を変えたらこの test」の対応を lint-staged の
 # glob で持つと、対応を書き忘れた変更が黙って通る。全体でも数百 ms なので常に回す
 bun test

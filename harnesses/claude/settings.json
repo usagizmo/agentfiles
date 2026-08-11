@@ -33,6 +33,9 @@
     "type": "command",
     "command": "~/.claude/statusline.py"
   },
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true
+  },
   "language": "Japanese",
   "alwaysThinkingEnabled": true,
   "autoMemoryEnabled": false,
@@ -40,8 +43,5 @@
   "skipWorkflowUsageWarning": true,
   "verbose": true,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true,
-  "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true
-  }
+  "skipAutoPermissionPrompt": true
 }

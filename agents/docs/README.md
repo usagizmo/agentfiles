@@ -66,12 +66,12 @@ flowchart TB
 
 ## 層構造
 
-| 層             | skills                                                                                      | 契約                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| orchestrator   | `conductor`                                                                                 | キューを回す。盤面を人へ返し、1 件の解決は work-item flow に委譲する |
-| work-item flow | `refine` `resolve`                                                                          | 課題 1 件を扱う。`refine` は計画まで、`resolve` は着地まで           |
-| subflow        | `finish`                                                                                    | 工程の一部を束ねる                                                   |
-| leaf           | `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` | それ自体で完結し、単体で invoke できる                               |
+| 層             | skills                                                                                                                              | 契約                                                                 |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| orchestrator   | `conductor`                                                                                                                         | キューを回す。盤面を人へ返し、1 件の解決は work-item flow に委譲する |
+| work-item flow | `refine` `resolve`                                                                                                                  | 課題 1 件を扱う。`refine` は計画まで、`resolve` は着地まで           |
+| subflow        | `finish`                                                                                                                            | 工程の一部を束ねる                                                   |
+| leaf           | `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` `agent-browser` `herdr` `skill-creator` | それ自体で完結し、単体で invoke できる                               |
 
 参照は上の層から下の層への一方通行。
 
