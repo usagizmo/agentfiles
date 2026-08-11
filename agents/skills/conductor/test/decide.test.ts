@@ -1087,3 +1087,163 @@ describe("action の選択と独立な精算", () => {
     );
   });
 });
+
+describe("着地面が制御面と違う（action）", () => {
+  const control = (over: Partial<ReturnType<typeof surface>> = {}) =>
+    surface({ name: "control", ...over });
+  const secondary = (over: Partial<ReturnType<typeof surface>> = {}) =>
+    surface({ name: "skills", usesPr: false, ...over });
+
+  /** claim 済みで、制御面の branch と着地面の worktree を持つ骨格。 */
+  const landed = (over: Partial<IssueObservation> = {}): IssueObservation =>
+    observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      claimRecord: present({ members: [1], landing: ["control", "skills"] }),
+      surfaces: [control(), secondary({ hasCheckout: present(true) })],
+      ...over,
+    });
+
+  test("17a: claim 済みだが、着地面の worktree をまだ作っていない", () => {
+    expectAction(
+      [
+        observation({
+          ledger: present("進行中"),
+          claimBranchExists: present(true),
+          claimRecord: present({ members: [1], landing: ["control", "skills"] }),
+          surfaces: [control(), secondary()],
+        }),
+      ],
+      "解決を起こし直す",
+    );
+  });
+
+  test("17d: 着地面の worktree は片付けたが、もう 1 面が残っている", () => {
+    expectAction(
+      [
+        landed({
+          ledger: present("完了"),
+          claimBranchExists: present(false),
+          surfaces: [
+            control({ terminal: present(true) }),
+            secondary({ terminal: present(true), hasCheckout: present(true) }),
+          ],
+          submissionEvidence: present(true),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17e: 着地面は clean で commit あり、セッションまとめの記録が無い", () => {
+    expectLease(
+      [
+        landed({
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          session: session.idle,
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("17f: 行 17e と同じ状況でまとめの記録が出た", () => {
+    expectAction(
+      [
+        landed({
+          surfaces: [
+            control(),
+            secondary({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              landable: present(true),
+            }),
+          ],
+          submissionEvidence: present(true),
+          session: session.idle,
+        }),
+      ],
+      "意図の確認を促す",
+    );
+  });
+
+  test("17g: まとめの記録はあるが、着地の直前に書き直して dirty になった", () => {
+    expectIdle([
+      landed({
+        surfaces: [
+          control(),
+          secondary({
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            landable: present(true),
+            dirty: present(true),
+          }),
+        ],
+        submissionEvidence: present(true),
+        session: session.running,
+      }),
+    ]);
+  });
+
+  test("17g3: 提出のあとで、書かないつもりだった面へ commit した", () => {
+    expectLease(
+      [
+        landed({
+          surfaces: [
+            control({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          // まとめは無効になっているので `着地待ち` から落ちる（透過にも `heads = T` を課す）。
+          submissionEvidence: present(false),
+          session: session.idle,
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("17j: 同じ面へ別の課題が着地し、統合先が動いた", () => {
+    expectAction(
+      [
+        landed({
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          planInvalidated: present(true),
+          session: session.running,
+        }),
+      ],
+      "計画の失効を伝える",
+    );
+  });
+
+  test("17l: 依存先が closed かつ 完了 なら、依存は解けている", () => {
+    const dependency = observation({
+      issue: 1,
+      open: false,
+      ledger: present("完了"),
+      surfaces: [control(), secondary()],
+    });
+    const child = observation({ issue: 2, ledger: present("計画済み"), dependsOn: [1] });
+    expectAction([dependency, child], "claim する");
+  });
+
+  test("17m2: PR を使わない面だけの課題で、commit はあるが提出の証跡が無い", () => {
+    expectAction(
+      [
+        landed({
+          surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
+          claimRecord: present({ members: [1], landing: ["skills"] }),
+          submissionEvidence: present(false),
+          session: session.none,
+        }),
+      ],
+      "解決を起こし直す",
+    );
+  });
+});
