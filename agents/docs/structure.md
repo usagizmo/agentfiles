@@ -172,13 +172,13 @@ flowchart LR
 
 `scripts/` も同じく skill 固有で、共有するものだけ `shared/` に置く。
 
-| skill           | 実体                                                              | 何をするか                                           |
-| --------------- | ----------------------------------------------------------------- | ---------------------------------------------------- |
-| `conductor`     | `watch.sh` / `project-status.graphql`                             | 起床監視。**手順書ではなくここが観測の SSOT**        |
-| `docs`          | `audit-skills.sh` / `check-emphasis.mjs`                          | 品質パスの機械検査。層の定義 `layers.tsv` を伴う     |
-| `pr`            | `sync-and-push.sh`                                                | base への追随と push（素の `git push` を使わせない） |
-| `skill-creator` | —                                                                 | vendored                                             |
-| 共有            | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink） | アドバイザーの起動と回収                             |
+| skill           | 実体                                                              | 何をするか                                                |
+| --------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| `conductor`     | `watch.sh` / `project-status.graphql` / `cycle-mark.py` (+ test)  | 起床監視と成果の指紋。**手順書ではなくここが観測の SSOT** |
+| `docs`          | `audit-skills.sh` / `check-emphasis.mjs`                          | 品質パスの機械検査。層の定義 `layers.tsv` を伴う          |
+| `pr`            | `sync-and-push.sh`                                                | base への追随と push（素の `git push` を使わせない）      |
+| `skill-creator` | —                                                                 | vendored                                                  |
+| 共有            | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink） | アドバイザーの起動と回収                                  |
 
 ## 追加・変更するとき
 
