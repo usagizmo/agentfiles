@@ -110,6 +110,15 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     found.push(conflict("ledger が解釈不能", n, "Project Status を読めない"));
   }
 
+  // **`退避先` は論理 lease を返す**ので、そこでセッションが動いているのは
+  // 「lease を持たないまま書いている」状態。人が Status だけ動かすと起きる。
+  // 出さないと、入場を止める宣言も merge の枠も外れないまま誰にも見えない。
+  if (value(o.ledger) === "退避先" && o.session.kind === "running") {
+    found.push(
+      conflict("退避先だがセッションが止まらない", n, "退避先へ移ったのにセッションが稼働中"),
+    );
+  }
+
   // **本文の欠落だけで解除しない** —— 本物の質問を選択 UI にだけ出して書き損ねた経路がある。
   if (o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "undecidable") {
     found.push(
