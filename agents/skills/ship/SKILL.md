@@ -10,7 +10,7 @@ CI が通った PR を merge し、後始末まで見る。
 - CI が通っている（`gh pr checks <number> --json bucket` に pending / failure が無い）
 - **base が default**（`gh pr view <number> --json baseRefName`）。別 PR の head が base なら積み上げの途中
 - 配信してよい（判断基準は project 差分。既定は「その変更の検証を終えている」）
-- **意図の確認が済んでいる** —— 判定は `references/intent-record.md`「着地の前に確かめる」
+- **人に見せる面を変えたなら、明示の承認がある** —— UI・公開 API・設計骨格を変えた PR を、承認なしに merge しない。**沈黙は承認ではない**。承認の置き場と判定手順は project が定める（無ければ、このセッションでの明示承認か PR の人によるレビュー承認）
 
 満たさないなら merge せず、満たしていない側を報告する。
 

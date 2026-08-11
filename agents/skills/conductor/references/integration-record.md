@@ -1,1 +1,1 @@
-../../../shared/integration-record.md
+../../../shared/queue/integration-record.md

@@ -1,1 +1,1 @@
-../../../shared/wait-record.md
+../../../shared/queue/wait-record.md

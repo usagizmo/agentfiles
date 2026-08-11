@@ -1,1 +1,1 @@
-../../../shared/ready-record.md
+../../../shared/queue/ready-record.md

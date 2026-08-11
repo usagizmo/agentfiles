@@ -1,1 +1,0 @@
-../../../shared/intent-record.md
