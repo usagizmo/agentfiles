@@ -61,16 +61,37 @@ GIT_STATUS_PINS=(-c core.fsmonitor=false -c core.untrackedCache=false
 # 成果物が ignore されて `dirty=0` になる（**未コミットの成果を抱えた worktree が clean に見え、
 # そのまま merge と削除へ進む**）。`cycle-mark.py` が同じ経路を既に遮断しているので、両方の
 # 観測が食い違わないようにここでも同じ形にする。
-# **観測に使う git は全部これを通す。**status だけを sanitize しても、`GIT_DIR` / `GIT_WORK_TREE`
-# が効いていれば `-C <checkout>` は無視され、**別の repo を「その面」として観測したままラウンドが
-# 成功する**。`GIT_CONFIG_COUNT` は空文字だと数値として解釈されて落ちうるので、env から外す。
+# **観測に使う git は全部 `GIT_ENV_STRIP` を通す**（network を張るものは下の `git_net`、それ以外は
+# `git_clean`）。status だけを sanitize しても、`GIT_DIR` / `GIT_WORK_TREE` が効いていれば
+# `-C <checkout>` は無視され、**別の repo を「その面」として観測したままラウンドが成功する**。
+# `GIT_CONFIG_COUNT` は空文字だと数値として解釈されて落ちうるので、env から外す。
+GIT_ENV_STRIP=(-u GIT_CONFIG -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE
+               -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES
+               -u GIT_COMMON_DIR -u GIT_CEILING_DIRECTORIES
+               -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS)
+
 git_clean() {
-  env -u GIT_CONFIG -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
-      -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_COMMON_DIR -u GIT_CEILING_DIRECTORIES \
-      -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+  env "${GIT_ENV_STRIP[@]}" \
       GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 \
-      GIT_ATTR_NOSYSTEM=1 GIT_OPTIONAL_LOCKS=0 \
+      GIT_ATTR_NOSYSTEM=1 GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 \
     git "$@"
+}
+
+# **network を張る git は、利用者自身の設定を残す。**credential helper は global config に在るので、
+# そこを `/dev/null` にすると **HTTPS remote の fetch が認証できず、ユーザー名を対話で聞きにいって
+# 落ちる**（実測: 制御面の origin が HTTPS の環境で、snapshot が毎回
+# `could not read Username for 'https://github.com'` で失敗し、tick が丸ごと止まった。
+# **SSH remote の面だけで試すと再現しない**）。
+#
+# **潰してよいのは外から注入されうる env だけで、利用者の global / system config ではない。**
+# 上の sanitize が防いでいるのは、親プロセスが立てた `GIT_DIR` / `GIT_CONFIG_*` で観測先を
+# すり替えられることで、利用者自身の設定は信頼している側に居る（repo-local config も同じ理由で
+# 潰せない —— `remote.origin.url` がそこに在る）。面のすり替えは `git_identity_ok` が
+# local config の生値で照合して止める。
+#
+# **`GIT_TERMINAL_PROMPT=0` は両方に置く** —— 認証に失敗したとき、端末があると入力待ちで固まる。
+git_net() {
+  env "${GIT_ENV_STRIP[@]}" GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 git "$@"
 }
 
 git_status() {
@@ -360,7 +381,12 @@ snapshot() {
   prs=$(printf '%s\n' "$prs" | sort -n)
 
   # **fetch の失敗でラウンドを無効にする。**握りつぶすと古い origin/<default> を有効な観測として使う。
-  git_clean -C "$REPO" fetch origin --prune --quiet || return 1
+  # **どの段で落ちたかを名指しする** —— 認証や網の障害はここでしか出ず、`snapshot failed` だけでは
+  # 観測の欠陥と環境の障害を切り分けられない。
+  if ! git_net -C "$REPO" fetch origin --prune --quiet; then
+    echo "[watch] 制御面の fetch に失敗した: $REPO" >&2
+    return 1
+  fi
   default=$(git_clean -C "$REPO" rev-parse "origin/$DEFAULT_BRANCH") || return 1
   require_nonempty default "$default" || return 1
   branches=$(git_clean -C "$REPO" branch -r --list 'origin/*' | sed 's/^ *//' | sort) || return 1
@@ -415,7 +441,7 @@ snapshot() {
     # その面を持つ課題だけを `Conflict` にする。**制御面だけは別**で、正規化そのものが成り立たない
     # のでラウンドを無効にする（下の default / branches / issues と同じ扱い）。
     if [ "$checkout" != "$REPO" ]; then
-      if ! git_clean -C "$checkout" fetch origin --prune --quiet; then
+      if ! git_net -C "$checkout" fetch origin --prune --quiet; then
         plane_unknown "$name" "$ref"
         continue
       fi

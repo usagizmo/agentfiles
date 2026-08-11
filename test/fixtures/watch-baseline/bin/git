@@ -15,14 +15,22 @@ done
 
 case "${1:-} ${2:-} ${3:-}" in
   "fetch origin --prune")
+    # **credential helper は利用者の global config に在る。**そこを潰したまま network を張ると、
+    # HTTPS remote では認証できずここで落ちる（実測: 制御面の origin が HTTPS の環境で、snapshot が
+    # 毎回 `could not read Username for 'https://github.com'` で失敗して tick が止まった）。
+    # SSH remote の面だけでは再現しないので、**偽 git 側で必ず踏む形にしてある。**
+    if [ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ]; then
+      echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2
+      exit 128
+    fi
     ;;
-  "rev-parse origin/main "*|"rev-parse origin/main")
+  "rev-parse origin/main "*)
     echo "1111111111111111111111111111111111111111"
     ;;
   "rev-parse --verify --quiet")
     echo "1111111111111111111111111111111111111111"
     ;;
-  "rev-parse HEAD "*|"rev-parse HEAD")
+  "rev-parse HEAD "*)
     echo "2222222222222222222222222222222222222222"
     ;;
   "config --local -z")
@@ -41,13 +49,13 @@ case "${1:-} ${2:-} ${3:-}" in
     # `--format=<面> %(refname:short) %(objectname)` を展開したもの
     printf '%s main 2222222222222222222222222222222222222222\n' "$(printf '%s' "$2" | sed 's/^--format=//; s/ .*//')"
     ;;
-  "branch -r "*|"branch -r")
+  "branch -r "*)
     echo "  origin/main"
     ;;
-  "worktree list "*|"worktree list")
+  "worktree list "*)
     printf 'worktree /fake/wt\nHEAD 2222222222222222222222222222222222222222\nbranch refs/heads/main\n\n'
     ;;
-  "status --porcelain=v1 "*|"status --porcelain=v1")
+  "status --porcelain=v1 "*)
     # clean
     ;;
   *)
