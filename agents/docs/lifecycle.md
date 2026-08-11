@@ -154,7 +154,7 @@ sequenceDiagram
         U->>R: 項目ごとに承認する
         R->>GH: 全項目そろったら confirmed → 人待ちを cleared に
     else それ以外
-        R->>GH: 意図の確認を not-required に（理由と revision つき）
+        R->>GH: 意図の確認を not-required に（理由と revisions つき）
     end
 
     R-->>C: 待機
