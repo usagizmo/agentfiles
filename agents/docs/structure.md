@@ -90,19 +90,21 @@ flowchart LR
         PR[pr]
         SH[ship]
     end
-    subgraph shared["agents/shared/"]
+    subgraph shared["agents/shared/ — 普遍"]
+        RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
+        AD["advisors.md<br/><small>アドバイザー起動表</small>"]
+        AS["advisors.sh<br/><small>起動・回収の実行</small>"]
+        GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
+    end
+    subgraph sharedq["agents/shared/queue/ — キュー機構専用"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
         IC["issue-contract.md<br/><small>Issue 契約の見出しと入場を止める宣言</small>"]
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
         RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
-        RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         AF["artifact.md<br/><small>読ませる面の条件</small>"]
         IR["integration-record.md<br/><small>merge の枠の記録</small>"]
         IT["intent-record.md<br/><small>意図の確認の記録</small>"]
-        AD["advisors.md<br/><small>アドバイザー起動表</small>"]
-        AS["advisors.sh<br/><small>起動・回収の実行</small>"]
-        GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
         LS["landing-surface.md<br/><small>着地面の意味論</small>"]
         SR["session-report.md<br/><small>セッションまとめ</small>"]
     end
@@ -129,22 +131,11 @@ flowchart LR
     RS --> IR
     CO --> IT
     RS --> IT
-    SH --> IT
-    SH --> SB
     CO --> LS
     RF --> LS
     RS --> LS
-    ME --> LS
     CO --> SR
     RS --> SR
-    ME --> SR
-    SH --> SR
-    SH --> LS
-    SH --> AF
-    SH --> RR
-    ME --> SB
-    ME --> IT
-    ME --> AF
     RF --> SR
     CS --> AD
     CS --> AS

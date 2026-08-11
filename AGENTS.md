@@ -4,7 +4,30 @@
 
 **private な案件の repo 名・Issue / PR 番号・社内固有の文言を、tracked ファイルにも commit message にも書かない。** 由来を残したいときは、何を直したかだけを書く。**リンクの曖昧さを完全修飾で解こうとしない** —— `#123` が自分の repo を指してしまうからと `org/private-repo#123` へ直すと、曖昧さの代わりに repo 名が公開される。
 
-**共通 instructions / skills の変更は、直すと決めた工程がその場で commit する。push と merge だけは人が行う** —— merge した瞬間に全 project の全工程へ配布されるので、取り消しの範囲が commit 単位で閉じない。
+**共通 instructions / skills の変更は、直すと決めた工程が commit も merge も行う。push だけは人が行う。**
+
+**配布は merge では起きない。**`~/.agents` の symlink 先はこの repo の working tree なので、**この checkout でファイルを書いた瞬間に全 project の全工程へ配布される**。merge を人の gate にしても、その前に配布は済んでいる —— 止められるのは「別の worktree で作業したときだけ」で、同じ木で直した変更には一度も掛からない。掛からない gate を置くと、守られているつもりの範囲だけが実態とずれる。
+
+**push が別なのは、取り消しが手元で閉じないから**。他のマシンと公開先へ出た後は、消しても消したことが残る。`git reset` で戻せる範囲に居るあいだは、エージェントが着地まで進めてよい。
+
+**配布を止めたいなら、別の worktree で作業する**（gate は merge ではなくそちら側にある）。
+
+**共通 `merge` skill の「何をいつ入れるかは人が決める」を緩めていない。**あちらが禁じているのは
+「課題の着地として自動で走ること」で、決めるのは人という点は変わらない —— ここはその判断を
+この repo に対して 1 度だけ据え置いたもの。**手順と検査（dirty・HEAD・祖先関係・失敗したら止まる）は
+そのまま適用する。**
+
+## 切り出しの受け皿
+
+**この repo は受け皿を持たない**（GitHub Issues は無効）。`~/.agents/AGENTS.md`「作業単位」の
+「切り出すと決めたものは受け皿へ置く」は、ここでは成立しない。
+
+**だから、気づいたものは現在のブランチで直しきる**。直しきれないものだけ、行き先の決定を人へ返す
+（**まとめに書いて終わりにしない** —— そこが実測で発見が消えた経路）。統合は `temp` へ `--no-ff` で
+積んで `main` へ落とす形で、待ち行列ではない。
+
+**受け皿を持つ project では、その project の AGENTS.md が置き場と最優先の位置を定める**
+（例: Project board を持つ project なら `Backlog` の最上段）。
 
 ## dotfiles への依存
 
@@ -78,6 +101,9 @@
 - **同層への言及が構造的に消える**。参照先が skill でなくなるので、層契約（同じ層への依存・言及を作らない）を隠さずに満たせる
 - **skill 本文は自分の相対パスだけ**。skill が自己完結し、投影先でも repo でも解決できる
 - **`shared/` に置く条件は 1 つ**: **2 つ以上の skill が同じものを使っている**。契約でも手順でもよい（`review-contract` は契約、`advisors` は手順）。1 つの skill しか使わないものは、その skill の `references/` に実体で置く
+- **ドメインで 2 段に分ける**。`shared/` は普遍（どの project でも意味が通る）、`shared/queue/` はキュー機構専用（Issue・Status・claim・着地面・記録 marker を前提にするもの）。**`shared/queue/` を張れるのは queue package の構成員だけ**（一覧は `agents/skills/docs/scripts/audit-skills.sh` の `QUEUE_MEMBERS`）
+- **軸は skill の rank ではなくドメイン**。rank は将来ずれる代理でしかない —— キュー専用の subflow が rank 2 に増えたとき、rank 境界だと正当な参照まで落ちる
+- **`shared/` が層契約の抜け道になっていた**。参照先が skill でなくなるぶん層検査に当たらないので、キュー専用の概念が leaf へ流れる経路がそこ 1 本だけ開いていた（実測で、`merge` が `landing-surface.md` を 1 本引いただけで、推移閉包で 8 本が leaf に生えた）
 - `~/.agents/shared` への投影は要らない（skill が相対 symlink で辿るため）。skill 以外から参照したくなった時点で足す
 - 実体の一覧は `agents/docs/structure.md`（**導出した索引**。規約は本ファイルが SSOT）
 
