@@ -9,13 +9,49 @@ description: >-
 
 **通常は使わない**。変更を default へ入れる既定の経路は PR。この skill は PR を経由せずにローカルで統合すると決めたときだけ発動する。
 
-1. 対象ブランチ名を取得する
-2. `git log --oneline HEAD..<branch>` と `git diff HEAD...<branch>` で変更を把握する
+**課題の着地として自動では走らない**。PR を使わない着地面の着地は commit までで終わる（`references/landing-surface.md`）—— live checkout は人と走っている全セッションが読む面なので、**そこへ何をいつ入れるかは人が決める**。ここは、人がそう決めたときの手順。
+
+## 操作台は統合先が出ている checkout
+
+**セッションの cwd では走らせない**。課題の worktree に出ているのは課題の branch なので、そこで
+統合先への merge はできない（下の検査に必ず掛かる）。**統合先が checkout されている木へ `git -C` で
+入って行う** —— PR を使わない着地面ではそれが live checkout。
+
+**`checkout` で cwd の worktree を統合先へ切り替えない**。課題の branch が worktree から外れ、
+実装の続きも片付けも行き先を失う。
+
+## マージ先を先に検査する
+
+**統合先が live checkout に出ているときは、そこが人と全セッションの読む面**（skill の symlink 先がこれ）。**次を確かめてから merge する。1 つでも当たったら、直しにいかずに報告して止まる。**
+
+| 観測                                       | なぜ自動で直さないか                                                       |
+| ------------------------------------------ | -------------------------------------------------------------------------- |
+| dirty                                      | 共有面なので、**誰の作業か分からない未コミットの変更を消す**ことになる     |
+| HEAD が統合先の branch でない              | 人が別の branch を見ている最中。戻すと、その人の作業文脈が黙って切り替わる |
+| 姿勢を観測できない                         | 読めないことを「異常なし」と読むと、壊れた木へ merge する                  |
+| **統合先 HEAD が対象 branch の祖先でない** | **衝突しうる**。下記                                                       |
+
+**`checkout` / `stash` / `reset` を使わない**。行ってよいのは fetch と、この merge だけ。
+
+**例外は、自分が始めた merge の `--abort` だけ。**merge の commit は hook と署名を通るので、**祖先関係が成立していても最後で落ちうる**（lint / test の hook、署名鍵が取れない等）。落ちると `MERGING` と staged な変更が残り**、そのままでは live が壊れた状態で共有される**。直前に clean を確かめてあるので、`--abort` が戻すのは自分が作った状態だけ —— 他人の作業は最初から無い。
+
+**`--abort` で戻したら、そこで止めて報告する**。`--no-verify` や `--no-gpg-sign` で通し直さない ——落ちた検査は、その面の規約が要求しているもの。
+
+**統合先が upstream より先行していることは異常ではない**。push が人の領分の面では、それが常態
+（実測で 15 commit 先行）。ここを gate にすると、**その面へは一度も着地できなくなる。**
+
+**衝突しうる状態では merge しない**。統合先の HEAD が対象 branch の祖先なら、`--no-ff` の merge は
+必ず成功する（衝突は起きえない）。祖先でないなら**自分の worktree で rebase してから出直す** ——
+先に merge してから `--abort` で戻す形にすると、**衝突から abort までのあいだ live に conflict marker の
+入った木が残り、全セッションがそれを読む**。abort 自体も、live に許した操作（fetch と merge）の外。
+
+1. 対象ブランチ名と、統合先が出ている checkout の path を取得する
+2. **その checkout で** `git log --oneline HEAD..<branch>` と `git diff HEAD...<branch>` で変更を把握する
 3. `git log -1 --format="%s%n%n%b"` で直前コミットの言語・スタイルを合わせる
 4. 変更の性質で gitmoji を1つ選び、マージする
 
 ```
-git merge --no-ff <branch> -m "{gitmoji} {変更の本質}
+git -C <統合先の checkout> merge --no-ff <branch> -m "{gitmoji} {変更の本質}
 
 - {サマリー1}
 - {サマリー2}"
@@ -23,3 +59,4 @@ git merge --no-ff <branch> -m "{gitmoji} {変更の本質}
 
 - タイトルは `Merge branch '...'` にしない
 - gitmoji は `references/gitmoji.md`
+- **merge した後、live checkout が clean で統合先に居ることを確かめる**。ここまでが 1 手

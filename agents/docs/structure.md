@@ -102,6 +102,8 @@ flowchart LR
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
+        LS["landing-surface.md<br/><small>着地面の意味論</small>"]
+        SR["session-report.md<br/><small>セッションまとめ</small>"]
     end
 
     RF --> AF
@@ -126,6 +128,21 @@ flowchart LR
     RS --> IT
     SH --> IT
     SH --> SB
+    CO --> LS
+    RF --> LS
+    RS --> LS
+    ME --> LS
+    CO --> SR
+    RS --> SR
+    ME --> SR
+    SH --> SR
+    SH --> LS
+    SH --> AF
+    SH --> RR
+    ME --> SB
+    ME --> IT
+    ME --> AF
+    RF --> SR
     CS --> AD
     CS --> AS
     ZB --> AD
@@ -138,6 +155,9 @@ flowchart LR
     SH --> GM
 ```
 
+**shared が bare 名で参照する兄弟は、その shared を張った skill にも張る**。張らないと、読み手が
+その名前を辿れない（同じ `references/` に在ることが bare 名の前提）。
+
 **層をまたいでも、同じ層どうしでも、参照先は `shared/` だけ**。skill が別の skill の `references/` を覗く形が無くなるので、層契約（同じ層への言及を作らない）を隠さずに満たせる。
 
 **skill 固有の reference は `references/` に実体で置く。**
@@ -145,7 +165,7 @@ flowchart LR
 | skill           | 実体                                                                                      | 何を持つか                                                                                                                                   |
 | --------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `conductor`     | `harness.md` / `protocols.md` / `intake.md` / `tick.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 正規化と action の論証 / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
-| `resolve`       | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `session-report.md`              | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
+| `resolve`       | `replan.md` / `intent.md` / `judgment.md` / `scope.md`                                    | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
 | `ship`          | `sync-default.md`                                                                         | 着地後にローカル default を最新化する手順                                                                                                    |
 | `docs`          | `review-prompt.md`                                                                        | 更新判定用                                                                                                                                   |
 | `skill-creator` | `schemas.md`                                                                              | vendored                                                                                                                                     |

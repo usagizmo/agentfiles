@@ -68,7 +68,7 @@ import sys
 # **符号化を変えたらここを上げる。**指紋の先頭に入るので、新旧が静かに同じ値へ化けない。
 # 互換は持たない（旧 `mark` の変換も新旧併用もしない）。上げた周は全件が不一致になり、
 # `count` が 1 度だけ 0 に戻る（退避が最大 1 周遅れる安全側）。
-SCHEMA = "cycle-mark/1"
+SCHEMA = "cycle-mark/2"
 
 # **レコード名は固定の ASCII 定数だけ。**可変長のものはすべて中身側へ置いて長さ前置きにする。
 # path を名前に埋めると（`untracked:<path>`）、改行を含む path で framing が曖昧になり、
@@ -78,6 +78,15 @@ RECORD_NAME = re.compile(r"\A[a-z][a-z-]*\Z")
 # remote は `origin` 固定。**同じ skill の `watch.sh` が remote branch を `origin/*` で観測する**
 # ので、そちらと違う remote を見ると「観測した branch」と「指紋の head」がずれる。
 REMOTE = "origin"
+
+# branch head を撮る順。**ローカルを先に見る。**着地面の branch は push を要求しないので
+# （`../references/landing-surface.md`）、remote だけを見ると commit が生まれている面の head が
+# 永久に解決できず、その面の周は毎回観測の失敗になる。ローカルと remote が両方あって食い違う
+# 場合にローカルを採るのは、成果＝手元で生まれたもの、だから。
+BRANCH_SOURCES = (
+    ("local-branch", "refs/heads/{}"),
+    ("remote-branch", "refs/remotes/" + REMOTE + "/{}"),
+)
 
 # git の出力を実行環境から切り離す。**受入条件の「利用者の git 設定に依存しない」はここで閉じる。**
 # 残る repo-local は checkout そのものの性質（どの実行器から見ても同じ）なので触らない。
@@ -206,8 +215,15 @@ GIT_CONFIG_PINS = ("core.fsmonitor=false", "core.untrackedCache=false")
 GIT_DEADLINE = 60
 
 
-def git(cwd, *args):
-    """git を回して stdout をバイト列で返す。失敗は観測の失敗。"""
+def git(cwd, *args, **kwargs):
+    """git を回して stdout をバイト列で返す。失敗は観測の失敗。
+
+    `allow_fail=True` のときだけ、非 0 で `None` を返す（**stderr は捨てる**）。使うのは
+    「その ref が在るか」を引くところだけで、**在ることを前提にした取得には使わない** ——
+    観測の失敗を `None` へ畳むと、壊れた checkout が「実体なし」の正常な指紋になる。
+    """
+    allow_fail = kwargs.pop("allow_fail", False)
+    assert not kwargs, kwargs
     argv = ["git", "-C", cwd, "--no-pager"]
     for pin in GIT_CONFIG_PINS:
         argv += ["-c", pin]
@@ -230,12 +246,23 @@ def git(cwd, *args):
         proc.communicate()
         raise ObservationError("git {} が {} 秒で戻らない".format(" ".join(args), GIT_DEADLINE))
     if proc.returncode != 0:
+        if allow_fail:
+            return None
         raise ObservationError(
             "git {} が {} で終わった: {}".format(
                 " ".join(args), proc.returncode, err.decode("utf-8", "replace").strip()
             )
         )
     return out
+
+
+def common_dir(path):
+    """その checkout / worktree が属する repository の共有 git ディレクトリ（絶対 path）。
+
+    linked worktree でも同じ値になるので、**「この worktree はこの面のものか」を引く鍵**になる。
+    """
+    out = git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return os.path.realpath(out.decode("utf-8").strip())
 
 
 def verify_worktree(path):
@@ -425,35 +452,131 @@ def index_entries(worktree):
     return dict((path, b"\n".join(sorted(metas))) for path, metas in table.items())
 
 
-def encode_resolve(enc, args):
-    """解決の周。成果物の側だけから作る。
+def resolve_head(enc, repo, worktree, branch):
+    """その面の head を撮り、出どころも指紋へ入れる。
 
-    **`runtime` とセッションの状態は入れない**（回した直後に必ず変わるので、入れると常に
-    成果ありになる）。**commit 数でも引かない**（amend / squash / rebase で減る）。
+    worktree があればそこ。無ければ branch（ローカル → remote の順）。どちらも無ければ
+    「無い」を明示して符号化する。**段階で免除を分けない** —— 分けると、免除の側を広く読んだ
+    実装が照合を飛ばす。
     """
-    enc.text("progress", args.progress)
-
-    # **`--repo` は使う前に確かめる。**`--no-branch --no-worktree` では参照しないので、
-    # 検証しないと存在しない path を渡した周が「実体なし」の正常な指紋になる。
-    git(args.repo, "rev-parse", "--git-dir")
-
-    worktree = verify_worktree(args.worktree) if args.worktree else None
-
-    head_before = None
     if worktree:
-        head_before = git(worktree, "rev-parse", "HEAD").decode("utf-8").strip()
+        head = git(worktree, "rev-parse", "HEAD").decode("utf-8").strip()
         enc.text("head-source", "worktree")
-        enc.text("head", head_before)
-    elif args.branch:
+        enc.text("head", head)
+        return head
+
+    if branch:
         # worktree を消した後でも branch が残っていれば head は撮れる。
-        ref = "refs/remotes/{}/{}".format(REMOTE, args.branch)
-        enc.text("head-source", "remote-branch")
-        enc.text("head", git(args.repo, "rev-parse", "--verify", ref).decode("utf-8").strip())
+        for source, template in BRANCH_SOURCES:
+            ref = template.format(branch)
+            found = git(repo, "rev-parse", "--verify", "--quiet", ref, allow_fail=True)
+            if found is not None:
+                enc.text("head-source", source)
+                enc.text("head", found.decode("utf-8").strip())
+                return None
+        raise ObservationError("branch {!r} が {} のどこにも無い".format(branch, repo))
+
+    # **branch も worktree も無い段階（claim 前・実体を消した後）でも一意に作る。**
+    enc.text("head-source", "absent")
+    enc.text("head", "")
+    return None
+
+
+def split_remote_url(name):
+    """remote の URL を `(host, path)` に割る。割れない形は `None`。
+
+    `https://host/owner/repo(.git)` と `git@host:owner/repo(.git)` と `ssh://git@host/owner/repo`。
+    **host より後ろを取れない形は通さない**（local path の remote 等）—— identity を確かめられない
+    ものを「一致した」とは読まない。
+    """
+    if name.endswith(".git"):
+        name = name[: -len(".git")]
+    rest = name.split("://", 1)[1] if "://" in name else name
+    if "://" in name or "/" in rest.split(":", 1)[0]:
+        host, sep, path = rest.partition("/")
     else:
-        # **branch も worktree も無い段階（claim 前・実体を消した後）でも一意に作る。**
-        # 段階で免除を分けない —— 分けると、免除の側を広く読んだ実装が照合を飛ばす。
-        enc.text("head-source", "absent")
-        enc.text("head", "")
+        host, sep, path = rest.partition(":")
+    if not sep or not host or not path:
+        return None
+    return (host.rpartition("@")[2], path)
+
+
+def verify_identity(checkout, repo, expected_host):
+    """その checkout が `<owner>/<repo>` の実体かを `origin` の URL で確かめる。
+
+    **面の名前と checkout の対応は呼び出し側が組み立てる。**取り違えても common dir の検査は
+    通る（別の面の checkout はその面自身とは整合しているので）ので、**本来の面の成果が観測から
+    落ちたまま正常な指紋が返る**。名前だけで信用しない。
+    """
+    # **`remote get-url` を使わない。**`url.<base>.insteadOf` が効いていると書き換え後の URL が
+    # 返るので、**別の repo 名へ化けた値で照合してしまう**（同じ理由で `watch.sh` も生値を読む。
+    # 2 つの観測が違う判定をすると、指紋と snapshot が食い違う）。
+    # **`--get` ではなく `-z --get-all`。**`--get` は複数登録されたうち最後の 1 本しか返さないので、
+    # 先頭に別 repo を足して末尾に期待値を置けば検査を通る（fetch が向く先とは食い違いうる）。
+    # **NUL 終端で数える** —— 行で数えると、末尾の空値が落ちて「1 件」に見える。
+    url = git(checkout, "config", "--local", "-z", "--get-all", "remote.{}.url".format(REMOTE), allow_fail=True)
+    if url is None:
+        raise ObservationError("面 {!r} の checkout に {} が無い: {}".format(repo, REMOTE, checkout))
+    # **`-z` は各値を NUL で終端する。**最後の 1 つだけを落とし、空の値は数に残す
+    # （除くと、空を足すだけで「1 件」に見えて gate をすり抜ける）。
+    raw = url.split(b"\0")
+    if raw and raw[-1] == b"":
+        raw.pop()
+    if len(raw) != 1:
+        raise ObservationError(
+            "面 {!r} の {} が {} 本ある: {}".format(repo, REMOTE, len(raw), checkout)
+        )
+    name = raw[0].decode("utf-8", "replace").strip()
+    # **末尾一致で済ませない。**`.../evil/owner/repo` は末尾 2 段が一致するので通ってしまう。
+    # host より後ろが `<owner>/<repo>` と**完全に**一致することを見る。
+    split = split_remote_url(name)
+    if split is None or split[1] != repo:
+        raise ObservationError("checkout が面 {!r} のものではない: {} ({})".format(repo, checkout, name))
+    # **host も照合する。**path だけだと `git@evil.example:owner/repo` が正しい面として通り、
+    # **別の repo の branch と dirty をその面の成果として符号化**する。`watch.sh` は制御面の host を
+    # 期待値にしているので、こちらだけ緩いと 2 つの観測が違う判定を出す。
+    if split[0] != expected_host:
+        raise ObservationError(
+            "面 {!r} の host が期待と違う: {} ({} != {})".format(repo, checkout, split[0], expected_host)
+        )
+
+
+def encode_landing(enc, repo, checkout, worktree, branch, expected_host):
+    """着地面 1 つぶんの成分。
+
+    **面の名前を先に入れる。**名前を落として値だけ並べると、面が増減したときに別の面の値と
+    入れ替わり、動いていない周が成果ありに見える（framing は Encoder が長さで閉じている）。
+    """
+    enc.text("landing", repo)
+
+    # **checkout は使う前に確かめる。**`--no-branch --no-worktree` では参照しないので、
+    # 検証しないと存在しない path を渡した周が「実体なし」の正常な指紋になる。
+    git(checkout, "rev-parse", "--git-dir")
+    verify_identity(checkout, repo, expected_host)
+
+    if worktree:
+        worktree = verify_worktree(worktree)
+        # **その worktree がこの面のものか確かめる。**面の名前だけを突き合わせても、path を
+        # 取り違えた呼び出しは通ってしまう —— **別の面の成果をこの面として符号化し、本来の面の
+        # 成果は落ちる**（正常な指紋を返すので誰も気づけない）。
+        if common_dir(worktree) != common_dir(checkout):
+            raise ObservationError(
+                "worktree {!r} は面 {!r} のものではない".format(worktree, repo)
+            )
+        # **その worktree にこの課題の branch が出ているかも見る。**同じ repo の別 worktree は
+        # common dir が一致するので、**別の課題の HEAD と dirty をこの課題の成果として符号化**
+        # できてしまう（本物の進捗は落ち、成果ゼロの `count` も誤って 0 に戻る）。detached HEAD も
+        # 通さない —— 何の branch を見ているか決まらない。
+        if branch:
+            out = git(worktree, "symbolic-ref", "--quiet", "--short", "HEAD", allow_fail=True)
+            checked_out = out.decode("utf-8").strip() if out is not None else None
+            if checked_out != branch:
+                raise ObservationError(
+                    "worktree {!r} に出ているのは {!r} で、課題の branch {!r} ではない".format(
+                        worktree, checked_out or "(detached)", branch
+                    )
+                )
+    head_before = resolve_head(enc, checkout, worktree, branch)
 
     if worktree:
         tracked, untracked = status_entries(worktree)
@@ -484,6 +607,25 @@ def encode_resolve(enc, args):
         enc.text("tracked-source", "absent")
         enc.text("untracked-source", "absent")
 
+
+def encode_resolve(enc, args):
+    """解決の周。成果物の側だけから作る。
+
+    **`runtime` とセッションの状態は入れない**（回した直後に必ず変わるので、入れると常に
+    成果ありになる）。**commit 数でも引かない**（amend / squash / rebase で減る）。
+
+    **着地面ごとに撮る。**成果物が生まれる repo は Issue の repo とは限らず（`landing-surface.md`）、
+    1 面だけを見ると、別の面で書き進んでいる周と何も書けずに止まっている周が同じ値になる ——
+    **この機構が直そうとしている欠陥そのもの。**
+    """
+    enc.text("progress", args.progress)
+    # **期待 host は呼び出し側が渡す**（制御面の origin から取る）。**最初の面で決めない** ——
+    # 制御面を着地面に含めない課題では、唯一の面が別 host でもそのまま期待値になって通ってしまう
+    # （`watch.sh` は制御面を基準にしているので、判定が 2 つで割れる）。
+    for repo, checkout in args.landing:
+        encode_landing(
+            enc, repo, checkout, args.worktree.get(repo), args.branch.get(repo), args.host
+        )
     encode_optional_file(enc, "plan-comment", args.plan_comment)
     encode_optional_file(enc, "wait-record", args.wait_record)
 
@@ -524,6 +666,18 @@ def issue_body_arg(value):
     return (int(number), path)
 
 
+def landing_arg(value):
+    """`<面の名前>:<値>`（`--landing` の checkout path・`--branch` の名前・`--worktree` の path）。
+
+    **面の名前を必須にする。**path だけを並べさせると、面が入れ替わったことが指紋に出ない
+    （path は端末ごとに違ううえ、worktree の作り直しでも動く）。
+    """
+    repo, sep, path = value.partition(":")
+    if not sep or not repo.strip() or not path.strip():
+        raise argparse.ArgumentTypeError("<owner>/<repo>:<path> の形で渡す: {}".format(value))
+    return (repo, path)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
@@ -535,12 +689,49 @@ def build_parser():
         ),
     )
     parser.add_argument("--ledger", required=True, help="`未計画` なら計画の周、それ以外は解決の周")
-    parser.add_argument("--repo", help="解決の周で必須。worktree が無くても branch を解決できる入口")
+    parser.add_argument(
+        "--landing",
+        action="append",
+        default=[],
+        type=landing_arg,
+        metavar="repo:path",
+        help="解決の周で必須。着地面ごとに 1 つ（並べ替えは実装が行う）",
+    )
     parser.add_argument("--progress", help="解決の周で必須")
-    parser.add_argument("--branch", help="代表の branch 名（remote は origin 固定）")
-    parser.add_argument("--no-branch", action="store_true", help="branch が無いことの明示")
-    parser.add_argument("--worktree", help="worktree root の path")
-    parser.add_argument("--no-worktree", action="store_true", help="worktree が無いことの明示")
+    parser.add_argument(
+        "--host",
+        help="解決の周で必須。全着地面の remote が在るべき host（制御面の origin から取る）",
+    )
+    parser.add_argument(
+        "--branch",
+        action="append",
+        default=[],
+        type=landing_arg,
+        metavar="repo:name",
+        help="branch を持つ着地面ごとに 1 つ（ローカル → origin の順で解決）",
+    )
+    parser.add_argument(
+        "--no-branch",
+        action="append",
+        default=[],
+        metavar="repo",
+        help="branch を持たない着地面ごとに 1 つ（面の名前だけ）",
+    )
+    parser.add_argument(
+        "--worktree",
+        action="append",
+        default=[],
+        type=landing_arg,
+        metavar="repo:path",
+        help="worktree を持つ着地面ごとに 1 つ（worktree root）",
+    )
+    parser.add_argument(
+        "--no-worktree",
+        action="append",
+        default=[],
+        metavar="repo",
+        help="worktree を持たない着地面ごとに 1 つ（面の名前だけ）",
+    )
     parser.add_argument("--plan-comment", help="計画コメントの本文を入れた file")
     parser.add_argument("--no-plan-comment", action="store_true", help="計画コメントが無いことの明示")
     parser.add_argument(
@@ -582,6 +773,34 @@ def require_pair(parser, name, value, negative):
         parser.error("--{0} か --no-{0} のどちらかが要る".format(name))
 
 
+def require_coverage(parser, name, values, negatives, args):
+    """**着地面ごとに有無をちょうど 1 回宣言させる。**
+
+    `--<name> <repo>:<値>` か `--no-<name> <repo>` のどちらかを、全着地面ぶん。
+
+    **1 面でも省略を許さない。**省略された面の状態は指紋へ入らないので、**その面で進んだ周と
+    何も無い周が同値**になる。面ごとに `absent` を正常な観測値として符号化できることが、
+    claim の途中失敗や部分的な片付けからの復旧に要る —— そこで観測の失敗に倒すと、照合が
+    通らないまま起こし直しにも片付けにも到達しない。
+    """
+    for _, value in values:
+        require_value(parser, name, value)
+    for repo in negatives:
+        require_value(parser, "no-" + name, repo)
+
+    landing = [repo for repo, _ in args.landing]
+    declared = [repo for repo, _ in values] + list(negatives)
+    if len(set(declared)) != len(declared):
+        parser.error("{} の有無を 2 回宣言している面がある".format(name))
+
+    missing = sorted(set(landing) - set(declared))
+    if missing:
+        parser.error("{} の有無が宣言されていない面: {}".format(name, ", ".join(missing)))
+    unknown = sorted(set(declared) - set(landing))
+    if unknown:
+        parser.error("--landing に無い面の {} を宣言している: {}".format(name, ", ".join(unknown)))
+
+
 def forbid(parser, kind, **values):
     """その周では渡してはいけない引数を弾く。
 
@@ -602,21 +821,39 @@ def parse_args(argv):
 
     if args.kind == "resolve":
         forbid(parser, "解決", issue_body=args.issue_body)
-        require_value(parser, "repo", args.repo)
         require_value(parser, "progress", args.progress)
-        if not args.repo:
-            parser.error("--repo が要る")
+        require_value(parser, "host", args.host)
+        if not args.host:
+            parser.error("--host が要る")
+        if not args.landing:
+            parser.error("--landing が 1 つ以上要る")
+        names = [repo for repo, _ in args.landing]
+        if len(set(names)) != len(names):
+            parser.error("--landing の面が重複している")
         if args.progress is None:
             parser.error("--progress が要る")
-        require_pair(parser, "branch", args.branch, args.no_branch)
-        require_pair(parser, "worktree", args.worktree, args.no_worktree)
+        require_coverage(parser, "branch", args.branch, args.no_branch, args)
+        require_coverage(parser, "worktree", args.worktree, args.no_worktree, args)
+        # **worktree があるのに branch が無い面を許さない。**その面だけ branch の同一性検査が
+        # 飛び、別課題の worktree や detached HEAD をこの課題の成果として符号化できる。
+        with_worktree = set(repo for repo, _ in args.worktree)
+        without_branch = set(args.no_branch)
+        both = sorted(with_worktree & without_branch)
+        if both:
+            parser.error("worktree があるのに branch が無い面: {}".format(", ".join(both)))
         require_pair(parser, "plan-comment", args.plan_comment, args.no_plan_comment)
+
+        # 並べ替えを実装が持つ（呼び出し側の順序で指紋が動かない）。
+        args.landing = sorted(args.landing)
+        args.worktree = dict(args.worktree)
+        args.branch = dict(args.branch)
     else:
         forbid(
             parser,
             "計画",
-            repo=args.repo,
+            landing=args.landing,
             progress=args.progress,
+            host=args.host,
             branch=args.branch,
             no_branch=args.no_branch,
             worktree=args.worktree,
