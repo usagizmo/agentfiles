@@ -1,10 +1,18 @@
-# dotfiles プロジェクト固有の設定
+# agentfiles プロジェクト固有の設定
 
 ## この repo は public
 
 **private な案件の repo 名・Issue / PR 番号・社内固有の文言を、tracked ファイルにも commit message にも書かない。** 由来を残したいときは、何を直したかだけを書く。**リンクの曖昧さを完全修飾で解こうとしない** —— `#123` が自分の repo を指してしまうからと `org/private-repo#123` へ直すと、曖昧さの代わりに repo 名が公開される。
 
 **共通 instructions / skills の変更は、直すと決めた工程がその場で commit する。push と merge だけは人が行う** —— merge した瞬間に全 project の全工程へ配布されるので、取り消しの範囲が commit 単位で閉じない。
+
+## dotfiles への依存
+
+**配線 primitive と inventory API は dotfiles の `lib/links.sh` が SSOT**。`lib/bootstrap.sh` が読み込み、在処は `DOTFILES_REPO` > 兄弟ディレクトリ の順に解決する。**見つからなければ止まる** —— 関数が未定義のまま進むと、どの `inv_*` も no-op になり「成功したのに何も張られていない」で終わる。
+
+**参照方向は agentfiles → dotfiles の一方通行**。dotfiles 側は agentfiles を知らない。
+
+**次の規約は dotfiles の `AGENTS.md` が SSOT で、ここには写さない** —— symlink の貼り方、配布先に既に何かある場合の扱い、コレクション配線のルール、外部コマンド実行のルール、tracked ファイルに絶対 home パスを書かないこと。primitive の実装がそこにあるので、写すと片方だけ古くなる。
 
 ## コミットメッセージ規約
 
@@ -21,43 +29,34 @@
 
 ### スコープと絵文字の対応
 
-| 絵文字 | スコープ       | 説明                                                                                                      |
-| ------ | -------------- | --------------------------------------------------------------------------------------------------------- |
-| 🐟     | `[fish]`       | Fish シェル設定                                                                                           |
-| 🐚     | `[zsh]`        | Zsh シェル設定                                                                                            |
-| 🤖     | `[claude]`     | `harnesses/claude` 配下の Claude Code 設定                                                                |
-| 🤖     | `[codex]`      | Codex 関連設定（`init.sh` の `~/.codex` 配線等）                                                          |
-| 🤖     | `[agents]`     | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
-| 🤖     | `[grok]`       | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
-| 🖥️     | `[cursor-app]` | `cursor-app` 配下の Cursor IDE 設定                                                                       |
-| 📝     | `[nvim]`       | Neovim 設定                                                                                               |
-| 👻     | `[ghostty]`    | Ghostty ターミナル設定                                                                                    |
-| 🐏     | `[herdr]`      | `herdr/` / `~/.config/herdr` 配下の herdr 設定                                                            |
-| 📁     | `[yazi]`       | Yazi ファイルマネージャー設定                                                                             |
-| 🔨     | `[mise]`       | mise ランタイムバージョン管理設定                                                                         |
-| 🎨     | `[lint]`       | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
-| 🔧     | `[複数]`       | 複数スコープにまたがる設定変更（例: `[fish][zsh]`）                                                       |
+| 絵文字 | スコープ   | 説明                                                                                                      |
+| ------ | ---------- | --------------------------------------------------------------------------------------------------------- |
+| 🤖     | `[agents]` | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
+| 🤖     | `[claude]` | `harnesses/claude` 配下の Claude Code 設定                                                                |
+| 🤖     | `[codex]`  | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
+| 🤖     | `[grok]`   | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
+| 🎨     | `[lint]`   | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
+| 🔧     | `[複数]`   | 複数スコープにまたがる変更（例: `[agents][claude]`）                                                      |
 
 スコープに該当しない全体的な変更は、汎用 gitmoji を使う（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）。
 
 ### コミット例
 
 ```
-🐟 [fish] claude コマンドの短縮 abbreviation c を追加
+🤖 [agents] conductor の tick に成果ゼロの周の上限を足す
 
-- `abbr -a c claude` を追加し、より素早く Claude を起動できるように改善
+- 実行器を回しても成果物が動かない周が続いたら選出対象外へ退避する
 ```
 
 ## agent 設定の配置方針
 
-- `./AGENTS.md` はこの dotfiles repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
+- `./AGENTS.md` はこの repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - `./agents/docs/` は人が全体を把握・監査するための資料。**agent へは投影しない**（`lib/inventory.sh` に載せない）。規約の本体は置かず、skills から導出した図と索引だけを持つ
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置かない
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイル（固有ルール + 共通 `~/.agents/AGENTS.md` への参照。Claude は `@~/.agents/AGENTS.md` import）への symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（空 overlay を先回りで作らない）
 - 共通 `agents/AGENTS.md` に書けるのは、**その機能が無い harness でも代替手段で成立するルール**まで（例: 判断材料を Artifact にする → 作れない harness では応答に出す）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ
 - **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。どこに何を張るかの一覧は `lib/inventory.sh`
-- **tracked ファイルに絶対 home パス（`/Users/...` `/home/...`）を書かない。**`$HOME` / `~` を使う（別環境で壊れる）。`doctor.sh` が repo 全体の tracked ファイルを検査する。symlink 先に使う絶対パスは `$DOTFILES_DIR` 展開であって、リテラルの絶対パスではない
 
 ### 共通と個別の分け方
 
@@ -82,58 +81,24 @@
 - `~/.agents/shared` への投影は要らない（skill が相対 symlink で辿るため）。skill 以外から参照したくなった時点で足す
 - 実体の一覧は `agents/docs/structure.md`（**導出した索引**。規約は本ファイルが SSOT）
 
-### symlink の貼り方
-
-| パターン                           | 対象                             | 例                                                                                |
-| ---------------------------------- | -------------------------------- | --------------------------------------------------------------------------------- |
-| 単一ファイル                       | instructions / hooks / 設定 1 枚 | `agents/AGENTS.md` → `~/.claude/CLAUDE.md`                                        |
-| ディレクトリ丸ごと                 | union 不要な SSOT 投影           | `agents/skills` → `~/.agents/skills`                                              |
-| 実 dir + 項目ごと symlink（union） | skills / agents 等のコレクション | `~/.claude/skills/<name>` ← `agents/skills` + `harnesses/claude/skills`（後勝ち） |
-
 ### 配線の SSOT（スケール用）
 
 | パス               | 役割                                                                                                      |
 | ------------------ | --------------------------------------------------------------------------------------------------------- |
-| `lib/inventory.sh` | **配線一覧の唯一の正**。harness / symlink / skills union の追加はここだけ                                 |
-| `lib/links.sh`     | apply / check の primitive（触らなくてよいことが多い）                                                    |
-| `./init.sh`        | `run_inventory apply` + `core.hooksPath` の設定 + パッケージ類のインストール副作用                        |
-| `./up.sh`          | 外部依存（agent skills / mise tools / yazi plugins）の更新 + 配線の再適用                                 |
+| `lib/inventory.sh` | **この repo が何を配線するかの唯一の正**。harness / symlink / skills union の追加はここだけ               |
+| `lib/bootstrap.sh` | dotfiles の `lib/links.sh`（primitive と `inv_*` の実装）を解決して読む                                   |
+| `./init.sh`        | `run_inventory apply` + `core.hooksPath` の設定 + 開発依存のインストール                                  |
+| `./up.sh`          | 外部 skills の更新 + herdr skill の生成 + 配線の再適用 + 開発依存の更新                                   |
 | `./doctor.sh`      | `run_inventory check` + commit gate 検査 + tracked ファイルの絶対 home パス検査（read-only。修復は init） |
 
-新しい harness や symlink を足す手順:
+**ランタイム（bun / mise）はこの repo が入れない。**dotfiles の `./init.sh` が供給する。欠けていたら開発依存のインストールをスキップして ⚠️ に留める（配線が主目的なので止めない）。
+
+新しい harness を足す手順:
 
 1. `lib/inventory.sh` の `inventory_define` に 1 ブロック追加（`inv_home` / `inv_symlink` / `inv_harness_skills` 等）
 2. 上の「スコープと絵文字の対応」に harness の行を追加する
 3. `./init.sh` で配線
 4. `./doctor.sh` で検査
-
-外部コマンド実行のルール（インストール・更新の副作用）:
-
-- パッケージ / プラグインのインストールは `init.sh` の `install_step "<助詞まで含む文節>" <cmd...>` で実行する（例: `install_step "tpm を" git clone ...`）。成否を握りつぶさず、失敗は件数を集計して summary で非ゼロ終了する
-- **ツール欠落の扱いは、欠いたまま完走したときにそのスクリプトの主目的が達成できるかで決まる**。達成できるならスキップして ⚠️ に留め、できないなら失敗に数える（`init.sh` は配線が主目的でインストールは全て付随物なのでスキップ、`up.sh` は skills 更新が主目的なので `bunx` 欠落は失敗・`ya` は付随物なのでスキップ）
-- **更新の対象そのものが入っていない場合はスキップ**（生成元が無いので更新できないが、既にあるものを壊しもしない）。道具の欠落と区別する — `up.sh` の `bunx` は道具なので失敗、`herdr` は対象なのでスキップ
-- 実行を試みて失敗した場合は、上によらず数える
-- **生成物を直接リダイレクトで上書きしない。**`>` はコマンド起動の前にファイルを 0 バイトへ切り詰めるので、生成に失敗すると既存の成果物が消える。temp へ出し、成功かつ非空を確かめてから `mv` する
-
-コレクション配線のルール:
-
-- **source 列は優先度低→高**。後から渡した source が同名を上書きする（harness skills: `agents/skills` < `harnesses/<agent>/skills`）
-- **`~/.agents/skills` をネイティブに読む harness（Codex 等）には `agents/skills` の union を張らない**（重複配布で衝突警告になる）。union は harness 固有 overlay の分のみ（`inv_collection "$HOME/.codex/skills" harnesses/codex/skills` 等）
-- 存在しない source dir はスキップする（`harnesses/<agent>/skills` 等は実体ができてから作る）
-- symlink は **絶対パス**（`$DOTFILES_DIR/...`）
-
-配布先に既に何かある場合の扱いは、経路で違う:
-
-| 配布先の状態            | 単一ファイル（`inv_symlink`）                                                | コレクション項目（`inv_collection` / `inv_harness_skills`） |
-| ----------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| repo 配下を指す symlink | 付け替える                                                                   | 付け替える                                                  |
-| repo 外を指す symlink   | ⚠️ 触らない                                                                  | 付け替える                                                  |
-| 実ファイル              | 内容を repo へ取り込んでから symlink 化（差分は git で確認・discard できる） | ⚠️ 拒否                                                     |
-| 実ディレクトリ          | ⚠️ 触らない                                                                  | ⚠️ 触らない                                                 |
-
-- **⚠️ は必ず出し、件数を集計して非ゼロ終了する**（黙殺しない）。`ln` の失敗も同じ。実ディレクトリは自動削除しない
-- prune で消すのは **repo 配下を指す管理下 symlink のうち、配布対象に無いもの・壊れたもの**だけ。repo 外を指す link・実ファイル・実ディレクトリ（vendor の `.system` や Grok bundled skills 等）は触らない
-- doctor は実ファイル / 実ディレクトリを ❌ にする（read-only。修復は `init.sh`）
 
 hooks の tripwire:
 
