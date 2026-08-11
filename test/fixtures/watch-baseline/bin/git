@@ -1,0 +1,65 @@
+#!/bin/sh
+# watch.sh 用の偽 git。
+# **前置きの option を全部剥がしてから subcommand で分岐する** —— `-C <path>` / `--no-pager` /
+# `-c <key=value>` は呼び出し側の都合で増減するので、位置で決め打ちすると増えた瞬間に壊れる。
+set -eu
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -C) shift 2 ;;
+    -c) shift 2 ;;
+    --no-pager) shift ;;
+    *) break ;;
+  esac
+done
+
+case "${1:-} ${2:-} ${3:-}" in
+  "fetch origin --prune")
+    # **credential helper は利用者の global config に在る。**そこを潰したまま network を張ると、
+    # HTTPS remote では認証できずここで落ちる（実測: 制御面の origin が HTTPS の環境で、snapshot が
+    # 毎回 `could not read Username for 'https://github.com'` で失敗して tick が止まった）。
+    # SSH remote の面だけでは再現しないので、**偽 git 側で必ず踏む形にしてある。**
+    if [ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ]; then
+      echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2
+      exit 128
+    fi
+    ;;
+  "rev-parse origin/main "*)
+    echo "1111111111111111111111111111111111111111"
+    ;;
+  "rev-parse --verify --quiet")
+    echo "1111111111111111111111111111111111111111"
+    ;;
+  "rev-parse HEAD "*)
+    echo "2222222222222222222222222222222222222222"
+    ;;
+  "config --local -z")
+    printf 'https://github.com/o/r.git\0'
+    ;;
+  "config --local --get")
+    echo "https://github.com/o/r.git"
+    ;;
+  "symbolic-ref --quiet HEAD")
+    echo "refs/heads/main"
+    ;;
+  "rev-list --count "*)
+    echo "0"
+    ;;
+  "for-each-ref --format="*)
+    # `--format=<面> %(refname:short) %(objectname)` を展開したもの
+    printf '%s main 2222222222222222222222222222222222222222\n' "$(printf '%s' "$2" | sed 's/^--format=//; s/ .*//')"
+    ;;
+  "branch -r "*)
+    echo "  origin/main"
+    ;;
+  "worktree list "*)
+    printf 'worktree /fake/wt\nHEAD 2222222222222222222222222222222222222222\nbranch refs/heads/main\n\n'
+    ;;
+  "status --porcelain=v1 "*)
+    # clean
+    ;;
+  *)
+    echo "fake git: unexpected args: $*" >&2
+    exit 1
+    ;;
+esac
