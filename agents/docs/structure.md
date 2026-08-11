@@ -92,6 +92,7 @@ flowchart LR
     end
     subgraph shared["agents/shared/"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
+        IC["issue-contract.md<br/><small>Issue 契約の見出しと入場を止める宣言</small>"]
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
         RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
@@ -110,6 +111,8 @@ flowchart LR
     RS --> AF
     CO --> AF
     CO --> SB
+    CO --> IC
+    RF --> IC
     CO --> WR
     CO --> RR
     CO --> BD

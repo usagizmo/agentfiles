@@ -57,6 +57,10 @@ fencing token（grant 世代つき）は**入力が conductor 経由でしか通
 
 **振られた作業のセッション名は `refine-` / `resolve-` で始めない**。内容が分かる名前を付ける（`investigate-ci-timeout` 等）。述語に当たるからではない —— 計画枠も選出も片付けも完全一致で引くので `refine-investigate` は当たらず、容量にも計画枠にも数えない。名前だけで工程が読めなくなる方が損失が大きい —— 観測は名前しか手掛かりを持たないので、`refine-` で始まる pane が計画セッションでないなら、一覧を見た人も次の conductor も毎回 pane を開いて確かめることになる。
 
+**実行器のモデルは落とさない**。成果物の品質を決めているのはここで、conductor 自身とは別に指定する
+（`--` 以降で渡す）。conductor 側を軽いモデルにするのは、判断が `src/` へ移った後なら成立する ——
+**移す前に落とすと、prose の解釈で誤判定が増える。**
+
 どちらも **完了を待たない**。次の tick へ戻る（完了検知は tick の観測で足りる）。渡すのは Issue 番号だけで、起こされた側は Issue 本文を読んで自分で文脈を作る（親セッションの文脈は引き継がれない前提で Issue 契約が要求されている）。
 
 **セッション名は `refine-<番号>` / `resolve-<番号>` に固定する**。観測時に工程まで名前で分かる。
@@ -156,7 +160,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | tab を作る（refine）                         | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                           |
 | pane を作る（振られた作業）                  | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                        |
 | pane_id を得る                               | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                     |
-| セッションを起こす                           | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い）                                                                                                                                                                           |
+| セッションを起こす                           | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000 -- --model <名前>`（`--pane` 以外の受け口は無い。`--` 以降が実行器へ渡る）                                                                                                                                |
 | 課題を渡す・再開する                         | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                  |
 | セッションを観測する                         | `herdr agent list`（`name` / `agent_status` / `cwd`）                                                                                                                                                                                                                         |
 | worktree を作る（claim。二次面）             | **`git -C <その面の checkout> worktree add -b <名> <path> <その面の統合先>`**（**pane を作らない**。`<path>` の決め方は下記）                                                                                                                                                 |
@@ -297,6 +301,10 @@ worktree 一覧は上記のとおり面ごとの checkout から取る（スク�
 ## 交代
 
 **context が尽きる前に、別 pane の後継へ渡して自分は退く**。tick は冪等で観測から組み立て直せるので、**渡すのは観測に出ないものだけ**（それ以外を書くと、後継が読むのに時間と context を二重に使う）。
+
+**判断を `src/` へ移してからは、これが発火する頻度は大きく下がった**（毎 tick 読み直していた判断の
+prose が消えたため）。**それでも節ごと消さない** —— 実行と状況ボードの文章で context は増え続けるので、
+起きる事象そのものは残っている。
 
 **手順**（既存の受け口だけで足りる。新しい仕組みを作らない）。
 
