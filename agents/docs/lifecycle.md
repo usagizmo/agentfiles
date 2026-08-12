@@ -158,7 +158,7 @@ sequenceDiagram
     end
 
     R-->>C: 待機
-    C->>C: integration は PR 作成が最も早い 1 件
+    C->>C: integration は claim が最も古い 1 件
     C->>M: 着地してよい
     M->>R: 再開
     R->>GH: latest default へ追随 → merge
