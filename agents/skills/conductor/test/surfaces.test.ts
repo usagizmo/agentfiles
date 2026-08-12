@@ -25,6 +25,19 @@ const report = (heads: Record<string, string>): Observed<ReportRecord> =>
   present({ heads, bases: {} });
 
 describe("PR を使う面", () => {
+  test("17n: PR がまだ無い面は、着地してよくないことが確定している", () => {
+    // `checksGreen` は PR が無いと `absent`。**それを「読めない」に畳まない** ——
+    // 畳むと claim 済みで PR 前の課題（準備中・実装中の全部）が Conflict になり、
+    // キューがそこで止まる。
+    const s = deriveSurface(facts({ openPr: present(false), checksGreen: absent() }), absent());
+    expect(s.landable).toEqual(present(false));
+  });
+
+  test("open PR はあるが checks を読めないなら、着地してよいかは判定できない", () => {
+    const s = deriveSurface(facts({ openPr: present(true), checksGreen: absent() }), absent());
+    expect(s.landable.kind).toBe("unobservable");
+  });
+
   test("merged なら終端", () => {
     const s = deriveSurface(facts({ prMerged: present(true) }), absent());
     expect(s.terminal).toEqual(present(true));

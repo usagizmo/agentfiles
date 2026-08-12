@@ -27,6 +27,7 @@ import {
   retryRecord,
   waitRecord,
 } from "./records.ts";
+import { CONCURRENCY, mapLimit } from "./limit.ts";
 import { deriveSurface } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
 import type { Ledger, Observed } from "./types.ts";
@@ -154,112 +155,112 @@ export const observe = async (
     port.issueComments(numbers),
   ]);
 
-  return Promise.all(
-    statuses.map(async (status): Promise<IssueObservation> => {
-      const issue = status.issue;
-      const body = bodies.get(issue) ?? "";
-      const commentText = joinComments(comments.get(issue) ?? []);
+  // **件数ぶん並行に投げない**（`limit.ts`）。1 件につき計画と PR の 2 経路が走るので、
+  // ここを開けると board の件数の 2 倍が同時に立つ。
+  return mapLimit(statuses, CONCURRENCY, async (status): Promise<IssueObservation> => {
+    const issue = status.issue;
+    const body = bodies.get(issue) ?? "";
+    const commentText = joinComments(comments.get(issue) ?? []);
 
-      const [plan, extra] = await Promise.all([port.planFacts(issue), port.issueFacts(issue)]);
-      const pause = extractMarker(commentText, "yield").kind === "present";
-      const claim = claimRecord(commentText);
-      const report = reportRecord(commentText);
+    const [plan, extra] = await Promise.all([port.planFacts(issue), port.issueFacts(issue)]);
+    const pause = extractMarker(commentText, "yield").kind === "present";
+    const claim = claimRecord(commentText);
+    const report = reportRecord(commentText);
 
-      // **claim 後は claim の記録の `landing` が着地面の SSOT。**claim 前は座標表の既定 1 面。
-      const surfaceNames =
-        claim.kind === "present" && claim.value.landing.length > 0
-          ? claim.value.landing
-          : [...surfaceUsesPr.keys()].slice(0, 1);
+    // **claim 後は claim の記録の `landing` が着地面の SSOT。**claim 前は座標表の既定 1 面。
+    const surfaceNames =
+      claim.kind === "present" && claim.value.landing.length > 0
+        ? claim.value.landing
+        : [...surfaceUsesPr.keys()].slice(0, 1);
 
-      const surfaces: SurfaceObservation[] = await Promise.all(
-        surfaceNames.map(async (name) => {
-          const git = await port.surfaceGit(issue, name);
-          // **帰属は面の名前だけでは引けない。**同じ面に複数の課題の worktree が並ぶので、
-          // path に自分の claim branch（`{prefix}/{番号}-`）が入っているものだけを自分のものとする。
-          // 面だけで引くと、隣の課題の worktree を自分の容量として数え、片付けの対象にもする。
-          const worktree = worktreeRows.find(
-            (w) => w.surface === name && ownsWorktreePath(w.path, issue),
-          );
-          const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
-          const facts: SurfaceFacts = {
-            name,
-            usesPr: surfaceUsesPr.get(name) ?? true,
-            aheadOfIntegration: git.ahead,
-            head: git.head,
-            dirty: fromTri(worktree?.dirty),
-            hasCheckout: present(worktree !== undefined),
-            liveCheckoutHealthy:
-              liveHealth.get(name) ?? unobservable("live checkout を観測していない"),
-            prMerged: extra.prMerged,
-            openPr: present(pr !== undefined),
-            checksGreen:
-              pr === undefined || pr.checks === "untracked"
-                ? absent()
-                : present(pr.checks.length > 0 && pr.checks.every((c) => c === "SUCCESS")),
-          };
-          return deriveSurface(facts, report);
-        }),
-      );
+    const surfaces: SurfaceObservation[] = await Promise.all(
+      surfaceNames.map(async (name) => {
+        const git = await port.surfaceGit(issue, name);
+        // **帰属は面の名前だけでは引けない。**同じ面に複数の課題の worktree が並ぶので、
+        // path に自分の claim branch（`{prefix}/{番号}-`）が入っているものだけを自分のものとする。
+        // 面だけで引くと、隣の課題の worktree を自分の容量として数え、片付けの対象にもする。
+        const worktree = worktreeRows.find(
+          (w) => w.surface === name && ownsWorktreePath(w.path, issue),
+        );
+        const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
+        const facts: SurfaceFacts = {
+          name,
+          usesPr: surfaceUsesPr.get(name) ?? true,
+          aheadOfIntegration: git.ahead,
+          head: git.head,
+          dirty: fromTri(worktree?.dirty),
+          hasCheckout: present(worktree !== undefined),
+          liveCheckoutHealthy:
+            liveHealth.get(name) ?? unobservable("live checkout を観測していない"),
+          prMerged: extra.prMerged,
+          openPr: present(pr !== undefined),
+          checksGreen:
+            pr === undefined || pr.checks === "untracked"
+              ? absent()
+              : present(pr.checks.length > 0 && pr.checks.every((c) => c === "SUCCESS")),
+        };
+        return deriveSurface(facts, report);
+      }),
+    );
 
-      const row = issueRows.get(issue);
-      const ledger = statusMap.get(status.status);
+    const row = issueRows.get(issue);
+    const ledger = statusMap.get(status.status);
 
-      return {
-        issue,
-        open: row?.open ?? false,
-        // **対応表に無い Status を既定へ倒さない**（`invalid` が `Conflict` を立てる）。
-        ledger:
-          ledger === undefined ? invalid(status.status, "Status の対応が無い") : present(ledger),
+    return {
+      issue,
+      open: row?.open ?? false,
+      // **対応表に無い Status を既定へ倒さない**（`invalid` が `Conflict` を立てる）。
+      ledger:
+        ledger === undefined ? invalid(status.status, "Status の対応が無い") : present(ledger),
 
-        claimBranchExists: present(snapshotHasClaimBranch(snapshot, issue)),
-        planCommentExists: present(extractMarker(commentText, "plan").kind === "present"),
-        issueContractComplete: extra.issueContractComplete,
-        claimRecord: claim,
+      claimBranchExists: present(snapshotHasClaimBranch(snapshot, issue)),
+      planCommentExists: present(extractMarker(commentText, "plan").kind === "present"),
+      issueContractComplete: extra.issueContractComplete,
+      claimRecord: claim,
 
-        surfaces,
+      surfaces,
 
-        openPr: present(
-          surfaces.some((s) => s.usesPr) &&
-            prRows.some((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef)),
-        ),
-        checks: checksOf(prRows, issue),
-        latestPrClosedUnmerged: extra.latestPrClosedUnmerged,
-        prMerged: extra.prMerged,
+      openPr: present(
+        surfaces.some((s) => s.usesPr) &&
+          prRows.some((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef)),
+      ),
+      checks: checksOf(prRows, issue),
+      latestPrClosedUnmerged: extra.latestPrClosedUnmerged,
+      prMerged: extra.prMerged,
 
-        submissionEvidence: present(report.kind === "present"),
+      submissionEvidence: present(report.kind === "present"),
 
-        session: classifySession(sessionRows, `resolve-${issue}`),
-        retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
-        refineSessionExists: sessionRows.some((r) => r.split(" ")[0] === `refine-${issue}`),
+      session: classifySession(sessionRows, `resolve-${issue}`),
+      retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
+      refineSessionExists: sessionRows.some((r) => r.split(" ")[0] === `refine-${issue}`),
 
-        waitRecord: waitRecord(commentText, pause),
-        pauseRecordExists: pause,
-        intentRecord: intentRecord(commentText),
-        integrationRecordCount: present(integrationRecord(commentText).kind === "present" ? 1 : 0),
+      waitRecord: waitRecord(commentText, pause),
+      pauseRecordExists: pause,
+      intentRecord: intentRecord(commentText),
+      integrationRecordCount: present(integrationRecord(commentText).kind === "present" ? 1 : 0),
 
-        // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
-        prunableWorkspace: present(
-          [...prunableWorkspaces].some((path) => ownsWorktreePath(path, issue)),
-        ),
+      // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
+      prunableWorkspace: present(
+        [...prunableWorkspaces].some((path) => ownsWorktreePath(path, issue)),
+      ),
 
-        failureRecord: retryRecord(commentText),
-        cycleRecord: cycleRecord(commentText),
-        currentMark: await port.cycleMark(issue),
-        readyRecordStale: stalenessOf(readyRecord(commentText)),
+      failureRecord: retryRecord(commentText),
+      cycleRecord: cycleRecord(commentText),
+      currentMark: await port.cycleMark(issue),
+      readyRecordStale: stalenessOf(readyRecord(commentText)),
 
-        bodyMatchesPlan: plan.bodyMatchesPlan,
-        planInvalidated: plan.planInvalidated,
-        resourceKeys: plan.resourceKeys,
-        blocksEntry: extra.blocksEntry,
+      bodyMatchesPlan: plan.bodyMatchesPlan,
+      planInvalidated: plan.planInvalidated,
+      resourceKeys: plan.resourceKeys,
+      blocksEntry: extra.blocksEntry,
 
-        dependsOn: declarations(body, "Depends on"),
-        sameBranchAs: declarations(body, "Same branch as"),
+      dependsOn: declarations(body, "Depends on"),
+      sameBranchAs: declarations(body, "Same branch as"),
 
-        boardOrder: status.boardOrder,
-        claimedAt: extra.claimedAt,
-      };
-    }),
-  );
+      boardOrder: status.boardOrder,
+      claimedAt: extra.claimedAt,
+    };
+  });
 };
 
 /**

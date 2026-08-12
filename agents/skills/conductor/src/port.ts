@@ -4,6 +4,7 @@
 // 倒すと、観測できなかったことが「そうではない」として遷移を通す。
 
 import { createHash } from "node:crypto";
+import { CONCURRENCY, mapLimit } from "./limit.ts";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
 import { entryBlockRecord, planRecord } from "./records.ts";
@@ -101,6 +102,22 @@ export const snapshotArgs = (
 export const createPort = (options: PortOptions): ObservePort => {
   const { config, surfaces, scriptsDir, snapshotPath } = options;
 
+  /**
+   * repo の全 PR。**tick に 1 回しか取らない。**`issueFacts` は Issue ごとに呼ばれるので、
+   * ここで都度 `--paginate` すると `O(Issue 数 × 全 PR)` になり、Issue が数百ある repo では
+   * 1 周で secondary rate limit に達して観測そのものが落ちる（実測）。
+   */
+  let prsOnce:
+    | Promise<Observed<{ merged_at: string | null; state: string; head: { ref: string } }[]>>
+    | undefined;
+  const allPrs = () =>
+    (prsOnce ??= json<{ merged_at: string | null; state: string; head: { ref: string } }[]>([
+      "gh",
+      "api",
+      `repos/${config.ghRepo}/pulls?state=all&per_page=100`,
+      "--paginate",
+    ]));
+
   const bodies = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
   /** claim の記録が書かれた時刻。**merge の枠の順序キー**なので、固定値へ倒さない */
@@ -116,47 +133,41 @@ export const createPort = (options: PortOptions): ObservePort => {
 
     issueBodies: async (numbers) => {
       const map = new Map<number, string>();
-      await Promise.all(
-        numbers.map(async (n) => {
-          const body = await json<{ body: string | null }>([
-            "gh",
-            "api",
-            `repos/${config.ghRepo}/issues/${n}`,
-          ]);
-          bodies.set(
-            n,
-            body.kind === "present"
-              ? present(body.value.body ?? "")
-              : unobservable("本文を読めない"),
-          );
-          if (body.kind === "present") map.set(n, body.value.body ?? "");
-        }),
-      );
+      await mapLimit(numbers, CONCURRENCY, async (n) => {
+        const body = await json<{ body: string | null }>([
+          "gh",
+          "api",
+          `repos/${config.ghRepo}/issues/${n}`,
+        ]);
+        bodies.set(
+          n,
+          body.kind === "present" ? present(body.value.body ?? "") : unobservable("本文を読めない"),
+        );
+        if (body.kind === "present") map.set(n, body.value.body ?? "");
+      });
       return map;
     },
 
     issueComments: async (numbers) => {
       const map = new Map<number, readonly string[]>();
-      await Promise.all(
-        numbers.map(async (n) => {
-          const list = await json<{ body: string | null; created_at: string }[]>([
-            "gh",
-            "api",
-            "--paginate",
-            `repos/${config.ghRepo}/issues/${n}/comments`,
-          ]);
-          if (list.kind !== "present") {
-            comments.set(n, []);
-            claimTimes.set(n, unobservable("コメントを読めない"));
-            return;
-          }
-          const bodiesOfIssue = list.value.map((c) => c.body ?? "");
-          comments.set(n, bodiesOfIssue);
-          map.set(n, bodiesOfIssue);
-          const claim = list.value.find((c) => (c.body ?? "").includes("<!-- claim -->"));
-          claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
-        }),
-      );
+      await mapLimit(numbers, CONCURRENCY, async (n) => {
+        const list = await json<{ body: string | null; created_at: string }[]>([
+          "gh",
+          "api",
+          "--paginate",
+          `repos/${config.ghRepo}/issues/${n}/comments`,
+        ]);
+        if (list.kind !== "present") {
+          comments.set(n, []);
+          claimTimes.set(n, unobservable("コメントを読めない"));
+          return;
+        }
+        const bodiesOfIssue = list.value.map((c) => c.body ?? "");
+        comments.set(n, bodiesOfIssue);
+        map.set(n, bodiesOfIssue);
+        const claim = list.value.find((c) => (c.body ?? "").includes("<!-- claim -->"));
+        claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
+      });
       return map;
     },
 
@@ -238,12 +249,7 @@ export const createPort = (options: PortOptions): ObservePort => {
     },
 
     issueFacts: async (issue) => {
-      const prs = await json<{ merged_at: string | null; state: string; head: { ref: string } }[]>([
-        "gh",
-        "api",
-        `repos/${config.ghRepo}/pulls?state=all&per_page=100`,
-        "--paginate",
-      ]);
+      const prs = await allPrs();
       // **head の branch 名で自分の PR だけに絞る。**絞らないと、repo 内のどれか 1 本が
       // merged なだけで全課題が `着地済み` 側の証跡を持つ。
       const owned = new RegExp(`^[^/]+/${issue}-`);
