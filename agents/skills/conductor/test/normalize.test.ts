@@ -9,6 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { normalize, normalizeProgress } from "../src/normalize.ts";
+import { holdsWrite } from "../src/resources.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { Capacity, ConflictReason, Ledger, Progress, Runtime } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
@@ -422,6 +423,86 @@ describe("着地面が制御面と違う", () => {
     expect(reasons).not.toContain("Issue 契約が欠けたまま成果物がある");
   });
 
+  test("17h4: 面が読めない未 claim の課題は、write を保持しない", () => {
+    // **`実装中` は読めた証跡だけで決める。**読めない面から `実装中` を導くと、branch も
+    // worktree もセッションも無い課題が write を握り、**幽霊の保持者として本物の実行器を
+    // 止める**（`交差を解消する` が当たる）。終端側の fail-closed は `allSurfacesClean` が
+    // 別に守っているので、ここで倒す必要は無い。
+    const o = observation({
+      ledger: present("未計画"),
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("座標表に無い"),
+          dirty: unobservable("座標表に無い"),
+          hasCheckout: unobservable("座標表に無い"),
+          terminal: unobservable("座標表に無い"),
+          landable: unobservable("座標表に無い"),
+        }),
+      ],
+    });
+    expect(normalizeProgress(o)).toBe("未着手");
+    expect(holdsWrite(normalize(o))).toBe(false);
+  });
+
+  test("17h5: 面を読めなくても、claim 済みなら write を保持し続ける", () => {
+    // 実体（branch）があることは読めているので、そちらは手放さない。
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("面の git を読めない"),
+          dirty: unobservable("面の git を読めない"),
+          terminal: unobservable("面の git を読めない"),
+          landable: unobservable("面の git を読めない"),
+        }),
+      ],
+    });
+    expect(holdsWrite(normalize(o))).toBe(true);
+  });
+
+  test("17h6: 終端の判定では、読めない dirty を clean へ倒さない", () => {
+    // `landing-surface.md`「全着地面が dirty でない（`0` のみ。読めなかった `-` は不可）」。
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      submissionEvidence: present(true),
+      surfaces: [
+        control({
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          terminal: present(true),
+          dirty: unobservable("worktree 一覧を読めない"),
+        }),
+      ],
+    });
+    expect(normalizeProgress(o)).not.toBe("着地済み");
+  });
+
+  test("17h7: 面が読めない課題が、終端に達して実体も残っていない", () => {
+    // **報告しても人が動かす先が無い。**`片付ける` が触る実体（容量・セッション・claim branch）が
+    // 1 つも残っていないので、面を解決する必要そのものが無い。当てると毎 tick 報告し続ける。
+    const settled: Partial<IssueObservation> = {
+      open: present(false),
+      ledger: present("完了"),
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("座標表に無い"),
+          dirty: unobservable("座標表に無い"),
+          hasCheckout: unobservable("座標表に無い"),
+          terminal: unobservable("座標表に無い"),
+          landable: unobservable("座標表に無い"),
+        }),
+      ],
+    };
+    expect(normalize(observation(settled)).conflicts).toEqual([]);
+    // **実体が残っているなら出す** —— 面を解決できないまま片付けにいかせない。
+    const left = normalize(observation({ ...settled, claimBranchExists: present(true) }));
+    expect(left.conflicts.map((c) => c.reason)).toContain("着地面が解決できない");
+  });
+
   test("17h2: 面が読めない理由を、そのまま人へ渡す", () => {
     // **「読めない」だけでは人が動けない。**座標表から外れたのか、checkout が無いのか、
     // git が落ちたのかで、次にやることが違う。観測が持っている理由を握り潰さない。
@@ -637,18 +718,24 @@ describe("capacity", () => {
 });
 
 describe("読めなかった観測を clean へ畳まない", () => {
-  test("dirty が `-` の面は `実装中` 側へ落ちる", () => {
+  test("dirty が `-` の面は、終端へ上がらない", () => {
+    // **守るのは終端側**（`allSurfacesClean` が `0` のみを通す）。`実装中` を名乗らせる必要は
+    // 無い —— 読めない dirty から `実装中` を導くと、実体を持たない課題まで write を握る。
     expectFields(
       observation({
         ledger: present("進行中"),
         claimBranchExists: present(true),
         planCommentExists: present(true),
         surfaces: [
-          surface({ dirty: unobservable("worktree を読めない"), hasCheckout: present(true) }),
+          surface({
+            dirty: unobservable("worktree を読めない"),
+            hasCheckout: present(true),
+            terminal: present(true),
+          }),
         ],
         submissionEvidence: present(true),
       }),
-      { progress: "実装中", runtime: "無し", capacity: "あり", ledger: "進行中" },
+      { progress: "準備済み", runtime: "無し", capacity: "あり", ledger: "進行中" },
     );
   });
 

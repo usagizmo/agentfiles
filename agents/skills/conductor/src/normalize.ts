@@ -50,13 +50,20 @@ const terminalMixed = (surfaces: readonly SurfaceObservation[]): boolean => {
 };
 
 /**
- * `実装中` — **`統合先..branch` が非空か、worktree が dirty**（読めなかった `-` も dirty 側）。
+ * `実装中` — **`統合先..branch` が非空か、worktree が dirty**。
+ *
+ * **読めた証跡だけで決める。**読めない面から `実装中` を導くと、branch も worktree も
+ * セッションも無い課題が write を握り、**幽霊の保持者として本物の実行器を止める**
+ * （`交差を解消する` がそれに当たる）。読めない面には `着地面が解決できない` が別に立つ。
+ *
+ * **終端側の fail-closed はここではない。**「全着地面が dirty でない（`0` のみ。読めなかった
+ * `-` は不可）」は `allSurfacesClean` が持つ（`landing-surface.md`「終端」）。
  *
  * **`decide` の「成果物がある」と同じ述語**。割れると、契約が欠けた計画済みが差し戻されずに
  * Conflict へ落ちる。**2 つ書かない。**
  */
 export const hasWorkInProgress = (surfaces: readonly SurfaceObservation[]): boolean =>
-  surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) !== false);
+  surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) === true);
 
 export const normalizeProgress = (o: IssueObservation): Progress => {
   const clean = allSurfacesClean(o.surfaces);
@@ -196,6 +203,15 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     );
   }
 
+  // **終端に達して、片付けが触る実体が 1 つも残っていない課題には当てない。**面を解決する
+  // 必要そのものが無いので、報告しても人が動かす先が無く、毎 tick 出続けるだけになる。
+  // **実体が残っているなら出す** —— 面を解決できないまま片付けにいかせない。
+  const nothingLeft =
+    settled &&
+    normalizeCapacity(o) === "無し" &&
+    o.session.kind === "none" &&
+    value(o.claimBranchExists) !== true;
+
   const claim = value(o.claimRecord);
   if (
     o.claimBranchExists.kind === "present" &&
@@ -211,7 +227,7 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // **理由を握り潰さない。**座標表から外れたのか・checkout が無いのか・git が落ちたのかで
   // 人が次にやることが違う。`unobservable` と `invalid` はどちらも理由を持っている。
   for (const s of o.surfaces) {
-    const why = reasonOf(s.terminal) ?? reasonOf(s.landable);
+    const why = nothingLeft ? undefined : (reasonOf(s.terminal) ?? reasonOf(s.landable));
     if (why !== undefined) {
       found.push(conflict("着地面が解決できない", n, `面 ${s.name} の観測が読めない: ${why}`));
     }
