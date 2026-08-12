@@ -19,6 +19,10 @@ const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.va
 const isUnreadable = (o: Observed<unknown>): boolean =>
   o.kind === "unobservable" || o.kind === "invalid";
 
+/** 読めなかった理由。読めているなら `undefined`。**判定と理由を 1 回で取る。** */
+const reasonOf = (o: Observed<unknown>): string | undefined =>
+  o.kind === "unobservable" || o.kind === "invalid" ? o.reason : undefined;
+
 /**
  * **commit が 0 の面は透過する**。予定した面に結局書かなかったことは通常運用で、
  * 透過させないと成果物が別 repo にある課題が終端から締め出される。
@@ -197,9 +201,12 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   if (isUnreadable(o.claimRecord) && value(o.claimBranchExists) === true) {
     found.push(conflict("着地面が解決できない", n, "claim の記録を読めない"));
   }
+  // **理由を握り潰さない。**座標表から外れたのか・checkout が無いのか・git が落ちたのかで
+  // 人が次にやることが違う。`unobservable` と `invalid` はどちらも理由を持っている。
   for (const s of o.surfaces) {
-    if (isUnreadable(s.terminal) || isUnreadable(s.landable)) {
-      found.push(conflict("着地面が解決できない", n, `面 ${s.name} の観測が読めない`));
+    const why = reasonOf(s.terminal) ?? reasonOf(s.landable);
+    if (why !== undefined) {
+      found.push(conflict("着地面が解決できない", n, `面 ${s.name} の観測が読めない: ${why}`));
     }
   }
 
