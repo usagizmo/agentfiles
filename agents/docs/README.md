@@ -119,10 +119,10 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 
 ### レビューの委譲先
 
-| skill                        | 委譲先                                    | 契約の SSOT                        |
-| ---------------------------- | ----------------------------------------- | ---------------------------------- |
-| `consult` / `zero-base-loop` | 別 harness の CLI を read-only で並列起動 | `agents/shared/advisors.md`        |
-| `docs` / `tidy`              | 同 harness の subagent                    | `agents/shared/review-contract.md` |
+| skill                        | 委譲先                               | 契約の SSOT                        |
+| ---------------------------- | ------------------------------------ | ---------------------------------- |
+| `consult` / `zero-base-loop` | Herdr の tab に read-only で並列起動 | `agents/shared/advisors.md`        |
+| `docs` / `tidy`              | 同 harness の subagent               | `agents/shared/review-contract.md` |
 
 **アドバイザーは実行中の自分を除いて選ぶ**ので、メインが Claude でも Codex でも同じ表から組み替わる（人数と選び方は上の SSOT）。
 

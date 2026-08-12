@@ -19,7 +19,7 @@ description: >-
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | action を実行するとき                | `references/protocols.md`（手順）・`references/harness.md`（multiplexer 操作） |
 | 人が tick の外から何か渡してきたとき | `references/intake.md`                                                         |
-| 状況ボードを引き当てるとき           | `references/artifact.md`（題名の条件）                                         |
+| 状況ボードを引き当てるとき           | `references/score.md`                                                          |
 | tick の意味論を書き換えるとき        | 下記                                                                           |
 
 意味論を変えるなら、先にテストを変える。期待の SSOT は `test/decide.test.ts` と `test/normalize.test.ts` で、`references/scenarios.md` は同じ行 ID の解説。表だけを直しても何も変わら**ない**。
@@ -253,7 +253,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 - 渡すのは、その tick が action を決めるのに使った観測。**起床側で取り直さない**
 - `--interval` / `--max` は検知の遅延の調整であって、この窓の対策では**ない**（既定は `references/harness.md`）
 - 指紋を動かす書き込みをしたら、観測からやり直す。**action に数えない書き込み**（周回・失敗の記録の精算）も含む（上限には数えないまま）
-- 指紋に入らない出力は含め**ない**（状況ボードは Artifact か応答）
+- 指紋に入らない出力は含め**ない**（状況ボードは譜面か応答）
 - 観測できなかった tick も張る。渡すのは直前に成功した snapshot（`--snapshot` は失敗しても既存の file を壊さない）。**取り直さない**
 - 張らずに終えてよいのは、一度も観測に成功していないときだけ（起動直後）。**渡せる baseline が無いので報告して止まる**
 
@@ -529,7 +529,7 @@ branch 名は `{prefix}/{Issue 番号}-{slug}`（prefix の既定は `feat` / `f
 
 ## 状況ボード
 
-**1 つの Artifact を更新し続ける**。ユーザーがそれを見れば、今どの worktree で何が起きているかが分かる状態にする。Artifact を作れない harness では、同じ内容を最終応答に出す。
+**1 つの譜面を更新し続ける**。ユーザーがそれを見れば、今どの worktree で何が起きているかが分かる状態にする。
 
 **自分の context の残量を制約として報告しない**（ボードにも応答にも）。交代の契機は `references/harness.md`「交代」が持つ。
 

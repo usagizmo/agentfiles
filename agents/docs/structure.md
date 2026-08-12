@@ -102,7 +102,7 @@ flowchart LR
         WR["wait-record.md<br/><small>人待ちの記録</small>"]
         RR["ready-record.md<br/><small>在庫の鮮度の記録</small>"]
         BD["body-digest.md<br/><small>Issue 本文の digest</small>"]
-        AF["artifact.md<br/><small>読ませる面の条件</small>"]
+        AF["score.md<br/><small>譜面の条件</small>"]
         IR["integration-record.md<br/><small>merge の枠の記録</small>"]
         IT["intent-record.md<br/><small>意図の確認の記録</small>"]
         LS["landing-surface.md<br/><small>着地面の意味論</small>"]
