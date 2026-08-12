@@ -28,6 +28,13 @@ export type ProjectConfig = {
   readonly statusMap: ReadonlyMap<string, Ledger>;
   /** **座標表。先頭が制御面。**空にできない */
   readonly surfaces: readonly SurfaceConfig[];
+  /**
+   * `watch.sh` へ注入するセッション / workspace の一覧コマンド。
+   * **どちらも必須**（`watch.sh` が要求する）。既定を持たせると multiplexer を
+   * 共通側が知ることになり、adapter の境界が崩れる。
+   */
+  readonly sessionsCmd: string;
+  readonly workspacesCmd: string;
   readonly tick: TickConfig;
 };
 
@@ -94,6 +101,8 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     statusField: String(required("statusField")),
     statusMap,
     surfaces,
+    sessionsCmd: String(required("sessionsCmd")),
+    workspacesCmd: String(required("workspacesCmd")),
     // 硬い上限は既定を持つ（推測が外れても待ちが伸びるだけ）。
     tick: {
       ...DEFAULT_CONFIG,

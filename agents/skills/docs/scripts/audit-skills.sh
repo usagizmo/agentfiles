@@ -556,8 +556,13 @@ if ! command -v bun >/dev/null 2>&1; then
 elif [ ! -f "$EMPHASIS_JS" ]; then
 	emit SKIP emphasis "-" "note=$EMPHASIS_JS が無いので強調記法を検査していない"
 else
+	# **instructions 入口も入れる。**skills だけを対象にすると、全 project が毎回読む
+	# AGENTS.md が壊れたまま緑で通る（実際にそれで 1 度出荷した）。
 	{
 		cat "$WORK/unique"
+		for f in "$ROOT/../AGENTS.md" "$ROOT/../CLAUDE.md"; do
+			[ -f "$f" ] && printf '%s\t%s\n' "${f##*/}" "$f"
+		done
 		if [ -n "$DOCS_DIR" ]; then
 			for f in "$DOCS_DIR"/*.md; do
 				[ -f "$f" ] && printf 'docs/%s\t%s\n' "${f##*/}" "$f"
