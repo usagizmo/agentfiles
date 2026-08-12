@@ -57,9 +57,46 @@ export type PortOptions = {
 const surfaceOf = (config: ProjectConfig, name: string) =>
   config.surfaces.find((s) => s.name === name);
 
+/**
+ * `watch.sh --snapshot` の引数。**純関数にしてあるのは、渡し漏れが観測の穴になるから** ——
+ * 面を 1 つ落とすとそこで書き進んでいる課題が成果ゼロの周として数えられ、
+ * `--sessions-cmd` / `--workspaces-cmd` を落とすと usage error で 1 度も観測できない。
+ *
+ * **制御面（先頭）は `--repo` で渡すので `--landing` に重ねない。**
+ */
+export const snapshotArgs = (
+  config: ProjectConfig,
+  scriptsDir: string,
+  snapshotPath: string,
+): string[] => {
+  const control = config.surfaces[0];
+  return [
+    "sh",
+    `${scriptsDir}/watch.sh`,
+    "--snapshot",
+    snapshotPath,
+    "--repo",
+    control?.repoPath ?? "",
+    "--gh-repo",
+    config.ghRepo,
+    ...config.surfaces
+      .slice(1)
+      .flatMap((s) => ["--landing", `${s.name}:${s.integrationRef}:${s.repoPath}`]),
+    "--project-org",
+    config.projectOrg,
+    "--project-number",
+    String(config.projectNumber),
+    "--status-field",
+    config.statusField,
+    "--sessions-cmd",
+    config.sessionsCmd,
+    "--workspaces-cmd",
+    config.workspacesCmd,
+  ];
+};
+
 export const createPort = (options: PortOptions): ObservePort => {
   const { config, scriptsDir, snapshotPath } = options;
-  const control = config.surfaces[0];
 
   const bodies = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
@@ -68,23 +105,7 @@ export const createPort = (options: PortOptions): ObservePort => {
 
   return {
     snapshot: async () => {
-      const args = [
-        "sh",
-        `${scriptsDir}/watch.sh`,
-        "--snapshot",
-        snapshotPath,
-        "--repo",
-        control?.repoPath ?? "",
-        "--gh-repo",
-        config.ghRepo,
-        "--project-org",
-        config.projectOrg,
-        "--project-number",
-        String(config.projectNumber),
-        "--status-field",
-        config.statusField,
-      ];
-      const result = await run(args);
+      const result = await run(snapshotArgs(config, scriptsDir, snapshotPath));
       // **観測できなかった tick も watcher は張る**ので、ここは投げて呼び出し側に判断させる。
       if (!result.ok) throw new Error(`snapshot に失敗した: ${result.reason}`);
       return result.stdout;

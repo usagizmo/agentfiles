@@ -136,6 +136,8 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 bun run <skill>/src/cli.ts --config <project の設定> --snapshot-out <baseline に渡す file>
 ```
 
+設定は JSON。**必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` に入れる中身は `references/harness.md`。
+
 ```mermaid
 flowchart TD
     S[tick 開始] --> D[cli.ts を呼ぶ<br/>観測 → 正規化 → Decision]
