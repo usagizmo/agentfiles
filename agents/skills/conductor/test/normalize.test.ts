@@ -8,7 +8,7 @@
 // 語っている唯一の担保になる。
 
 import { describe, expect, test } from "bun:test";
-import { normalize } from "../src/normalize.ts";
+import { normalize, normalizeProgress } from "../src/normalize.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { Capacity, ConflictReason, Ledger, Progress, Runtime } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
@@ -211,6 +211,13 @@ describe("実行器が消える / 止まる", () => {
       observation({ ledger: present("進行中"), session: session.unclassifiable("weird") }),
       "観測できない",
     );
+  });
+
+  test("7n: board に居るのに issues 節に無く、open / closed を読めない", () => {
+    const o = observation({ ledger: present("進行中"), open: unobservable("issues 節に無い") });
+    expectConflict(o, "観測できない");
+    // **closed へ倒さない** —— 倒すと `取り下げ` に化け、生きている課題が片付けの対象になる。
+    expect(normalizeProgress(o)).not.toBe("取り下げ");
   });
 
   test("7g: write を渡された直後にターンが終わった（1 行も書いていない）", () => {
@@ -439,7 +446,11 @@ describe("着地面が制御面と違う", () => {
 
   test("17k: 片付けが終わり、Issue は closed・worktree も無い", () => {
     expectFields(
-      observation({ open: false, ledger: present("完了"), claimBranchExists: present(true) }),
+      observation({
+        open: present(false),
+        ledger: present("完了"),
+        claimBranchExists: present(true),
+      }),
       { progress: "取り下げ", runtime: "無し", capacity: "無し", ledger: "完了" },
     );
   });
@@ -546,7 +557,11 @@ describe("merge の直列化（integration）", () => {
 describe("capacity", () => {
   test("checkout は無いが、所有している workspace が残っている", () => {
     expectFields(
-      observation({ ledger: present("完了"), prunableWorkspace: present(true), open: false }),
+      observation({
+        ledger: present("完了"),
+        prunableWorkspace: present(true),
+        open: present(false),
+      }),
       { progress: "取り下げ", runtime: "無し", capacity: "prunable", ledger: "完了" },
     );
   });

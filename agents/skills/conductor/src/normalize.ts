@@ -45,8 +45,13 @@ const terminalMixed = (surfaces: readonly SurfaceObservation[]): boolean => {
   return terminal > 0 && terminal < surfaces.length;
 };
 
-/** `実装中` — **`統合先..branch` が非空か、worktree が dirty**（`-` も dirty 側）。 */
-const hasWorkInProgress = (surfaces: readonly SurfaceObservation[]): boolean =>
+/**
+ * `実装中` — **`統合先..branch` が非空か、worktree が dirty**（読めなかった `-` も dirty 側）。
+ *
+ * **`decide` の「成果物がある」と同じ述語**。割れると、契約が欠けた計画済みが差し戻されずに
+ * Conflict へ落ちる。**2 つ書かない。**
+ */
+export const hasWorkInProgress = (surfaces: readonly SurfaceObservation[]): boolean =>
   surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) !== false);
 
 export const normalizeProgress = (o: IssueObservation): Progress => {
@@ -55,7 +60,8 @@ export const normalizeProgress = (o: IssueObservation): Progress => {
 
   if (allSurfacesTerminalOrTransparent(o.surfaces) && clean && submitted) return "着地済み";
 
-  const withdrawn = o.open === false || value(o.latestPrClosedUnmerged) === true;
+  // **読めなかった `open` を closed 側へ倒さない**（同じ観測が `観測できない` を立てる）。
+  const withdrawn = value(o.open) === false || value(o.latestPrClosedUnmerged) === true;
   if (withdrawn && !terminalMixed(o.surfaces)) return "取り下げ";
 
   if (allSurfacesLandableOrTransparent(o.surfaces) && clean && submitted) return "着地待ち";
@@ -103,6 +109,10 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // **本文とコメントを読めていないなら、他の値は詰め物。**先に報告して止める。
   if (o.sourceReadable.kind !== "present" || o.sourceReadable.value === false) {
     found.push(conflict("観測できない", n, "Issue の本文かコメントを読めない"));
+  }
+
+  if (o.open.kind !== "present") {
+    found.push(conflict("観測できない", n, "board に居るが Issue の open / closed を読めない"));
   }
 
   if (o.session.kind === "unclassifiable") {

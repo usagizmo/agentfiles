@@ -30,7 +30,7 @@ origin/main
 origin/feat/1-x
 --- worktrees (面 dirty(0/1/-) head path) ---
 control 1 abcdef /tmp/wt/feat-1-x
-skills - abcdef /tmp/wt/skills 1-x
+skills - abcdef /tmp/wt/skills  1-x
 --- sessions ---
 resolve-1 working
 --- workspaces ---
@@ -38,6 +38,7 @@ ws-1 /tmp/wt/feat-1-x
 --- project status (board order) ---
 1 12 進行中
 2 34 計画済み
+3 56 In progress
 --- issues ---
 12 open 2026-08-12T00:00:00Z alice
 34 closed 2026-08-11T00:00:00Z
@@ -79,7 +80,9 @@ describe("行の decode", () => {
   test("worktrees の dirty は 0 / 1 / - の 3 値のまま残る", () => {
     expect(worktrees(snap)).toEqual([
       { surface: "control", dirty: true, head: "abcdef", path: "/tmp/wt/feat-1-x" },
-      { surface: "skills", dirty: "unreadable", head: "abcdef", path: "/tmp/wt/skills 1-x" },
+      // **path は末尾の残余をそのまま残す**（空白を詰め直すと、`workspaces` 節との
+      // 突き合わせが外れて、生きている worktree が `prunable` に化ける）。
+      { surface: "skills", dirty: "unreadable", head: "abcdef", path: "/tmp/wt/skills  1-x" },
     ]);
   });
 
@@ -99,6 +102,9 @@ describe("行の decode", () => {
     expect(projectStatus(snap)).toEqual([
       { boardOrder: 1, issue: 12, status: "進行中" },
       { boardOrder: 2, issue: 34, status: "計画済み" },
+      // **Status 名は空白を含む**（`In progress` / `In review`）。先頭語で切ると
+      // 対応表に無い値へ化け、claim した課題が構造的に一度も読めなくなる。
+      { boardOrder: 3, issue: 56, status: "In progress" },
     ]);
   });
 

@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ObservePort, StatusMap } from "../src/observe.ts";
 import { observe } from "../src/observe.ts";
+import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
 import type { Ledger, Observed } from "../src/types.ts";
 import { unobservable } from "../src/types.ts";
@@ -103,7 +104,7 @@ describe("snapshot から導くもの", () => {
     const rows = await observe(port(), STATUS, SURFACES);
     const twelve = find(rows, 12);
     expect(twelve.boardOrder).toBe(1);
-    expect(twelve.open).toBe(true);
+    expect(twelve.open).toEqual(present(true));
     expect(twelve.session).toEqual({ kind: "running" });
     expect(twelve.claimBranchExists).toEqual(present(true));
     expect(find(rows, 34).claimBranchExists).toEqual(present(false));
@@ -191,6 +192,41 @@ describe("snapshot から導くもの", () => {
     expect(find(rows, 12).prunableWorkspace).toEqual(present(false));
   });
 
+  test("worktree を持たない課題の面は dirty を false で確定する", async () => {
+    // **checkout が無い面には未コミットの変更が存在しえない**ので、`present(false)`。
+    // `absent` にすると `value(dirty) !== false` が真になり、**claim もされていない課題が
+    // 全部「成果物あり」に読まれる**（実測で 289 件中 117 件が `実装中`、172 件が `取り下げ`）。
+    const rows = await observe(port(), STATUS, SURFACES);
+    expect(find(rows, 34).surfaces[0]?.dirty).toEqual(present(false));
+    expect(find(rows, 34).surfaces[0]?.hasCheckout).toEqual(present(false));
+  });
+
+  test("worktree が無いことを「成果物あり」と読まない", async () => {
+    // commit も無い（`統合先..branch` が空）ので、残る材料は dirty だけ。
+    const rows = await observe(
+      port({ surfaceGit: async () => ({ ahead: present(false), head: absent() }) }),
+      STATUS,
+      SURFACES,
+    );
+    expect(normalizeProgress(find(rows, 34))).toBe("未着手");
+  });
+
+  test("面の worktree 一覧そのものを読めないときは dirty を false へ倒さない", async () => {
+    // `watch.sh` の `plane_unknown` は面ごと `-` で潰す。**その面の worktree が 0 件なのか
+    // 読めなかったのかは区別できない**ので、実体を消す側へ倒さない。
+    const blind = SNAP.replace("o/control 0 aaa /tmp/wt/feat-12-x", "o/control - - -");
+    const rows = await observe(port({ snapshot: async () => blind }), STATUS, SURFACES);
+    expect(find(rows, 34).surfaces[0]?.dirty.kind).toBe("unobservable");
+    expect(find(rows, 34).surfaces[0]?.hasCheckout.kind).toBe("unobservable");
+  });
+
+  test("board に居るのに issues 節に無い課題を closed へ倒さない", async () => {
+    // 倒すと `取り下げ` に化け、**まだ生きている課題が終端として片付けの対象になる**。
+    const missing = SNAP.replace("34 open 2026-08-12T00:00:00Z\n", "");
+    const rows = await observe(port({ snapshot: async () => missing }), STATUS, SURFACES);
+    expect(find(rows, 34).open.kind).toBe("unobservable");
+  });
+
   test("live checkout が dirty なら異常として残す", async () => {
     const dirty = SNAP.replace("o/control main 0 0 0", "o/control main 1 0 0");
     const rows = await observe(port({ snapshot: async () => dirty }), STATUS, SURFACES);
@@ -236,5 +272,20 @@ describe("記録の読み取りを繋ぐ", () => {
     const rows = await observe(port(), STATUS, SURFACES);
     expect(find(rows, 12).surfaces.map((s) => s.name)).toEqual(["o/control"]);
     expect(find(rows, 12).claimRecord.kind).toBe("present");
+  });
+
+  test("landing が座標表に無い面なら、その面を観測できないものとして残す", async () => {
+    // **「PR で着地する面」を既定にしない** —— 倒すと、着地の条件も live checkout の検査も
+    // 観測していない面の型で決まり、座標表の欠けが `着地面が解決できない` として出てこない。
+    const unknown = claimComment.replace("landing: [o/control]", "landing: [o/elsewhere]");
+    const rows = await observe(
+      port({ issueComments: async () => new Map([[12, present([unknown])]]) }),
+      STATUS,
+      SURFACES,
+    );
+    const surface = find(rows, 12).surfaces[0];
+    expect(surface?.name).toBe("o/elsewhere");
+    expect(surface?.terminal.kind).toBe("unobservable");
+    expect(surface?.landable.kind).toBe("unobservable");
   });
 });

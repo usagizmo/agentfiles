@@ -1225,7 +1225,7 @@ describe("着地面が制御面と違う（action）", () => {
   test("17l: 依存先が closed かつ 完了 なら、依存は解けている", () => {
     const dependency = observation({
       issue: 1,
-      open: false,
+      open: present(false),
       ledger: present("完了"),
       surfaces: [control(), secondary()],
     });

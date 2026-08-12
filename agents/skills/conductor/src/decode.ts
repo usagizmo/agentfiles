@@ -97,6 +97,26 @@ const fields = (line: string, count: number, section: SectionName): string[] => 
   return parts;
 };
 
+/**
+ * 先頭から `count - 1` 列を空白で切り、**残りを最後の 1 列としてそのまま残す**。
+ *
+ * **末尾が自由書式の節はこちらで読む。**空白で切っただけの先頭語を値にすると、
+ * `In progress` が `In` へ化けて対応表に当たらず、**その Status の課題は構造的に一度も
+ * 読めない**（claim した課題は必ずそこを通るので、正常系がそのまま Conflict になる）。
+ */
+const fieldsWithRest = (line: string, count: number, section: SectionName): string[] => {
+  const head: string[] = [];
+  let rest = line.trim();
+  for (let i = 0; i < count - 1; i++) {
+    const at = rest.search(/\s/);
+    if (at < 0) throw new SnapshotDecodeError(`${section} の列が足りない: ${line}`);
+    head.push(rest.slice(0, at));
+    rest = rest.slice(at).trimStart();
+  }
+  if (rest === "") throw new SnapshotDecodeError(`${section} の末尾列が空: ${line}`);
+  return [...head, rest];
+};
+
 /** `--- worktrees (面 dirty(0/1/-) head path) ---` */
 export type WorktreeRow = {
   readonly surface: string;
@@ -108,13 +128,14 @@ export type WorktreeRow = {
 export const worktrees = (s: Snapshot): WorktreeRow[] =>
   rows(s, "worktrees")
     // 面ごとの空は `-` 1 列で来る。**その面を落とさず、読めなかったこととして残す。**
-    .map((line) => fields(line, 2, "worktrees"))
-    .filter((p) => p.length >= 4)
+    .filter((line) => fields(line, 2, "worktrees").length >= 4)
+    // path は空白を含みうるので、末尾は残余として取る。
+    .map((line) => fieldsWithRest(line, 4, "worktrees"))
     .map((p) => ({
       surface: p[0] ?? "",
       dirty: tri(p[1] ?? "", "worktrees.dirty"),
       head: p[2] ?? "",
-      path: p.slice(3).join(" "),
+      path: p[3] ?? "",
     }));
 
 /** `--- live checkout (面 branch dirty(0/1/-) ahead behind) ---` */
@@ -142,13 +163,16 @@ export const liveCheckouts = (s: Snapshot): LiveCheckoutRow[] =>
 export type ProjectStatusRow = {
   readonly boardOrder: number;
   readonly issue: number;
-  /** project の Status 名。**対応表に無い値をここで既定へ倒さない** */
+  /**
+   * project の Status 名。**対応表に無い値をここで既定へ倒さない**。
+   * **空白を含む**（`In progress` / `In review`）ので、末尾は残余として取る。
+   */
   readonly status: string;
 };
 
 export const projectStatus = (s: Snapshot): ProjectStatusRow[] =>
   rows(s, "project status").map((line) => {
-    const p = fields(line, 3, "project status");
+    const p = fieldsWithRest(line, 3, "project status");
     return { boardOrder: Number(p[0]), issue: Number(p[1]), status: p[2] ?? "-" };
   });
 
