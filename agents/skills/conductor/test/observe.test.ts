@@ -203,6 +203,72 @@ describe("snapshot から導くもの", () => {
     expect(find(rows, 12).dependsOn).toEqual([34]);
   });
 
+  test("claim 前の着地面は本文の Lands in から引く", async () => {
+    // **claim 前の枝が本文を見ずに座標表の先頭 1 面へ倒すと、宣言が黙って落ちる。**
+    // 座標表に無い面を宣言した課題が claim できてしまい、複数面を宣言した課題は
+    // 二次面の worktree が作られないまま「成果ゼロの周」として数えられる。
+    const rows = await observe(
+      port({
+        issueComments: async () => new Map([[34, present([])]]),
+        issueBodies: async () =>
+          new Map([
+            [12, present("本文")],
+            [34, present("Lands in o/control\nLands in o/other\n\n本文")],
+          ]),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 34).surfaces.map((s) => s.name)).toEqual(["o/control", "o/other"]);
+  });
+
+  test("Lands in が座標表に無ければ、その面を観測できないものとして残す", async () => {
+    // これが立って初めて、選出の条件「着地面が解決できる」が claim 前に効く。
+    const rows = await observe(
+      port({
+        issueComments: async () => new Map([[34, present([])]]),
+        issueBodies: async () =>
+          new Map([
+            [12, present("本文")],
+            [34, present("Lands in o/elsewhere\n\n本文")],
+          ]),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 34).surfaces.map((s) => s.name)).toEqual(["o/elsewhere"]);
+    expect(find(rows, 34).surfaces[0]?.terminal.kind).toBe("unobservable");
+  });
+
+  test("宣言は先頭区画（最初の見出しより前）から読む。行頭の ** 装飾も許す", async () => {
+    // **空行までにしない** —— 先頭区画は宣言専用ではなく、保留バナーや要約が同居する。
+    const body = [
+      "保留中: 仕様の確認待ち",
+      "",
+      "**Depends on #34**",
+      "Lands in o/other",
+      "",
+      "## 目的と期待する結果",
+      "",
+      "Depends on #99",
+    ].join("\n");
+    const rows = await observe(
+      port({
+        issueComments: async () => new Map([[12, present([])]]),
+        issueBodies: async () =>
+          new Map([
+            [12, present(body)],
+            [34, present("本文")],
+          ]),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    // 見出しより後ろの宣言は読まない。
+    expect(find(rows, 12).dependsOn).toEqual([34]);
+    expect(find(rows, 12).surfaces.map((s) => s.name)).toEqual(["o/other"]);
+  });
+
   test("checkout が無く workspace だけ残っているものを prunable にする", async () => {
     const rows = await observe(port(), STATUS, SURFACES);
     expect(find(rows, 34).prunableWorkspace).toEqual(present(true));

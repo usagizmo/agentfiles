@@ -158,8 +158,15 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     );
   }
 
+  // **面を読めないなら、その面の成果物も読めない。**fail-closed で「成果物あり」側へ倒れるが、
+  // そこから成果物の Conflict を出すと、実際には無い実装を人へ報告することになる ——
+  // 根の `着地面が解決できない` は同じ観測が立てているので、そちらだけを出す。
+  const artifacts =
+    o.surfaces.every((s) => !isUnreadable(s.terminal) && !isUnreadable(s.landable)) &&
+    hasWorkInProgress(o.surfaces);
+
   // **保守的に全交差のまま保持し続ける**（非保持へ倒すと、投稿に失敗した課題が無防備に書く）。
-  if (value(o.planCommentExists) === false && hasWorkInProgress(o.surfaces)) {
+  if (value(o.planCommentExists) === false && artifacts) {
     found.push(
       conflict(
         "計画コメントが無いまま実装の証跡がある",
@@ -169,7 +176,7 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     );
   }
 
-  if (value(o.issueContractComplete) === false && hasWorkInProgress(o.surfaces)) {
+  if (value(o.issueContractComplete) === false && artifacts) {
     found.push(
       conflict(
         "Issue 契約が欠けたまま成果物がある",

@@ -132,7 +132,7 @@ const fromTri = (t: Tri | undefined): Observed<boolean> => {
  */
 const unknownSurface = (name: string): SurfaceObservation => {
   // 面の名前は報告する側が添えるので、理由には入れない。
-  const reason = "座標表に無い（外された面を claim が指したまま、が典型）";
+  const reason = "座標表に無い（面を表から外した後も、本文の宣言や claim の記録が指したまま）";
   return {
     name,
     usesPr: true,
@@ -145,12 +145,37 @@ const unknownSurface = (name: string): SurfaceObservation => {
   };
 };
 
-/** 宣言行を本文の先頭区画・行頭からだけ読む（本文全体の文字列一致では辿らない）。 */
+/**
+ * 本文の先頭区画。**最初の見出しより前**（`same-branch.md`「宣言の形と置き場所」）。
+ *
+ * **空行までにしない。**先頭区画は宣言専用ではなく、保留バナー・注記・URL・要約が同居する ——
+ * 空行で切ると、それらの後ろに書かれた宣言が読まれない。
+ */
+const preamble = (body: string): string => {
+  const lines = body.split("\n");
+  const heading = lines.findIndex((line) => /^#{1,6}\s/.test(line));
+  return (heading < 0 ? lines : lines.slice(0, heading)).join("\n");
+};
+
+/**
+ * 宣言行を先頭区画・**行頭**からだけ読む（本文全体の文字列一致では辿らない）。
+ * **3 つとも同じ規則に相乗りする**（置き場所の規則を宣言ごとに分けない）。
+ * **行頭の `**` 装飾は許容する**（`**Depends on #N**`）。
+ */
+const declarationLines = (body: string, keyword: string): string[] => {
+  const found: string[] = [];
+  for (const line of preamble(body).split("\n")) {
+    const match = new RegExp(`^(?:\\*\\*)?${keyword}\\s+(\\S+?)\\*{0,2}\\s*$`).exec(line);
+    const captured = match?.[1];
+    if (captured !== undefined) found.push(captured);
+  }
+  return found;
+};
+
 const declarations = (body: string, keyword: "Depends on" | "Same branch as"): number[] => {
-  const head = body.split(/\n\s*\n/)[0] ?? "";
   const found: number[] = [];
-  for (const line of head.split("\n")) {
-    const match = new RegExp(`^${keyword}\\s+#(\\d+)`).exec(line.trim());
+  for (const raw of declarationLines(body, keyword)) {
+    const match = /^#(\d+)$/.exec(raw);
     const captured = match?.[1];
     if (captured !== undefined) found.push(Number(captured));
   }
@@ -236,11 +261,16 @@ export const observe = async (
     const claim = claimRecord(commentText);
     const report = reportRecord(commentText);
 
-    // **claim 後は claim の記録の `landing` が着地面の SSOT。**claim 前は座標表の既定 1 面。
+    // **claim 後は claim の記録の `landing` が着地面の SSOT。**
+    // **claim 前は本文の `Lands in`**（宣言が無ければ制御面 1 面）。本文を見ずに既定へ倒すと、
+    // 座標表に無い面を宣言した課題が claim でき、複数面を宣言した課題は二次面が落ちる。
+    const declared = declarationLines(body, "Lands in");
     const surfaceNames =
       claim.kind === "present" && claim.value.landing.length > 0
         ? claim.value.landing
-        : [...surfaceUsesPr.keys()].slice(0, 1);
+        : declared.length > 0
+          ? declared
+          : [...surfaceUsesPr.keys()].slice(0, 1);
 
     // **着地面を決めてから計画を照らす。**失効は面ごとの base から測るので、
     // その課題の着地面が決まっていないと問い合わせられない。

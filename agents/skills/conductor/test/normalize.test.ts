@@ -398,6 +398,30 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17h3: 面が読めない課題に、成果物の Conflict を重ねない", () => {
+    // 面を読めないなら **その面の dirty も commit も読めない**。fail-closed で「成果物あり」
+    // 側へ倒れるが、そこから「計画コメントが無いのに実装の証跡がある」を出すと、
+    // 実際には無い成果物を人へ報告することになる。根の Conflict は同じ観測が立てている。
+    const o = observation({
+      ledger: present("未計画"),
+      issueContractComplete: present(false),
+      // `observe` の `unknownSurface` と同じ形（面ごと観測できない）。
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("座標表に無い"),
+          dirty: unobservable("座標表に無い"),
+          hasCheckout: unobservable("座標表に無い"),
+          terminal: unobservable("座標表に無い"),
+          landable: unobservable("座標表に無い"),
+        }),
+      ],
+    });
+    const reasons = normalize(o).conflicts.map((c) => c.reason);
+    expect(reasons).toContain("着地面が解決できない");
+    expect(reasons).not.toContain("計画コメントが無いまま実装の証跡がある");
+    expect(reasons).not.toContain("Issue 契約が欠けたまま成果物がある");
+  });
+
   test("17h2: 面が読めない理由を、そのまま人へ渡す", () => {
     // **「読めない」だけでは人が動けない。**座標表から外れたのか、checkout が無いのか、
     // git が落ちたのかで、次にやることが違う。観測が持っている理由を握り潰さない。
