@@ -8,8 +8,9 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
-import { entryBlockRecord, planRecord } from "./records.ts";
-import { bodyMatchesPlan, planInvalidated } from "./plan.ts";
+import { entryBlockRecord, planRecord, readyRecord } from "./records.ts";
+import { bodyMatchesPlan, planBases, planInvalidated, readyBases, readyStale } from "./plan.ts";
+import type { ChangedPath, PlanBase } from "./plan.ts";
 import { issueContractComplete } from "./contract.ts";
 import type { Observed } from "./types.ts";
 import { absent, present, unobservable } from "./types.ts";
@@ -102,6 +103,8 @@ export const snapshotArgs = (
 
 export const createPort = (options: PortOptions): ObservePort => {
   const { config, surfaces, scriptsDir, snapshotPath } = options;
+  // **制御面は座標の先頭**（`snapshotArgs` と同じ規則）。接頭辞の無い scope 項目はこの面の path。
+  const control = surfaces[0]?.name ?? "";
 
   /**
    * repo の全 PR。**tick に 1 回しか取らない。**`issueFacts` は Issue ごとに呼ばれるので、
@@ -123,6 +126,30 @@ export const createPort = (options: PortOptions): ObservePort => {
   const comments = new Map<number, readonly string[]>();
   /** claim の記録が書かれた時刻。**merge の枠の順序キー**なので、固定値へ倒さない */
   const claimTimes = new Map<number, Observed<number>>();
+
+  /**
+   * 面ごとの `base..統合先` で変わった path。**`plan` と `ready` で同じ手順を 2 度書かない** ——
+   * 片方だけ直すと、失効と鮮度の判定が割れる。
+   */
+  const changedSince = async (
+    bases: readonly PlanBase[],
+  ): Promise<Observed<readonly ChangedPath[]>> => {
+    const collected: ChangedPath[] = [];
+    for (const { surface: name, base } of bases) {
+      const surface = surfaceOf(surfaces, name);
+      if (surface === undefined) return unobservable(`座標表に無い面: ${name}`);
+      if (base === undefined) return unobservable(`記録に面 ${name} の base が無い`);
+      const diff = await run(
+        ["git", "diff", "--name-only", `${base}...${surface.integrationRef}`],
+        surface.repoPath,
+      );
+      if (!diff.ok) return unobservable(diff.reason);
+      for (const path of diff.stdout.split("\n")) {
+        if (path !== "") collected.push({ surface: name, path });
+      }
+    }
+    return present(collected);
+  };
 
   return {
     snapshot: async () => {
@@ -297,7 +324,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       return result.ok ? present(result.stdout.trim()) : unobservable(result.reason);
     },
 
-    planFacts: async (issue) => {
+    planFacts: async (issue, landing) => {
       const plan = planRecord((comments.get(issue) ?? []).join("\n\n"));
       const body = bodies.get(issue) ?? unobservable("本文をまだ読んでいない");
       const digests = new Map<number, Observed<string>>([
@@ -307,30 +334,33 @@ export const createPort = (options: PortOptions): ObservePort => {
         ],
       ]);
 
-      // 面ごとの `base..統合先` で変わった path を集める。
+      // **その課題の着地面だけを、面ごとの base から測る**（`plan.ts` の `planBases`）。
       // **読めなかった面があれば交差扱い**（`planInvalidated` が fail-closed で受ける）。
-      let changed: Observed<readonly string[]> = present([]);
-      if (plan.kind === "present") {
-        const collected: string[] = [];
-        for (const surface of surfaces) {
-          const diff = await run(
-            ["git", "diff", "--name-only", `${plan.value.baseSha}...${surface.integrationRef}`],
-            surface.repoPath,
-          );
-          if (!diff.ok) {
-            changed = unobservable(diff.reason);
-            break;
-          }
-          collected.push(...diff.stdout.split("\n").filter((p) => p !== ""));
-        }
-        if (changed.kind === "present") changed = present(collected);
-      }
+      const changed =
+        plan.kind === "present"
+          ? await changedSince(planBases(plan.value, landing, control))
+          : present([]);
 
       return {
         bodyMatchesPlan: bodyMatchesPlan(plan, digests),
-        planInvalidated: planInvalidated(plan, changed),
+        planInvalidated: planInvalidated(plan, changed, control),
         resourceKeys: plan.kind === "present" ? present(plan.value.resourceKeys) : absent(),
       };
+    },
+
+    readyFacts: async (issue, landing) => {
+      const record = readyRecord((comments.get(issue) ?? []).join("\n\n"));
+      const body = bodies.get(issue) ?? unobservable("本文をまだ読んでいない");
+      const changed =
+        record.kind === "present"
+          ? await changedSince(readyBases(record.value, landing, control))
+          : present([]);
+      return readyStale(
+        record,
+        changed,
+        body.kind === "present" ? present(digest(body.value)) : unobservable("本文を読めない"),
+        control,
+      );
     },
 
     issueFacts: async (issue) => {

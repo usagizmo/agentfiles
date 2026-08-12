@@ -19,15 +19,19 @@ ${SNAPSHOT_SCHEMA}
 abc123
 --- landing tips ---
 o/control def456
+o/other 111222
 --- landing local branches ---
 o/control feat/12-x aaa
+o/other feat/12-x bbb
 --- live checkout (面 branch dirty(0/1/-) ahead behind) ---
 o/control main 0 0 0
+o/other main 0 0 0
 --- remote branches ---
 origin/main
 origin/feat/12-x
 --- worktrees (面 dirty(0/1/-) head path) ---
 o/control 0 aaa /tmp/wt/feat-12-x
+o/other 0 bbb /tmp/wt2/feat-12-x
 --- sessions ---
 resolve-12 working
 --- workspaces ---
@@ -51,7 +55,11 @@ const STATUS: StatusMap = new Map<string, Ledger>([
   ["未計画", "未計画"],
 ]);
 
-const SURFACES = new Map([["o/control", true]]);
+// **2 面にしておく。**1 面だと「その課題の着地面だけを渡す」が「全面を渡す」と区別できない。
+const SURFACES = new Map([
+  ["o/control", true],
+  ["o/other", false],
+]);
 
 const claimComment = `<!-- claim -->
 
@@ -76,6 +84,7 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
       [34, present([])],
     ]),
   surfaceGit: async () => ({ ahead: present(true), head: present("aaa") }),
+  readyFacts: async () => present(false),
   cycleMark: async () => present("mark-1"),
   // 実引数の組み立ては port の責務。ここは「何を渡すか」だけを見る。
   planFacts: async () => ({
@@ -280,6 +289,28 @@ describe("記録の読み取りを繋ぐ", () => {
     const rows = await observe(port(), STATUS, SURFACES);
     expect(find(rows, 12).surfaces.map((s) => s.name)).toEqual(["o/control"]);
     expect(find(rows, 12).claimRecord.kind).toBe("present");
+  });
+
+  test("計画の照合には、その課題の着地面だけを渡す", async () => {
+    // 座標表の全面を渡すと、**制御面の base を持たない repo で `git diff` が必ず落ちて**
+    // 判定不能 = 交差扱いになり、計画を持つ全課題が常に失効扱いになる。
+    const seen: (readonly string[])[] = [];
+    await observe(
+      port({
+        planFacts: async (_issue, landing) => {
+          seen.push(landing);
+          return {
+            bodyMatchesPlan: present(true),
+            planInvalidated: present(false),
+            resourceKeys: present([]),
+          };
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen).not.toHaveLength(0);
+    for (const landing of seen) expect(landing).toEqual(["o/control"]);
   });
 
   test("landing が座標表に無い面なら、その面を観測できないものとして残す", async () => {
