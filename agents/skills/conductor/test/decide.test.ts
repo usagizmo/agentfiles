@@ -4,7 +4,7 @@
 // **テスト名は行 ID**。`何も選ばない` は選択結果の null 値なので `idle` で受ける。
 
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CONFIG, decide } from "../src/decide.ts";
+import { DEFAULT_CONFIG, buildGroups, decide } from "../src/decide.ts";
 import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
@@ -45,7 +45,7 @@ const implementing = (over: Partial<IssueObservation> = {}): IssueObservation =>
     ledger: present("進行中"),
     claimBranchExists: present(true),
     planCommentExists: present(true),
-    claimRecord: present({ members: [1], landing: ["control"] }),
+    claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
     surfaces: [surface({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
     ...over,
   });
@@ -97,7 +97,7 @@ describe("台帳と実体のずれ", () => {
       [
         observation({
           ledger: present("進行中"),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
         }),
       ],
       "計画済み",
@@ -109,7 +109,7 @@ describe("台帳と実体のずれ", () => {
       [
         observation({
           ledger: present("計画済み"),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
         }),
       ],
       "計画済み",
@@ -179,7 +179,7 @@ describe("台帳と実体のずれ", () => {
       [
         observation({
           ledger: present("進行中"),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
           failureRecord: present({ count: 3, lastAction: "解決を起こし直す" }),
         }),
       ],
@@ -304,7 +304,7 @@ describe("実行器が消える / 止まる", () => {
       observation({
         ledger: present("進行中"),
         claimBranchExists: present(true),
-        claimRecord: present({ members: [1], landing: ["control"] }),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
         surfaces: [surface({ hasCheckout: present(true) })],
         session: session.running,
       }),
@@ -317,7 +317,7 @@ describe("実行器が消える / 止まる", () => {
         observation({
           ledger: present("進行中"),
           claimBranchExists: present(true),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
           surfaces: [surface({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
           session: session.running,
         }),
@@ -404,7 +404,7 @@ describe("外から状態が動く", () => {
     const busy = Array.from({ length: 4 }, (_, i) =>
       implementing({
         issue: 10 + i,
-        claimRecord: present({ members: [10 + i], landing: ["control"] }),
+        claimRecord: present({ representative: 10, members: [10 + i], landing: ["control"] }),
         session: session.running,
       }),
     );
@@ -433,7 +433,7 @@ describe("外から状態が動く", () => {
     });
     const b = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       session: session.running,
     });
@@ -448,7 +448,7 @@ describe("外から状態が動く", () => {
     });
     const b = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       pauseRecordExists: true,
       session: session.running,
@@ -482,7 +482,7 @@ describe("外から状態が動く", () => {
     });
     const follower = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["api"]),
       pauseRecordExists: true,
       session: session.idle,
@@ -506,7 +506,7 @@ describe("外から状態が動く", () => {
     });
     const follower = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["api"]),
       session: session.running,
     });
@@ -524,7 +524,7 @@ describe("外から状態が動く", () => {
     });
     const follower = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["api"]),
       session: session.running,
     });
@@ -699,7 +699,7 @@ describe("外から状態が動く", () => {
         observation({
           ledger: present("進行中"),
           claimBranchExists: present(true),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
           surfaces: [surface({ hasCheckout: present(true) })],
           planCommentExists: present(true),
           session: session.idle,
@@ -788,7 +788,7 @@ describe("意図の確認", () => {
     });
     const other = awaitingLanding({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       claimedAt: present(200),
       session: session.idle,
     });
@@ -812,7 +812,7 @@ describe("merge の直列化（integration）", () => {
     });
     const other = awaitingLanding({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       claimedAt: present(50),
       session: session.idle,
     });
@@ -827,10 +827,33 @@ describe("merge の直列化（integration）", () => {
 });
 
 describe("group", () => {
-  test("11: group 内で 着地済み と 実装中 が混在している", () => {
+  test("11: 対象集合の 1 人だけが closed になり、終端が混在した", () => {
+    // 実体は 1 セットなので、**どちらに倒しても壊れる** —— 片付ければ走っている実装が消え、
+    // 放置すれば closed の課題が終端に達しないまま資源を握り続ける。
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const closed = observation({ issue: 2, ledger: present("進行中"), open: present(false) });
+    expectConflict([lead, closed], "group の終端が混在");
+  });
+
+  test("12g: claim 済み group の非代表成員を正規化する", () => {
+    // **共有する実体は代表の番号で 1 セット**（`same-branch.md`「共有するもの」）。
+    // 成員ごとに自分の番号で引くと branch も worktree もセッションも見えず、
+    // **claim するたびに代表以外の全員が `ledger が期待より先` になる**。
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const member = observation({ issue: 2, ledger: present("進行中"), sameBranchAs: [1] });
+    expect(tick([lead, member]).conflicts).toEqual([]);
+  });
+
+  test("12h: 行 12g の group が着地した", () => {
     const landed = implementing({
       issue: 1,
-      sameBranchAs: [2],
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
       surfaces: [
         surface({
           aheadOfIntegration: present(true),
@@ -840,12 +863,50 @@ describe("group", () => {
       ],
       submissionEvidence: present(true),
     });
-    const working = implementing({
-      issue: 2,
-      sameBranchAs: [1],
-      claimRecord: present({ members: [2], landing: ["control"] }),
+    const member = observation({ issue: 2, ledger: present("進行中"), sameBranchAs: [1] });
+    const records = buildGroups([landed, member]).flatMap((g) => g.records);
+    expect(records.find((r) => r.issue === 2)?.progress).toBe("着地済み");
+    expect(tick([landed, member]).conflicts).toEqual([]);
+  });
+
+  test("12i: claim の記録の members にだけ居る番号", () => {
+    // 加入は記録への追記が実体。**本文の宣言を待たない。**
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
     });
-    expectConflict([landed, working], "group の終端が混在");
+    const joined = observation({ issue: 2, ledger: present("進行中") });
+    const d = tick([lead, joined]);
+    expect(d.conflicts).toEqual([]);
+    expect(d.outcome.kind === "action" ? d.outcome.target.members : null).toEqual([1, 2]);
+  });
+
+  test("12k: 片方向の宣言で、書いていない側が先に観測される", () => {
+    // **宣言は片方向でも group が成立する**（`same-branch.md`「譲っても機能は失われない」）。
+    // 有向辺のまま辿ると、辺を持たない側を先に訪問した時点でそこが確定し、
+    // **board の並び順で連結成分が割れる** —— 1 本で直すための宣言が 2 本の branch を生む。
+    const silent = observation({ issue: 1, ledger: present("計画済み") });
+    const declaring = observation({ issue: 2, ledger: present("計画済み"), sameBranchAs: [1] });
+    // 宣言していない側が先（board の並び順がそうなりうる）。
+    const groups = buildGroups([silent, declaring]);
+    expect(groups.length).toBe(1);
+    expect(groups[0]?.members).toEqual([1, 2]);
+    expect(groups[0]?.representative).toBe(1);
+    // 並びを逆にしても同じ（順序に依存しない）。
+    expect(buildGroups([declaring, silent])[0]?.members).toEqual([1, 2]);
+  });
+
+  test("12j: claim 前の group で、成員の側にだけ人待ちの記録がある", () => {
+    // claim 前の人待ちは渡された Issue に書かれる（代表がまだ決まっていない）。
+    const a = observation({ issue: 1, ledger: present("未計画"), sameBranchAs: [2] });
+    const b = observation({
+      issue: 2,
+      ledger: present("未計画"),
+      sameBranchAs: [1],
+      waitRecord: wait.waiting,
+    });
+    const records = buildGroups([a, b]).flatMap((g) => g.records);
+    expect(records.find((r) => r.issue === 2)?.runtime).toBe("人待ち");
   });
 
   test("12: group の一部だけ計画済み。group は claim の候補にしない", () => {
@@ -942,7 +1003,7 @@ describe("入場を止める宣言（続き）", () => {
       issue: 2,
       ledger: present("進行中"),
       claimBranchExists: present(true),
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       surfaces: [surface({ hasCheckout: present(true) })],
       // 計画コメントがまだ無い = `準備中` なので、この課題は write を保持していない。
       session: session.idle,
@@ -999,7 +1060,7 @@ describe("merge の直列化（続き）", () => {
     });
     const reentered = awaitingLanding({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       claimedAt: present(1),
       session: session.idle,
     });
@@ -1084,7 +1145,7 @@ describe("硬い上限", () => {
     const busy = Array.from({ length: 4 }, (_, i) =>
       implementing({
         issue: 10 + i,
-        claimRecord: present({ members: [10 + i], landing: ["control"] }),
+        claimRecord: present({ representative: 10, members: [10 + i], landing: ["control"] }),
         session: session.running,
       }),
     );
@@ -1158,7 +1219,7 @@ describe("着地面が制御面と違う（action）", () => {
       ledger: present("進行中"),
       claimBranchExists: present(true),
       planCommentExists: present(true),
-      claimRecord: present({ members: [1], landing: ["control", "skills"] }),
+      claimRecord: present({ representative: 1, members: [1], landing: ["control", "skills"] }),
       surfaces: [control(), secondary({ hasCheckout: present(true) })],
       ...over,
     });
@@ -1169,7 +1230,7 @@ describe("着地面が制御面と違う（action）", () => {
         observation({
           ledger: present("進行中"),
           claimBranchExists: present(true),
-          claimRecord: present({ members: [1], landing: ["control", "skills"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control", "skills"] }),
           surfaces: [control(), secondary()],
         }),
       ],
@@ -1296,7 +1357,7 @@ describe("着地面が制御面と違う（action）", () => {
       [
         landed({
           surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
-          claimRecord: present({ members: [1], landing: ["skills"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
           submissionEvidence: present(false),
           session: session.none,
         }),

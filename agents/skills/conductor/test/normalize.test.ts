@@ -66,7 +66,7 @@ describe("台帳と実体のずれ", () => {
     expectFields(
       observation({
         ledger: present("進行中"),
-        claimRecord: present({ members: [1], landing: ["control"] }),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
       }),
       { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "進行中" },
     );
@@ -76,7 +76,7 @@ describe("台帳と実体のずれ", () => {
     expectFields(
       observation({
         ledger: present("計画済み"),
-        claimRecord: present({ members: [1], landing: ["control"] }),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
       }),
       { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "計画済み" },
     );

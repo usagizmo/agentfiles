@@ -80,8 +80,9 @@ export type IssueObservation = {
   readonly planCommentExists: Observed<boolean>;
   /** Issue 契約が揃っているか（項目の SSOT は `refine` の Issue 契約） */
   readonly issueContractComplete: Observed<boolean>;
-  /** claim の記録。`landing` の欠落は `Conflict` */
+  /** claim の記録。`landing` の欠落は `Conflict`。**対象集合と代表を定めるのはこれ** */
   readonly claimRecord: Observed<{
+    readonly representative: number;
     readonly members: readonly number[];
     readonly landing: readonly string[];
   }>;

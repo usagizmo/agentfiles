@@ -75,9 +75,73 @@ export type Group = {
   readonly leadObservation: IssueObservation;
 };
 
-/** `Same branch as #N` の連結成分。**代表は最小番号**（固定の規約は `same-branch.md`）。 */
+/**
+ * その課題が同じ 1 本で直すと宣言している相手。
+ *
+ * **claim 済みなら記録の `members`、未 claim なら本文の宣言**（`same-branch.md`
+ * 「どちらの集合を見るか」）。記録は代表にしか無いので、成員の側は本文から辿る。
+ * **本文にだけ足された番号は claim 済みの対象集合に入らない**（次の着地まで別扱い）。
+ */
+const links = (o: IssueObservation): readonly number[] =>
+  o.claimRecord.kind === "present" ? o.claimRecord.value.members : o.sameBranchAs;
+
+/**
+ * 共有する実体の観測を、対象集合の全員へ揃える（`same-branch.md`「共有するもの」）。
+ *
+ * **branch も worktree もセッションも記録も、代表の番号で 1 セットしか無い。**成員ごとに
+ * 自分の番号で引くと、それらが 1 つも見えず全員が `未着手` に落ちる —— claim するたびに
+ * 代表以外が `ledger が期待より先` になり、着地すれば終端の混在になる。
+ *
+ * **Issue 単位のまま残すもの**: 台帳・open / closed・Issue 契約・本文から引くもの・
+ * 在庫の鮮度・`refine` のセッション（どれも成員ごとに別々に在る）。
+ *
+ * **claim 前には当てない。**代表がまだ決まっておらず、人待ちは渡された Issue に書かれる。
+ */
+const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueObservation =>
+  member.issue === lead.issue
+    ? member
+    : {
+        ...member,
+        claimBranchExists: lead.claimBranchExists,
+        planCommentExists: lead.planCommentExists,
+        claimRecord: lead.claimRecord,
+        surfaces: lead.surfaces,
+        openPr: lead.openPr,
+        checks: lead.checks,
+        latestPrClosedUnmerged: lead.latestPrClosedUnmerged,
+        prMerged: lead.prMerged,
+        submissionEvidence: lead.submissionEvidence,
+        session: lead.session,
+        waitRecord: lead.waitRecord,
+        pauseRecordExists: lead.pauseRecordExists,
+        intentRecord: lead.intentRecord,
+        integrationRecordCount: lead.integrationRecordCount,
+        prunableWorkspace: lead.prunableWorkspace,
+        failureRecord: lead.failureRecord,
+        cycleRecord: lead.cycleRecord,
+        currentMark: lead.currentMark,
+        planInvalidated: lead.planInvalidated,
+        resourceKeys: lead.resourceKeys,
+        blocksEntry: lead.blocksEntry,
+        claimedAt: lead.claimedAt,
+      };
+
+/**
+ * 対象集合（claim 済み）または group（未 claim）の連結成分。
+ * **代表は記録の `representative`、無ければ最小番号**（固定の規約は `same-branch.md`）。
+ */
 export const buildGroups = (observations: readonly IssueObservation[]): Group[] => {
   const byIssue = new Map(observations.map((o) => [o.issue, o]));
+  // **無向グラフにしてから辿る。**記録は代表にしか無く、本文の相互記載も漏れうるので、
+  // 片側からしか張られていない辺が実在する。有向のまま辿ると、走査の順で group が割れる。
+  const edges = new Map<number, Set<number>>();
+  const link = (a: number, b: number) => {
+    if (a === b) return;
+    (edges.get(a) ?? edges.set(a, new Set()).get(a))?.add(b);
+    (edges.get(b) ?? edges.set(b, new Set()).get(b))?.add(a);
+  };
+  for (const o of observations) for (const n of links(o)) link(o.issue, n);
+
   const seen = new Set<number>();
   const groups: Group[] = [];
 
@@ -90,22 +154,27 @@ export const buildGroups = (observations: readonly IssueObservation[]): Group[] 
       if (current === undefined || seen.has(current)) continue;
       seen.add(current);
       members.push(current);
-      const observation = byIssue.get(current);
-      if (observation === undefined) continue;
-      for (const linked of observation.sameBranchAs) if (!seen.has(linked)) queue.push(linked);
+      for (const linked of edges.get(current) ?? []) if (!seen.has(linked)) queue.push(linked);
     }
     members.sort((a, b) => a - b);
-    const groupObservations = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
-    if (groupObservations.length === 0) continue;
-    const records = groupObservations.map(normalize);
-    const representative = members[0] ?? o.issue;
+    const raw = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
+    if (raw.length === 0) continue;
+
+    const claim = raw.find((x) => x.claimRecord.kind === "present")?.claimRecord;
+    const representative =
+      claim?.kind === "present" ? claim.value.representative : (members[0] ?? o.issue);
     const leadIndex = Math.max(
       0,
-      groupObservations.findIndex((g) => g.issue === representative),
+      raw.findIndex((g) => g.issue === representative),
     );
+    const leadObservation = raw[leadIndex];
+    if (leadObservation === undefined) continue;
+    // **共有の反映は claim 済みのときだけ**（claim 前は記録が成員ごとに別々に在る）。
+    const groupObservations =
+      claim?.kind === "present" ? raw.map((x) => shareEvidence(x, leadObservation)) : raw;
+    const records = groupObservations.map(normalize);
     const lead = records[leadIndex];
-    const leadObservation = groupObservations[leadIndex];
-    if (lead === undefined || leadObservation === undefined) continue;
+    if (lead === undefined) continue;
     groups.push({
       representative,
       members,
