@@ -28,21 +28,39 @@ export const MARKERS = [
 export type Marker = (typeof MARKERS)[number];
 
 /**
+ * marker が**行として単独で立っている**位置。
+ *
+ * **散文の中の字面を拾わない。**記録の説明をする文（再計画の報告・経緯のまとめ・移行の告知）は
+ * 運用で必ず出るので、行の途中や code span の中を marker として数えると、**正しい記録がある
+ * 課題が「壊れている」に化けて**ラダー最上段に固定される。書く側の規約では塞がらない ——
+ * 既に書かれたコメントは残るし、記録について説明する文は今後も書かれる。
+ *
+ * **行末の `\r` は許す** —— CRLF の本文が実データに混在する。
+ */
+const standaloneLines = (body: string, tag: string): { start: number; end: number }[] => {
+  const found: { start: number; end: number }[] = [];
+  let offset = 0;
+  for (const line of body.split("\n")) {
+    const bare = line.endsWith("\r") ? line.slice(0, -1) : line;
+    if (bare === tag) found.push({ start: offset, end: offset + line.length });
+    offset += line.length + 1;
+  }
+  return found;
+};
+
+/**
  * コメント本文から marker の中身（YAML）を取り出す。
  * **同じ marker が 2 つある本文は `invalid`** —— どちらを拾うか決まらない。
  */
 export const extractMarker = (body: string, marker: Marker): Observed<string> => {
-  const open = `<!-- ${marker} -->`;
-  const close = `<!-- /${marker} -->`;
-  const first = body.indexOf(open);
-  if (first < 0) return absent();
-  if (body.indexOf(open, first + open.length) >= 0) {
-    return invalid(body, `marker ${marker} が 2 つある`);
-  }
-  const end = body.indexOf(close, first);
-  if (end < 0) return invalid(body, `marker ${marker} が閉じていない`);
-  const inner = body.slice(first + open.length, end);
-  const fence = /```(?:yaml)?\n([\s\S]*?)```/.exec(inner);
+  const opens = standaloneLines(body, `<!-- ${marker} -->`);
+  const open = opens[0];
+  if (open === undefined) return absent();
+  if (opens.length >= 2) return invalid(body, `marker ${marker} が 2 つある`);
+  const close = standaloneLines(body, `<!-- /${marker} -->`).find((c) => c.start >= open.end);
+  if (close === undefined) return invalid(body, `marker ${marker} が閉じていない`);
+  const inner = body.slice(open.end, close.start);
+  const fence = /```(?:yaml)?\r?\n([\s\S]*?)```/.exec(inner);
   if (fence === null) return invalid(inner, `marker ${marker} に yaml ブロックが無い`);
   return present(fence[1] ?? "");
 };

@@ -36,6 +36,53 @@ describe("marker の取り出し", () => {
       "invalid",
     );
   });
+
+  test("散文の中で字面に言及した行を marker として拾わない", () => {
+    // 記録の説明をする文（再計画の報告・経緯のまとめ・移行の告知）は運用で必ず出る。
+    // **拾うと、正しい記録がある課題が「壊れている」に化けて**ラダー最上段に固定される。
+    const prose = [
+      "製品判断は確定済み（`<!-- wait -->` は `cleared`）で、前提が動かなかったため、",
+      "1. **種別違い** — 実際に待っていたのは write lease で、`<!-- yield -->` の役目だった",
+      "| `<!-- claim -->` / `<!-- plan -->` | **どれも無し** |",
+      "### ゲートの結果（`<!-- report -->` の要求）",
+    ].join("\n");
+    for (const marker of ["wait", "yield", "claim", "plan", "report"] as const) {
+      expect(extractMarker(prose, marker).kind).toBe("absent");
+    }
+  });
+
+  test("散文の言及があっても、単独行で立っている記録へ到達する", () => {
+    const body = `前置き（\`<!-- wait -->\` は \`cleared\`）と書いた行\n\n${wrap("wait", "asked: x")}`;
+    expect(extractMarker(body, "wait").kind).toBe("present");
+  });
+
+  test("閉じの字面が中身の散文に出ても、そこで打ち切らない", () => {
+    const body = [
+      "<!-- wait -->",
+      "",
+      "この記録は `<!-- /wait -->` で閉じる、と説明する行",
+      "",
+      "```yaml",
+      "asked: x",
+      "```",
+      "",
+      "<!-- /wait -->",
+    ].join("\n");
+    expect(extractMarker(body, "wait").kind).toBe("present");
+  });
+
+  test("散文の言及は「2 つある」にも数えない", () => {
+    const body = `${wrap("claim", "representative: 1")}\n表の中の \`<!-- claim -->\` という言及\n`;
+    expect(extractMarker(body, "claim").kind).toBe("present");
+  });
+
+  test("CRLF の本文でも読める（実データに混在する）", () => {
+    const body = wrap("claim", "representative: 1\nmembers: [1]\nlanding: [control]").replace(
+      /\n/g,
+      "\r\n",
+    );
+    expect(claimRecord(body).kind).toBe("present");
+  });
 });
 
 describe("claim の記録", () => {
