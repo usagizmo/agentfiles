@@ -3,7 +3,7 @@
 // **どちらも fail-closed。**digest のキーが無ければ不一致、失効の判定材料が無ければ交差扱い ——
 // 倒す向きを逆にすると、古い前提のまま書き続ける課題を止められない。
 
-import type { PlanRecord } from "./records.ts";
+import type { PlanRecord, ReadyRecord } from "./records.ts";
 import type { Observed } from "./types.ts";
 import { present, unobservable } from "./types.ts";
 
@@ -35,20 +35,35 @@ export type PlanBase = { readonly surface: string; readonly base: string | undef
  *
  * **回すのはその課題の着地面だけ。座標表の全面ではない** —— 制御面の SHA は他 repo に
  * 存在しないので `git diff` が必ず落ち、判定不能 = 交差扱いになる。着地面が 2 面以上ある
- * 座標表では、それだけで**計画を持つ全課題が常に失効扱い**になる。
+ * 座標表では、それだけで**全課題が常に失効扱い**になる。
  *
- * **制御面は `baseSha`、それ以外は `landingBaseShas`。**キーが無い面は `undefined` のまま
- * 返す（fail-closed の材料であって、既定へ倒す場所ではない）。
+ * **制御面は着地面に含まれなくても必ず見る**（`landing-surface.md`）—— project 差分と
+ * 共有ファイルがそこにあるので、外すとその範囲が動いても永久に失効しない。
+ *
+ * **キーが無い面は `undefined` のまま返す**（fail-closed の材料であって、既定へ倒す場所ではない）。
  */
+const surfaceBases = (
+  controlBase: string,
+  otherBases: Readonly<Record<string, string>>,
+  landing: readonly string[],
+  control: string,
+): readonly PlanBase[] =>
+  [control, ...landing.filter((n) => n !== control)].map((surface) => ({
+    surface,
+    base: surface === control ? controlBase : otherBases[surface],
+  }));
+
 export const planBases = (
   plan: PlanRecord,
   landing: readonly string[],
   control: string,
-): readonly PlanBase[] =>
-  landing.map((surface) => ({
-    surface,
-    base: surface === control ? plan.baseSha : plan.landingBaseShas[surface],
-  }));
+): readonly PlanBase[] => surfaceBases(plan.baseSha, plan.landingBaseShas, landing, control);
+
+export const readyBases = (
+  record: ReadyRecord,
+  landing: readonly string[],
+  control: string,
+): readonly PlanBase[] => surfaceBases(record.readySha, record.landingReadyShas, landing, control);
 
 /** 面ごとの `base..統合先` で変わった path。 */
 export type ChangedPath = { readonly surface: string; readonly path: string };
@@ -94,4 +109,26 @@ const matches = (changed: ChangedPath, entry: string, control: string): boolean 
   if (bare === "") return false;
   const path = changed.path;
   return path === bare || path.startsWith(bare.endsWith("/") ? bare : `${bare}/`);
+};
+
+/**
+ * 在庫が陳腐化したか。判定の 5 つは `ready-record.md`「読むときの判定」が SSOT。
+ *
+ * **記録が読めるかどうかだけで決めない** —— 決めると、統合先が進んでも本文が変わっても
+ * 計画済みのまま claim される。**判定できないものは陳腐化**（fail-closed）。
+ */
+export const readyStale = (
+  record: Observed<ReadyRecord>,
+  /** 面ごとの `readySha..統合先` で変わった path */
+  changedPaths: Observed<readonly ChangedPath[]>,
+  /** いまの本文の digest */
+  bodyDigest: Observed<string>,
+  control: string,
+): Observed<boolean> => {
+  if (record.kind !== "present") return present(true);
+  if (changedPaths.kind !== "present") return present(true);
+  if (bodyDigest.kind !== "present") return present(true);
+  if (bodyDigest.value !== record.value.issueDigest) return present(true);
+  const scope = record.value.invalidationScope;
+  return present(changedPaths.value.some((c) => scope.some((entry) => matches(c, entry, control))));
 };

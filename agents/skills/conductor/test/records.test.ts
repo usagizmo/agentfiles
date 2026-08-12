@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   claimRecord,
+  planRecord,
   cycleRecord,
   extractMarker,
   intentRecord,
@@ -175,5 +176,43 @@ describe("提出と在庫と枠", () => {
   test("integration は pr が無くても読める（PR を使う面が無い課題）", () => {
     const r = integrationRecord(wrap("integration", "issues: [1]"));
     expect(r).toEqual({ kind: "present", value: { issues: [1], pr: null } });
+  });
+});
+
+describe("面の接頭辞を持つ記録", () => {
+  // **yaml では `- key: value` は文字列ではなく 1 要素の map。**`landing-surface.md` と
+  // `ready-record.md` が定める `<owner>/<repo>: <path>` はその形なので、文字列の配列だけを
+  // 受けると**面をまたぐ課題の記録が必ず invalid** になる（在庫は計画した瞬間に陳腐化扱い）。
+  const readyBody = (scope: string) =>
+    wrap("ready", `readySha: aaa\nissueDigest: d1\ninvalidationScope:\n${scope}`);
+
+  test("`- <面>: <path>` を面つきの項目として読む", () => {
+    const r = readyRecord(readyBody("  - acme/skills: agents/x\n  - plain/path.ts"));
+    expect(r.kind === "present" ? r.value.invalidationScope : r.kind).toEqual([
+      "acme/skills: agents/x",
+      "plain/path.ts",
+    ]);
+  });
+
+  test("plan の invalidationScope と expectedWrites も同じ形で読む", () => {
+    const r = planRecord(
+      wrap(
+        "plan",
+        [
+          "baseSha: aaa",
+          'issueDigests:\n  "12": d12',
+          "invalidationScope:\n  - acme/skills: agents/x",
+          "expectedWrites:\n  - acme/skills: agents/y",
+          "resourceKeys: []",
+        ].join("\n"),
+      ),
+    );
+    expect(r.kind === "present" ? r.value.invalidationScope : r.kind).toEqual([
+      "acme/skills: agents/x",
+    ]);
+  });
+
+  test("2 つ以上のキーを持つ map は読めない（どちらが面か決まらない）", () => {
+    expect(readyRecord(readyBody("  - {a: 1, b: 2}")).kind).toBe("invalid");
   });
 });

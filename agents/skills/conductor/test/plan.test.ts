@@ -1,8 +1,14 @@
 // 計画との突き合わせ。**倒す向き**（不一致側・交差側）だけを固定する。
 
 import { describe, expect, test } from "bun:test";
-import { bodyMatchesPlan, planBases, planInvalidated } from "../src/plan.ts";
-import { planRecord } from "../src/records.ts";
+import {
+  bodyMatchesPlan,
+  planBases,
+  planInvalidated,
+  readyBases,
+  readyStale,
+} from "../src/plan.ts";
+import { planRecord, readyRecord } from "../src/records.ts";
 import type { Observed } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
 
@@ -122,8 +128,82 @@ describe("面ごとの base", () => {
   });
 
   test("landingBaseShas にキーが無い面は判定不能（交差扱いへ倒す材料）", () => {
+    // **制御面は着地面に含まれなくても必ず見る**（`landing-surface.md`）。
     expect(planBases(record(BASE), ["acme/skills"], CONTROL)).toEqual([
+      { surface: "acme/control", base: "aaa" },
       { surface: "acme/skills", base: undefined },
+    ]);
+  });
+});
+
+describe("在庫の鮮度", () => {
+  // 判定の 5 つは `ready-record.md`「読むときの判定」。**記録が読めるかどうかだけで決めない** ——
+  // 決めると、統合先が進んでも本文が変わっても計画済みのまま claim される。
+  const ready = (yaml: string) =>
+    readyRecord(`<!-- ready -->\n\n\`\`\`yaml\n${yaml}\n\`\`\`\n\n<!-- /ready -->`);
+  const R = `readySha: aaa
+issueDigest: d1
+invalidationScope:
+  - agents/skills/conductor`;
+
+  test("記録が無ければ陳腐化", () => {
+    expect(readyStale(absent(), present([]), present("d1"), CONTROL)).toEqual(present(true));
+  });
+
+  test("記録を読めなければ陳腐化（fail-closed）", () => {
+    expect(readyStale(ready("readySha: aaa"), present([]), present("d1"), CONTROL)).toEqual(
+      present(true),
+    );
+  });
+
+  test("交差も不一致も無ければ鮮度は保たれる", () => {
+    expect(readyStale(ready(R), at("acme/control", "other/x"), present("d1"), CONTROL)).toEqual(
+      present(false),
+    );
+  });
+
+  test("readySha..default の変更が invalidationScope に交差すれば陳腐化", () => {
+    expect(
+      readyStale(
+        ready(R),
+        at("acme/control", "agents/skills/conductor/SKILL.md"),
+        present("d1"),
+        CONTROL,
+      ),
+    ).toEqual(present(true));
+  });
+
+  test("issueDigest が現在の本文と一致しなければ陳腐化", () => {
+    expect(readyStale(ready(R), present([]), present("d2"), CONTROL)).toEqual(present(true));
+  });
+
+  test("本文を読めなければ陳腐化", () => {
+    expect(readyStale(ready(R), present([]), unobservable("読めない"), CONTROL)).toEqual(
+      present(true),
+    );
+  });
+
+  test("面ごとの変更を読めなければ陳腐化", () => {
+    expect(
+      readyStale(ready(R), unobservable("面の統合先を読めない"), present("d1"), CONTROL),
+    ).toEqual(present(true));
+  });
+
+  test("着地面のキーが landingReadyShas に無ければ判定不能（base が undefined）", () => {
+    const r = ready(R);
+    if (r.kind !== "present") throw new Error("記録を読めない");
+    expect(readyBases(r.value, ["acme/skills"], CONTROL)).toEqual([
+      { surface: "acme/control", base: "aaa" },
+      { surface: "acme/skills", base: undefined },
+    ]);
+  });
+
+  test("制御面は着地面に含まれなくても必ず見る", () => {
+    const r = ready(`${R}\nlandingReadyShas:\n  acme/skills: bbb`);
+    if (r.kind !== "present") throw new Error("記録を読めない");
+    expect(readyBases(r.value, ["acme/skills"], CONTROL)).toEqual([
+      { surface: "acme/control", base: "aaa" },
+      { surface: "acme/skills", base: "bbb" },
     ]);
   });
 });

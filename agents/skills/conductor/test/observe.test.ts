@@ -84,6 +84,7 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
       [34, present([])],
     ]),
   surfaceGit: async () => ({ ahead: present(true), head: present("aaa") }),
+  readyFacts: async () => present(false),
   cycleMark: async () => present("mark-1"),
   // 実引数の組み立ては port の責務。ここは「何を渡すか」だけを見る。
   planFacts: async () => ({

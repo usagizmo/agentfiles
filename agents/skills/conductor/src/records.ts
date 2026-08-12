@@ -85,6 +85,34 @@ const isNumberArray = (v: unknown): v is number[] =>
 const isStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === "string");
 
+/**
+ * 面の接頭辞を持ちうる項目の列（`invalidationScope` / `expectedWrites`）を、
+ * `<面>: <path>` の文字列へ揃える。
+ *
+ * **yaml では `- <面>: <path>` は文字列ではなく 1 要素の map。**`landing-surface.md` と
+ * `ready-record.md` が定める書式はその形なので、文字列の配列だけを受けると
+ * **面をまたぐ課題の記録が必ず壊れていると読まれる**（在庫は計画した瞬間に陳腐化扱いになり、
+ * 計画 → 差し戻し → 計画 の往復から出られない）。
+ *
+ * **2 つ以上のキーを持つ map は読めない**（どちらが面か決まらない）。
+ */
+const scopeList = (v: unknown): readonly string[] | undefined => {
+  if (!Array.isArray(v)) return undefined;
+  const out: string[] = [];
+  for (const item of v) {
+    if (typeof item === "string") {
+      out.push(item);
+      continue;
+    }
+    if (!isRecord(item)) return undefined;
+    const pairs = Object.entries(item);
+    const only = pairs[0];
+    if (pairs.length !== 1 || only === undefined || typeof only[1] !== "string") return undefined;
+    out.push(`${only[0]}: ${only[1]}`);
+  }
+  return out;
+};
+
 // ---------------------------------------------------------------------------
 
 export type ClaimRecord = {
@@ -203,8 +231,12 @@ export const reportRecord = (body: string): Observed<ReportRecord> =>
   parseYaml(extractMarker(body, "report"), isReport);
 
 export type ReadyRecord = {
+  /** **制御面の** base。他の面は `landingReadyShas` */
   readonly readySha: string;
+  /** 制御面以外の着地面の base。**無いキーは判定不能**（`ready-record.md`） */
+  readonly landingReadyShas: Readonly<Record<string, string>>;
   readonly issueDigest: string;
+  /** `<面>: <path>` へ揃えた列（素の path は制御面のもの） */
   readonly invalidationScope: readonly string[];
 };
 
@@ -213,11 +245,18 @@ const isReady = (v: unknown): v is ReadyRecord =>
   typeof v["readySha"] === "string" &&
   typeof v["issueDigest"] === "string" &&
   // **空にしない**（空だと何も失効しないので、陳腐化が永久に検出されない）
-  isStringArray(v["invalidationScope"]) &&
-  v["invalidationScope"].length > 0;
+  (scopeList(v["invalidationScope"])?.length ?? 0) > 0;
 
-export const readyRecord = (body: string): Observed<ReadyRecord> =>
-  parseYaml(extractMarker(body, "ready"), isReady);
+export const readyRecord = (body: string): Observed<ReadyRecord> => {
+  const parsed = parseYaml(extractMarker(body, "ready"), isReady);
+  if (parsed.kind !== "present") return parsed;
+  const raw = parsed.value as { invalidationScope?: unknown; landingReadyShas?: unknown };
+  return present({
+    ...parsed.value,
+    invalidationScope: scopeList(raw.invalidationScope) ?? [],
+    landingReadyShas: isStringMap(raw.landingReadyShas) ? raw.landingReadyShas : {},
+  });
+};
 
 export type YieldRecord = {
   readonly issues: readonly number[];
@@ -253,19 +292,23 @@ const isPlan = (v: unknown): v is PlanRecord =>
   isRecord(v) &&
   typeof v["baseSha"] === "string" &&
   isStringMap(v["issueDigests"]) &&
-  isStringArray(v["invalidationScope"]) &&
-  v["invalidationScope"].length > 0 &&
+  (scopeList(v["invalidationScope"])?.length ?? 0) > 0 &&
   isStringArray(v["resourceKeys"]);
 
 export const planRecord = (body: string): Observed<PlanRecord> => {
   const parsed = parseYaml(extractMarker(body, "plan"), isPlan);
   if (parsed.kind !== "present") return parsed;
-  const raw = parsed.value as { alsoResolves?: unknown; landingBaseShas?: unknown };
+  const raw = parsed.value as {
+    alsoResolves?: unknown;
+    landingBaseShas?: unknown;
+    invalidationScope?: unknown;
+  };
   // **どちらも省略できる**（制御面だけの課題・同居しない課題）。**無いことを異常にしない。**
   return present({
     ...parsed.value,
     alsoResolves: isNumberArray(raw.alsoResolves) ? raw.alsoResolves : [],
     landingBaseShas: isStringMap(raw.landingBaseShas) ? raw.landingBaseShas : {},
+    invalidationScope: scopeList(raw.invalidationScope) ?? [],
   });
 };
 
