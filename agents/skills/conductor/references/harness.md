@@ -145,7 +145,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 片付けに要る workspace ID                    | **`herdr worktree list --cwd <面の checkout>`** の `open_workspace_id`                                                                                                                                                                                                        |
 | 孤児 workspace を洗う                        | **`herdr workspace list`**（repo 非依存）                                                                                                                                                                                                                                     |
 
-**`--kind` は project の `config.json` の `executors`**（工程ごと。検証は `src/config.ts` の `parseConfig`）。**ここで harness を名指ししない** —— 名指しすると project ごとに変えられず、計画と実装で別の実行器を試すこともできない。**モデルは渡さ**ない —— 既定は harness の設定側が持っている。
+**`--kind` は project の `config.json` の `executors`**（工程ごと。検証は `src/config.ts` の `parseConfig`）。**モデルは渡さ**ない —— 既定は harness の設定側が持つ。
 
 **3 つの経路は、それぞれ別の問いに対して権威。1 つに寄せない。**
 
