@@ -1,1 +1,0 @@
-../../../shared/queue/artifact.md

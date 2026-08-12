@@ -2,7 +2,7 @@
 name: rabi-design
 description: >-
   株式会社ラビのブランドスタイル（カラー・フォント・トーン）を適用する。
-  Rabi 名義の UI・ドキュメント・スライド・Artifact を作るとき、
+  Rabi 名義の UI・ドキュメント・スライド・譜面を作るとき、
   または「Rabiスタイルで」と言われたときに使う。CSS デザイントークンを含む。
 ---
 
@@ -39,4 +39,4 @@ Rabi のデザイン仕様。基調はモノトーン＋クリムゾン。rabi.c
 
 ## 使い方
 
-HTML / Artifact では `assets/rabi.css` の `--rabi-*` トークンを先頭にインライン展開して使う。表は `.rabi-table` + `tr.group` / `tr.total`。他形式（docx・スライド等）でも上記トークンと Typography に従う。
+HTML / 譜面では `assets/rabi.css` の `--rabi-*` トークンを先頭にインライン展開して使う。表は `.rabi-table` + `tr.group` / `tr.total`。他形式（docx・スライド等）でも上記トークンと Typography に従う。

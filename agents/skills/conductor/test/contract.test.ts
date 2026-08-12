@@ -48,8 +48,8 @@ describe("契約の充足", () => {
     expect(missingContractItems(renamed)).toEqual(["## 受入条件"]);
   });
 
-  test("先頭区画の宣言や枚の URL は契約の項目に数えない", () => {
-    const withHead = `Depends on #12\nhttps://example.com/artifact\n\n${full}`;
+  test("先頭区画の宣言は契約の項目に数えない", () => {
+    const withHead = `Depends on #12\nLands in example/repo\n\n${full}`;
     expect(issueContractComplete(withHead)).toEqual(present(true));
   });
 });

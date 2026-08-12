@@ -48,7 +48,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-同ディレクトリの `references/advisors.md` に従う（アドバイザー起動の SSOT。harness 差分もここだけ）。
+同ディレクトリの `references/advisors.md` に従う（アドバイザー起動の SSOT。Herdr の外では立てない）。
 
 ### 4. 精査 → 修正
 
