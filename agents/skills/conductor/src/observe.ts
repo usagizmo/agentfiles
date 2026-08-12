@@ -120,7 +120,8 @@ const fromTri = (t: Tri | undefined): Observed<boolean> => {
  * `terminal` が `unobservable` である限り、着地の判定も live checkout の検査も先へ進まない。
  */
 const unknownSurface = (name: string): SurfaceObservation => {
-  const reason = `座標表に無い面: ${name}`;
+  // 面の名前は報告する側が添えるので、理由には入れない。
+  const reason = "座標表に無い（外された面を claim が指したまま、が典型）";
   return {
     name,
     usesPr: true,

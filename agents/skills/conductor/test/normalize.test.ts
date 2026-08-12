@@ -398,6 +398,21 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17h2: 面が読めない理由を、そのまま人へ渡す", () => {
+    // **「読めない」だけでは人が動けない。**座標表から外れたのか、checkout が無いのか、
+    // git が落ちたのかで、次にやることが違う。観測が持っている理由を握り潰さない。
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      surfaces: [control({ terminal: unobservable("座標表に無い") })],
+    });
+    const evidence = normalize(o)
+      .conflicts.filter((c) => c.reason === "着地面が解決できない")
+      .flatMap((c) => c.evidence)
+      .join(" ");
+    expect(evidence).toContain("座標表に無い");
+  });
+
   test("17i: live checkout が dirty で、その面はまだ着地していない", () => {
     expectConflict(
       observation({
