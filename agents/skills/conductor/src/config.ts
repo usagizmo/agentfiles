@@ -38,6 +38,14 @@ export type ProjectConfig = {
    */
   readonly sessionsCmd: string;
   readonly workspacesCmd: string;
+  /**
+   * 工程ごとに何で実行器を起こすか（`herdr agent start --kind` の値）。**両方必須**。
+   *
+   * **何で起こすかは配線**（`~/.agents/AGENTS.md`「意味と手順は共通、起動・配線は個別」）——
+   * 共通 skill が harness を名指しすると、project ごとに変えられず、計画と実装で別の実行器を
+   * 試すこともできない。**モデルは持たない** —— 既定は harness の設定側が持っている。
+   */
+  readonly executors: { readonly refine: string; readonly resolve: string };
   readonly tick: TickConfig;
 };
 
@@ -115,6 +123,15 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     };
   });
 
+  const executorsRaw = required("executors");
+  if (typeof executorsRaw !== "object" || executorsRaw === null)
+    throw new ConfigError("executors が object ではない");
+  const executor = (stage: "refine" | "resolve"): string => {
+    const kind = (executorsRaw as Record<string, unknown>)[stage];
+    if (typeof kind !== "string" || kind === "") throw new ConfigError(`executors.${stage} が無い`);
+    return kind;
+  };
+
   return {
     ghRepo: String(required("ghRepo")),
     projectOrg: String(required("projectOrg")),
@@ -124,6 +141,7 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     surfaces,
     sessionsCmd: String(required("sessionsCmd")),
     workspacesCmd: String(required("workspacesCmd")),
+    executors: { refine: executor("refine"), resolve: executor("resolve") },
     // 硬い上限は既定を持つ（推測が外れても待ちが伸びるだけ）。
     tick: {
       ...DEFAULT_CONFIG,

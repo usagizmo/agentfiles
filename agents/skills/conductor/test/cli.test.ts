@@ -34,6 +34,7 @@ const VALID = {
   surfaces: [{ name: "acme/control", usesPr: true, integrationRef: "origin/main" }],
   sessionsCmd: "echo conductor present",
   workspacesCmd: "echo ws -",
+  executors: { refine: "claude", resolve: "claude" },
 };
 
 /** 設定を書き出して path を返す。`over` を undefined にした key は落とす。 */
@@ -107,6 +108,7 @@ describe("設定の fail-closed", () => {
     "surfaces",
     "sessionsCmd",
     "workspacesCmd",
+    "executors",
   ]) {
     test(`${key} が欠けたら 2 で止まる`, async () => {
       const path = configFile(`no-${key}`, { [key]: undefined });

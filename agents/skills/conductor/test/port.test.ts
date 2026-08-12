@@ -5,7 +5,7 @@
 // （実際にその形で、kernel が一度も end-to-end で動いていなかった）。
 
 import { describe, expect, test } from "bun:test";
-import { parseConfig, resolveSurfaces } from "../src/config.ts";
+import { ConfigError, parseConfig, resolveSurfaces } from "../src/config.ts";
 import { snapshotArgs } from "../src/port.ts";
 
 const raw = {
@@ -26,6 +26,7 @@ const raw = {
   ],
   sessionsCmd: "list-sessions",
   workspacesCmd: "list-workspaces",
+  executors: { refine: "claude", resolve: "grok" },
 };
 
 const PATHS = new Map([
@@ -113,5 +114,30 @@ describe("設定の fail-closed", () => {
   test("workspacesCmd が無ければ止まる", () => {
     const { workspacesCmd: _drop, ...without } = raw;
     expect(() => parseConfig(without)).toThrow("workspacesCmd");
+  });
+});
+
+describe("実行器の起動", () => {
+  // **何で起こすかは配線**（`~/.agents/AGENTS.md`「意味と手順は共通、起動・配線は個別」）。
+  // 共通 skill が harness を名指しすると、project ごとに変えられず実験もできない。
+  test("工程ごとに別の実行器を指定できる", () => {
+    const config = parseConfig(raw);
+    expect(config.executors.refine).toBe("claude");
+    expect(config.executors.resolve).toBe("grok");
+  });
+
+  test("executors が無ければ止まる", () => {
+    const { executors: _drop, ...without } = raw;
+    expect(() => parseConfig(without)).toThrow(ConfigError);
+  });
+
+  test("工程が 1 つでも欠けたら止まる", () => {
+    expect(() => parseConfig({ ...raw, executors: { refine: "claude" } })).toThrow(ConfigError);
+  });
+
+  test("空文字なら止まる（既定へ倒さない）", () => {
+    expect(() => parseConfig({ ...raw, executors: { ...raw.executors, resolve: "" } })).toThrow(
+      ConfigError,
+    );
   });
 });
