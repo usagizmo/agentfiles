@@ -4,7 +4,6 @@
 // 倒すと、観測できなかったことが「そうではない」として遷移を通す。
 
 import { createHash } from "node:crypto";
-import { CONCURRENCY, mapLimit } from "./limit.ts";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
 import { entryBlockRecord, planRecord } from "./records.ts";
@@ -131,43 +130,77 @@ export const createPort = (options: PortOptions): ObservePort => {
       return result.stdout;
     },
 
+    // **Issue ごとに引かない。**board の件数ぶん REST を投げると `O(items)` になり、
+    // 289 件の board で secondary rate limit に達する（実測）。repo 単位の bulk 1 系統にする。
+    //
+    // **打ち切りは fail-closed。**`--paginate` が途中で落ちたら、欠けた分を「無い」と
+    // 読むことになる —— 記録が無い課題として claim や差し戻しが走る。
     issueBodies: async (numbers) => {
-      const map = new Map<number, string>();
-      await mapLimit(numbers, CONCURRENCY, async (n) => {
-        const body = await json<{ body: string | null }>([
-          "gh",
-          "api",
-          `repos/${config.ghRepo}/issues/${n}`,
-        ]);
-        bodies.set(
-          n,
-          body.kind === "present" ? present(body.value.body ?? "") : unobservable("本文を読めない"),
-        );
-        if (body.kind === "present") map.set(n, body.value.body ?? "");
-      });
+      const all = await json<{ number: number; body: string | null }[]>([
+        "gh",
+        "api",
+        "--paginate",
+        `repos/${config.ghRepo}/issues?state=all&per_page=100`,
+      ]);
+      const map = new Map<number, Observed<string>>();
+      if (all.kind !== "present") {
+        for (const n of numbers) {
+          const miss: Observed<string> = unobservable("Issue 一覧を読めない");
+          bodies.set(n, miss);
+          map.set(n, miss);
+        }
+        return map;
+      }
+      const byNumber = new Map(all.value.map((i) => [i.number, i.body ?? ""]));
+      for (const n of numbers) {
+        // **board に居るのに一覧に無い**のは欠落。既定へ倒さない。
+        const found = byNumber.get(n);
+        const observed: Observed<string> =
+          found === undefined ? unobservable("Issue 一覧に居ない") : present(found);
+        bodies.set(n, observed);
+        map.set(n, observed);
+      }
       return map;
     },
 
+    // **`sort=updated` の窓で切らない。**claim と plan は書いた後に更新されないので、
+    // 窓で切ると「計画はあるのに planCommentExists=false」が再発する。marker を持つ限り全ページ辿る。
     issueComments: async (numbers) => {
-      const map = new Map<number, readonly string[]>();
-      await mapLimit(numbers, CONCURRENCY, async (n) => {
-        const list = await json<{ body: string | null; created_at: string }[]>([
-          "gh",
-          "api",
-          "--paginate",
-          `repos/${config.ghRepo}/issues/${n}/comments`,
-        ]);
-        if (list.kind !== "present") {
+      const all = await json<
+        { issue_url: string; body: string | null; created_at: string; id: number }[]
+      >(["gh", "api", "--paginate", `repos/${config.ghRepo}/issues/comments?per_page=100`]);
+      const map = new Map<number, Observed<readonly string[]>>();
+      if (all.kind !== "present") {
+        for (const n of numbers) {
+          const miss: Observed<readonly string[]> = unobservable("コメント一覧を読めない");
           comments.set(n, []);
           claimTimes.set(n, unobservable("コメントを読めない"));
-          return;
+          map.set(n, miss);
         }
-        const bodiesOfIssue = list.value.map((c) => c.body ?? "");
+        return map;
+      }
+      // **marker を持つものだけ残す。**種類は列挙しない（形だけで拾う）。
+      const marked = all.value.filter((c) => /<!--\s*[a-z][a-z-]*\s*-->/.test(c.body ?? ""));
+      const byIssue = new Map<number, typeof marked>();
+      for (const c of marked) {
+        const n = Number(c.issue_url.split("/").pop());
+        if (!Number.isInteger(n)) continue;
+        const list = byIssue.get(n) ?? [];
+        list.push(c);
+        byIssue.set(n, list);
+      }
+      for (const n of numbers) {
+        // **Issue ごとに作成順で整列する。**repo 全体の endpoint は Issue をまたいで並ぶので、
+        // そのまま連ねると `claimedAt`（merge の枠の順序キー）が別の意味になる。
+        const list = [...(byIssue.get(n) ?? [])].sort(
+          (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id,
+        );
+        const bodiesOfIssue = list.map((c) => c.body ?? "");
         comments.set(n, bodiesOfIssue);
-        map.set(n, bodiesOfIssue);
-        const claim = list.value.find((c) => (c.body ?? "").includes("<!-- claim -->"));
+        map.set(n, present(bodiesOfIssue));
+        const claim = list.find((c) => (c.body ?? "").includes("<!-- claim -->"));
         claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
-      });
+      }
       return map;
     },
 

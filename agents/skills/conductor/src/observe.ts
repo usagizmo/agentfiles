@@ -38,11 +38,13 @@ export type ObservePort = {
   /** `watch.sh --snapshot` の出力 */
   readonly snapshot: () => Promise<string>;
   /** Issue 本文（番号 → 本文） */
-  readonly issueBodies: (issues: readonly number[]) => Promise<ReadonlyMap<number, string>>;
+  readonly issueBodies: (
+    issues: readonly number[],
+  ) => Promise<ReadonlyMap<number, Observed<string>>>;
   /** 固定 marker のコメント本文（番号 → 本文の配列） */
   readonly issueComments: (
     issues: readonly number[],
-  ) => Promise<ReadonlyMap<number, readonly string[]>>;
+  ) => Promise<ReadonlyMap<number, Observed<readonly string[]>>>;
   /**
    * 面ごとの git。`統合先..branch` が非空かと、その面の branch head。
    * **`統合先..branch` で測る** —— branch 上の commit の存在で読むと、追随しただけの空 branch が
@@ -159,8 +161,14 @@ export const observe = async (
   // ここを開けると board の件数の 2 倍が同時に立つ。
   return mapLimit(statuses, CONCURRENCY, async (status): Promise<IssueObservation> => {
     const issue = status.issue;
-    const body = bodies.get(issue) ?? "";
-    const commentText = joinComments(comments.get(issue) ?? []);
+    // **読めなかったものを空へ畳まない。**畳むと Issue 契約が「欠けている」に、
+    // 記録が全部「無い」に読まれ、差し戻しと片付けが誤った観測で走る。
+    // 値そのものは `観測できない` の Conflict が最上段で当たるので誰も読まない。
+    const bodyObserved = bodies.get(issue) ?? absent();
+    const commentsObserved = comments.get(issue) ?? absent();
+    const body = bodyObserved.kind === "present" ? bodyObserved.value : "";
+    const commentText =
+      commentsObserved.kind === "present" ? joinComments(commentsObserved.value) : "";
 
     const [plan, extra] = await Promise.all([port.planFacts(issue), port.issueFacts(issue)]);
     const pause = extractMarker(commentText, "yield").kind === "present";
@@ -209,6 +217,10 @@ export const observe = async (
     return {
       issue,
       open: row?.open ?? false,
+      sourceReadable:
+        bodyObserved.kind === "present" && commentsObserved.kind === "present"
+          ? present(true)
+          : unobservable("Issue の本文かコメントを読めない"),
       // **対応表に無い Status を既定へ倒さない**（`invalid` が `Conflict` を立てる）。
       ledger:
         ledger === undefined ? invalid(status.status, "Status の対応が無い") : present(ledger),

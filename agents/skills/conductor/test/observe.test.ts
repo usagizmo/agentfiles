@@ -9,6 +9,7 @@ import type { ObservePort, StatusMap } from "../src/observe.ts";
 import { observe } from "../src/observe.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
 import type { Ledger, Observed } from "../src/types.ts";
+import { unobservable } from "../src/types.ts";
 import { absent, present } from "../src/types.ts";
 
 const SNAP = `--- schema ---
@@ -65,13 +66,13 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
   snapshot: async () => SNAP,
   issueBodies: async () =>
     new Map([
-      [12, "Depends on #34\nSame branch as #99\n\n本文"],
-      [34, "本文"],
+      [12, present("Depends on #34\nSame branch as #99\n\n本文")],
+      [34, present("本文")],
     ]),
   issueComments: async () =>
     new Map([
-      [12, [claimComment]],
-      [34, []],
+      [12, present([claimComment])],
+      [34, present([])],
     ]),
   surfaceGit: async () => ({ ahead: present(true), head: present("aaa") }),
   cycleMark: async () => present("mark-1"),
@@ -112,13 +113,31 @@ describe("snapshot から導くもの", () => {
     expect(find(rows, 34).ledger.kind).toBe("invalid");
   });
 
+  test("本文を読めなかった課題は、空本文へ畳まず観測できないとして扱う", async () => {
+    const rows = await observe(
+      port({ issueBodies: async () => new Map([[12, unobservable("読めない")]]) }),
+      STATUS,
+      SURFACES,
+    );
+    expect(rows.find((r) => r.issue === 12)?.sourceReadable.kind).toBe("unobservable");
+  });
+
+  test("コメントを読めなかった課題も同じ", async () => {
+    const rows = await observe(
+      port({ issueComments: async () => new Map([[12, unobservable("読めない")]]) }),
+      STATUS,
+      SURFACES,
+    );
+    expect(rows.find((r) => r.issue === 12)?.sourceReadable.kind).toBe("unobservable");
+  });
+
   test("宣言は本文の先頭区画・行頭からだけ読む", async () => {
     const rows = await observe(
       port({
         issueBodies: async () =>
           new Map([
-            [12, "Depends on #34\n\n本文の後ろに Depends on #77 と書いても読まない"],
-            [34, ""],
+            [12, present("Depends on #34\n\n本文の後ろに Depends on #77 と書いても読まない")],
+            [34, present("")],
           ]),
       }),
       STATUS,
