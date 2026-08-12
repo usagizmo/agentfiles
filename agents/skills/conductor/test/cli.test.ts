@@ -31,7 +31,7 @@ const VALID = {
     Done: "完了",
     Shelved: "退避先",
   },
-  surfaces: [{ name: "acme/control", usesPr: true, repoPath: TMP, integrationRef: "origin/main" }],
+  surfaces: [{ name: "acme/control", usesPr: true, integrationRef: "origin/main" }],
   sessionsCmd: "echo conductor present",
   workspacesCmd: "echo ws -",
 };
@@ -45,6 +45,9 @@ const configFile = (name: string, over: Record<string, unknown> = {}): string =>
   return path;
 };
 
+/** 座標に checkout path を束ねる option。全 case で同じ面を渡す。 */
+const SURFACE = ["--surface-path", `acme/control=${TMP}`];
+
 const run = async (args: string[]) => {
   const p = Bun.spawn(["bun", CLI, ...args], { stdout: "pipe", stderr: "pipe" });
   const [code, out, err] = await Promise.all([
@@ -57,33 +60,39 @@ const run = async (args: string[]) => {
 
 describe("引数", () => {
   test("--config が無ければ 2 で止まる", async () => {
-    const { code, err } = await run(["--snapshot-out", join(TMP, "s")]);
+    const { code, err } = await run(["--snapshot-out", join(TMP, "s"), ...SURFACE]);
     expect(code).toBe(2);
     expect(err).toContain("usage");
   });
 
   test("--snapshot-out が無ければ 2 で止まる", async () => {
-    const { code, err } = await run(["--config", configFile("a")]);
+    const { code, err } = await run(["--config", configFile("a"), ...SURFACE]);
     expect(code).toBe(2);
     expect(err).toContain("usage");
   });
 
   test("--config の値が欠けたら 2 で止まる", async () => {
-    const { code } = await run(["--snapshot-out", join(TMP, "s"), "--config"]);
+    const { code } = await run(["--snapshot-out", join(TMP, "s"), ...SURFACE, "--config"]);
     expect(code).toBe(2);
   });
 });
 
 describe("設定の fail-closed", () => {
   test("設定 file が無ければ 2 で止まる", async () => {
-    const { code } = await run(["--config", join(TMP, "nope.json"), "--snapshot-out", "/dev/null"]);
+    const { code } = await run([
+      "--config",
+      join(TMP, "nope.json"),
+      "--snapshot-out",
+      "/dev/null",
+      ...SURFACE,
+    ]);
     expect(code).toBe(2);
   });
 
   test("JSON として壊れていれば 2 で止まる", async () => {
     const path = join(TMP, "broken.json");
     writeFileSync(path, "{ not json");
-    const { code } = await run(["--config", path, "--snapshot-out", "/dev/null"]);
+    const { code } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
   });
 
@@ -101,7 +110,13 @@ describe("設定の fail-closed", () => {
   ]) {
     test(`${key} が欠けたら 2 で止まる`, async () => {
       const path = configFile(`no-${key}`, { [key]: undefined });
-      const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null"]);
+      const { code, err } = await run([
+        "--config",
+        path,
+        "--snapshot-out",
+        "/dev/null",
+        ...SURFACE,
+      ]);
       expect(code).toBe(2);
       expect(err).toContain(key);
     });
@@ -111,14 +126,39 @@ describe("設定の fail-closed", () => {
     const path = configFile("partial-status", {
       statusMap: { Backlog: "未計画", Ready: "計画済み" },
     });
-    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null"]);
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
     expect(err).toContain("statusMap");
   });
 
   test("surfaces が空なら 2 で止まる", async () => {
     const path = configFile("no-surface", { surfaces: [] });
-    const { code } = await run(["--config", path, "--snapshot-out", "/dev/null"]);
+    const { code } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+  });
+});
+
+describe("checkout path", () => {
+  test("--surface-path が無ければ 2 で止まる", async () => {
+    const { code, err } = await run([
+      "--config",
+      configFile("no-path"),
+      "--snapshot-out",
+      "/dev/null",
+    ]);
+    expect(code).toBe(2);
+    expect(err).toContain("acme/control");
+  });
+
+  test("<name>=<path> の形でなければ 2 で止まる", async () => {
+    const { code } = await run([
+      "--config",
+      configFile("bad-path"),
+      "--snapshot-out",
+      "/dev/null",
+      "--surface-path",
+      "acme/control",
+    ]);
     expect(code).toBe(2);
   });
 });
@@ -132,6 +172,7 @@ describe("観測の失敗", () => {
       configFile("valid"),
       "--snapshot-out",
       join(TMP, "snap.txt"),
+      ...SURFACE,
     ]);
     expect(code).toBe(1);
     expect(err).toContain("観測に失敗した");
@@ -143,6 +184,7 @@ describe("観測の失敗", () => {
       configFile("valid2"),
       "--snapshot-out",
       join(TMP, "snap2.txt"),
+      ...SURFACE,
     ]);
     expect(out.trim()).toBe("");
   });

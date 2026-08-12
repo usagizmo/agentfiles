@@ -4,7 +4,7 @@
 // 倒すと、観測できなかったことが「そうではない」として遷移を通す。
 
 import { createHash } from "node:crypto";
-import type { ProjectConfig } from "./config.ts";
+import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
 import { entryBlockRecord, planRecord } from "./records.ts";
 import { bodyMatchesPlan, planInvalidated } from "./plan.ts";
@@ -48,14 +48,16 @@ export const digest = (body: string): string =>
 
 export type PortOptions = {
   readonly config: ProjectConfig;
+  /** 座標に checkout path を束ねたもの（`resolveSurfaces` の結果）。**順序は座標のまま** */
+  readonly surfaces: readonly ResolvedSurface[];
   /** `scripts/` の絶対 path */
   readonly scriptsDir: string;
   /** `watch.sh --snapshot` の書き出し先。**tick を終えるときに `--baseline` として渡す同じ file** */
   readonly snapshotPath: string;
 };
 
-const surfaceOf = (config: ProjectConfig, name: string) =>
-  config.surfaces.find((s) => s.name === name);
+const surfaceOf = (surfaces: readonly ResolvedSurface[], name: string) =>
+  surfaces.find((s) => s.name === name);
 
 /**
  * `watch.sh --snapshot` の引数。**純関数にしてあるのは、渡し漏れが観測の穴になるから** ——
@@ -66,10 +68,11 @@ const surfaceOf = (config: ProjectConfig, name: string) =>
  */
 export const snapshotArgs = (
   config: ProjectConfig,
+  surfaces: readonly ResolvedSurface[],
   scriptsDir: string,
   snapshotPath: string,
 ): string[] => {
-  const control = config.surfaces[0];
+  const control = surfaces[0];
   return [
     "sh",
     `${scriptsDir}/watch.sh`,
@@ -79,7 +82,7 @@ export const snapshotArgs = (
     control?.repoPath ?? "",
     "--gh-repo",
     config.ghRepo,
-    ...config.surfaces
+    ...surfaces
       .slice(1)
       .flatMap((s) => ["--landing", `${s.name}:${s.integrationRef}:${s.repoPath}`]),
     "--project-org",
@@ -96,7 +99,7 @@ export const snapshotArgs = (
 };
 
 export const createPort = (options: PortOptions): ObservePort => {
-  const { config, scriptsDir, snapshotPath } = options;
+  const { config, surfaces, scriptsDir, snapshotPath } = options;
 
   const bodies = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
@@ -105,7 +108,7 @@ export const createPort = (options: PortOptions): ObservePort => {
 
   return {
     snapshot: async () => {
-      const result = await run(snapshotArgs(config, scriptsDir, snapshotPath));
+      const result = await run(snapshotArgs(config, surfaces, scriptsDir, snapshotPath));
       // **観測できなかった tick も watcher は張る**ので、ここは投げて呼び出し側に判断させる。
       if (!result.ok) throw new Error(`snapshot に失敗した: ${result.reason}`);
       return result.stdout;
@@ -158,7 +161,7 @@ export const createPort = (options: PortOptions): ObservePort => {
     },
 
     surfaceGit: async (issue, name) => {
-      const surface = surfaceOf(config, name);
+      const surface = surfaceOf(surfaces, name);
       if (surface === undefined) {
         return { ahead: unobservable("座標表に無い面"), head: unobservable("座標表に無い面") };
       }
@@ -213,7 +216,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       let changed: Observed<readonly string[]> = present([]);
       if (plan.kind === "present") {
         const collected: string[] = [];
-        for (const surface of config.surfaces) {
+        for (const surface of surfaces) {
           const diff = await run(
             ["git", "diff", "--name-only", `${plan.value.baseSha}...${surface.integrationRef}`],
             surface.repoPath,

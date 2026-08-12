@@ -5,7 +5,7 @@
 // （実際にその形で、kernel が一度も end-to-end で動いていなかった）。
 
 import { describe, expect, test } from "bun:test";
-import { parseConfig } from "../src/config.ts";
+import { parseConfig, resolveSurfaces } from "../src/config.ts";
 import { snapshotArgs } from "../src/port.ts";
 
 const raw = {
@@ -21,14 +21,24 @@ const raw = {
     Shelved: "退避先",
   },
   surfaces: [
-    { name: "acme/control", usesPr: true, repoPath: "/w/control", integrationRef: "origin/main" },
-    { name: "acme/skills", usesPr: false, repoPath: "/w/skills", integrationRef: "main" },
+    { name: "acme/control", usesPr: true, integrationRef: "origin/main" },
+    { name: "acme/skills", usesPr: false, integrationRef: "main" },
   ],
   sessionsCmd: "list-sessions",
   workspacesCmd: "list-workspaces",
 };
 
-const args = () => snapshotArgs(parseConfig(raw), "/s", "/tmp/snap");
+const PATHS = new Map([
+  ["acme/control", "/w/control"],
+  ["acme/skills", "/w/skills"],
+]);
+
+const argsOf = (input: typeof raw, paths: ReadonlyMap<string, string> = PATHS) => {
+  const config = parseConfig(input);
+  return snapshotArgs(config, resolveSurfaces(config.surfaces, paths), "/s", "/tmp/snap");
+};
+
+const args = () => argsOf(raw);
 
 /** `--x v` の v を引く。 */
 const valuesOf = (flag: string) =>
@@ -61,15 +71,36 @@ describe("watch.sh の引数", () => {
   });
 
   test("checkout は最後に置く（`:` を含む path が通る）", () => {
-    const withColon = {
-      ...raw,
-      surfaces: [
-        raw.surfaces[0],
-        { name: "acme/skills", usesPr: false, repoPath: "/w/a:b", integrationRef: "main" },
-      ],
-    };
-    const a = snapshotArgs(parseConfig(withColon), "/s", "/tmp/snap");
+    const a = argsOf(
+      raw,
+      new Map([
+        ["acme/control", "/w/control"],
+        ["acme/skills", "/w/a:b"],
+      ]),
+    );
     expect(a[a.indexOf("--landing") + 1]).toBe("acme/skills:main:/w/a:b");
+  });
+});
+
+describe("checkout path の解決", () => {
+  test("面が 1 つでも欠けたら止まる（観測の穴になる）", () => {
+    const config = parseConfig(raw);
+    expect(() =>
+      resolveSurfaces(config.surfaces, new Map([["acme/control", "/w/control"]])),
+    ).toThrow("acme/skills");
+  });
+
+  test("空文字は渡していないものとして扱う", () => {
+    const config = parseConfig(raw);
+    expect(() =>
+      resolveSurfaces(
+        config.surfaces,
+        new Map([
+          ["acme/control", "/w/control"],
+          ["acme/skills", ""],
+        ]),
+      ),
+    ).toThrow("acme/skills");
   });
 });
 

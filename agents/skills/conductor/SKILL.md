@@ -133,10 +133,13 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 `test/decide.test.ts` が守っている意味論と、実際に走るものが別になる。
 
 ```bash
-bun run <skill>/src/cli.ts --config <project の設定> --snapshot-out <baseline に渡す file>
+bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
+  --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>...
 ```
 
-設定は JSON。**必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` に入れる中身は `references/harness.md`。
+設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` に入れる中身は `references/harness.md`。
+
+**checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**宣言された面を 1 つでも渡さなければ exit 2**。
 
 ```mermaid
 flowchart TD
