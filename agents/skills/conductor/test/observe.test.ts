@@ -110,6 +110,14 @@ describe("snapshot から導くもの", () => {
     expect(find(rows, 34).claimBranchExists).toEqual(present(false));
   });
 
+  test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {
+    // **代用すると計画中は必ず `none` になり**、走っているものを畳まない保護が一度も効かない。
+    const planning = SNAP.replace("resolve-12 working", "refine-12 working");
+    const rows = await observe(port({ snapshot: async () => planning }), STATUS, SURFACES);
+    expect(find(rows, 12).refineSession).toEqual({ kind: "running" });
+    expect(find(rows, 12).session).toEqual({ kind: "none" });
+  });
+
   test("対応表に無い Status を既定へ倒さない", async () => {
     const rows = await observe(port(), new Map<string, Ledger>([["進行中", "進行中"]]), SURFACES);
     expect(find(rows, 34).ledger.kind).toBe("invalid");

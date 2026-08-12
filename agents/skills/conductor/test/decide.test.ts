@@ -15,28 +15,28 @@ const tick = (observations: readonly IssueObservation[], over: Partial<TickInput
   decide({ observations, config: DEFAULT_CONFIG, ...over });
 
 const expectAction = (observations: readonly IssueObservation[], action: ActionName) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params.action : d.kind).toBe(action);
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params.action : o.kind).toBe(action);
 };
 
 const expectRevert = (observations: readonly IssueObservation[], to: RevertTarget) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params : d.kind).toMatchObject({ action: "差し戻す", to });
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params : o.kind).toMatchObject({ action: "差し戻す", to });
 };
 
 const expectLease = (observations: readonly IssueObservation[], lease: LeaseKind) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params : d.kind).toMatchObject({ action: "枠を渡す", lease });
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params : o.kind).toMatchObject({ action: "枠を渡す", lease });
 };
 
 const expectIdle = (observations: readonly IssueObservation[]) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params.action : d.kind).toBe("idle");
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params.action : o.kind).toBe("idle");
 };
 
+/** **Conflict は action の選択と直交する。**出ていることだけを見る。 */
 const expectConflict = (observations: readonly IssueObservation[], reason: ConflictReason) => {
-  const d = tick(observations);
-  expect(d.kind === "conflict" ? d.conflicts.map((c) => c.reason) : d.kind).toContain(reason);
+  expect(tick(observations).conflicts.map((c) => c.reason)).toContain(reason);
 };
 
 /** claim 済みで実装が進んでいる課題の骨格。各行はここから差分だけ書く。 */
@@ -131,6 +131,45 @@ describe("台帳と実体のずれ", () => {
     expectAction([observation({ ledger: present("未計画") })], "計画を起こす");
   });
 
+  test("3d: Conflict のある課題は選出対象外になるだけで、他の課題は回る", () => {
+    // **1 件を止めるのは差し戻し、全体を止めるのは conductor セッション自体の停止**
+    // （SKILL.md「実行の制約」）。1 件で全体が凍ると、健全な課題まで人が触るまで動かない
+    // （実測で 289 件中 287 件が健全でも 1 手も出なかった）。
+    const broken = observation({
+      issue: 1,
+      ledger: present("進行中"),
+      session: session.unclassifiable("weird"),
+    });
+    const healthy = observation({ issue: 2, ledger: present("未計画") });
+    const d = tick([broken, healthy]);
+    expect(d.conflicts.map((c) => c.reason)).toContain("観測できない");
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "計画を起こす",
+    );
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(2);
+  });
+
+  test("3e: Conflict のある課題自身には action を出さない", () => {
+    const broken = observation({
+      issue: 1,
+      ledger: present("未計画"),
+      session: session.unclassifiable("weird"),
+    });
+    const d = tick([broken]);
+    expect(d.conflicts.length).toBeGreaterThan(0);
+    expect(d.outcome.kind).toBe("idle");
+  });
+
+  test("3f: ledger が期待より先の課題が居ても、他の課題は回る", () => {
+    // この Conflict だけはラダー上で決まる（差し戻しのどれにも当たらないことが条件）。
+    // **当たった課題を選出対象外にするだけ**で、そこで tick を終え**ない**。
+    const ahead = observation({ issue: 1, ledger: present("進行中") });
+    const healthy = observation({ issue: 2, ledger: present("未計画") });
+    const d = tick([ahead, healthy]);
+    expect(d.conflicts.map((c) => c.reason)).toContain("ledger が期待より先");
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(2);
+  });
+
   test("4c: 計画済みの正常な在庫", () => {
     expectAction([observation({ ledger: present("計画済み") })], "claim する");
   });
@@ -169,8 +208,7 @@ describe("実行器が消える / 止まる", () => {
       [
         observation({
           ledger: present("未計画"),
-          session: session.idle,
-          refineSessionExists: true,
+          refineSession: session.idle,
         }),
       ],
       "計画セッションを片付ける",
@@ -221,12 +259,32 @@ describe("実行器が消える / 止まる", () => {
       [
         observation({
           ledger: present("退避先"),
-          session: session.idle,
-          refineSessionExists: true,
+          refineSession: session.idle,
         }),
       ],
       "計画セッションを片付ける",
     );
+  });
+
+  test("7d2: 起こした直後で、計画セッションが動いている", () => {
+    // **走っているセッションを片付ける action に当てない。**`o.session` は `resolve-<番号>` を
+    // 見るので計画中は常に `none` になり、`refine` の稼働で引かないと保護が一度も効かない ——
+    // 起こす → 次の tick で畳む → また起こす、の往復から出られなくなる（実物で踏んだ）。
+    expectIdle([observation({ ledger: present("未計画"), refineSession: session.running })]);
+  });
+
+  test("7d3: 台帳が進んだ後でも、計画セッションが動いているうちは畳まない", () => {
+    // `refine` は Status を進めてから終わるので、**この窓を毎回通る**。
+    expectAction(
+      [observation({ ledger: present("計画済み"), refineSession: session.running })],
+      "claim する",
+    );
+  });
+
+  test("7d4: retired-refine は片付けの対象ではなく、計画を塞ぐ印として残る", () => {
+    // rename 済みなので「計画セッションを片付ける」は当たらない（対象は `refine-<番号>` の完全一致）。
+    // **塞ぎは残る** —— 当てて消すと、次の tick で二重計画になる。
+    expectIdle([observation({ ledger: present("未計画"), retiredRefineExists: true })]);
   });
 
   test("7e: 計画セッションが idle", () => {
@@ -234,8 +292,7 @@ describe("実行器が消える / 止まる", () => {
       [
         observation({
           ledger: present("計画済み"),
-          session: session.idle,
-          refineSessionExists: true,
+          refineSession: session.idle,
         }),
       ],
       "計画セッションを片付ける",
@@ -430,7 +487,7 @@ describe("外から状態が動く", () => {
       pauseRecordExists: true,
       session: session.idle,
     });
-    const d = tick([lead, follower]);
+    const d = tick([lead, follower]).outcome;
     expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
       action: "枠を渡す",
       lease: "write",
@@ -545,7 +602,7 @@ describe("外から状態が動く", () => {
         waitRecord: wait.waiting,
         cycleRecord: present({ count: 3, mark: "mark-0" }),
       }),
-    ]);
+    ]).outcome;
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
   });
 
@@ -632,7 +689,7 @@ describe("外から状態が動く", () => {
         // `progress` が指紋に入っているので、提出中 へ進んだ時点で mark が動いている。
         cycleRecord: present({ count: 3, mark: "mark-prev" }),
       }),
-    ]);
+    ]).outcome;
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
   });
 
@@ -690,7 +747,9 @@ describe("外から状態が動く", () => {
 
 describe("意図の確認", () => {
   test("15: 意図の確認が pending で、人待ちも waiting", () => {
-    const d = tick([awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting })]);
+    const d = tick([
+      awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting }),
+    ]).outcome;
     // merge の枠の受け手にしない。
     expect(d.kind === "action" && d.params.action === "枠を渡す" ? d.params.lease : null).not.toBe(
       "integration",
@@ -698,7 +757,9 @@ describe("意図の確認", () => {
   });
 
   test("15c: 一部の項目だけ明示承認され、残りは無反応", () => {
-    const d = tick([awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting })]);
+    const d = tick([
+      awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting }),
+    ]).outcome;
     // 沈黙は承認ではないので `pending` のまま。受け手にしない。
     expect(d.kind === "action" && d.params.action === "枠を渡す" ? d.params.lease : null).not.toBe(
       "integration",
@@ -731,7 +792,7 @@ describe("意図の確認", () => {
       claimedAt: present(200),
       session: session.idle,
     });
-    const d = tick([blocked, other]);
+    const d = tick([blocked, other]).outcome;
     expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
   });
 });
@@ -755,7 +816,7 @@ describe("merge の直列化（integration）", () => {
       claimedAt: present(50),
       session: session.idle,
     });
-    const d = tick([holder, other]);
+    const d = tick([holder, other]).outcome;
     // 記録を持つ側が保持者。**`着地待ち` に居ることは保持の条件ではない。**
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("枠を渡す");
   });
@@ -804,15 +865,13 @@ describe("group", () => {
     const a = observation({
       issue: 1,
       ledger: present("未計画"),
-      refineSessionExists: true,
-      session: session.running,
+      refineSession: session.running,
       sameBranchAs: [2],
     });
     const b = observation({
       issue: 2,
       ledger: present("未計画"),
-      refineSessionExists: true,
-      session: session.running,
+      refineSession: session.running,
       sameBranchAs: [1],
     });
     expectIdle([a, b]);
@@ -821,7 +880,7 @@ describe("group", () => {
   test("12d: conductor がこの tick で規約の穴を見つけた", () => {
     const d = tick([observation({ issue: 1, ledger: present("計画済み") })], {
       specGap: { issue: 1, fact: "片付けの述語が 2 箇所に在る" },
-    });
+    }).outcome;
     expect(d.kind === "action" ? d.params.action : d.kind).toBe("規約の穴を起票する");
   });
 
@@ -838,7 +897,7 @@ describe("group", () => {
       sameBranchAs: [1],
       readyRecordStale: present(true),
     });
-    const d = tick([fresh, stale]);
+    const d = tick([fresh, stale]).outcome;
     expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
       action: "差し戻す",
       to: "未計画",
@@ -888,7 +947,7 @@ describe("入場を止める宣言（続き）", () => {
       // 計画コメントがまだ無い = `準備中` なので、この課題は write を保持していない。
       session: session.idle,
     });
-    const d = tick([blocker, waiting]);
+    const d = tick([blocker, waiting]).outcome;
     expect(d.kind === "action" && d.params.action === "枠を渡す" ? d.params.lease : null).not.toBe(
       "write",
     );
@@ -944,7 +1003,7 @@ describe("merge の直列化（続き）", () => {
       claimedAt: present(1),
       session: session.idle,
     });
-    const d = tick([holder, reentered]);
+    const d = tick([holder, reentered]).outcome;
     expect(d.kind === "action" ? d.target.representative : null).not.toBe(2);
   });
 
@@ -1002,7 +1061,7 @@ describe("順序", () => {
       dependsOn: [1],
       boardOrder: 90,
     });
-    const d = tick([blocker, board, waiter]);
+    const d = tick([blocker, board, waiter]).outcome;
     expect(d.kind === "action" ? d.target.representative : d.kind).toBe(1);
   });
 
@@ -1015,7 +1074,7 @@ describe("順序", () => {
       boardOrder: 90,
     });
     const board = observation({ issue: 2, ledger: present("計画済み"), boardOrder: 1 });
-    const d = tick([first, shelved, board]);
+    const d = tick([first, shelved, board]).outcome;
     expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
   });
 });
@@ -1038,8 +1097,7 @@ describe("硬い上限", () => {
       observation({
         issue: 10 + i,
         ledger: present("未計画"),
-        refineSessionExists: true,
-        session: session.running,
+        refineSession: session.running,
       }),
     );
     const candidate = observation({ issue: 1, ledger: present("未計画") });
@@ -1055,7 +1113,7 @@ describe("硬い上限", () => {
         }),
       ],
       config: { ...DEFAULT_CONFIG, retryBudget: 2 },
-    });
+    }).outcome;
     expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
       action: "差し戻す",
       to: "退避先",
@@ -1070,7 +1128,7 @@ describe("action の選択と独立な精算", () => {
         ledger: present("退避先"),
         failureRecord: present({ count: 3, lastAction: "解決を起こし直す" }),
       }),
-    ]);
+    ]).outcome;
     expect(d.kind).toBe("settle-record");
   });
 

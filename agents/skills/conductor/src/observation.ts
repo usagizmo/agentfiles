@@ -103,8 +103,12 @@ export type IssueObservation = {
   readonly session: SessionObservation;
   /** `retired-refine-<番号>` が残っているか。**`runtime` には写さない**（`無し` として扱う） */
   readonly retiredRefineExists: boolean;
-  /** `refine-<番号>` のセッションがあるか（完全一致） */
-  readonly refineSessionExists: boolean;
+  /**
+   * `refine-<番号>` のセッション（完全一致）。**存在の有無ではなく状態で持つ** ——
+   * `session` は `resolve-<番号>` を見るので計画中は常に `none` になり、
+   * 有無だけでは「走っているものを畳まない」を書けない。
+   */
+  readonly refineSession: SessionObservation;
 
   readonly waitRecord: WaitRecord;
   /** 休止の記録。**「記録あり」だけでは `休止` にならない**（非稼働も要る） */

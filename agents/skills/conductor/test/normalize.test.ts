@@ -139,8 +139,9 @@ describe("実行器が消える / 止まる", () => {
 
   test("6b: refine が Status も人待ちの記録も残さずに終わった（セッションは done）", () => {
     expectFields(
-      observation({ ledger: present("未計画"), session: session.idle, refineSessionExists: true }),
-      { progress: "未着手", runtime: "待機", capacity: "無し", ledger: "未計画" },
+      observation({ ledger: present("未計画"), refineSession: session.idle }),
+      // **`runtime` は `resolve-<番号>` から導く。**計画中は `無し`（`refine` の稼働を写さない）。
+      { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "未計画" },
     );
   });
 
@@ -176,10 +177,9 @@ describe("実行器が消える / 止まる", () => {
     expectFields(
       observation({
         ledger: present("計画済み"),
-        session: session.idle,
-        refineSessionExists: true,
+        refineSession: session.idle,
       }),
-      { progress: "未着手", runtime: "待機", capacity: "無し", ledger: "計画済み" },
+      { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "計画済み" },
     );
   });
 

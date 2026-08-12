@@ -22,6 +22,7 @@ import type {
   Ledger,
   NormalizedIssue,
   Observed,
+  Outcome,
   Progress,
   Target,
 } from "./types.ts";
@@ -341,12 +342,24 @@ const crossingWriteHolders = (g: Group, ctx: Context): Group[] =>
       blocks(intersect(g.leadObservation.resourceKeys, other.leadObservation.resourceKeys)),
   );
 
+/**
+ * 位置に依らない Conflict。**ラダーへ乗せない** —— どの rung より先に、その group を
+ * 選出対象外にする。`ledger が期待より先` だけは差し戻しの後でなければ判定できないので
+ * ラダー上に残る（そちらも当たった group を選出対象外にする）。
+ */
+const standingConflicts = (g: Group): Conflict[] => {
+  const found: Conflict[] = g.records.flatMap((r) => [...r.conflicts]);
+  if (terminalMixedInGroup(g)) {
+    found.push({
+      reason: "group の終端が混在",
+      evidence: ["group 内で終端と非終端が混在している"],
+      issues: g.members,
+    });
+  }
+  return found;
+};
+
 const LADDER: readonly Rung[] = [
-  {
-    params: () => ({ action: "報告して止める" }),
-    why: "ラダーで解決できない証跡がある",
-    match: (g) => g.records.some((r) => r.conflicts.length > 0) || terminalMixedInGroup(g),
-  },
   {
     params: () => ({ action: "規約の穴を起票する" }),
     why: "この tick で規約の穴に当たった",
@@ -378,9 +391,13 @@ const LADDER: readonly Rung[] = [
     why: "計画セッションが残って計画枠を焼いている",
     match: (g, ctx) => {
       const o = g.leadObservation;
-      if (!o.refineSessionExists) return false;
+      if (o.refineSession.kind === "none") return false;
       if (g.lead.runtime === "人待ち") return false;
-      if (g.lead.ledger === "未計画" && o.session.kind === "running") return false;
+      // **走っている計画セッションには当てない。`ledger` で絞らない。**
+      // `runtime` は `resolve-<番号>` から導くので計画中は必ず `無し` になり、そちらでは
+      // 一度も止められない。`refine` は Status を進めてから終わるので `計画済み` の窓も通る ——
+      // 絞ると、起こす → 次の tick で畳む → また起こす、の往復から出られない。
+      if (o.refineSession.kind === "running") return false;
       // **`count` 条件は `ledger` が `未計画` のときだけ掛かる。**
       if (g.lead.ledger === "未計画" && failure(g).count >= ctx.config.retryBudget) return false;
       return true;
@@ -435,7 +452,7 @@ const LADDER: readonly Rung[] = [
       !isShelved(g) &&
       g.lead.ledger === "未計画" &&
       g.lead.runtime === "人待ち" &&
-      !g.leadObservation.refineSessionExists &&
+      g.leadObservation.refineSession.kind === "none" &&
       ctx.planSlotsUsed < ctx.config.planSlots,
   },
   {
@@ -547,7 +564,7 @@ const LADDER: readonly Rung[] = [
       if (isShelved(g)) return false;
       if (g.lead.ledger !== "未計画" || g.lead.progress !== "未着手") return false;
       // `retired-refine-<番号>` も「有る」に数える。
-      if (g.leadObservation.refineSessionExists || g.leadObservation.retiredRefineExists)
+      if (g.leadObservation.refineSession.kind !== "none" || g.leadObservation.retiredRefineExists)
         return false;
       if (g.leadObservation.waitRecord.kind === "waiting") return false;
       if (ctx.planSlotsUsed >= ctx.config.planSlots) return false;
@@ -602,15 +619,26 @@ export const decide = (input: TickInput): Decision => {
   const shelved = groups.find(
     (g) => isShelved(g) && (failure(g).count !== 0 || cycle(g).count !== 0),
   );
+  // **Conflict は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他は回す。
+  const conflicts: Conflict[] = [];
+  const excluded = new Set<number>();
+  for (const g of groups) {
+    const found = standingConflicts(g);
+    if (found.length === 0) continue;
+    conflicts.push(...found);
+    for (const n of g.members) excluded.add(n);
+  }
+  const decision = (outcome: Outcome): Decision => ({ conflicts, outcome });
+
   if (shelved !== undefined) {
-    return {
+    return decision({
       kind: "settle-record",
       settlement: {
         target: target(shelved),
         kind: "退避先の count を 0 に揃える",
         detail: `失敗 ${failure(shelved).count} / 周回 ${cycle(shelved).count} を 0 へ`,
       },
-    };
+    });
   }
 
   const ctx: Context = {
@@ -655,43 +683,42 @@ export const decide = (input: TickInput): Decision => {
       .filter((x) => x !== undefined),
   );
 
+  const inPlay = (g: Group): boolean => !g.members.some((n) => excluded.has(n));
+
+  // **候補を 1 度だけ舐める。**`ledger が期待より先` は当たった課題を選出対象外にするだけ
+  // なので、その rung の次の候補へ進む。**同じ rung を当て直す形にしない** ——
+  // 終了が「外したものが次から外れる」という述語の一致に依存し、食い違うと tick が返らなくなる
+  // （返らないのは、誤った action より重い）。
   for (const rung of LADDER) {
-    const candidates = rung.unit === "issue" ? solo : ordered;
-    const hit = candidates.find((g) => rung.match(g, ctx));
-    if (hit === undefined) continue;
-    if (rung.params(hit, ctx).action === "報告して止める") {
-      const conflicts: Conflict[] = hit.records.flatMap((r) => [...r.conflicts]);
-      if (terminalMixedInGroup(hit)) {
-        conflicts.push({
-          reason: "group の終端が混在",
-          evidence: ["group 内で終端と非終端が混在している"],
-          issues: hit.members,
-        });
+    for (const g of rung.unit === "issue" ? solo : ordered) {
+      if (!inPlay(g) || !rung.match(g, ctx)) continue;
+      if (rung.params(g, ctx).action === "報告して止める") {
+        for (const r of g.records) {
+          if (!ledgerAhead(r)) continue;
+          conflicts.push({
+            reason: "ledger が期待より先",
+            evidence: [`progress が ${r.progress} なのに ledger が ${r.ledger}`],
+            issues: [r.issue],
+          });
+        }
+        for (const n of g.members) excluded.add(n);
+        continue;
       }
-      for (const r of hit.records) {
-        if (!ledgerAhead(r)) continue;
-        conflicts.push({
-          reason: "ledger が期待より先",
-          evidence: [`progress が ${r.progress} なのに ledger が ${r.ledger}`],
-          issues: [r.issue],
-        });
-      }
-      return { kind: "conflict", conflicts };
+      return decision({
+        kind: "action",
+        params: rung.params(g, ctx),
+        target: target(g),
+        evidence: {
+          progress: g.lead.progress,
+          runtime: g.lead.runtime,
+          capacity: g.lead.capacity,
+          ledger: g.lead.ledger,
+          why: rung.why,
+        },
+      });
     }
-    return {
-      kind: "action",
-      params: rung.params(hit, ctx),
-      target: target(hit),
-      evidence: {
-        progress: hit.lead.progress,
-        runtime: hit.lead.runtime,
-        capacity: hit.lead.capacity,
-        ledger: hit.lead.ledger,
-        why: rung.why,
-      },
-    };
   }
 
   // **空キューは終了条件ではなく idle。**次の観測まで待つ。
-  return { kind: "idle" };
+  return decision({ kind: "idle" });
 };

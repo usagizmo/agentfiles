@@ -82,7 +82,7 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
 
   session: session.none,
   retiredRefineExists: false,
-  refineSessionExists: false,
+  refineSession: { kind: "none" },
 
   waitRecord: wait.absent,
   pauseRecordExists: false,

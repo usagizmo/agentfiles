@@ -314,7 +314,7 @@ export const observe = async (
 
       session: classifySession(sessionRows, `resolve-${issue}`),
       retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
-      refineSessionExists: sessionRows.some((r) => r.split(" ")[0] === `refine-${issue}`),
+      refineSession: classifySession(sessionRows, `refine-${issue}`),
 
       waitRecord: waitRecord(commentText, pause),
       pauseRecordExists: pause,

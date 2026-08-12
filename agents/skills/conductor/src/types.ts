@@ -145,10 +145,10 @@ export const NON_ACTION_KINDS = [
 export type NonActionKind = (typeof NON_ACTION_KINDS)[number];
 
 /**
- * tick が 1 周で出す結論。**`Action | null` にしない** —— 表は遷移 / 制約 / action 外の
+ * tick が 1 周で選ぶ 1 手。**`Action | null` にしない** —— 表は遷移 / 制約 / action 外の
  * 3 形を強度順で使い分けており、制約行を「何も選ばない」へ潰すと回帰がそのぶん薄くなる。
  */
-export type Decision =
+export type Outcome =
   | {
       readonly kind: "action";
       readonly params: ActionParams;
@@ -158,8 +158,23 @@ export type Decision =
   | { readonly kind: "settle-record"; readonly settlement: Settlement }
   | { readonly kind: "constraint"; readonly constraint: ConstraintKind; readonly detail: string }
   | { readonly kind: "non-action"; readonly nonAction: NonActionKind; readonly detail: string }
-  | { readonly kind: "conflict"; readonly conflicts: readonly Conflict[] }
   | { readonly kind: "idle" };
+
+/**
+ * tick が 1 周で出す結論。
+ *
+ * **`Conflict` は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他の課題は
+ * 回す —— **1 件を止めるのは差し戻し、全体を止めるのは conductor セッション自体の停止**
+ * （`SKILL.md`「実行の制約」）。全体停止のトリガーにすると、健全な課題まで人が触るまで動かない。
+ *
+ * **選出対象外にしても資源の数え上げからは外さない**（write / integration lease）ので、
+ * その課題の実体は他の課題の action から守られたまま。
+ */
+export type Decision = {
+  /** **毎 tick そのまま報告する。**1 手を選べた周でも落とさ**ない** */
+  readonly conflicts: readonly Conflict[];
+  readonly outcome: Outcome;
+};
 
 /**
  * action の選択とは独立に行う精算。**action として書かない** ——
