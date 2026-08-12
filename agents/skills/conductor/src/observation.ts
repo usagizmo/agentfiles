@@ -66,6 +66,13 @@ export type IssueObservation = {
   readonly open: boolean;
   readonly ledger: Observed<Ledger>;
 
+  /**
+   * 本文とコメントを読めたか。**読めなかったことを「無い」に畳まない** ——
+   * 畳むと Issue 契約が「欠けている」に、記録が全部「無い」に読まれる。
+   * 偽なら `観測できない` の `Conflict` が最上段で当たり、他の値は誰も読まない。
+   */
+  readonly sourceReadable: Observed<boolean>;
+
   /** 制御面の claim branch。**成果物の段とは混ぜない**（`準備中` / `準備済み` はここから引く） */
   readonly claimBranchExists: Observed<boolean>;
   /** 固定 marker の計画コメント */

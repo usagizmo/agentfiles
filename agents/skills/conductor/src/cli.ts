@@ -11,7 +11,7 @@
 //   1  観測に失敗した（**watcher は呼び出し側が直前の snapshot で張る**）
 //   2  設定が壊れている（fail-closed。何も選ばずに止まる）
 
-import { ConfigError, parseConfig } from "./config.ts";
+import { ConfigError, parseConfig, resolveSurfaces } from "./config.ts";
 import { decide } from "./decide.ts";
 import { observe } from "./observe.ts";
 import { createPort } from "./port.ts";
@@ -21,6 +21,25 @@ const arg = (name: string): string | undefined => {
   return index < 0 ? undefined : Bun.argv[index + 1];
 };
 
+/** 繰り返し渡せる option。**最初の 1 つで打ち切らない** —— 面を落とすと観測に出ない。 */
+const args = (name: string): string[] =>
+  Bun.argv.flatMap((a, i) => (a === `--${name}` ? [Bun.argv[i + 1] ?? ""] : []));
+
+/**
+ * `--surface-path <name>=<path>`。**座標表に checkout path を置かない**ので、
+ * 端末ごとに違う値はここから入る（`landing-surface.md`）。`=` は最初の 1 つで切る ——
+ * path 側に `=` が現れても通す。
+ */
+const surfacePaths = (): Map<string, string> => {
+  const map = new Map<string, string>();
+  for (const raw of args("surface-path")) {
+    const at = raw.indexOf("=");
+    if (at <= 0) fail(2, `--surface-path の形が <name>=<path> でない: ${raw}`);
+    map.set(raw.slice(0, at), raw.slice(at + 1));
+  }
+  return map;
+};
+
 // **`never` を返す関数で narrow させない** —— const に代入した arrow では制御フロー解析が
 // 効かず、`undefined` のまま先へ流れる。呼び出し側で受けて明示的に落とす。
 const fail: (code: 1 | 2, message: string) => never = (code, message) => {
@@ -28,9 +47,9 @@ const fail: (code: 1 | 2, message: string) => never = (code, message) => {
   process.exit(code);
 };
 
-const configPath = arg("config") ?? fail(2, "usage: cli.ts --config <path> --snapshot-out <path>");
-const snapshotOut =
-  arg("snapshot-out") ?? fail(2, "usage: cli.ts --config <path> --snapshot-out <path>");
+const USAGE = "usage: cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...";
+const configPath = arg("config") ?? fail(2, USAGE);
+const snapshotOut = arg("snapshot-out") ?? fail(2, USAGE);
 
 const scriptsDir = new URL("../scripts", import.meta.url).pathname;
 
@@ -45,7 +64,15 @@ const config = await (async () => {
   }
 })();
 
-const port = createPort({ config, scriptsDir, snapshotPath: snapshotOut });
+const surfaces = (() => {
+  try {
+    return resolveSurfaces(config.surfaces, surfacePaths());
+  } catch (error) {
+    return fail(2, error instanceof ConfigError ? error.message : String(error));
+  }
+})();
+
+const port = createPort({ config, surfaces, scriptsDir, snapshotPath: snapshotOut });
 const surfaceUsesPr = new Map(config.surfaces.map((s) => [s.name, s.usesPr]));
 
 const observations = await observe(port, config.statusMap, surfaceUsesPr).catch((error: unknown) =>

@@ -3,8 +3,10 @@
 // **失敗を `false` へ倒さない。**コマンドが落ちたら `unobservable` を返す ——
 // 倒すと、観測できなかったことが「そうではない」として遷移を通す。
 
-import { createHash } from "node:crypto";
-import type { ProjectConfig } from "./config.ts";
+import { createHash, randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
 import { entryBlockRecord, planRecord } from "./records.ts";
 import { bodyMatchesPlan, planInvalidated } from "./plan.ts";
@@ -48,14 +50,16 @@ export const digest = (body: string): string =>
 
 export type PortOptions = {
   readonly config: ProjectConfig;
+  /** 座標に checkout path を束ねたもの（`resolveSurfaces` の結果）。**順序は座標のまま** */
+  readonly surfaces: readonly ResolvedSurface[];
   /** `scripts/` の絶対 path */
   readonly scriptsDir: string;
   /** `watch.sh --snapshot` の書き出し先。**tick を終えるときに `--baseline` として渡す同じ file** */
   readonly snapshotPath: string;
 };
 
-const surfaceOf = (config: ProjectConfig, name: string) =>
-  config.surfaces.find((s) => s.name === name);
+const surfaceOf = (surfaces: readonly ResolvedSurface[], name: string) =>
+  surfaces.find((s) => s.name === name);
 
 /**
  * `watch.sh --snapshot` の引数。**純関数にしてあるのは、渡し漏れが観測の穴になるから** ——
@@ -66,10 +70,11 @@ const surfaceOf = (config: ProjectConfig, name: string) =>
  */
 export const snapshotArgs = (
   config: ProjectConfig,
+  surfaces: readonly ResolvedSurface[],
   scriptsDir: string,
   snapshotPath: string,
 ): string[] => {
-  const control = config.surfaces[0];
+  const control = surfaces[0];
   return [
     "sh",
     `${scriptsDir}/watch.sh`,
@@ -79,7 +84,7 @@ export const snapshotArgs = (
     control?.repoPath ?? "",
     "--gh-repo",
     config.ghRepo,
-    ...config.surfaces
+    ...surfaces
       .slice(1)
       .flatMap((s) => ["--landing", `${s.name}:${s.integrationRef}:${s.repoPath}`]),
     "--project-org",
@@ -96,7 +101,23 @@ export const snapshotArgs = (
 };
 
 export const createPort = (options: PortOptions): ObservePort => {
-  const { config, scriptsDir, snapshotPath } = options;
+  const { config, surfaces, scriptsDir, snapshotPath } = options;
+
+  /**
+   * repo の全 PR。**tick に 1 回しか取らない。**`issueFacts` は Issue ごとに呼ばれるので、
+   * ここで都度 `--paginate` すると `O(Issue 数 × 全 PR)` になり、Issue が数百ある repo では
+   * 1 周で secondary rate limit に達して観測そのものが落ちる（実測）。
+   */
+  let prsOnce:
+    | Promise<Observed<{ merged_at: string | null; state: string; head: { ref: string } }[]>>
+    | undefined;
+  const allPrs = () =>
+    (prsOnce ??= json<{ merged_at: string | null; state: string; head: { ref: string } }[]>([
+      "gh",
+      "api",
+      `repos/${config.ghRepo}/pulls?state=all&per_page=100`,
+      "--paginate",
+    ]));
 
   const bodies = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
@@ -105,60 +126,88 @@ export const createPort = (options: PortOptions): ObservePort => {
 
   return {
     snapshot: async () => {
-      const result = await run(snapshotArgs(config, scriptsDir, snapshotPath));
+      const result = await run(snapshotArgs(config, surfaces, scriptsDir, snapshotPath));
       // **観測できなかった tick も watcher は張る**ので、ここは投げて呼び出し側に判断させる。
       if (!result.ok) throw new Error(`snapshot に失敗した: ${result.reason}`);
       return result.stdout;
     },
 
+    // **Issue ごとに引かない。**board の件数ぶん REST を投げると `O(items)` になり、
+    // 289 件の board で secondary rate limit に達する（実測）。repo 単位の bulk 1 系統にする。
+    //
+    // **打ち切りは fail-closed。**`--paginate` が途中で落ちたら、欠けた分を「無い」と
+    // 読むことになる —— 記録が無い課題として claim や差し戻しが走る。
     issueBodies: async (numbers) => {
-      const map = new Map<number, string>();
-      await Promise.all(
-        numbers.map(async (n) => {
-          const body = await json<{ body: string | null }>([
-            "gh",
-            "api",
-            `repos/${config.ghRepo}/issues/${n}`,
-          ]);
-          bodies.set(
-            n,
-            body.kind === "present"
-              ? present(body.value.body ?? "")
-              : unobservable("本文を読めない"),
-          );
-          if (body.kind === "present") map.set(n, body.value.body ?? "");
-        }),
-      );
+      const all = await json<{ number: number; body: string | null }[]>([
+        "gh",
+        "api",
+        "--paginate",
+        `repos/${config.ghRepo}/issues?state=all&per_page=100`,
+      ]);
+      const map = new Map<number, Observed<string>>();
+      if (all.kind !== "present") {
+        for (const n of numbers) {
+          const miss: Observed<string> = unobservable("Issue 一覧を読めない");
+          bodies.set(n, miss);
+          map.set(n, miss);
+        }
+        return map;
+      }
+      const byNumber = new Map(all.value.map((i) => [i.number, i.body ?? ""]));
+      for (const n of numbers) {
+        // **board に居るのに一覧に無い**のは欠落。既定へ倒さない。
+        const found = byNumber.get(n);
+        const observed: Observed<string> =
+          found === undefined ? unobservable("Issue 一覧に居ない") : present(found);
+        bodies.set(n, observed);
+        map.set(n, observed);
+      }
       return map;
     },
 
+    // **`sort=updated` の窓で切らない。**claim と plan は書いた後に更新されないので、
+    // 窓で切ると「計画はあるのに planCommentExists=false」が再発する。marker を持つ限り全ページ辿る。
     issueComments: async (numbers) => {
-      const map = new Map<number, readonly string[]>();
-      await Promise.all(
-        numbers.map(async (n) => {
-          const list = await json<{ body: string | null; created_at: string }[]>([
-            "gh",
-            "api",
-            "--paginate",
-            `repos/${config.ghRepo}/issues/${n}/comments`,
-          ]);
-          if (list.kind !== "present") {
-            comments.set(n, []);
-            claimTimes.set(n, unobservable("コメントを読めない"));
-            return;
-          }
-          const bodiesOfIssue = list.value.map((c) => c.body ?? "");
-          comments.set(n, bodiesOfIssue);
-          map.set(n, bodiesOfIssue);
-          const claim = list.value.find((c) => (c.body ?? "").includes("<!-- claim -->"));
-          claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
-        }),
-      );
+      const all = await json<
+        { issue_url: string; body: string | null; created_at: string; id: number }[]
+      >(["gh", "api", "--paginate", `repos/${config.ghRepo}/issues/comments?per_page=100`]);
+      const map = new Map<number, Observed<readonly string[]>>();
+      if (all.kind !== "present") {
+        for (const n of numbers) {
+          const miss: Observed<readonly string[]> = unobservable("コメント一覧を読めない");
+          comments.set(n, []);
+          claimTimes.set(n, unobservable("コメントを読めない"));
+          map.set(n, miss);
+        }
+        return map;
+      }
+      // **marker を持つものだけ残す。**種類は列挙しない（形だけで拾う）。
+      const marked = all.value.filter((c) => /<!--\s*[a-z][a-z-]*\s*-->/.test(c.body ?? ""));
+      const byIssue = new Map<number, typeof marked>();
+      for (const c of marked) {
+        const n = Number(c.issue_url.split("/").pop());
+        if (!Number.isInteger(n)) continue;
+        const list = byIssue.get(n) ?? [];
+        list.push(c);
+        byIssue.set(n, list);
+      }
+      for (const n of numbers) {
+        // **Issue ごとに作成順で整列する。**repo 全体の endpoint は Issue をまたいで並ぶので、
+        // そのまま連ねると `claimedAt`（merge の枠の順序キー）が別の意味になる。
+        const list = [...(byIssue.get(n) ?? [])].sort(
+          (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id,
+        );
+        const bodiesOfIssue = list.map((c) => c.body ?? "");
+        comments.set(n, bodiesOfIssue);
+        map.set(n, present(bodiesOfIssue));
+        const claim = list.find((c) => (c.body ?? "").includes("<!-- claim -->"));
+        claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
+      }
       return map;
     },
 
     surfaceGit: async (issue, name) => {
-      const surface = surfaceOf(config, name);
+      const surface = surfaceOf(surfaces, name);
       if (surface === undefined) {
         return { ahead: unobservable("座標表に無い面"), head: unobservable("座標表に無い面") };
       }
@@ -187,13 +236,63 @@ export const createPort = (options: PortOptions): ObservePort => {
       };
     },
 
-    cycleMark: async (issue) => {
-      const result = await run([
-        "python3",
-        `${scriptsDir}/cycle-mark.py`,
-        "--issue",
-        String(issue),
-      ]);
+    // **引数表は `references/protocols.md` が SSOT。**「無い」も明示して渡す ——
+    // 省略は usage error で、取得に失敗した周と本当に無い周を同じ指紋にしないための形。
+    cycleMark: async (input) => {
+      const args = ["python3", `${scriptsDir}/cycle-mark.py`, "--ledger", input.ledger];
+      const files: string[] = [];
+      const fileArg = async (flag: string, body: string | null, absentFlag: string) => {
+        if (body === null) {
+          args.push(absentFlag);
+          return;
+        }
+        const path = `${tmpdir()}/conductor-${input.issue}-${flag.replace(/^--/, "")}-${randomUUID()}`;
+        await Bun.write(path, body);
+        files.push(path);
+        args.push(flag, path);
+      };
+
+      if (input.ledger === "未計画") {
+        for (const b of input.issueBodies) {
+          const path = `${tmpdir()}/conductor-body-${b.issue}-${randomUUID()}`;
+          await Bun.write(path, b.body);
+          files.push(path);
+          args.push("--issue-body", `${b.issue}:${path}`);
+        }
+      } else {
+        args.push("--progress", input.progress);
+        const host = await run(
+          ["git", "remote", "get-url", "origin"],
+          surfaces[0]?.repoPath ?? ".",
+        );
+        // **host は制御面の origin から取る**（全着地面の remote が在るべき host）。
+        const url = host.ok ? host.stdout.trim() : "";
+        const parsed = /^(?:git@|https?:\/\/)([^:/]+)/.exec(url)?.[1];
+        if (parsed === undefined) return unobservable("制御面の origin から host を引けない");
+        args.push("--host", parsed);
+        for (const s of input.surfaces) {
+          const surface = surfaceOf(surfaces, s.name);
+          if (surface === undefined) return unobservable(`座標表に無い面: ${s.name}`);
+          args.push("--landing", `${s.name}:${surface.repoPath}`);
+          const branches = await run(
+            ["git", "branch", "--list", "--format=%(refname:short)"],
+            surface.repoPath,
+          );
+          if (!branches.ok) return unobservable(branches.reason);
+          const branch = branches.stdout
+            .split("\n")
+            .find((b) => new RegExp(`^[^/]+/${input.issue}-`).test(b.trim()));
+          if (branch === undefined) args.push("--no-branch", s.name);
+          else args.push("--branch", `${s.name}:${branch.trim()}`);
+          if (s.worktree === null) args.push("--no-worktree", s.name);
+          else args.push("--worktree", `${s.name}:${s.worktree}`);
+        }
+        await fileArg("--plan-comment", input.planComment, "--no-plan-comment");
+      }
+      await fileArg("--wait-record", input.waitRecord, "--no-wait-record");
+
+      const result = await run(args);
+      await Promise.all(files.map((f) => rm(f, { force: true })));
       // **指紋を作れない周でも action の選択は続ける**（照合を飛ばすだけ）。
       return result.ok ? present(result.stdout.trim()) : unobservable(result.reason);
     },
@@ -213,7 +312,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       let changed: Observed<readonly string[]> = present([]);
       if (plan.kind === "present") {
         const collected: string[] = [];
-        for (const surface of config.surfaces) {
+        for (const surface of surfaces) {
           const diff = await run(
             ["git", "diff", "--name-only", `${plan.value.baseSha}...${surface.integrationRef}`],
             surface.repoPath,
@@ -235,12 +334,7 @@ export const createPort = (options: PortOptions): ObservePort => {
     },
 
     issueFacts: async (issue) => {
-      const prs = await json<{ merged_at: string | null; state: string; head: { ref: string } }[]>([
-        "gh",
-        "api",
-        `repos/${config.ghRepo}/pulls?state=all&per_page=100`,
-        "--paginate",
-      ]);
+      const prs = await allPrs();
       // **head の branch 名で自分の PR だけに絞る。**絞らないと、repo 内のどれか 1 本が
       // merged なだけで全課題が `着地済み` 側の証跡を持つ。
       const owned = new RegExp(`^[^/]+/${issue}-`);

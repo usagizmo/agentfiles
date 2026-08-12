@@ -64,6 +64,7 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   issue: 1,
   open: true,
   ledger: present("未計画"),
+  sourceReadable: present(true),
 
   claimBranchExists: present(false),
   planCommentExists: present(false),

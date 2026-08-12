@@ -100,6 +100,11 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   const found: Conflict[] = [];
   const n = o.issue;
 
+  // **本文とコメントを読めていないなら、他の値は詰め物。**先に報告して止める。
+  if (o.sourceReadable.kind !== "present" || o.sourceReadable.value === false) {
+    found.push(conflict("観測できない", n, "Issue の本文かコメントを読めない"));
+  }
+
   if (o.session.kind === "unclassifiable") {
     found.push(conflict("観測できない", n, `セッションの生の状態が分類できない: ${o.session.raw}`));
   }

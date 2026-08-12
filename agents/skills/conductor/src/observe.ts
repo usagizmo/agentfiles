@@ -27,9 +27,11 @@ import {
   retryRecord,
   waitRecord,
 } from "./records.ts";
+import { CONCURRENCY, mapLimit } from "./limit.ts";
+import { normalizeProgress } from "./normalize.ts";
 import { deriveSurface } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
-import type { Ledger, Observed } from "./types.ts";
+import type { Ledger, Observed, Progress } from "./types.ts";
 import { absent, invalid, present, unobservable } from "./types.ts";
 
 /** snapshot に無い材料を取る口。**実装は 1 つで、テストは fake を渡す。** */
@@ -37,11 +39,13 @@ export type ObservePort = {
   /** `watch.sh --snapshot` の出力 */
   readonly snapshot: () => Promise<string>;
   /** Issue 本文（番号 → 本文） */
-  readonly issueBodies: (issues: readonly number[]) => Promise<ReadonlyMap<number, string>>;
+  readonly issueBodies: (
+    issues: readonly number[],
+  ) => Promise<ReadonlyMap<number, Observed<string>>>;
   /** 固定 marker のコメント本文（番号 → 本文の配列） */
   readonly issueComments: (
     issues: readonly number[],
-  ) => Promise<ReadonlyMap<number, readonly string[]>>;
+  ) => Promise<ReadonlyMap<number, Observed<readonly string[]>>>;
   /**
    * 面ごとの git。`統合先..branch` が非空かと、その面の branch head。
    * **`統合先..branch` で測る** —— branch 上の commit の存在で読むと、追随しただけの空 branch が
@@ -51,8 +55,11 @@ export type ObservePort = {
     issue: number,
     surface: string,
   ) => Promise<{ readonly ahead: Observed<boolean>; readonly head: Observed<string> }>;
-  /** 成果の指紋（`scripts/cycle-mark.py`） */
-  readonly cycleMark: (issue: number) => Promise<Observed<string>>;
+  /**
+   * 成果の指紋（`scripts/cycle-mark.py`）。**渡すのは正規化済みの値だけ** ——
+   * 成分の名前と符号化はスクリプトが専任する（引数表は `references/protocols.md`）。
+   */
+  readonly cycleMark: (input: CycleMarkInput) => Promise<Observed<string>>;
   /** 本文が計画の記録と一致しているか・計画が失効したか・資源キー（計画コメントの中身） */
   readonly planFacts: (issue: number) => Promise<{
     readonly bodyMatchesPlan: Observed<boolean>;
@@ -75,6 +82,24 @@ export type ObservePort = {
     /** claim の記録が書かれた時刻。**merge の枠の順序キー**（PR 作成の早さでは選ばない） */
     readonly claimedAt: Observed<number>;
   }>;
+};
+
+/**
+ * 指紋の材料。**`ledger` が式を決める**（`未計画` なら計画の周、それ以外は解決の周）。
+ * checkout path と host は port が持つので入れない。branch も port が git から引く。
+ */
+export type CycleMarkInput = {
+  readonly issue: number;
+  readonly ledger: Ledger;
+  readonly progress: Progress;
+  /** 着地面ごとの worktree。**無いことも明示して渡す**（省略は usage error） */
+  readonly surfaces: readonly { readonly name: string; readonly worktree: string | null }[];
+  /** 計画コメントの本文。無ければ null */
+  readonly planComment: string | null;
+  /** 人待ちの記録の本文。**有効なときだけ渡す**（判定は呼び出し側） */
+  readonly waitRecord: string | null;
+  /** 計画の周のみ。対象集合の全件 */
+  readonly issueBodies: readonly { readonly issue: number; readonly body: string }[];
 };
 
 /** project の Status 名 → `ledger`。**対応表は project 必須**（無ければ fail-closed）。 */
@@ -154,112 +179,173 @@ export const observe = async (
     port.issueComments(numbers),
   ]);
 
-  return Promise.all(
-    statuses.map(async (status): Promise<IssueObservation> => {
-      const issue = status.issue;
-      const body = bodies.get(issue) ?? "";
-      const commentText = joinComments(comments.get(issue) ?? []);
+  // **件数ぶん並行に投げない**（`limit.ts`）。1 件につき計画と PR の 2 経路が走るので、
+  // ここを開けると board の件数の 2 倍が同時に立つ。
+  const base = await mapLimit(statuses, CONCURRENCY, async (status): Promise<IssueObservation> => {
+    const issue = status.issue;
+    // **読めなかったものを空へ畳まない。**畳むと Issue 契約が「欠けている」に、
+    // 記録が全部「無い」に読まれ、差し戻しと片付けが誤った観測で走る。
+    // 値そのものは `観測できない` の Conflict が最上段で当たるので誰も読まない。
+    const bodyObserved = bodies.get(issue) ?? absent();
+    const commentsObserved = comments.get(issue) ?? absent();
+    const body = bodyObserved.kind === "present" ? bodyObserved.value : "";
+    const commentText =
+      commentsObserved.kind === "present" ? joinComments(commentsObserved.value) : "";
 
-      const [plan, extra] = await Promise.all([port.planFacts(issue), port.issueFacts(issue)]);
-      const pause = extractMarker(commentText, "yield").kind === "present";
-      const claim = claimRecord(commentText);
-      const report = reportRecord(commentText);
+    const [plan, extra] = await Promise.all([port.planFacts(issue), port.issueFacts(issue)]);
+    const pause = extractMarker(commentText, "yield").kind === "present";
+    const claim = claimRecord(commentText);
+    const report = reportRecord(commentText);
 
-      // **claim 後は claim の記録の `landing` が着地面の SSOT。**claim 前は座標表の既定 1 面。
-      const surfaceNames =
-        claim.kind === "present" && claim.value.landing.length > 0
-          ? claim.value.landing
-          : [...surfaceUsesPr.keys()].slice(0, 1);
+    // **claim 後は claim の記録の `landing` が着地面の SSOT。**claim 前は座標表の既定 1 面。
+    const surfaceNames =
+      claim.kind === "present" && claim.value.landing.length > 0
+        ? claim.value.landing
+        : [...surfaceUsesPr.keys()].slice(0, 1);
 
-      const surfaces: SurfaceObservation[] = await Promise.all(
-        surfaceNames.map(async (name) => {
-          const git = await port.surfaceGit(issue, name);
-          // **帰属は面の名前だけでは引けない。**同じ面に複数の課題の worktree が並ぶので、
-          // path に自分の claim branch（`{prefix}/{番号}-`）が入っているものだけを自分のものとする。
-          // 面だけで引くと、隣の課題の worktree を自分の容量として数え、片付けの対象にもする。
-          const worktree = worktreeRows.find(
-            (w) => w.surface === name && ownsWorktreePath(w.path, issue),
-          );
-          const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
-          const facts: SurfaceFacts = {
-            name,
-            usesPr: surfaceUsesPr.get(name) ?? true,
-            aheadOfIntegration: git.ahead,
-            head: git.head,
-            dirty: fromTri(worktree?.dirty),
-            hasCheckout: present(worktree !== undefined),
-            liveCheckoutHealthy:
-              liveHealth.get(name) ?? unobservable("live checkout を観測していない"),
-            prMerged: extra.prMerged,
-            openPr: present(pr !== undefined),
-            checksGreen:
-              pr === undefined || pr.checks === "untracked"
-                ? absent()
-                : present(pr.checks.length > 0 && pr.checks.every((c) => c === "SUCCESS")),
-          };
-          return deriveSurface(facts, report);
-        }),
-      );
+    const surfaces: SurfaceObservation[] = await Promise.all(
+      surfaceNames.map(async (name) => {
+        const git = await port.surfaceGit(issue, name);
+        // **帰属は面の名前だけでは引けない。**同じ面に複数の課題の worktree が並ぶので、
+        // path に自分の claim branch（`{prefix}/{番号}-`）が入っているものだけを自分のものとする。
+        // 面だけで引くと、隣の課題の worktree を自分の容量として数え、片付けの対象にもする。
+        const worktree = worktreeRows.find(
+          (w) => w.surface === name && ownsWorktreePath(w.path, issue),
+        );
+        const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
+        const facts: SurfaceFacts = {
+          name,
+          usesPr: surfaceUsesPr.get(name) ?? true,
+          aheadOfIntegration: git.ahead,
+          head: git.head,
+          dirty: fromTri(worktree?.dirty),
+          hasCheckout: present(worktree !== undefined),
+          liveCheckoutHealthy:
+            liveHealth.get(name) ?? unobservable("live checkout を観測していない"),
+          prMerged: extra.prMerged,
+          openPr: present(pr !== undefined),
+          checksGreen:
+            pr === undefined || pr.checks === "untracked"
+              ? absent()
+              : present(pr.checks.length > 0 && pr.checks.every((c) => c === "SUCCESS")),
+        };
+        return deriveSurface(facts, report);
+      }),
+    );
 
-      const row = issueRows.get(issue);
-      const ledger = statusMap.get(status.status);
+    const row = issueRows.get(issue);
+    const ledger = statusMap.get(status.status);
 
-      return {
-        issue,
-        open: row?.open ?? false,
-        // **対応表に無い Status を既定へ倒さない**（`invalid` が `Conflict` を立てる）。
-        ledger:
-          ledger === undefined ? invalid(status.status, "Status の対応が無い") : present(ledger),
+    return {
+      issue,
+      open: row?.open ?? false,
+      sourceReadable:
+        bodyObserved.kind === "present" && commentsObserved.kind === "present"
+          ? present(true)
+          : unobservable("Issue の本文かコメントを読めない"),
+      // **対応表に無い Status を既定へ倒さない**（`invalid` が `Conflict` を立てる）。
+      ledger:
+        ledger === undefined ? invalid(status.status, "Status の対応が無い") : present(ledger),
 
-        claimBranchExists: present(snapshotHasClaimBranch(snapshot, issue)),
-        planCommentExists: present(extractMarker(commentText, "plan").kind === "present"),
-        issueContractComplete: extra.issueContractComplete,
-        claimRecord: claim,
+      claimBranchExists: present(snapshotHasClaimBranch(snapshot, issue)),
+      planCommentExists: present(extractMarker(commentText, "plan").kind === "present"),
+      issueContractComplete: extra.issueContractComplete,
+      claimRecord: claim,
 
-        surfaces,
+      surfaces,
 
-        openPr: present(
-          surfaces.some((s) => s.usesPr) &&
-            prRows.some((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef)),
-        ),
-        checks: checksOf(prRows, issue),
-        latestPrClosedUnmerged: extra.latestPrClosedUnmerged,
-        prMerged: extra.prMerged,
+      openPr: present(
+        surfaces.some((s) => s.usesPr) &&
+          prRows.some((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef)),
+      ),
+      checks: checksOf(prRows, issue),
+      latestPrClosedUnmerged: extra.latestPrClosedUnmerged,
+      prMerged: extra.prMerged,
 
-        submissionEvidence: present(report.kind === "present"),
+      submissionEvidence: present(report.kind === "present"),
 
-        session: classifySession(sessionRows, `resolve-${issue}`),
-        retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
-        refineSessionExists: sessionRows.some((r) => r.split(" ")[0] === `refine-${issue}`),
+      session: classifySession(sessionRows, `resolve-${issue}`),
+      retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
+      refineSessionExists: sessionRows.some((r) => r.split(" ")[0] === `refine-${issue}`),
 
-        waitRecord: waitRecord(commentText, pause),
-        pauseRecordExists: pause,
-        intentRecord: intentRecord(commentText),
-        integrationRecordCount: present(integrationRecord(commentText).kind === "present" ? 1 : 0),
+      waitRecord: waitRecord(commentText, pause),
+      pauseRecordExists: pause,
+      intentRecord: intentRecord(commentText),
+      integrationRecordCount: present(integrationRecord(commentText).kind === "present" ? 1 : 0),
 
-        // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
-        prunableWorkspace: present(
-          [...prunableWorkspaces].some((path) => ownsWorktreePath(path, issue)),
-        ),
+      // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
+      prunableWorkspace: present(
+        [...prunableWorkspaces].some((path) => ownsWorktreePath(path, issue)),
+      ),
 
-        failureRecord: retryRecord(commentText),
-        cycleRecord: cycleRecord(commentText),
-        currentMark: await port.cycleMark(issue),
-        readyRecordStale: stalenessOf(readyRecord(commentText)),
+      failureRecord: retryRecord(commentText),
+      cycleRecord: cycleRecord(commentText),
+      currentMark: absent(),
+      readyRecordStale: stalenessOf(readyRecord(commentText)),
 
-        bodyMatchesPlan: plan.bodyMatchesPlan,
-        planInvalidated: plan.planInvalidated,
-        resourceKeys: plan.resourceKeys,
-        blocksEntry: extra.blocksEntry,
+      bodyMatchesPlan: plan.bodyMatchesPlan,
+      planInvalidated: plan.planInvalidated,
+      resourceKeys: plan.resourceKeys,
+      blocksEntry: extra.blocksEntry,
 
-        dependsOn: declarations(body, "Depends on"),
-        sameBranchAs: declarations(body, "Same branch as"),
+      dependsOn: declarations(body, "Depends on"),
+      sameBranchAs: declarations(body, "Same branch as"),
 
-        boardOrder: status.boardOrder,
-        claimedAt: extra.claimedAt,
-      };
-    }),
-  );
+      boardOrder: status.boardOrder,
+      claimedAt: extra.claimedAt,
+    };
+  });
+
+  // **指紋は要る課題にだけ作る。**`decide` が読むのは周回の記録が `mark` を持つときだけで、
+  // 書く側（回す action）は終端に達した課題では走らない。全件に走らせると board の件数ぶん
+  // python を起こす。**落としているのは対象であって観測項目ではない。**
+  const marks = new Map<number, Observed<string>>();
+  const needsMark = base.filter((o) => {
+    const cycle = o.cycleRecord.kind === "present" ? o.cycleRecord.value : undefined;
+    if (cycle?.mark != null) return true;
+    return !(o.ledger.kind === "present" && o.ledger.value === "完了");
+  });
+  await mapLimit(needsMark, CONCURRENCY, async (o) => {
+    if (o.ledger.kind !== "present") return;
+    const raw = comments.get(o.issue);
+    const text = raw?.kind === "present" ? joinComments(raw.value) : "";
+    const plan = extractMarker(text, "plan");
+    const waitBlock = extractMarker(text, "wait");
+    // **有効な人待ちだけ渡す**（判定は呼び出し側、と引数表が定めている）。
+    const validWait =
+      o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid"
+        ? waitBlock.kind === "present"
+          ? waitBlock.value
+          : null
+        : null;
+    const bodyOf = (n: number): string => {
+      const b = bodies.get(n);
+      return b?.kind === "present" ? b.value : "";
+    };
+    marks.set(
+      o.issue,
+      await port.cycleMark({
+        issue: o.issue,
+        ledger: o.ledger.value,
+        progress: normalizeProgress(o),
+        surfaces: o.surfaces.map((s) => ({
+          name: s.name,
+          worktree:
+            worktreeRows.find((w) => w.surface === s.name && ownsWorktreePath(w.path, o.issue))
+              ?.path ?? null,
+        })),
+        planComment: plan.kind === "present" ? plan.value : null,
+        waitRecord: validWait,
+        // **計画の周は対象集合の全件**。claim 前なので group は本文の宣言から引く。
+        issueBodies:
+          o.ledger.value === "未計画"
+            ? [o.issue, ...o.sameBranchAs].map((n) => ({ issue: n, body: bodyOf(n) }))
+            : [],
+      }),
+    );
+  });
+
+  return base.map((o) => ({ ...o, currentMark: marks.get(o.issue) ?? absent() }));
 };
 
 /**
