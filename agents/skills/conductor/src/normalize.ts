@@ -105,6 +105,14 @@ const conflict = (reason: ConflictReason, issue: number, ...evidence: string[]):
 const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] => {
   const found: Conflict[] = [];
   const n = o.issue;
+  // **記録の整合の Conflict は、その記録がこれから読まれる課題にだけ当てる。**
+  // 台帳が `完了` に達した課題の記録は二度と分岐に使われないので、当てても人が動かす先が
+  // 無く、**ラダー最上段なのでキューが恒久的に止まる**（実測で、キュー以前に着地した
+  // 40 件が全部ここへ落ち、`片付ける` にも届かなかった）。
+  //
+  // **実体を守る Conflict には掛けない** —— 成果物を伴う 2 つ・着地面・live checkout は、
+  // `片付ける` が消しにいく対象そのものを見ている。
+  const settled = value(o.ledger) === "完了";
 
   // **本文とコメントを読めていないなら、他の値は詰め物。**先に報告して止める。
   if (o.sourceReadable.kind !== "present" || o.sourceReadable.value === false) {
@@ -135,12 +143,12 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   }
 
   // **本文の欠落だけで解除しない** —— 本物の質問を選択 UI にだけ出して書き損ねた経路がある。
-  if (o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "undecidable") {
+  if (!settled && o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "undecidable") {
     found.push(
       conflict("証跡が矛盾している", n, "人待ちの記録に質問の本文が無く、実行資源待ちの証跡も無い"),
     );
   }
-  if (o.waitRecord.kind === "broken") {
+  if (!settled && o.waitRecord.kind === "broken") {
     found.push(
       conflict("証跡が矛盾している", n, `人待ちの記録が壊れている: ${o.waitRecord.reason}`),
     );
@@ -169,7 +177,9 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
 
   // **`取り下げ` に落とさない** —— 実体は着地しているのに `完了` が付かず、依存が永久に解けない。
   // **PR を使わない面には当てない**（あちらは提出の証跡そのものが終端の条件）。
-  if (value(o.prMerged) === true && value(o.submissionEvidence) !== true) {
+  // 守っているのは台帳が進んでいないことだけなので、`完了` には当てない
+  // （`完了` なら依存は `closed かつ 完了` の経路で解ける）。
+  if (!settled && value(o.prMerged) === true && value(o.submissionEvidence) !== true) {
     found.push(
       conflict("着地済みだが提出の証跡が無い", n, "merged な PR があるのに提出のまとめが無い"),
     );
@@ -209,17 +219,18 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   }
 
   // **待つのをやめたのに要求が残っている形。**放置すると実物を見せないまま着地する。
-  if (o.intentRecord.kind === "pending" && o.waitRecord.kind !== "waiting") {
+  if (!settled && o.intentRecord.kind === "pending" && o.waitRecord.kind !== "waiting") {
     found.push(
       conflict("意図の確認が pending なのに人待ちが無い", n, "人待ちの記録が cleared か無い"),
     );
   }
 
+  // `完了` の課題に残った渡しの記録は、報告ではなく `片付ける` が消す。
   const integrationRecords = value(o.integrationRecordCount);
-  if (integrationRecords !== undefined && integrationRecords >= 2) {
+  if (!settled && integrationRecords !== undefined && integrationRecords >= 2) {
     found.push(conflict("渡しの記録が複数", n, `渡しの記録が ${integrationRecords} 件ある`));
   }
-  if (isUnreadable(o.integrationRecordCount)) {
+  if (!settled && isUnreadable(o.integrationRecordCount)) {
     found.push(conflict("渡しの記録が複数", n, "渡しの記録を読めない"));
   }
 

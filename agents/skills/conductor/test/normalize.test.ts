@@ -444,6 +444,25 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17m3: 記録の整合が壊れているが、台帳は既に 完了", () => {
+    // キュー以前に着地した課題。当てると**歴史側が全部ここへ落ち**、ラダー最上段なので
+    // `片付ける` にも永久に届かない（実測で 289 件中 40 件）。
+    const settled: Partial<IssueObservation> = {
+      open: present(false),
+      ledger: present("完了"),
+      surfaces: [control({ terminal: present(true) })],
+    };
+    const cases: Partial<IssueObservation>[] = [
+      { ...settled, prMerged: present(true) },
+      { ...settled, waitRecord: wait.broken("marker を読めない") },
+      { ...settled, waitRecord: wait.undecidable },
+      { ...settled, intentRecord: intent.pending },
+      { ...settled, integrationRecordCount: present(2) },
+      { ...settled, integrationRecordCount: unobservable("読めない") },
+    ];
+    for (const over of cases) expect(normalize(observation(over)).conflicts).toEqual([]);
+  });
+
   test("17k: 片付けが終わり、Issue は closed・worktree も無い", () => {
     expectFields(
       observation({
