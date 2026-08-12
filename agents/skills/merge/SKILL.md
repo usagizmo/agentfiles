@@ -33,7 +33,7 @@ description: >-
 
 **`checkout` / `stash` / `reset` を使わない**。行ってよいのは fetch と、この merge だけ。
 
-**例外は、自分が始めた merge の `--abort` だけ。**merge の commit は hook と署名を通るので、**祖先関係が成立していても最後で落ちうる**（lint / test の hook、署名鍵が取れない等）。落ちると `MERGING` と staged な変更が残り**、そのままでは live が壊れた状態で共有される**。直前に clean を確かめてあるので、`--abort` が戻すのは自分が作った状態だけ —— 他人の作業は最初から無い。
+**例外は、自分が始めた merge の `--abort` だけ**。merge の commit は hook と署名を通るので、祖先関係が成立していても最後で落ちうる（lint / test の hook、署名鍵が取れない等）。落ちると `MERGING` と staged な変更が残り、そのままでは live が壊れた状態で共有される。直前に clean を確かめてあるので、`--abort` が戻すのは自分が作った状態だけ —— 他人の作業は最初から無い。
 
 **`--abort` で戻したら、そこで止めて報告する**。`--no-verify` や `--no-gpg-sign` で通し直さない ——落ちた検査は、その面の規約が要求しているもの。
 
