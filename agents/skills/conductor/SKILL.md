@@ -282,6 +282,8 @@ snapshot の取り方は harness 依存（`references/harness.md`）。
 
 「保持している条件」が唯一の復元式。取得と解放を別に書かない。
 
+**write lease は advisory**。休止を頼み、従わなければ記録を伸ばして `退避先` へ退避させるまでで、書き込みそのものは止め**られない**。**correctness を write lease に置かない** —— 直列化を保証するのは integration lease で、そちらは着地の直前に fail-closed で確かめる（`references/integration-record.md`）。
+
 コードに無い規約:
 
 - 計画コメントが無いのに commit か dirty があるなら、証跡の矛盾として報告し、保守的に全交差のまま保持し続ける（非保持へ**倒さない**）
