@@ -28,12 +28,20 @@ try {
 
 // **描画結果からタグとコードを取り除いてから探す。**残すとテキスト以外の `**` を数える —
 // 規約を逐語で説明する `` `**` ``、HTML コメント、属性値。いずれも表示上は強調ではない。
+const stripped = (html) =>
+  html.replace(/<code[^>]*>[\s\S]*?<\/code>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+
+/**
+ * **リテラルで残った `**` だけを見ると足りない。**マーカーが偶数個あると全部ペアとして
+ * 消費され、リテラルが残らないまま**範囲だけがずれる**（`**規則。**続き` は
+ * 閉じ損ねた `**` が次の開きを拾い、文全体が強調になる）。症状は `<strong>` の入れ子。
+ */
+const nested = (html) => /<strong>(?:(?!<\/strong>)[\s\S])*<strong>/.test(stripped(html));
+
 const broken = (html) =>
-  html
-    .replace(/<code[^>]*>[\s\S]*?<\/code>/g, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
+  stripped(html)
     .replace(/<[^>]*>/g, "")
-    .includes("**");
+    .includes("**") || nested(html);
 
 /** 壊れている行を `{ no, text }` で返す。判定の入口はここ 1 つ（test もこれを見る）。 */
 export function brokenLines(src) {
