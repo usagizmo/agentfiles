@@ -63,7 +63,8 @@ export type SurfaceObservation = {
 /** 1 課題ぶんの観測。**group へ畳む前**の、Issue 単位の材料。 */
 export type IssueObservation = {
   readonly issue: number;
-  readonly open: boolean;
+  /** Issue が open か。**board に居るのに `issues` 節に無いことを closed へ畳まない** */
+  readonly open: Observed<boolean>;
   readonly ledger: Observed<Ledger>;
 
   /**

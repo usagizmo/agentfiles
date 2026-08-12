@@ -198,7 +198,11 @@ CLEAN_GIT_ENV = {
 
 
 def git(cwd, *args):
-    env = os.environ.copy()
+    # **周りの git 環境を持ち込まない。**commit hook の下では `GIT_DIR` / `GIT_INDEX_FILE` が
+    # 立っているので、そのまま渡すと `-C` を無視して**実 repo が fixture として使われる**
+    # （`init` が再初期化に、`add` と `commit` が実 repo の index への書き込みになる）。
+    # **allowlist にしない** —— git が変数を増やすたびに漏れる。
+    env = dict((k, v) for k, v in os.environ.items() if not k.startswith("GIT_"))
     env.update(CLEAN_GIT_ENV)
     proc = subprocess.run(
         ["git", "-C", cwd, "-c", "commit.gpgsign=false", "-c", "gc.auto=0"] + list(args),
@@ -886,6 +890,31 @@ def test_ignored_not_counted(tmp):
     check("ignore 対象が指紋を動かす", mark(resolve_argv(repo, worktree=repo)), before)
 
 
+def test_fixture_env_isolation(tmp):
+    """**fixture 自身が周りの git 環境から隔離されていること。**
+
+    commit hook の下では `GIT_DIR` などが立っている。持ち込むと `-C` が無視され、
+    **実 repo が fixture として使われる** —— 落ちれば運が良く、通れば実 repo の index が
+    書き換わる。ここが守っているのは指紋ではなく、検査を回すこと自体の安全。
+    """
+    baseline = make_repo(os.path.join(tmp, "iso-baseline"))
+    leaked = {
+        "GIT_DIR": os.path.join(tmp, "iso-baseline", ".git"),
+        "GIT_WORK_TREE": os.path.join(tmp, "iso-baseline"),
+        "GIT_INDEX_FILE": os.path.join(tmp, "iso-baseline", ".git", "index"),
+    }
+    saved = dict((k, os.environ.get(k)) for k in leaked)
+    os.environ.update(leaked)
+    try:
+        check("fixture の隔離: 別 repo が作れる", make_repo(os.path.join(tmp, "iso-leaked")), baseline)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def test_env_invariance(tmp):
     """受入条件 2 —— 実行環境で値が動かないこと。"""
     repo = os.path.join(tmp, "env")
@@ -1289,6 +1318,7 @@ def main():
             test_clean_filter,
             test_index_only,
             test_gitlink,
+            test_fixture_env_isolation,
             test_env_invariance,
             test_local_config_invariance,
             test_fail_closed_branches,

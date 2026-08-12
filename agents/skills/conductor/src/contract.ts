@@ -1,5 +1,5 @@
 // Issue 契約の充足判定。**見出しの字面が契約の実体**（SSOT は
-// `references/issue-contract.md`。字面を変えるときはあちらと同時に変える）。
+// `references/issue-contract.md` の項目表。一致は `test/contract.test.ts` が検査する）。
 //
 // **項目の質は測らない。**見出しが在り、直下に中身があることまで —— そこから先は工程の責任。
 
@@ -8,7 +8,7 @@ import { present } from "./types.ts";
 
 /** **完全一致で引く。**言い換えると契約が観測できない。 */
 export const CONTRACT_HEADINGS = [
-  "## 目的",
+  "## 目的と期待する結果",
   "## 受入条件",
   "## 非目標",
   "## 確定済みの製品判断",

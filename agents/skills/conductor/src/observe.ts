@@ -112,6 +112,27 @@ const fromTri = (t: Tri | undefined): Observed<boolean> => {
   return present(t);
 };
 
+/**
+ * 座標表に無い面。**面ごと観測できないものとして残す** —— 正規化が
+ * `着地面が解決できない` を立てるので、座標表の欠けがそのまま人へ出る。
+ *
+ * `usesPr` だけは真偽で持つ型なので `true` を置く。**この値では何も決まらない** ——
+ * `terminal` が `unobservable` である限り、着地の判定も live checkout の検査も先へ進まない。
+ */
+const unknownSurface = (name: string): SurfaceObservation => {
+  const reason = `座標表に無い面: ${name}`;
+  return {
+    name,
+    usesPr: true,
+    aheadOfIntegration: unobservable(reason),
+    dirty: unobservable(reason),
+    hasCheckout: unobservable(reason),
+    terminal: unobservable(reason),
+    landable: unobservable(reason),
+    liveCheckoutHealthy: unobservable(reason),
+  };
+};
+
 /** 宣言行を本文の先頭区画・行頭からだけ読む（本文全体の文字列一致では辿らない）。 */
 const declarations = (body: string, keyword: "Depends on" | "Same branch as"): number[] => {
   const head = body.split(/\n\s*\n/)[0] ?? "";
@@ -173,6 +194,13 @@ export const observe = async (
       .map((parts) => parts.slice(1).join(" ")),
   );
 
+  // **面ごとの worktree 一覧を読めたか。**`watch.sh` の `plane_unknown` は面ごと `-` で潰すので、
+  // 実体が 0 件なのか読めなかったのかを行の有無では区別できない。**dirty を読めない行が
+  // 1 本でもあれば、その面の一覧そのものを観測できていない**として扱う。
+  const blindSurfaces = new Set(
+    worktreeRows.filter((w) => w.dirty === "unreadable").map((w) => w.surface),
+  );
+
   const numbers = statuses.map((s) => s.issue);
   const [bodies, comments] = await Promise.all([
     port.issueBodies(numbers),
@@ -205,6 +233,12 @@ export const observe = async (
 
     const surfaces: SurfaceObservation[] = await Promise.all(
       surfaceNames.map(async (name) => {
+        // **座標表に無い面を「PR で着地する面」へ倒さない。**倒すと、着地の条件も
+        // live checkout の検査も観測していない面の型で決まり、座標表の欠けが
+        // `着地面が解決できない` として出てこない。
+        const usesPr = surfaceUsesPr.get(name);
+        if (usesPr === undefined) return unknownSurface(name);
+
         const git = await port.surfaceGit(issue, name);
         // **帰属は面の名前だけでは引けない。**同じ面に複数の課題の worktree が並ぶので、
         // path に自分の claim branch（`{prefix}/{番号}-`）が入っているものだけを自分のものとする。
@@ -212,14 +246,25 @@ export const observe = async (
         const worktree = worktreeRows.find(
           (w) => w.surface === name && ownsWorktreePath(w.path, issue),
         );
+        const blind = blindSurfaces.has(name);
         const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
         const facts: SurfaceFacts = {
           name,
-          usesPr: surfaceUsesPr.get(name) ?? true,
+          usesPr,
           aheadOfIntegration: git.ahead,
           head: git.head,
-          dirty: fromTri(worktree?.dirty),
-          hasCheckout: present(worktree !== undefined),
+          // **worktree が無いことは「読めなかった」ではない。**checkout が無い面には
+          // 未コミットの変更が存在しえないので `false` で確定する —— `absent` にすると
+          // 「dirty でないとは言えない」に読まれ、**claim もされていない課題が全部
+          // 「成果物あり」になる**。読めなかったのは一覧ごと潰れている場合だけ。
+          dirty: blind
+            ? unobservable("面の worktree 一覧を読めない")
+            : worktree === undefined
+              ? present(false)
+              : fromTri(worktree.dirty),
+          hasCheckout: blind
+            ? unobservable("面の worktree 一覧を読めない")
+            : present(worktree !== undefined),
           liveCheckoutHealthy:
             liveHealth.get(name) ?? unobservable("live checkout を観測していない"),
           prMerged: extra.prMerged,
@@ -238,7 +283,9 @@ export const observe = async (
 
     return {
       issue,
-      open: row?.open ?? false,
+      // **board に居るのに `issues` 節に無い課題を closed へ倒さない。**倒すと `取り下げ` に
+      // 化け、まだ生きている課題が終端として片付けの対象になる。
+      open: row === undefined ? unobservable("board に居るが issues 節に無い") : present(row.open),
       sourceReadable:
         bodyObserved.kind === "present" && commentsObserved.kind === "present"
           ? present(true)

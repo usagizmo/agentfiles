@@ -62,7 +62,7 @@ export const intent = {
 
 export const observation = (over: Partial<IssueObservation> = {}): IssueObservation => ({
   issue: 1,
-  open: true,
+  open: present(true),
   ledger: present("未計画"),
   sourceReadable: present(true),
 

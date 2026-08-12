@@ -14,7 +14,7 @@ import {
   planSlotUsage,
   worktreeCount,
 } from "./resources.ts";
-import { ledgerAhead, ledgerBehind, normalize } from "./normalize.ts";
+import { hasWorkInProgress, ledgerAhead, ledgerBehind, normalize } from "./normalize.ts";
 import type {
   ActionParams,
   Conflict,
@@ -221,10 +221,9 @@ const stockStale = (g: Group, ctx: Context): boolean =>
 const parentOf = (g: Group, ctx: Context): Group =>
   ctx.groups.find((x) => x.members.includes(g.representative)) ?? g;
 
+/** **述語は `normalize` の 1 つだけ**。ここで書き直すと `実装中` の判定と割れる。 */
 const hasArtifacts = (g: Group): boolean =>
-  g.observations.some((o) =>
-    o.surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) !== false),
-  );
+  g.observations.some((o) => hasWorkInProgress(o.surfaces));
 
 // ---------------------------------------------------------------------------
 // 選出
@@ -247,7 +246,8 @@ const dependenciesResolved = (
       if (record === undefined) return false;
       // **解消 = `着地済み`、または closed かつ `完了`**（片付けが終端の証跡を消すため）。
       if (record.progress === "着地済み") return true;
-      return byIssue.get(n)?.open === false && record.ledger === "完了";
+      const dep = byIssue.get(n);
+      return dep !== undefined && value(dep.open) === false && record.ledger === "完了";
     }),
   );
 
@@ -257,7 +257,8 @@ const selectable = (
   all: readonly NormalizedIssue[],
   byIssue: Map<number, IssueObservation>,
 ): boolean => {
-  if (!g.observations.every((o) => o.open)) return false;
+  // **読めなかった `open` を選出の側へ倒さない**（claim は worktree を作る不可逆操作）。
+  if (!g.observations.every((o) => value(o.open) === true)) return false;
   if (!g.records.every((r) => r.ledger === "計画済み")) return false;
   if (alreadyClaimed(g)) return false;
   if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return false;
@@ -273,7 +274,7 @@ const selectable = (
  * そこは在庫の鮮度が守っている対象そのもの。
  */
 const claimStructurallyBlocked = (g: Group): boolean => {
-  if (!g.observations.every((o) => o.open)) return true;
+  if (!g.observations.every((o) => value(o.open) === true)) return true;
   if (!g.records.every((r) => r.ledger === "計画済み")) return true;
   if (alreadyClaimed(g)) return true;
   if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return true;
