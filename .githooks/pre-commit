@@ -26,5 +26,8 @@ bun run lint-staged || exit 1
 bun run typecheck || exit 1
 
 # **テストは対象を絞らない。**「この実装を変えたらこの test」の対応を lint-staged の
-# glob で持つと、対応を書き忘れた変更が黙って通る。全体でも数百 ms なので常に回す
+# glob で持つと、対応を書き忘れた変更が黙って通る。
+#
+# **探索は bun の既定に任せる。**`bunfig.toml` も test script も置かないので、
+# `*.test.*` を置けばそれだけで gate に乗る。列挙を持つと、足した検査が呼ばれないまま残る。
 bun test
