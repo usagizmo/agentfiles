@@ -235,7 +235,10 @@ export const yieldRecord = (body: string): Observed<YieldRecord> =>
   parseYaml(extractMarker(body, "yield"), isYield);
 
 export type PlanRecord = {
+  /** **制御面の** base。他の面は `landingBaseShas`（形式は `resolve` の計画コメント） */
   readonly baseSha: string;
+  /** 制御面以外の着地面の base。**面ごとに引く**（制御面の SHA を他 repo で使えない） */
+  readonly landingBaseShas: Readonly<Record<string, string>>;
   /** 対象集合の全件。**キーが無いものは不一致として扱う**（fail-closed） */
   readonly issueDigests: Readonly<Record<string, string>>;
   /** ここが変わったら計画が無効になる。**空にしない** */
@@ -257,8 +260,13 @@ const isPlan = (v: unknown): v is PlanRecord =>
 export const planRecord = (body: string): Observed<PlanRecord> => {
   const parsed = parseYaml(extractMarker(body, "plan"), isPlan);
   if (parsed.kind !== "present") return parsed;
-  const also = (parsed.value as { alsoResolves?: unknown }).alsoResolves;
-  return present({ ...parsed.value, alsoResolves: isNumberArray(also) ? also : [] });
+  const raw = parsed.value as { alsoResolves?: unknown; landingBaseShas?: unknown };
+  // **どちらも省略できる**（制御面だけの課題・同居しない課題）。**無いことを異常にしない。**
+  return present({
+    ...parsed.value,
+    alsoResolves: isNumberArray(raw.alsoResolves) ? raw.alsoResolves : [],
+    landingBaseShas: isStringMap(raw.landingBaseShas) ? raw.landingBaseShas : {},
+  });
 };
 
 /**

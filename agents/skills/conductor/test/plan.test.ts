@@ -1,7 +1,7 @@
 // 計画との突き合わせ。**倒す向き**（不一致側・交差側）だけを固定する。
 
 import { describe, expect, test } from "bun:test";
-import { bodyMatchesPlan, planInvalidated } from "../src/plan.ts";
+import { bodyMatchesPlan, planBases, planInvalidated } from "../src/plan.ts";
 import { planRecord } from "../src/records.ts";
 import type { Observed } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
@@ -47,31 +47,83 @@ describe("本文と計画の突き合わせ", () => {
   });
 });
 
+const CONTROL = "acme/control";
+const at = (surface: string, ...paths: string[]) =>
+  present(paths.map((path) => ({ surface, path })));
+
 describe("計画の失効", () => {
   test("invalidationScope の下の変更は交差する（前方一致）", () => {
-    const changed = present(["agents/skills/conductor/SKILL.md"]);
-    expect(planInvalidated(plan(BASE), changed)).toEqual(present(true));
+    const changed = at("acme/control", "agents/skills/conductor/SKILL.md");
+    expect(planInvalidated(plan(BASE), changed, CONTROL)).toEqual(present(true));
   });
 
   test("範囲外の変更は交差しない", () => {
-    expect(planInvalidated(plan(BASE), present(["harnesses/claude/settings.json"]))).toEqual(
-      present(false),
-    );
+    expect(
+      planInvalidated(plan(BASE), at("acme/control", "harnesses/claude/settings.json"), CONTROL),
+    ).toEqual(present(false));
   });
 
   test("resourceKeys の名前に当たる path も交差する", () => {
-    expect(planInvalidated(plan(BASE), present(["conductor-tick/x.ts"]))).toEqual(present(true));
-  });
-
-  test("変更を読めなければ交差扱いにする（判定不能を「交差していない」へ倒さない）", () => {
-    expect(planInvalidated(plan(BASE), unobservable("面の統合先を読めない"))).toEqual(
+    expect(planInvalidated(plan(BASE), at("acme/control", "conductor-tick/x.ts"), CONTROL)).toEqual(
       present(true),
     );
   });
 
-  test("接頭辞が途中で切れている path は当たらない", () => {
-    expect(planInvalidated(plan(BASE), present(["agents/skills/conductor-other/x"]))).toEqual(
+  test("変更を読めなければ交差扱いにする（判定不能を「交差していない」へ倒さない）", () => {
+    expect(planInvalidated(plan(BASE), unobservable("面の統合先を読めない"), CONTROL)).toEqual(
+      present(true),
+    );
+  });
+
+  test("他の面を指した項目は、この面の変更に当てない", () => {
+    // `landing-surface.md`「面をまたぐ path の突き合わせ」の 3 行目。
+    // 当てると、別 repo の同名 path が動くたびに計画が失効する。
+    const scoped = plan(BASE.replace("- agents/skills/conductor", '- "acme/skills: agents"'));
+    expect(planInvalidated(scoped, at("acme/control", "agents/x"), CONTROL)).toEqual(
       present(false),
     );
+    expect(planInvalidated(scoped, at("acme/skills", "agents/x"), CONTROL)).toEqual(present(true));
+  });
+
+  test("接頭辞の無い項目は制御面の変更にだけ当たる", () => {
+    expect(
+      planInvalidated(plan(BASE), at("acme/skills", "agents/skills/conductor/x"), CONTROL),
+    ).toEqual(present(false));
+  });
+
+  test("接頭辞が途中で切れている path は当たらない", () => {
+    expect(
+      planInvalidated(plan(BASE), at("acme/control", "agents/skills/conductor-other/x"), CONTROL),
+    ).toEqual(present(false));
+  });
+});
+
+describe("面ごとの base", () => {
+  const record = (yaml: string) => {
+    const r = plan(yaml);
+    if (r.kind !== "present") throw new Error("計画を読めない");
+    return r.value;
+  };
+
+  test("回すのはその課題の着地面だけ（座標表の全面ではない）", () => {
+    // 全面を回すと、**制御面の SHA を持たない repo で必ず落ちて**判定不能になり、
+    // 着地面が 2 面以上ある座標表では計画を持つ全課題が常に失効扱いになる。
+    expect(planBases(record(BASE), ["acme/control"], CONTROL)).toEqual([
+      { surface: "acme/control", base: "aaa" },
+    ]);
+  });
+
+  test("制御面は baseSha、それ以外は landingBaseShas", () => {
+    const two = record(`${BASE}\nlandingBaseShas:\n  acme/skills: bbb`);
+    expect(planBases(two, ["acme/control", "acme/skills"], CONTROL)).toEqual([
+      { surface: "acme/control", base: "aaa" },
+      { surface: "acme/skills", base: "bbb" },
+    ]);
+  });
+
+  test("landingBaseShas にキーが無い面は判定不能（交差扱いへ倒す材料）", () => {
+    expect(planBases(record(BASE), ["acme/skills"], CONTROL)).toEqual([
+      { surface: "acme/skills", base: undefined },
+    ]);
   });
 });

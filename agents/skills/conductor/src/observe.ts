@@ -60,8 +60,15 @@ export type ObservePort = {
    * 成分の名前と符号化はスクリプトが専任する（引数表は `references/protocols.md`）。
    */
   readonly cycleMark: (input: CycleMarkInput) => Promise<Observed<string>>;
-  /** 本文が計画の記録と一致しているか・計画が失効したか・資源キー（計画コメントの中身） */
-  readonly planFacts: (issue: number) => Promise<{
+  /**
+   * 本文が計画の記録と一致しているか・計画が失効したか・資源キー（計画コメントの中身）。
+   * **`landing` はその課題の着地面**。座標表の全面を渡さない —— 制御面の base は他 repo に
+   * 存在しないので、渡すと判定不能 = 交差扱いが全課題で立つ。
+   */
+  readonly planFacts: (
+    issue: number,
+    landing: readonly string[],
+  ) => Promise<{
     readonly bodyMatchesPlan: Observed<boolean>;
     readonly planInvalidated: Observed<boolean>;
     readonly resourceKeys: Observed<readonly string[]>;
@@ -221,7 +228,6 @@ export const observe = async (
     const commentText =
       commentsObserved.kind === "present" ? joinComments(commentsObserved.value) : "";
 
-    const [plan, extra] = await Promise.all([port.planFacts(issue), port.issueFacts(issue)]);
     const pause = extractMarker(commentText, "yield").kind === "present";
     const claim = claimRecord(commentText);
     const report = reportRecord(commentText);
@@ -231,6 +237,13 @@ export const observe = async (
       claim.kind === "present" && claim.value.landing.length > 0
         ? claim.value.landing
         : [...surfaceUsesPr.keys()].slice(0, 1);
+
+    // **着地面を決めてから計画を照らす。**失効は面ごとの base から測るので、
+    // その課題の着地面が決まっていないと問い合わせられない。
+    const [plan, extra] = await Promise.all([
+      port.planFacts(issue, surfaceNames),
+      port.issueFacts(issue),
+    ]);
 
     const surfaces: SurfaceObservation[] = await Promise.all(
       surfaceNames.map(async (name) => {
