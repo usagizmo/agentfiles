@@ -3,7 +3,9 @@
 // **失敗を `false` へ倒さない。**コマンドが落ちたら `unobservable` を返す ——
 // 倒すと、観測できなかったことが「そうではない」として遷移を通す。
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
 import { entryBlockRecord, planRecord } from "./records.ts";
@@ -234,13 +236,63 @@ export const createPort = (options: PortOptions): ObservePort => {
       };
     },
 
-    cycleMark: async (issue) => {
-      const result = await run([
-        "python3",
-        `${scriptsDir}/cycle-mark.py`,
-        "--issue",
-        String(issue),
-      ]);
+    // **引数表は `references/protocols.md` が SSOT。**「無い」も明示して渡す ——
+    // 省略は usage error で、取得に失敗した周と本当に無い周を同じ指紋にしないための形。
+    cycleMark: async (input) => {
+      const args = ["python3", `${scriptsDir}/cycle-mark.py`, "--ledger", input.ledger];
+      const files: string[] = [];
+      const fileArg = async (flag: string, body: string | null, absentFlag: string) => {
+        if (body === null) {
+          args.push(absentFlag);
+          return;
+        }
+        const path = `${tmpdir()}/conductor-${input.issue}-${flag.replace(/^--/, "")}-${randomUUID()}`;
+        await Bun.write(path, body);
+        files.push(path);
+        args.push(flag, path);
+      };
+
+      if (input.ledger === "未計画") {
+        for (const b of input.issueBodies) {
+          const path = `${tmpdir()}/conductor-body-${b.issue}-${randomUUID()}`;
+          await Bun.write(path, b.body);
+          files.push(path);
+          args.push("--issue-body", `${b.issue}:${path}`);
+        }
+      } else {
+        args.push("--progress", input.progress);
+        const host = await run(
+          ["git", "remote", "get-url", "origin"],
+          surfaces[0]?.repoPath ?? ".",
+        );
+        // **host は制御面の origin から取る**（全着地面の remote が在るべき host）。
+        const url = host.ok ? host.stdout.trim() : "";
+        const parsed = /^(?:git@|https?:\/\/)([^:/]+)/.exec(url)?.[1];
+        if (parsed === undefined) return unobservable("制御面の origin から host を引けない");
+        args.push("--host", parsed);
+        for (const s of input.surfaces) {
+          const surface = surfaceOf(surfaces, s.name);
+          if (surface === undefined) return unobservable(`座標表に無い面: ${s.name}`);
+          args.push("--landing", `${s.name}:${surface.repoPath}`);
+          const branches = await run(
+            ["git", "branch", "--list", "--format=%(refname:short)"],
+            surface.repoPath,
+          );
+          if (!branches.ok) return unobservable(branches.reason);
+          const branch = branches.stdout
+            .split("\n")
+            .find((b) => new RegExp(`^[^/]+/${input.issue}-`).test(b.trim()));
+          if (branch === undefined) args.push("--no-branch", s.name);
+          else args.push("--branch", `${s.name}:${branch.trim()}`);
+          if (s.worktree === null) args.push("--no-worktree", s.name);
+          else args.push("--worktree", `${s.name}:${s.worktree}`);
+        }
+        await fileArg("--plan-comment", input.planComment, "--no-plan-comment");
+      }
+      await fileArg("--wait-record", input.waitRecord, "--no-wait-record");
+
+      const result = await run(args);
+      await Promise.all(files.map((f) => rm(f, { force: true })));
       // **指紋を作れない周でも action の選択は続ける**（照合を飛ばすだけ）。
       return result.ok ? present(result.stdout.trim()) : unobservable(result.reason);
     },

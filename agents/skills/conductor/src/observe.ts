@@ -28,9 +28,10 @@ import {
   waitRecord,
 } from "./records.ts";
 import { CONCURRENCY, mapLimit } from "./limit.ts";
+import { normalizeProgress } from "./normalize.ts";
 import { deriveSurface } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
-import type { Ledger, Observed } from "./types.ts";
+import type { Ledger, Observed, Progress } from "./types.ts";
 import { absent, invalid, present, unobservable } from "./types.ts";
 
 /** snapshot に無い材料を取る口。**実装は 1 つで、テストは fake を渡す。** */
@@ -54,8 +55,11 @@ export type ObservePort = {
     issue: number,
     surface: string,
   ) => Promise<{ readonly ahead: Observed<boolean>; readonly head: Observed<string> }>;
-  /** 成果の指紋（`scripts/cycle-mark.py`） */
-  readonly cycleMark: (issue: number) => Promise<Observed<string>>;
+  /**
+   * 成果の指紋（`scripts/cycle-mark.py`）。**渡すのは正規化済みの値だけ** ——
+   * 成分の名前と符号化はスクリプトが専任する（引数表は `references/protocols.md`）。
+   */
+  readonly cycleMark: (input: CycleMarkInput) => Promise<Observed<string>>;
   /** 本文が計画の記録と一致しているか・計画が失効したか・資源キー（計画コメントの中身） */
   readonly planFacts: (issue: number) => Promise<{
     readonly bodyMatchesPlan: Observed<boolean>;
@@ -78,6 +82,24 @@ export type ObservePort = {
     /** claim の記録が書かれた時刻。**merge の枠の順序キー**（PR 作成の早さでは選ばない） */
     readonly claimedAt: Observed<number>;
   }>;
+};
+
+/**
+ * 指紋の材料。**`ledger` が式を決める**（`未計画` なら計画の周、それ以外は解決の周）。
+ * checkout path と host は port が持つので入れない。branch も port が git から引く。
+ */
+export type CycleMarkInput = {
+  readonly issue: number;
+  readonly ledger: Ledger;
+  readonly progress: Progress;
+  /** 着地面ごとの worktree。**無いことも明示して渡す**（省略は usage error） */
+  readonly surfaces: readonly { readonly name: string; readonly worktree: string | null }[];
+  /** 計画コメントの本文。無ければ null */
+  readonly planComment: string | null;
+  /** 人待ちの記録の本文。**有効なときだけ渡す**（判定は呼び出し側） */
+  readonly waitRecord: string | null;
+  /** 計画の周のみ。対象集合の全件 */
+  readonly issueBodies: readonly { readonly issue: number; readonly body: string }[];
 };
 
 /** project の Status 名 → `ledger`。**対応表は project 必須**（無ければ fail-closed）。 */
@@ -159,7 +181,7 @@ export const observe = async (
 
   // **件数ぶん並行に投げない**（`limit.ts`）。1 件につき計画と PR の 2 経路が走るので、
   // ここを開けると board の件数の 2 倍が同時に立つ。
-  return mapLimit(statuses, CONCURRENCY, async (status): Promise<IssueObservation> => {
+  const base = await mapLimit(statuses, CONCURRENCY, async (status): Promise<IssueObservation> => {
     const issue = status.issue;
     // **読めなかったものを空へ畳まない。**畳むと Issue 契約が「欠けている」に、
     // 記録が全部「無い」に読まれ、差し戻しと片付けが誤った観測で走る。
@@ -258,7 +280,7 @@ export const observe = async (
 
       failureRecord: retryRecord(commentText),
       cycleRecord: cycleRecord(commentText),
-      currentMark: await port.cycleMark(issue),
+      currentMark: absent(),
       readyRecordStale: stalenessOf(readyRecord(commentText)),
 
       bodyMatchesPlan: plan.bodyMatchesPlan,
@@ -273,6 +295,57 @@ export const observe = async (
       claimedAt: extra.claimedAt,
     };
   });
+
+  // **指紋は要る課題にだけ作る。**`decide` が読むのは周回の記録が `mark` を持つときだけで、
+  // 書く側（回す action）は終端に達した課題では走らない。全件に走らせると board の件数ぶん
+  // python を起こす。**落としているのは対象であって観測項目ではない。**
+  const marks = new Map<number, Observed<string>>();
+  const needsMark = base.filter((o) => {
+    const cycle = o.cycleRecord.kind === "present" ? o.cycleRecord.value : undefined;
+    if (cycle?.mark != null) return true;
+    return !(o.ledger.kind === "present" && o.ledger.value === "完了");
+  });
+  await mapLimit(needsMark, CONCURRENCY, async (o) => {
+    if (o.ledger.kind !== "present") return;
+    const raw = comments.get(o.issue);
+    const text = raw?.kind === "present" ? joinComments(raw.value) : "";
+    const plan = extractMarker(text, "plan");
+    const waitBlock = extractMarker(text, "wait");
+    // **有効な人待ちだけ渡す**（判定は呼び出し側、と引数表が定めている）。
+    const validWait =
+      o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid"
+        ? waitBlock.kind === "present"
+          ? waitBlock.value
+          : null
+        : null;
+    const bodyOf = (n: number): string => {
+      const b = bodies.get(n);
+      return b?.kind === "present" ? b.value : "";
+    };
+    marks.set(
+      o.issue,
+      await port.cycleMark({
+        issue: o.issue,
+        ledger: o.ledger.value,
+        progress: normalizeProgress(o),
+        surfaces: o.surfaces.map((s) => ({
+          name: s.name,
+          worktree:
+            worktreeRows.find((w) => w.surface === s.name && ownsWorktreePath(w.path, o.issue))
+              ?.path ?? null,
+        })),
+        planComment: plan.kind === "present" ? plan.value : null,
+        waitRecord: validWait,
+        // **計画の周は対象集合の全件**。claim 前なので group は本文の宣言から引く。
+        issueBodies:
+          o.ledger.value === "未計画"
+            ? [o.issue, ...o.sameBranchAs].map((n) => ({ issue: n, body: bodyOf(n) }))
+            : [],
+      }),
+    );
+  });
+
+  return base.map((o) => ({ ...o, currentMark: marks.get(o.issue) ?? absent() }));
 };
 
 /**
