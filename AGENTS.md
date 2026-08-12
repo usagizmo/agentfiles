@@ -78,6 +78,8 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 共通 `agents/AGENTS.md` に書けるのは、その機能が無い harness でも代替手段で成立するルールまで（例: 判断材料を Artifact にする → 作れない harness では応答に出す）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ。
 
+共通 `agents/AGENTS.md` は **10,000 文字を超えない**。grok が 1 ファイルあたりで切る（超過は警告だけで、本文は黙って後半が落ちる）。検査は `bun test`。
+
 ### 共通と個別の分け方
 
 | 置く場所             | 対象                                                                           | 判定                                                                                                             |
