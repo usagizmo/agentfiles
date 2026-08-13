@@ -2,6 +2,8 @@
 
 候補は Claude / Codex / Grok。**実行中の自分自身を除いた 2 つ**を起動する（再入防止）。自分が候補に無い harness や自分がどれか不確かな場合は Claude と Codex の 2 つ。
 
+アドバイザーは consult を起動しない。agent を start しない。判断を応答に出す。
+
 一言伝えてから起動する。モデル / effort の上書きはしない。
 
 Herdr の外では立てない。`HERDR_ENV` が 1 でない、または `herdr` が無いときは start が失敗する。`claude -p` / `codex exec` へ倒さ**ない**。
