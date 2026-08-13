@@ -242,12 +242,9 @@
     border-left-color: var(--rabi-accent);
   }
   /* 選択は枠で表す。赤の面のときだけ赤い枠 */
-  .card.is-sel {
-    border: 2px solid var(--rabi-ink);
-    padding: calc(0.6rem - 1px) calc(0.7rem - 1px) calc(0.65rem - 1px);
-    box-shadow: var(--rabi-e2);
-  }
-  .card[data-tone="human"].is-sel { border-color: var(--rabi-accent); }
+  /* 選択と focus は outline、警告は枠そのもの。赤の面の上で 2 つが同じ見た目にならない */
+  .card.is-sel { outline: 2px solid var(--rabi-ink); outline-offset: -2px; box-shadow: var(--rabi-e2); }
+  .card[data-tone="human"].is-sel { outline-color: var(--rabi-accent); }
   .card.dim { opacity: 0.3; }
   .card.rel { border-color: var(--rabi-edge); }
   .card .nums { display: block; font-family: var(--rabi-mono); font-size: 0.8rem; font-weight: 700; }
