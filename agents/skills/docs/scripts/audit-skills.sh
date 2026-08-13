@@ -33,7 +33,7 @@ LAYERS=$(dirname "$0")/layers.tsv
 
 # **queue package の構成員。**キュー機構専用の共有実体（`shared/queue/`）を張ってよい skill。
 # **rank ではなくドメインで決める** —— rank 2 の subflow が queue adapter になることがあり、
-# rank 境界だと正当な参照まで落ちる。project 差分の adapter は `--queue-member` で足す。
+# rank 境界だと正当な参照まで落ちる。
 QUEUE_MEMBERS="conductor
 refine
 resolve"
@@ -391,10 +391,9 @@ done
 # --- check shared: shared/ への symlink 健全性 ---------------------------
 # queue 判定に実体の在処が要るので、symlink 検査より前に解決しておく。
 SHARED_ROOT=$(CDPATH= cd -P -- "$ROOT/../shared" 2>/dev/null && pwd -P) || SHARED_ROOT=""
-# 規約は `skills/<name>/{references,scripts}/<file>` → `../../../shared/<同名>`。
-# 張り先はモデルの扱い（読む / 実行する）で決まり、拡張子では決まらない。
+# 張り先と名前の規約は repo の AGENTS.md。ここはその検査。
 : >"$WORK/shared_use"
-for d in "$ROOT"/*/references "$ROOT"/*/scripts; do
+for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets; do
 	[ -d "$d" ] || continue
 	skill=${d%/*}
 	skill=${skill##*/}
@@ -463,7 +462,7 @@ done
 
 # shared に同名の実体があるのに skill 側が通常ファイル = コピーによる重複。
 if [ -n "$SHARED_DIR" ]; then
-	for d in "$ROOT"/*/references "$ROOT"/*/scripts; do
+	for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets; do
 		[ -d "$d" ] || continue
 		skill=${d%/*}
 		skill=${skill##*/}
@@ -472,8 +471,12 @@ if [ -n "$SHARED_DIR" ]; then
 			[ -f "$f" ] || continue
 			[ -L "$f" ] && continue
 			b=${f##*/}
-			[ -f "$SHARED_DIR/$b" ] &&
+			# symlink 側と同じく queue も見る。片側だけだと queue の実体コピーが素通りする。
+			if [ -f "$SHARED_DIR/$b" ]; then
 				emit VIOLATION shared "$skill/$kind/$b" "note=shared/$b の実体があるのに通常ファイル"
+			elif [ -f "$SHARED_DIR/queue/$b" ]; then
+				emit VIOLATION shared "$skill/$kind/$b" "note=shared/queue/$b の実体があるのに通常ファイル"
+			fi
 		done
 	done
 fi
@@ -519,8 +522,10 @@ else
 				emit VIOLATION derived "docs/structure.md" "note=shared/${s##*/} が図にも一覧にも無い"
 		done
 		# 逆向き。shared 図に残った幽霊エントリもドリフト。
-		awk '/subgraph shared/ { on = 1; next } on && /^ *end/ { exit } on' "$DOCS_DIR/structure.md" |
-			awk '{ while (match($0, /[a-z][a-z0-9-]+\.(md|sh|tsv)/)) { print substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH) } }' |
+		# **拾う条件は subgraph の id ではなくラベルに `agents/shared/` が在ること**。
+		# id で拾うと、図を整える改名で検査が黙って外れる。拡張子も限定しない。
+		awk '/subgraph .*agents\/shared/ { on = 1; next } on && /^ *end/ { on = 0; next } on' "$DOCS_DIR/structure.md" |
+			awk '{ while (match($0, /[a-z][a-z0-9-]+\.[a-z][a-z0-9]{1,4}/)) { print substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH) } }' |
 			sort -u | while read -r n; do
 			grep -qx "$n" "$WORK/shared_real" ||
 				emit VIOLATION derived "docs/structure.md" "note=図の $n は shared に実体が無い"
