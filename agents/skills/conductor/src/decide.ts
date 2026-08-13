@@ -307,6 +307,22 @@ const alreadyClaimed = (g: Group): boolean =>
     (o) => o.claimRecord.kind === "present" || value(o.claimBranchExists) === true,
   );
 
+/** 盤面の `limits[]` と選出が同じ数え方をする。**式を盤面側で書き直さない。** */
+export const usageOf = (
+  observations: readonly IssueObservation[],
+): { readonly worktrees: number; readonly planSlotsUsed: number; readonly readyStock: number } => {
+  const groups = buildGroups(observations);
+  const planSlotsUsed = planSlotUsage(observations);
+  return {
+    worktrees: worktreeCount(observations),
+    planSlotsUsed,
+    // **在庫 = 計画済みの group 数 + 生存している `refine` セッション数。**
+    readyStock:
+      groups.filter((g) => g.records.every((r) => r.ledger === "計画済み") && !alreadyClaimed(g))
+        .length + planSlotsUsed,
+  };
+};
+
 const dependenciesResolved = (
   g: Group,
   all: readonly NormalizedIssue[],
@@ -779,17 +795,15 @@ export const decide = (input: TickInput): Decision => {
     });
   }
 
+  const usage = usageOf(input.observations);
   const ctx: Context = {
     groups,
     all,
     byIssue,
     config: input.config,
-    worktrees: worktreeCount(input.observations),
-    planSlotsUsed: planSlotUsage(input.observations),
-    // **在庫 = 計画済みの group 数 + 生存している `refine` セッション数。**
-    readyStock:
-      groups.filter((g) => g.records.every((r) => r.ledger === "計画済み") && !alreadyClaimed(g))
-        .length + planSlotUsage(input.observations),
+    worktrees: usage.worktrees,
+    planSlotsUsed: usage.planSlotsUsed,
+    readyStock: usage.readyStock,
     // **効くのは終端に達するまで。**外すのは `人待ち` と、止まったことを確かめた `退避先` だけ。
     entryBlocked: groups.some(
       (g) =>

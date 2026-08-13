@@ -123,6 +123,7 @@ export const createPort = (options: PortOptions): ObservePort => {
     ]));
 
   const bodies = new Map<number, Observed<string>>();
+  const titles = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
   /** claim の記録が書かれた時刻。**merge の枠の順序キー**なので、固定値へ倒さない */
   const claimTimes = new Map<number, Observed<number>>();
@@ -165,7 +166,7 @@ export const createPort = (options: PortOptions): ObservePort => {
     // **打ち切りは fail-closed。**`--paginate` が途中で落ちたら、欠けた分を「無い」と
     // 読むことになる —— 記録が無い課題として claim や差し戻しが走る。
     issueBodies: async (numbers) => {
-      const all = await json<{ number: number; body: string | null }[]>([
+      const all = await json<{ number: number; body: string | null; title: string }[]>([
         "gh",
         "api",
         "--paginate",
@@ -176,18 +177,30 @@ export const createPort = (options: PortOptions): ObservePort => {
         for (const n of numbers) {
           const miss: Observed<string> = unobservable("Issue 一覧を読めない");
           bodies.set(n, miss);
+          titles.set(n, miss);
           map.set(n, miss);
         }
         return map;
       }
-      const byNumber = new Map(all.value.map((i) => [i.number, i.body ?? ""]));
+      const byNumber = new Map(all.value.map((i) => [i.number, i]));
       for (const n of numbers) {
         // **board に居るのに一覧に無い**のは欠落。既定へ倒さない。
         const found = byNumber.get(n);
         const observed: Observed<string> =
-          found === undefined ? unobservable("Issue 一覧に居ない") : present(found);
+          found === undefined ? unobservable("Issue 一覧に居ない") : present(found.body ?? "");
+        const title: Observed<string> =
+          found === undefined ? unobservable("Issue 一覧に居ない") : present(found.title);
         bodies.set(n, observed);
+        titles.set(n, title);
         map.set(n, observed);
+      }
+      return map;
+    },
+
+    issueTitles: async (numbers) => {
+      const map = new Map<number, Observed<string>>();
+      for (const n of numbers) {
+        map.set(n, titles.get(n) ?? unobservable("本文をまだ読んでいない"));
       }
       return map;
     },
@@ -196,12 +209,22 @@ export const createPort = (options: PortOptions): ObservePort => {
     // 窓で切ると「計画はあるのに planCommentExists=false」が再発する。marker を持つ限り全ページ辿る。
     issueComments: async (numbers) => {
       const all = await json<
-        { issue_url: string; body: string | null; created_at: string; id: number }[]
+        {
+          issue_url: string;
+          body: string | null;
+          created_at: string;
+          updated_at: string;
+          id: number;
+        }[]
       >(["gh", "api", "--paginate", `repos/${config.ghRepo}/issues/comments?per_page=100`]);
-      const map = new Map<number, Observed<readonly string[]>>();
+      const map = new Map<
+        number,
+        Observed<readonly { readonly body: string; readonly at: string }[]>
+      >();
       if (all.kind !== "present") {
         for (const n of numbers) {
-          const miss: Observed<readonly string[]> = unobservable("コメント一覧を読めない");
+          const miss: Observed<readonly { readonly body: string; readonly at: string }[]> =
+            unobservable("コメント一覧を読めない");
           comments.set(n, []);
           claimTimes.set(n, unobservable("コメントを読めない"));
           map.set(n, miss);
@@ -226,18 +249,33 @@ export const createPort = (options: PortOptions): ObservePort => {
         );
         const bodiesOfIssue = list.map((c) => c.body ?? "");
         comments.set(n, bodiesOfIssue);
-        map.set(n, present(bodiesOfIssue));
+        map.set(
+          n,
+          present(
+            list.map((c) => ({
+              body: c.body ?? "",
+              at: c.updated_at || c.created_at,
+            })),
+          ),
+        );
         const claim = list.find((c) => (c.body ?? "").includes("<!-- claim -->"));
         claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
       }
       return map;
     },
 
-    surfaceGit: async (issue, name) => {
+    surfaceGit: async (issue, name, worktreePath) => {
       const surface = surfaceOf(surfaces, name);
       if (surface === undefined) {
         return { ahead: unobservable("座標表に無い面"), head: unobservable("座標表に無い面") };
       }
+      const dirtyCount = async (): Promise<Observed<number>> => {
+        if (worktreePath === undefined || worktreePath === null) return present(0);
+        const st = await run(["git", "status", "--porcelain"], worktreePath);
+        return st.ok
+          ? present(st.stdout.split("\n").filter((l) => l !== "").length)
+          : unobservable(st.reason);
+      };
       // **branch 名は `{prefix}/{番号}-{slug}`。**prefix の集合は project が変えてよいので
       // allowlist を焼き込まず、番号で引く。
       const branches = await run(
@@ -249,17 +287,29 @@ export const createPort = (options: PortOptions): ObservePort => {
       const branch = branches.stdout
         .split("\n")
         .find((b) => new RegExp(`^[^/]+/${issue}-`).test(b.trim()));
-      if (branch === undefined) return { ahead: present(false), head: absent() };
+      if (branch === undefined) {
+        return { ahead: present(false), head: absent(), dirtyCount: await dirtyCount() };
+      }
 
       const head = await run(["git", "rev-parse", branch.trim()], surface.repoPath);
       // **`統合先..branch` で測る** —— branch 上の commit の存在で読むと空 branch が `実装中` に化ける。
+      // **数を一度取り、boolean はそこから導く。**盤面用に behind / dirty も同じ round で取る。
       const ahead = await run(
         ["git", "rev-list", "--count", `${surface.integrationRef}..${branch.trim()}`],
         surface.repoPath,
       );
+      const behind = await run(
+        ["git", "rev-list", "--count", `${branch.trim()}..${surface.integrationRef}`],
+        surface.repoPath,
+      );
+      const aheadCount = ahead.ok ? Number(ahead.stdout.trim()) : Number.NaN;
       return {
-        ahead: ahead.ok ? present(Number(ahead.stdout.trim()) > 0) : unobservable(ahead.reason),
+        ahead: ahead.ok ? present(aheadCount > 0) : unobservable(ahead.reason),
         head: head.ok ? present(head.stdout.trim()) : unobservable(head.reason),
+        branch: present(branch.trim()),
+        ...(ahead.ok ? { aheadCount: present(aheadCount) } : {}),
+        ...(behind.ok ? { behindCount: present(Number(behind.stdout.trim())) } : {}),
+        dirtyCount: await dirtyCount(),
       };
     },
 

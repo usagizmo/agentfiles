@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ObservePort, StatusMap } from "../src/observe.ts";
-import { observe } from "../src/observe.ts";
+import { observeTick } from "../src/observe.ts";
 import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
 import type { Ledger, Observed } from "../src/types.ts";
@@ -71,6 +71,12 @@ landing: [o/control]
 
 <!-- /claim -->`;
 
+const comment = (body: string, at = "2026-08-12T00:00:00Z") => present([{ body, at }]);
+
+const observe = async (
+  ...args: Parameters<typeof observeTick>
+): Promise<readonly IssueObservation[]> => (await observeTick(...args)).observations;
+
 const port = (over: Partial<ObservePort> = {}): ObservePort => ({
   snapshot: async () => SNAP,
   issueBodies: async () =>
@@ -78,9 +84,10 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
       [12, present("Depends on #34\nSame branch as #99\n\n本文")],
       [34, present("本文")],
     ]),
+  issueTitles: async () => new Map(),
   issueComments: async () =>
     new Map([
-      [12, present([claimComment])],
+      [12, comment(claimComment)],
       [34, present([])],
     ]),
   surfaceGit: async () => ({ ahead: present(true), head: present("aaa") }),
@@ -152,7 +159,7 @@ keys: [skills]
 
 <!-- /yield -->`;
     const rows = await observe(
-      port({ issueComments: async () => new Map([[12, present([yieldComment])]]) }),
+      port({ issueComments: async () => new Map([[12, comment(yieldComment)]]) }),
       STATUS,
       SURFACES,
     );
@@ -438,7 +445,7 @@ describe("記録の読み取りを繋ぐ", () => {
     // 観測していない面の型で決まり、座標表の欠けが `着地面が解決できない` として出てこない。
     const unknown = claimComment.replace("landing: [o/control]", "landing: [o/elsewhere]");
     const rows = await observe(
-      port({ issueComments: async () => new Map([[12, present([unknown])]]) }),
+      port({ issueComments: async () => new Map([[12, comment(unknown)]]) }),
       STATUS,
       SURFACES,
     );
