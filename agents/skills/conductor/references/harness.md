@@ -128,7 +128,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 | 契約                                         | herdr                                                                                                                                                                                                                                                                         |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 名乗る                                       | `herdr agent rename "$HERDR_PANE_ID" conductor`（`--current` は無い。pane ID を渡す）                                                                                                                                                                                         |
+| 名乗る                                       | `herdr pane current --current` の `agent` が無ければ `herdr pane report-agent --source <kind> --agent <kind> --state working "$HERDR_PANE_ID"`。続けて `herdr agent rename "$HERDR_PANE_ID" conductor`                                                                        |
 | worktree を作る（claim。セッションを置く面） | `herdr worktree create --cwd <その面の checkout> --branch <名> --base <その面の統合先> --label "#<番号>" --no-focus`（**1 課題に 1 回**）                                                                                                                                     |
 | tab を作る（refine）                         | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                           |
 | pane を作る（振られた作業）                  | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                        |
@@ -166,13 +166,19 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **入力欄への送信は `agent prompt` 以外を使わない**。`pane send-keys <id> enter` も `pane send-text` の改行も submit しない。未送信の下書きは `agent prompt` が捨てるので、事前に消そうとしなくてよい
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は `agent prompt` には無い
 - 稼働の確認は `agent prompt <名前> <本文> --wait --until working`。**既に `working` のセッションに使うと返らず timeout する**ので、**その timeout を失敗として数えない**
+- `agent prompt` / `agent rename` は認識済み agent が要る。`pane current` に `agent` が無ければ `agent_not_found` か `agent_not_ready`。未認識の指定 pane には prompt せず、pane を割って `agent start` する
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わ**ない**
 
-`agent_status` は `idle` / `working` / `done` / `blocked` / `unknown` の 5 値。意味は `herdr` skill が SSOT。
+`agent_status` の意味は `herdr` skill が SSOT。conductor が足すのは次だけ。
 
-- **`idle` と `done` は別物** —— `idle` は「入力待ち かつ そのタブが focused UI で seen」、`done` は「未 seen のまま background 作業が終わった」。CLI から読んでも seen にはならない
-- **`unknown` は「agent は居るが分類できない」**。完了の証明ではないので `Conflict` へ写す（`../SKILL.md` の `runtime`）
-- **`blocked` は実行器の印**（承認または質問 UI）。人待ちの SSOT は Issue の記録。印だけの扱いは `src/normalize.ts`
+- 分類できない生値は `src/normalize.ts` の `collectConflicts` が `観測できない` にする
+- **`blocked` は実行器の印**（承認または質問 UI）。人待ちの SSOT は Issue の記録。印だけの扱いは `collectConflicts`
+
+名乗る:
+
+- `<kind>` は自分の実行器。`herdr agent start` の `--kind` と同じ語。project の `executors` ではない
+- `agent` が既にあるときは `report-agent` しない
+- `--current` は `agent rename` に無い。pane ID を渡す
 
 **入力欄の文字列は観測材料ではない**。サジェストか人の未送信入力かを区別できないので、どちらの理由にも使わ**ない**。
 
