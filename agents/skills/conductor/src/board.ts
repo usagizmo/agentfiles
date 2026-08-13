@@ -1,6 +1,6 @@
 // 状況ボード JSON の投影。**決定層の型に display を混ぜない。**
 //
-// 観測と Decision から毎 tick フル生成する。前の盤面は読まない。`log[]` は出さない。
+// 観測と Decision から毎 tick フル生成する。前の盤面は読まない。
 
 import type { ProjectConfig } from "./config.ts";
 import type { LiveCheckoutRow } from "./decode.ts";

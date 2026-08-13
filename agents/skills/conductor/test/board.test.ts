@@ -77,10 +77,6 @@ describe("tick.why", () => {
 });
 
 describe("toBoard", () => {
-  test("log を出さない", () => {
-    expect(toBoard(input())).not.toHaveProperty("log");
-  });
-
   test("stdout 用の Decision を盤面へ写す", () => {
     const decision: Decision = {
       conflicts: [

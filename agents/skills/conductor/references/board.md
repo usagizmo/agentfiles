@@ -2,7 +2,7 @@
 
 `scripts/board.mjs` へ渡す JSON。**盤面の HTML を書かない。**
 
-構造は `src/board.ts` の `toBoard` が、その tick の観測と Decision から毎回フル生成する。前の盤面は読ま**ない**。`log[]` は出さ**ない**。
+構造は `src/board.ts` の `toBoard` が、その tick の観測と Decision から毎回フル生成する。前の盤面は読ま**ない**。
 
 描画は `assets/board.html`。見た目とレーンの並びはそこが持つので、色も並び順もここへ書か**ない**。
 

@@ -557,7 +557,7 @@ branch 名は `{prefix}/{Issue 番号}-{slug}`（prefix の既定は `feat` / `f
 
 **自分の context の残量を制約として報告しない**（ボードにも応答にも）。交代の契機は `references/harness.md`「交代」が持つ。
 
-毎 tick、観測からファイル全体を上書きする。**HTML を書かない**。構造は `cli.ts --board-out`。`log[]` は出さない。形の SSOT は `references/board.md`、投影は `src/board.ts`。描画は `assets/board.html`。置き場は `references/score.md`。
+毎 tick、観測からファイル全体を上書きする。**HTML を書かない**。構造は `cli.ts --board-out`。形の SSOT は `references/board.md`、投影は `src/board.ts`。描画は `assets/board.html`。置き場は `references/score.md`。
 
 ```bash
 bun run <skill>/scripts/board.mjs <データ.json> <譜面のパス>
