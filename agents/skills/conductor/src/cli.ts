@@ -11,9 +11,12 @@
 //   1  観測に失敗した（**watcher は呼び出し側が直前の snapshot で張る**）
 //   2  設定が壊れている（fail-closed。何も選ばずに止まる）
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { parseOverlay, toBoard } from "./board.ts";
 import { ConfigError, parseConfig, resolveSurfaces } from "./config.ts";
 import { decide } from "./decide.ts";
-import { observe } from "./observe.ts";
+import { observeTick } from "./observe.ts";
 import { createPort } from "./port.ts";
 
 const arg = (name: string): string | undefined => {
@@ -47,7 +50,16 @@ const fail: (code: 1 | 2, message: string) => never = (code, message) => {
   process.exit(code);
 };
 
-const USAGE = "usage: cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...";
+const USAGE =
+  "usage: cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>... [--board-out <path>] [--board-overlay <path>] [--tick <n>] [--tick-used <n>]";
+
+const optionalInt = (name: string): number | undefined => {
+  const raw = arg(name);
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) fail(2, `--${name} が 0 以上の整数ではない: ${raw}`);
+  return n;
+};
 const configPath = arg("config") ?? fail(2, USAGE);
 const snapshotOut = arg("snapshot-out") ?? fail(2, USAGE);
 
@@ -75,11 +87,46 @@ const surfaces = (() => {
 const port = createPort({ config, surfaces, scriptsDir, snapshotPath: snapshotOut });
 const surfaceUsesPr = new Map(config.surfaces.map((s) => [s.name, s.usesPr]));
 
-const observations = await observe(port, config.statusMap, surfaceUsesPr).catch((error: unknown) =>
-  // **観測できなかった tick も watcher は張る**（張らないと起こし手が消え、一時的な障害が永久停止に化ける）。
-  // 張るのは呼び出し側の仕事なので、ここは失敗を伝えるだけにする。
-  fail(1, `観測に失敗した: ${String(error)}`),
+const { observations, view } = await observeTick(port, config.statusMap, surfaceUsesPr).catch(
+  (error: unknown) =>
+    // **観測できなかった tick も watcher は張る**（張らないと起こし手が消え、一時的な障害が永久停止に化ける）。
+    // 張るのは呼び出し側の仕事なので、ここは失敗を伝えるだけにする。
+    fail(1, `観測に失敗した: ${String(error)}`),
 );
 
 const decision = decide({ observations, config: config.tick });
+
+const boardOut = arg("board-out");
+if (boardOut !== undefined) {
+  const overlayPath = arg("board-overlay");
+  let overlay;
+  if (overlayPath !== undefined) {
+    try {
+      overlay = parseOverlay(await Bun.file(overlayPath).json());
+    } catch (error) {
+      fail(2, `overlay を読めない: ${String(error)}`);
+    }
+  }
+  const tick = optionalInt("tick");
+  const used = optionalInt("tick-used");
+  const board = toBoard({
+    observations,
+    decision,
+    config,
+    view,
+    ...(overlay === undefined ? {} : { overlay }),
+    observedAt: new Date().toISOString(),
+    ...(tick === undefined ? {} : { tick }),
+    ...(used === undefined ? {} : { actionsUsed: used }),
+  });
+  try {
+    const out = resolve(boardOut);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, `${JSON.stringify(board, null, 2)}\n`);
+  } catch (error) {
+    // **盤面は指紋に入らない。**書けなくても Decision は返す。
+    console.error(`盤面を書けない: ${String(error)}`);
+  }
+}
+
 console.log(JSON.stringify(decision, null, 2));

@@ -34,7 +34,7 @@ description: >-
 | 観測の境界          | `src/decode.ts` / `src/observe.ts` / `scripts/watch.sh` |
 | 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`   |
 
-自分がやるのは 5 つ**だけ** —— 実行器へ渡す prompt 本文、`Conflict` の人向け説明、状況ボードの文章、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。
+自分がやるのは 5 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、状況ボードの観測外の行、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。盤面の `conflicts[]` は `cli.ts` が出す。
 
 project 差分が無くても動く。**例外は Status の対応**で、これだけは project 必須（無ければ fail-closed で止まる）。推測が外れても待ちが伸びるだけの項目には既定値を置き、間違ったものを掴む項目には置か**ない**。
 
@@ -141,8 +141,12 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 ```bash
 bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
-  --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>...
+  --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>... \
+  --board-out <データ.json> --tick-used <この tick で実行した action 数> \
+  --board-overlay "$XDG_STATE_HOME/agents/conductor-overlay.json"
 ```
+
+`--board-overlay` は file があるときだけ渡す。`cli.ts` を呼び直すときも同じ path。無い path を渡すと exit 2。`--tick-used` を落とすと盤面の actions が常に 0。譜面へは `scripts/board.mjs`。置き場は `references/score.md`。
 
 設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` に入れる中身は `references/harness.md`。
 
@@ -208,7 +212,7 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 - action 上限にも数えず、観測もやり直さ**ない**
 - 次の tick でも同じ action を選び続ける
-- 状況ボードの「制約・異常」に出す。**時間切れで解除しない**
+- 状況ボードの overlay（`humanTodo`、`kind: env`）へ出す。**時間切れで解除しない**
 
 ### 記録の精算
 
@@ -553,38 +557,28 @@ branch 名は `{prefix}/{Issue 番号}-{slug}`（prefix の既定は `feat` / `f
 
 **自分の context の残量を制約として報告しない**（ボードにも応答にも）。交代の契機は `references/harness.md`「交代」が持つ。
 
-毎 tick、観測からファイル全体を上書きする。条件を項目名で列挙しない。
-
-**HTML を書か**ない。観測から JSON を作り、書くのはこれだけ。
+毎 tick、観測からファイル全体を上書きする。**HTML を書かない**。構造は `cli.ts --board-out`。`log[]` は出さない。形の SSOT は `references/board.md`、投影は `src/board.ts`。描画は `assets/board.html`。置き場は `references/score.md`。
 
 ```bash
 bun run <skill>/scripts/board.mjs <データ.json> <譜面のパス>
 ```
 
-データの形は `references/board.md`。見た目と語彙の描き分けは `assets/board.html` が持つ。譜面の置き場・引き当て・見せ方は `references/score.md`。
+観測から決まる `humanTodo` はテンプレ。wait の問いは記録本文をそのまま使う。言い換えない。
 
-載せるもの（**JSON のどの欄へ入るかは `references/board.md`**）:
+観測外の行（実行環境の拒否・intake）だけ overlay に書く。観測から出る Conflict・退避先・入場宣言・retired は書か**ない**。完成済みの盤面 JSON を編集し**ない**。載せ先は `humanTodo[]` で、`conflicts[]` ではない。
 
-| 項目                | 中身                                                                                                                                                                                                                                | 観測元                                                                                   |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 鮮度                | **観測した絶対時刻を先頭に置く。「何分前か」は書かない**。tick 番号や統合先の SHA で代替しない                                                                                                                                      | tick の時刻                                                                              |
-| 人がやること        | **先頭に束ねる**。述語は「人が動かすまで、どの工程も起きないもの」全部。件数と、何を答えれば / 何を動かせば進むかを書く。**行名で列挙しない**                                                                                       | 下の各行の導出                                                                           |
-| この tick の action | 何を選び、**なぜそれを選んだか**                                                                                                                                                                                                    | 実行した action                                                                          |
-| 稼働中              | Issue 番号・`progress`・保持している資源・`runtime`。branch を持つものは、あわせてその実体を着地面ごとに（面の名前 / 未コミット数 / 統合先へ入っていない commit 数 / 統合先から何 commit 遅れているか）。**面を畳んで合計にしない** | 正規化レコードと worktree の git 状態                                                    |
-| 待機中              | 何を待っているか、何が空けば動くか。**`休止` もここに載せる**（何が着地すれば再開できるか）                                                                                                                                         | 正規化レコードと容量                                                                     |
-| 詰まり              | 人待ちのもの。**何を答えれば進むか**を 1 行で。記録がいつから `waiting` かも出す                                                                                                                                                    | 人待ちの記録の `reason` と、そのコメントの更新時刻                                       |
-| 依存待ち            | `Depends on` が未解決のもの。**何が着地すれば動くか**を 1 行で                                                                                                                                                                      | Issue 本文の `Depends on` と依存先の `progress`                                          |
-| 退避先の滞留        | 件数と番号。人が未計画へ移すまで、**どの工程も起きない**                                                                                                                                                                            | `ledger` が `退避先` の Issue                                                            |
-| 制約・異常          | 下の一覧                                                                                                                                                                                                                            | 正規化レコードと容量、起床 snapshot の観測結果、失敗の記録、Issue 本文、この tick の実行 |
+置き場は `$XDG_STATE_HOME/agents/conductor-overlay.json`（無ければ `~/.local/state/agents/conductor-overlay.json`）。事象が立ったときに書き、解けるまで消さ**ない**。file があるあいだ、`cli.ts` を呼ぶたびに同じ path を渡す。
 
-「制約・異常」に載せるもの:
-
-- `Conflict` の内容（**着地面が解決できないこと・live checkout の異常**を含む）
-- 容量が目安を超えていること、そのために選ばなかった action
-- GitHub 観測不能・backoff 中であること
-- 実行環境が拒否している操作（どの action がどの操作で止まっているか・人が何を許可すれば解けるか）
-- `退避先` へ落ちた課題と原因（retry budget 切れは失敗の記録の `lastAction`、成果ゼロの周は差し戻しの経緯コメント。**人が置いたものにはどちらも無い**）
-- 宣言に見えるのに読まれない出現
-- この tick で自分の規約を曲げたこと・規約の穴に気づいたこと
-- 渡しの記録があるのに merge が進んでいないこと
-- 入場を止める宣言があること（誰が・いつから・何を待っているか・人がどう解除できるか）
+```json
+{
+  "humanTodo": [
+    {
+      "title": "指定の pane へ送れない",
+      "detail": "herdr agent prompt が agent_not_ready",
+      "unblocks": "対象 pane で実行器が idle になる",
+      "issues": [],
+      "kind": "env"
+    }
+  ]
+}
+```

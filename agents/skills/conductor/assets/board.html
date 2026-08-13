@@ -553,7 +553,7 @@ window.Board = (function () {
     }
     const resolved = (n) => {
       const d = byN.get(n);
-      return !!d && (d.progress === "着地済み" || d.ledger === "完了");
+      return !!d && (d.progress === "着地済み" || (d.open === false && d.ledger === "完了"));
     };
 
     const groups = [...groupMap.values()].map((g) => {
@@ -1233,16 +1233,6 @@ window.Board = (function () {
               <div class="ids" style="margin-top:.3rem">${parked.map((g) => `<span class="id">#${g.rep}</span>`).join("")}</div>
             </li>
           </ul>
-        </section>
-        <section>
-          <h2>直近の手</h2>
-          <div>
-            ${(data.log || []).slice(0, 7).map((l) => `
-              <div class="logline">
-                <span class="t">${esc(B.fmtTime(l.at).slice(5))}</span>
-                <span class="a"><b>${esc(l.action || l.outcome)}</b> ${(l.target || []).map((n) => "#" + n).join(" ")}<br><span>${esc(l.detail || "")}</span></span>
-              </div>`).join("")}
-          </div>
         </section>`;
     }
 
