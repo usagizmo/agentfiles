@@ -652,12 +652,15 @@ snapshot_bounded() {
   return "$rc"
 }
 
-# コストは**指紋に入れない**（毎周変わるので全部ノイズになる）。stderr へ出す。
+# コストは**指紋に入れない**。1 周ごとの申告は `--snapshot` だけ出す。`--baseline` では
+# 出さない（モニターを起こす出力にしない）。超過はどちらの mode でも出す。
 report_cost() {
   local cost
   cost=$(cat "$COST_FILE" 2>/dev/null) || cost=0
   case "$cost" in ''|*[!0-9]*) cost=0 ;; esac
-  echo "[watch] graphql cost this round: ${cost} pt (self-reported; gh pr list は別途 1 pt、REST は 0 pt)" >&2
+  if [ "$MODE" = snapshot ]; then
+    echo "[watch] graphql cost this round: ${cost} pt (self-reported; gh pr list は別途 1 pt、REST は 0 pt)" >&2
+  fi
   if [ "$cost" -gt "$COST_LIMIT" ]; then
     echo "[watch] cost ${cost} pt exceeds --cost-limit ${COST_LIMIT}: クエリの形状を疑う。起動を止める" >&2
     return 1

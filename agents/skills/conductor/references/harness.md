@@ -195,7 +195,9 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | `--snapshot <path>` | 前景       | 1 回だけ観測して `<path>` へ書き、stdout にも出す。**tick の観測入口** |
 | `--baseline <path>` | background | `<path>` を「前回」として監視する。違ったら exit 0。**取り直さない**   |
 
-**どちらか一方が必須。**
+`--snapshot` と `--baseline` はどちらか一方が必須。
+
+**`--baseline` の wrapper は stdout をモニターへ渡し、stderr を捨てる**（file へ逃がしてよい）。
 
 **渡し先の path は tick をまたいで固定する**（conductor は 1 つなので 1 本で足りる）。**世代は持たせない**（走っている watcher は起動時に自分の作業領域へ複製する）。
 

@@ -133,7 +133,7 @@ describe("台帳と実体のずれ", () => {
 
   test("3d: Conflict のある課題は選出対象外になるだけで、他の課題は回る", () => {
     // **1 件を止めるのは差し戻し、全体を止めるのは conductor セッション自体の停止**
-    // （SKILL.md「実行の制約」）。1 件で全体が凍ると、健全な課題まで人が触るまで動かない
+    // （SKILL.md「硬い上限」）。1 件で全体が凍ると、健全な課題まで人が触るまで動かない
     // （実測で 289 件中 287 件が健全でも 1 手も出なかった）。
     const broken = observation({
       issue: 1,
@@ -168,6 +168,43 @@ describe("台帳と実体のずれ", () => {
     const d = tick([ahead, healthy]);
     expect(d.conflicts.map((c) => c.reason)).toContain("ledger が期待より先");
     expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(2);
+  });
+
+  test("3g: reason と evidence が同じ Conflict は 1 件に畳み、issues に番号を集める", () => {
+    const liveBroken = (n: number): IssueObservation =>
+      implementing({
+        issue: n,
+        claimRecord: present({ representative: n, members: [n], landing: ["control"] }),
+        surfaces: [
+          surface({
+            name: "skills",
+            usesPr: false,
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            liveCheckoutHealthy: present(false),
+          }),
+        ],
+      });
+    const otherBroken = implementing({
+      issue: 4,
+      claimRecord: present({ representative: 4, members: [4], landing: ["control"] }),
+      surfaces: [
+        surface({
+          name: "other",
+          usesPr: false,
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          liveCheckoutHealthy: present(false),
+        }),
+      ],
+    });
+    const healthy = observation({ issue: 3, ledger: present("未計画") });
+    const d = tick([liveBroken(1), liveBroken(2), otherBroken, healthy]);
+    const live = d.conflicts.filter((c) => c.reason === "live checkout が異常");
+    expect(live).toHaveLength(2);
+    expect(live.find((c) => c.evidence[0]?.includes("skills"))?.issues).toEqual([1, 2]);
+    expect(live.find((c) => c.evidence[0]?.includes("other"))?.issues).toEqual([4]);
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(3);
   });
 
   test("4c: 計画済みの正常な在庫", () => {

@@ -163,14 +163,13 @@ export type Outcome =
  * tick が 1 周で出す結論。
  *
  * **`Conflict` は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他の課題は
- * 回す —— **1 件を止めるのは差し戻し、全体を止めるのは conductor セッション自体の停止**
- * （`SKILL.md`「実行の制約」）。全体停止のトリガーにすると、健全な課題まで人が触るまで動かない。
+ * 回す。1 件を止める / 全体を止めるの切り分けは `SKILL.md`「硬い上限」。
  *
  * **選出対象外にしても資源の数え上げからは外さない**（write / integration lease）ので、
  * その課題の実体は他の課題の action から守られたまま。
  */
 export type Decision = {
-  /** **毎 tick そのまま報告する。**1 手を選べた周でも落とさ**ない** */
+  /** 当たった課題を選出対象外にする。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
   readonly conflicts: readonly Conflict[];
   readonly outcome: Outcome;
 };

@@ -467,6 +467,29 @@ const standingConflicts = (g: Group): Conflict[] => {
   return found;
 };
 
+const sameEvidence = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((s, i) => s === b[i]);
+
+/** reason + evidence が同じものを 1 件にし、`issues` に番号を集める。選出対象外は畳まない。 */
+const foldConflicts = (xs: readonly Conflict[]): Conflict[] => {
+  const out: { reason: Conflict["reason"]; evidence: readonly string[]; issues: number[] }[] = [];
+  for (const c of xs) {
+    const hit = out.find((x) => x.reason === c.reason && sameEvidence(x.evidence, c.evidence));
+    if (hit === undefined) {
+      out.push({ reason: c.reason, evidence: c.evidence, issues: [...c.issues] });
+      continue;
+    }
+    for (const n of c.issues) {
+      if (!hit.issues.includes(n)) hit.issues.push(n);
+    }
+  }
+  return out.map((c) => ({
+    reason: c.reason,
+    evidence: c.evidence,
+    issues: [...c.issues].sort((a, b) => a - b),
+  }));
+};
+
 const LADDER: readonly Rung[] = [
   {
     params: () => ({ action: "規約の穴を起票する" }),
@@ -730,7 +753,10 @@ export const decide = (input: TickInput): Decision => {
     conflicts.push(...found);
     for (const n of g.members) excluded.add(n);
   }
-  const decision = (outcome: Outcome): Decision => ({ conflicts, outcome });
+  const decision = (outcome: Outcome): Decision => ({
+    conflicts: foldConflicts(conflicts),
+    outcome,
+  });
 
   if (shelved !== undefined) {
     return decision({
