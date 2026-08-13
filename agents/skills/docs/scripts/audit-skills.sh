@@ -13,7 +13,8 @@
 #   VIOLATION  規約違反。レビューへ出す前に直す
 #   REVIEW     候補。機械では意味を判定できないので、棄却可否はレビュアーが判定する
 #   SKIP       検査を飛ばした。緑と区別がつくよう必ず出す（黙ると検査済みに見える）
-# location は `<path>:<行>`。行を持たない検査（shared）はパスだけ、複数箇所を
+# location は `<path>:<行>`。行を持たない検査（shared / sibling / queue / derived）は
+# パスだけ、複数箇所を
 # 1 行へ畳む検査（numeric / marker）は集約キーが入り、位置は detail の at= に
 # 並ぶ（at= は同じ行を畳むので count とは一致しない）。
 # exit 0=違反なし / 1=VIOLATION あり / 2=検査自体が実行できない
@@ -479,6 +480,44 @@ if [ -n "$SHARED_DIR" ]; then
 			fi
 		done
 	done
+fi
+
+# --- check sibling: shared が bare 名で挙げる兄弟が、張った skill の references/ にも在るか ---
+# **代表 1 件へ畳む前の一覧を回す。**畳むと辞書順で最初の skill しか検査されず、
+# 張り忘れた skill の読み手だけが名前を辿れない状態が緑で通る。
+# 兄弟と断定できるのは shared に実体がある名前だけ。生成物の名前を巻き込まない。
+# 同じ兄弟を複数回引用する shared が在るので、行番号は持たずファイル単位へ畳む。
+if [ -n "$SHARED_ROOT" ]; then
+	while IFS="	" read -r disp phys; do
+		case "$phys" in "$SHARED_ROOT"/*) ;; *) continue ;; esac
+		case "$disp" in */references/*) ;; *) continue ;; esac
+		dir=${disp%/*}
+		skill=${disp%%/*}
+		awk '{
+			while (match($0, /`[a-z][a-z0-9-]*\.md`/)) {
+				print substr($0, RSTART + 1, RLENGTH - 2)
+				$0 = substr($0, RSTART + RLENGTH)
+			}
+		}' "$phys" | sort -u | while read -r sib; do
+			[ -e "$ROOT/$dir/$sib" ] && continue
+			# 同名 basename は queue を先に見る（symlink 検査の want と同じ順）。
+			if [ -f "$SHARED_ROOT/queue/$sib" ]; then
+				case "$phys" in
+				"$SHARED_ROOT"/queue/*)
+					if is_queue_member "$skill"; then
+						emit VIOLATION sibling "$disp" "sibling=$sib note=bare 名で挙げた兄弟が張られていない"
+					else
+						emit REVIEW sibling "$disp" "sibling=$sib note=queue の兄弟を非 member が読めない"
+					fi
+					;;
+				# 張らせると queue 検査と両立しない。直す先は引用元の bare 名。
+				*) emit REVIEW sibling "$disp" "sibling=$sib note=universal shared が queue の兄弟を bare 名で挙げている" ;;
+				esac
+			elif [ -f "$SHARED_ROOT/$sib" ]; then
+				emit VIOLATION sibling "$disp" "sibling=$sib note=bare 名で挙げた兄弟が張られていない"
+			fi
+		done
+	done <"$INVENTORY"
 fi
 
 # --- check derived: agents/docs/ が skills の実態からずれていないか --------
