@@ -109,6 +109,28 @@ const find = (rows: readonly IssueObservation[], n: number): IssueObservation =>
 };
 
 describe("snapshot から導くもの", () => {
+  test("SUCCESS と SKIPPED だけの checks は緑", async () => {
+    const snap = SNAP.replace("checks=SUCCESS", "checks=SUCCESS,SKIPPED");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).checks).toEqual(present({ running: 0, green: true }));
+    const prSurface = find(rows, 12).surfaces.find((s) => s.usesPr);
+    expect(prSurface?.landable).toEqual(present(true));
+  });
+
+  test("SUCCESS と NEUTRAL だけの checks は緑", async () => {
+    const snap = SNAP.replace("checks=SUCCESS", "checks=NEUTRAL,SUCCESS");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).checks).toEqual(present({ running: 0, green: true }));
+  });
+
+  test("CANCELLED を含む checks は緑にしない", async () => {
+    const snap = SNAP.replace("checks=SUCCESS", "checks=SUCCESS,CANCELLED");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).checks).toEqual(present({ running: 0, green: false }));
+    const prSurface = find(rows, 12).surfaces.find((s) => s.usesPr);
+    expect(prSurface?.landable).toEqual(present(false));
+  });
+
   test("ボード順・open / closed・セッション・claim branch を引く", async () => {
     const rows = await observe(port(), STATUS, SURFACES);
     const twelve = find(rows, 12);
