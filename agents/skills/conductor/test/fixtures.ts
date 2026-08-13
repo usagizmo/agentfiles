@@ -86,6 +86,7 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
 
   waitRecord: wait.absent,
   pauseRecordExists: false,
+  yieldRecord: absent(),
   intentRecord: intent.absent,
   integrationRecordCount: present(0),
 

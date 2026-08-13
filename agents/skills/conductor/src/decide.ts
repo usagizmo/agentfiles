@@ -114,6 +114,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         session: lead.session,
         waitRecord: lead.waitRecord,
         pauseRecordExists: lead.pauseRecordExists,
+        yieldRecord: lead.yieldRecord,
         intentRecord: lead.intentRecord,
         integrationRecordCount: lead.integrationRecordCount,
         prunableWorkspace: lead.prunableWorkspace,
@@ -411,6 +412,43 @@ const crossingWriteHolders = (g: Group, ctx: Context): Group[] =>
       blocks(intersect(g.leadObservation.resourceKeys, other.leadObservation.resourceKeys)),
   );
 
+const sharedKeys = (
+  a: Observed<readonly string[]>,
+  b: Observed<readonly string[]>,
+): readonly string[] | undefined => {
+  const left = value(a);
+  const right = value(b);
+  if (left === undefined || right === undefined) return undefined;
+  return left.filter((key) => right.includes(key));
+};
+
+const sameKeySet = (a: readonly string[], b: readonly string[]): boolean => {
+  const left = new Set(a);
+  const right = new Set(b);
+  if (left.size !== right.size) return false;
+  for (const key of left) if (!right.has(key)) return false;
+  return true;
+};
+
+/** 記録の `to` / `keys` が、この 2 者のいまの交差を記述しているか。 */
+const yieldDescribesPair = (holder: Group, partner: Group): boolean => {
+  const rec = holder.leadObservation.yieldRecord;
+  if (rec.kind !== "present") return false;
+  if (rec.value.to !== partner.representative && !partner.members.includes(rec.value.to)) {
+    return false;
+  }
+  const shared = sharedKeys(
+    holder.leadObservation.resourceKeys,
+    partner.leadObservation.resourceKeys,
+  );
+  if (shared === undefined) return false;
+  return sameKeySet(rec.value.keys, shared);
+};
+
+/** 交差相手のすべてについて、どちらかの yield が現況を記述しているか。 */
+const crossingDescribed = (g: Group, crossing: readonly Group[]): boolean =>
+  crossing.every((partner) => yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g));
+
 /**
  * 位置に依らない Conflict。**ラダーへ乗せない** —— どの rung より先に、その group を
  * 選出対象外にする。`ledger が期待より先` だけは差し戻しの後でなければ判定できないので
@@ -568,20 +606,14 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "交差を解消する" }),
-    why: "資源キーが交差する write 保持者が並んでいる",
+    why: "資源キーが交差する write 保持者が並び、休止の記録が現在の交差を記述していない",
     match: (g, ctx) => {
       if (isShelved(g) || !holdsWrite(g.lead)) return false;
       const crossing = crossingWriteHolders(g, ctx);
       if (crossing.length === 0) return false;
-      // **そのうち休止の記録を持つものが 1 つも無い**ときだけ。
-      return ![g, ...crossing].some((x) => x.leadObservation.pauseRecordExists);
+      // **記録の有無だけでは見ない。**`to` / `keys` が現況と一致しているあいだは送らない。
+      return !crossingDescribed(g, crossing);
     },
-  },
-  {
-    params: () => ({ action: "休止を促し直す" }),
-    why: "休止の記録があるのにセッションが動き続けている",
-    match: (g) =>
-      g.leadObservation.pauseRecordExists && g.leadObservation.session.kind === "running",
   },
   {
     params: () => ({ action: "checks を引き直させる" }),

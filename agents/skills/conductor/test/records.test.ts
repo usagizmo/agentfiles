@@ -13,6 +13,7 @@ import {
   reportRecord,
   retryRecord,
   waitRecord,
+  yieldRecord,
 } from "../src/records.ts";
 
 const wrap = (marker: string, yaml: string) =>
@@ -176,6 +177,19 @@ describe("提出と在庫と枠", () => {
   test("integration は pr が無くても読める（PR を使う面が無い課題）", () => {
     const r = integrationRecord(wrap("integration", "issues: [1]"));
     expect(r).toEqual({ kind: "present", value: { issues: [1], pr: null } });
+  });
+});
+
+describe("休止の記録", () => {
+  test("to と keys を残す", () => {
+    expect(yieldRecord(wrap("yield", "issues: [2]\nto: 1\nkeys: [skills]"))).toEqual({
+      kind: "present",
+      value: { issues: [2], to: 1, keys: ["skills"] },
+    });
+  });
+
+  test("必須の欄が欠けていれば invalid（既定へ丸めない）", () => {
+    expect(yieldRecord(wrap("yield", "issues: [2]\nto: 1")).kind).toBe("invalid");
   });
 });
 

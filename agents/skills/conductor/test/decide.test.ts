@@ -440,7 +440,7 @@ describe("外から状態が動く", () => {
     expectAction([a, b], "交差を解消する");
   });
 
-  test("9d: 休止の記録があるのに、そのセッションが動き続けている", () => {
+  test("9d: 休止の記録の to / keys が現在の交差と一致し、セッションは動き続けている", () => {
     const a = implementing({
       issue: 1,
       resourceKeys: present(["skills"]),
@@ -451,9 +451,27 @@ describe("外から状態が動く", () => {
       claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       pauseRecordExists: true,
+      yieldRecord: present({ issues: [2], to: 1, keys: ["skills"] }),
       session: session.running,
     });
-    expectAction([a, b], "休止を促し直す");
+    expectIdle([a, b]);
+  });
+
+  test("9k: 休止の記録はあるが、to か keys が現在の交差と一致しない", () => {
+    const a = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const b = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      resourceKeys: present(["skills"]),
+      pauseRecordExists: true,
+      yieldRecord: present({ issues: [2], to: 1, keys: ["old"] }),
+      session: session.running,
+    });
+    expectAction([a, b], "交差を解消する");
   });
 
   test("9e: 先発が着地し、休止していた後発と交差する保持者が居なくなった", () => {

@@ -25,6 +25,7 @@ import {
   reportRecord,
   retryRecord,
   waitRecord,
+  yieldRecord,
 } from "./records.ts";
 import { CONCURRENCY, mapLimit } from "./limit.ts";
 import { normalizeProgress } from "./normalize.ts";
@@ -257,6 +258,7 @@ export const observe = async (
     const commentText =
       commentsObserved.kind === "present" ? joinComments(commentsObserved.value) : "";
 
+    const parsedYield = yieldRecord(commentText);
     const pause = extractMarker(commentText, "yield").kind === "present";
     const claim = claimRecord(commentText);
     const report = reportRecord(commentText);
@@ -366,6 +368,7 @@ export const observe = async (
 
       waitRecord: waitRecord(commentText, pause),
       pauseRecordExists: pause,
+      yieldRecord: parsedYield,
       intentRecord: intentRecord(commentText),
       integrationRecordCount: present(integrationRecord(commentText).kind === "present" ? 1 : 0),
 

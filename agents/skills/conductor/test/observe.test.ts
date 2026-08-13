@@ -119,6 +119,26 @@ describe("snapshot から導くもの", () => {
     expect(find(rows, 34).claimBranchExists).toEqual(present(false));
   });
 
+  test("休止の記録の to / keys を本体として残す", async () => {
+    const yieldComment = `<!-- yield -->
+
+\`\`\`yaml
+issues: [12]
+to: 34
+keys: [skills]
+\`\`\`
+
+<!-- /yield -->`;
+    const rows = await observe(
+      port({ issueComments: async () => new Map([[12, present([yieldComment])]]) }),
+      STATUS,
+      SURFACES,
+    );
+    const twelve = find(rows, 12);
+    expect(twelve.pauseRecordExists).toBe(true);
+    expect(twelve.yieldRecord).toEqual(present({ issues: [12], to: 34, keys: ["skills"] }));
+  });
+
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {
     // **代用すると計画中は必ず `none` になり**、走っているものを畳まない保護が一度も効かない。
     const planning = SNAP.replace("resolve-12 working", "refine-12 working");

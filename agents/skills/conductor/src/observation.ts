@@ -1,6 +1,7 @@
 // `normalize` / `decide` が読む観測の型。**ここが decode 境界の出口**で、
 // `watch.sh --snapshot` の生テキストと固定 marker の本文は `decode.ts` がここへ写す。
 
+import type { YieldRecord } from "./records.ts";
 import type { Ledger, Observed } from "./types.ts";
 
 /**
@@ -114,6 +115,8 @@ export type IssueObservation = {
   readonly waitRecord: WaitRecord;
   /** 休止の記録。**「記録あり」だけでは `休止` にならない**（非稼働も要る） */
   readonly pauseRecordExists: boolean;
+  /** 休止の記録の本体。交差の記述（`to` / `keys`）を突き合わせるときだけ読む */
+  readonly yieldRecord: Observed<YieldRecord>;
   readonly intentRecord: IntentRecord;
   /** merge の枠の渡しの記録。2 件以上は `Conflict` */
   readonly integrationRecordCount: Observed<number>;
