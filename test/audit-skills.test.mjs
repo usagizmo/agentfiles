@@ -83,6 +83,22 @@ test("universal shared が queue の兄弟を挙げたら member でも REVIEW",
   expect(stdout).toContain("REVIEW\tsibling\taaa/references/uni.md\tsibling=qq.md");
 });
 
+// --- fence / 引用 --------------------------------------------------------
+// fixture は fence（入れ子つき）と引用の中に skill 名・.md・節見出しを置き、
+// **どちらの外にも行番号つきで検出できる違反を 1 件ずつ**置いた木。
+// 正例は行番号の保存と入れ子 fence の開閉を、負例は 4 検査の無視を押さえる。
+
+test("fence と引用の中は layer / ref / ref-heading / sibling に出ない", async () => {
+  const { stdout, exitCode } = await audit(fixture("fence-quote/skills"));
+  expect(stdout).toContain("VIOLATION\tref\taaa/SKILL.md:17\tmissing=missing/gone.md");
+  expect(stdout).toContain("VIOLATION\tref\taaa/references/host.md:14\tmissing=nope/none.md");
+  expect(stdout).not.toContain("VIOLATION\tlayer");
+  expect(stdout).not.toContain("VIOLATION\tref-heading");
+  expect(stdout).not.toContain("VIOLATION\tsibling");
+  expect(stdout).not.toContain("REVIEW\tref");
+  expect(exitCode).toBe(1);
+});
+
 // --- checker の異常系（EMPHASIS_JS で差し替える） -------------------------
 // **「落ちた」と「違反なし」を取り違えないこと**が要点。緑で通ると検査が消える。
 

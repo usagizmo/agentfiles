@@ -14,9 +14,9 @@
 #   REVIEW     候補。機械では意味を判定できないので、棄却可否はレビュアーが判定する
 #   SKIP       検査を飛ばした。緑と区別がつくよう必ず出す（黙ると検査済みに見える）
 # location は `<path>:<行>`。行を持たない検査（shared / sibling / queue / derived）は
-# パスだけ、複数箇所を
-# 1 行へ畳む検査（numeric / marker）は集約キーが入り、位置は detail の at= に
-# 並ぶ（at= は同じ行を畳むので count とは一致しない）。
+# パスだけ、複数箇所を 1 行へ畳む検査（numeric / marker）は集約キーが入り、位置は
+# detail の at= に並ぶ（at= は同じ行を畳むので count とは一致しない）。
+# fence と引用の中は参照として読まない（layer / ref / ref-heading / sibling）。
 # exit 0=違反なし / 1=VIOLATION あり / 2=検査自体が実行できない
 
 set -u
@@ -89,6 +89,34 @@ canon() {
 
 emit() {
 	printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >>"$FINDINGS"
+}
+
+# fence と引用の中は参照ではない。書式の実例や他所からの引用が入る。
+# **消さずに空行へ潰す** —— 行を詰めると location が別の行を指す。
+# **開閉は文字種と本数で判定する。**単純なトグルだと、記録形式が使う fence の
+# 入れ子（```` の中の ```）で反転し、以降の本物の参照が全部消える。
+strip_noncode() {
+	awk '
+		{
+			line = $0
+			sub(/^[ \t]+/, "", line)
+			ch = substr(line, 1, 1)
+			if (ch == "`" || ch == "~") {
+				n = 0
+				while (substr(line, n + 1, 1) == ch) n++
+				if (n >= 3) {
+					rest = substr(line, n + 1)
+					if (!fence) { fence = 1; fch = ch; fn = n }
+					else if (ch == fch && n >= fn && rest ~ /^[ \t]*$/) fence = 0
+					print ""
+					next
+				}
+			}
+			if (fence) { print ""; next }
+			if (line ~ /^>/) { print ""; next }
+			print
+		}
+	' "$1"
 }
 
 # --- 引数 ---------------------------------------------------------------
@@ -211,12 +239,12 @@ sort -t "	" -k2,2 -k1,1 "$INVENTORY" | awk -F "	" '!seen[$2]++' >"$WORK/unique"
 while read -r skill; do
 	is_layer_exempt "$skill" && continue
 	sr=$(rank "$skill")
-	awk '{
+	strip_noncode "$ROOT/$skill/SKILL.md" | awk '{
 		while (match($0, /`[a-z][a-z0-9-]*`/)) {
 			print NR "\t" substr($0, RSTART + 1, RLENGTH - 2)
 			$0 = substr($0, RSTART + RLENGTH)
 		}
-	}' "$ROOT/$skill/SKILL.md" | sort -u | while IFS="	" read -r ln word; do
+	}' | sort -u | while IFS="	" read -r ln word; do
 		[ "$word" = "$skill" ] && continue
 		grep -qx "$word" "$SKILLS" || continue
 		tr_=$(rank "$word")
@@ -231,12 +259,12 @@ while IFS="	" read -r disp phys; do
 	dir=${disp%/*}
 
 	# バッククォート内の相対 .md パス
-	awk '{
+	strip_noncode "$phys" | awk '{
 		while (match($0, /`[^`]*\.md`/)) {
 			print NR "\t" substr($0, RSTART + 1, RLENGTH - 2)
 			$0 = substr($0, RSTART + RLENGTH)
 		}
-	}' "$phys" | sort -u | while IFS="	" read -r ln target; do
+	}' | sort -u | while IFS="	" read -r ln target; do
 		case "$target" in
 		"~"* | /* | *" "*) continue ;;
 		# **プレースホルダは参照ではない。**`<skill>/references/<file>.md` の
@@ -262,7 +290,7 @@ while IFS="	" read -r disp phys; do
 	done
 
 	# `PATH` の「見出し」 / 「見出し」の節
-	awk -v disp="$disp" '
+	strip_noncode "$phys" | awk -v disp="$disp" '
 		function emit_h(ln, path, head) { print ln "\t" path "\t" head }
 		{
 			s = $0
@@ -295,7 +323,7 @@ while IFS="	" read -r disp phys; do
 				if (substr(after, 1, 6) == "の節") emit_h(NR, "-", head)
 			}
 		}
-	' "$phys" | sort -u | while IFS="	" read -r ln target head; do
+	' | sort -u | while IFS="	" read -r ln target head; do
 		[ -n "$head" ] || continue
 		if [ "$target" = "-" ]; then
 			hfile=$phys
@@ -493,12 +521,12 @@ if [ -n "$SHARED_ROOT" ]; then
 		case "$disp" in */references/*) ;; *) continue ;; esac
 		dir=${disp%/*}
 		skill=${disp%%/*}
-		awk '{
+		strip_noncode "$phys" | awk '{
 			while (match($0, /`[a-z][a-z0-9-]*\.md`/)) {
 				print substr($0, RSTART + 1, RLENGTH - 2)
 				$0 = substr($0, RSTART + RLENGTH)
 			}
-		}' "$phys" | sort -u | while read -r sib; do
+		}' | sort -u | while read -r sib; do
 			[ -e "$ROOT/$dir/$sib" ] && continue
 			# 同名 basename は queue を先に見る（symlink 検査の want と同じ順）。
 			if [ -f "$SHARED_ROOT/queue/$sib" ]; then
