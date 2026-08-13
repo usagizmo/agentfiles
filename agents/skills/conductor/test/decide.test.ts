@@ -973,6 +973,25 @@ describe("group", () => {
     expect(records.find((r) => r.issue === 2)?.runtime).toBe("人待ち");
   });
 
+  test("12l: claim 済み。wait は成員にだけあり、代表のセッションは blocked", () => {
+    // claim 後の wait は代表のコメントだけを読む。成員の記録は runtime に写さない。
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+      session: session.blocked,
+    });
+    const member = observation({
+      issue: 2,
+      ledger: present("進行中"),
+      sameBranchAs: [1],
+      waitRecord: wait.waiting,
+    });
+    const records = buildGroups([lead, member]).flatMap((g) => g.records);
+    expect(records.find((r) => r.issue === 1)?.runtime).not.toBe("人待ち");
+    expect(records.find((r) => r.issue === 2)?.runtime).not.toBe("人待ち");
+    expectConflict([lead, member], "証跡が矛盾している");
+  });
+
   test("12: group の一部だけ計画済み。group は claim の候補にしない", () => {
     const planned = observation({ issue: 1, ledger: present("計画済み"), sameBranchAs: [2] });
     const unplanned = observation({ issue: 2, ledger: present("未計画"), sameBranchAs: [1] });
