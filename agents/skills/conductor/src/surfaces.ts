@@ -80,10 +80,18 @@ export const deriveSurface = (
     return {
       ...base,
       terminal: merged === undefined ? unobservable("PR の merged を読めない") : present(merged),
+      // **「PR が無い」は既知の事実で、読めなかったのとは違う。**checks は PR が無ければ
+      // そもそも存在しないので `absent` になる。そこを「読めない」へ畳むと、claim 済みで
+      // PR 前の課題（`準備中`・`実装中` の全部）が `着地面が解決できない` に落ち、
+      // キューがそこで止まる。checks を要るのは open PR があるときだけ。
       landable:
-        open === undefined || green === undefined
-          ? unobservable("open PR か checks を読めない")
-          : present(open && green),
+        open === undefined
+          ? unobservable("open PR を読めない")
+          : open === false
+            ? present(false)
+            : green === undefined
+              ? unobservable("checks を読めない")
+              : present(green),
     };
   }
 

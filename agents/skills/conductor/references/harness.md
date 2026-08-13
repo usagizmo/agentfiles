@@ -79,7 +79,7 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 
 - **worktree 一覧は repo を明示して取る**（「今いる場所」に依存する手段を使わない）
 - 引く repo の集合は「制御面 + project 差分の座標表が持つ全着地面」。**「いま使われている面だけ」にも制御面だけにも絞らない**
-- 座標表へ面を足すことは、その面を毎周観測すると決めること。使わなくなった面は表から外す
+- 座標表へ面を足すことは、その面を毎周観測すると決めること。使わなくなった面は表から外す（**外す前の条件は `landing-surface.md`**）
 - 面ごとの失敗はその面を `-` にするだけで、ラウンドは捨て**ない**。**制御面の失敗だけがラウンドを無効にする**
 - セッションの状態表示だけでは `progress` は分からない。`progress` は git と PR からのみ引く
 
@@ -133,7 +133,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | tab を作る（refine）                         | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                           |
 | pane を作る（振られた作業）                  | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                        |
 | pane_id を得る                               | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                     |
-| セッションを起こす                           | `herdr agent start <名前> --kind claude --pane <id> --timeout 90000 -- --model <名前>`（`--pane` 以外の受け口は無い。`--` 以降が実行器へ渡る）                                                                                                                                |
+| セッションを起こす                           | `herdr agent start <名前> --kind <工程の実行器> --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い）                                                                                                                                                                   |
 | 課題を渡す・再開する                         | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                  |
 | セッションを観測する                         | `herdr agent list`（`name` / `agent_status` / `cwd`）                                                                                                                                                                                                                         |
 | worktree を作る（claim。二次面）             | **`git -C <その面の checkout> worktree add -b <名> <path> <その面の統合先>`**（**pane を作らない**。`<path>` の決め方は下記）                                                                                                                                                 |
@@ -144,6 +144,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 片付ける（`resolve`）                        | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`                                                                                                                                                                                                           |
 | 片付けに要る workspace ID                    | **`herdr worktree list --cwd <面の checkout>`** の `open_workspace_id`                                                                                                                                                                                                        |
 | 孤児 workspace を洗う                        | **`herdr workspace list`**（repo 非依存）                                                                                                                                                                                                                                     |
+
+**`--kind` は project の `config.json` の `executors`**（工程ごと。検証は `src/config.ts` の `parseConfig`）。**モデルは渡さ**ない —— 既定は harness の設定側が持つ。
 
 **3 つの経路は、それぞれ別の問いに対して権威。1 つに寄せない。**
 
@@ -170,7 +172,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 - **`idle` と `done` は別物** —— `idle` は「入力待ち かつ そのタブが focused UI で seen」、`done` は「未 seen のまま background 作業が終わった」。CLI から読んでも seen にはならない
 - **`unknown` は「agent は居るが分類できない」**。完了の証明ではないので `Conflict` へ写す（`../SKILL.md` の `runtime`）
-- **`blocked` は人待ち**。何を聞かれているかは `herdr pane read <id> --source visible` で読む
+- **`blocked` は実行器の印**（承認または質問 UI）。人待ちの SSOT は Issue の記録。印だけの扱いは `src/normalize.ts`
 
 **入力欄の文字列は観測材料ではない**。サジェストか人の未送信入力かを区別できないので、どちらの理由にも使わ**ない**。
 
@@ -193,7 +195,9 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | `--snapshot <path>` | 前景       | 1 回だけ観測して `<path>` へ書き、stdout にも出す。**tick の観測入口** |
 | `--baseline <path>` | background | `<path>` を「前回」として監視する。違ったら exit 0。**取り直さない**   |
 
-**どちらか一方が必須。**
+`--snapshot` と `--baseline` はどちらか一方が必須。
+
+**`--baseline` の wrapper は stdout をモニターへ渡し、stderr を捨てる**（file へ逃がしてよい）。
 
 **渡し先の path は tick をまたいで固定する**（conductor は 1 つなので 1 本で足りる）。**世代は持たせない**（走っている watcher は起動時に自分の作業領域へ複製する）。
 

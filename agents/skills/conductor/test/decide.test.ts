@@ -4,7 +4,7 @@
 // **テスト名は行 ID**。`何も選ばない` は選択結果の null 値なので `idle` で受ける。
 
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CONFIG, decide } from "../src/decide.ts";
+import { DEFAULT_CONFIG, buildGroups, decide } from "../src/decide.ts";
 import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
@@ -15,28 +15,28 @@ const tick = (observations: readonly IssueObservation[], over: Partial<TickInput
   decide({ observations, config: DEFAULT_CONFIG, ...over });
 
 const expectAction = (observations: readonly IssueObservation[], action: ActionName) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params.action : d.kind).toBe(action);
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params.action : o.kind).toBe(action);
 };
 
 const expectRevert = (observations: readonly IssueObservation[], to: RevertTarget) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params : d.kind).toMatchObject({ action: "差し戻す", to });
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params : o.kind).toMatchObject({ action: "差し戻す", to });
 };
 
 const expectLease = (observations: readonly IssueObservation[], lease: LeaseKind) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params : d.kind).toMatchObject({ action: "枠を渡す", lease });
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params : o.kind).toMatchObject({ action: "枠を渡す", lease });
 };
 
 const expectIdle = (observations: readonly IssueObservation[]) => {
-  const d = tick(observations);
-  expect(d.kind === "action" ? d.params.action : d.kind).toBe("idle");
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.params.action : o.kind).toBe("idle");
 };
 
+/** **Conflict は action の選択と直交する。**出ていることだけを見る。 */
 const expectConflict = (observations: readonly IssueObservation[], reason: ConflictReason) => {
-  const d = tick(observations);
-  expect(d.kind === "conflict" ? d.conflicts.map((c) => c.reason) : d.kind).toContain(reason);
+  expect(tick(observations).conflicts.map((c) => c.reason)).toContain(reason);
 };
 
 /** claim 済みで実装が進んでいる課題の骨格。各行はここから差分だけ書く。 */
@@ -45,7 +45,7 @@ const implementing = (over: Partial<IssueObservation> = {}): IssueObservation =>
     ledger: present("進行中"),
     claimBranchExists: present(true),
     planCommentExists: present(true),
-    claimRecord: present({ members: [1], landing: ["control"] }),
+    claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
     surfaces: [surface({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
     ...over,
   });
@@ -97,7 +97,7 @@ describe("台帳と実体のずれ", () => {
       [
         observation({
           ledger: present("進行中"),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
         }),
       ],
       "計画済み",
@@ -109,7 +109,7 @@ describe("台帳と実体のずれ", () => {
       [
         observation({
           ledger: present("計画済み"),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
         }),
       ],
       "計画済み",
@@ -131,6 +131,82 @@ describe("台帳と実体のずれ", () => {
     expectAction([observation({ ledger: present("未計画") })], "計画を起こす");
   });
 
+  test("3d: Conflict のある課題は選出対象外になるだけで、他の課題は回る", () => {
+    // **1 件を止めるのは差し戻し、全体を止めるのは conductor セッション自体の停止**
+    // （SKILL.md「硬い上限」）。1 件で全体が凍ると、健全な課題まで人が触るまで動かない
+    // （実測で 289 件中 287 件が健全でも 1 手も出なかった）。
+    const broken = observation({
+      issue: 1,
+      ledger: present("進行中"),
+      session: session.unclassifiable("weird"),
+    });
+    const healthy = observation({ issue: 2, ledger: present("未計画") });
+    const d = tick([broken, healthy]);
+    expect(d.conflicts.map((c) => c.reason)).toContain("観測できない");
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "計画を起こす",
+    );
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(2);
+  });
+
+  test("3e: Conflict のある課題自身には action を出さない", () => {
+    const broken = observation({
+      issue: 1,
+      ledger: present("未計画"),
+      session: session.unclassifiable("weird"),
+    });
+    const d = tick([broken]);
+    expect(d.conflicts.length).toBeGreaterThan(0);
+    expect(d.outcome.kind).toBe("idle");
+  });
+
+  test("3f: ledger が期待より先の課題が居ても、他の課題は回る", () => {
+    // この Conflict だけはラダー上で決まる（差し戻しのどれにも当たらないことが条件）。
+    // **当たった課題を選出対象外にするだけ**で、そこで tick を終え**ない**。
+    const ahead = observation({ issue: 1, ledger: present("進行中") });
+    const healthy = observation({ issue: 2, ledger: present("未計画") });
+    const d = tick([ahead, healthy]);
+    expect(d.conflicts.map((c) => c.reason)).toContain("ledger が期待より先");
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(2);
+  });
+
+  test("3g: reason と evidence が同じ Conflict は 1 件に畳み、issues に番号を集める", () => {
+    const liveBroken = (n: number): IssueObservation =>
+      implementing({
+        issue: n,
+        claimRecord: present({ representative: n, members: [n], landing: ["control"] }),
+        surfaces: [
+          surface({
+            name: "skills",
+            usesPr: false,
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            liveCheckoutHealthy: present(false),
+          }),
+        ],
+      });
+    const otherBroken = implementing({
+      issue: 4,
+      claimRecord: present({ representative: 4, members: [4], landing: ["control"] }),
+      surfaces: [
+        surface({
+          name: "other",
+          usesPr: false,
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          liveCheckoutHealthy: present(false),
+        }),
+      ],
+    });
+    const healthy = observation({ issue: 3, ledger: present("未計画") });
+    const d = tick([liveBroken(1), liveBroken(2), otherBroken, healthy]);
+    const live = d.conflicts.filter((c) => c.reason === "live checkout が異常");
+    expect(live).toHaveLength(2);
+    expect(live.find((c) => c.evidence[0]?.includes("skills"))?.issues).toEqual([1, 2]);
+    expect(live.find((c) => c.evidence[0]?.includes("other"))?.issues).toEqual([4]);
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(3);
+  });
+
   test("4c: 計画済みの正常な在庫", () => {
     expectAction([observation({ ledger: present("計画済み") })], "claim する");
   });
@@ -140,7 +216,7 @@ describe("台帳と実体のずれ", () => {
       [
         observation({
           ledger: present("進行中"),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
           failureRecord: present({ count: 3, lastAction: "解決を起こし直す" }),
         }),
       ],
@@ -169,11 +245,56 @@ describe("実行器が消える / 止まる", () => {
       [
         observation({
           ledger: present("未計画"),
-          session: session.idle,
-          refineSessionExists: true,
+          refineSession: session.idle,
         }),
       ],
       "計画セッションを片付ける",
+    );
+  });
+
+  test("7f2: セッションが blocked。人待ちの記録は waiting かつ有効", () => {
+    expectIdle([
+      implementing({
+        waitRecord: wait.waiting,
+        session: session.blocked,
+      }),
+    ]);
+  });
+
+  test("7f3: セッションが blocked。人待ちの記録が無い", () => {
+    expectConflict([implementing({ session: session.blocked })], "証跡が矛盾している");
+    expectIdle([implementing({ session: session.blocked })]);
+  });
+
+  test("7f4: 計画セッションが blocked。人待ちの記録が無い", () => {
+    const rows = [
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.blocked,
+      }),
+    ];
+    expectConflict(rows, "証跡が矛盾している");
+    const o = tick(rows).outcome;
+    expect(o.kind === "action" ? o.params.action : o.kind).not.toBe("計画セッションを片付ける");
+  });
+
+  test("7f5: 終端に達し、セッションが blocked。人待ちの記録が無い", () => {
+    expectAction(
+      [
+        implementing({
+          surfaces: [
+            surface({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              terminal: present(true),
+            }),
+          ],
+          submissionEvidence: present(true),
+          session: session.blocked,
+          ledger: present("完了"),
+        }),
+      ],
+      "片付ける",
     );
   });
 
@@ -221,12 +342,32 @@ describe("実行器が消える / 止まる", () => {
       [
         observation({
           ledger: present("退避先"),
-          session: session.idle,
-          refineSessionExists: true,
+          refineSession: session.idle,
         }),
       ],
       "計画セッションを片付ける",
     );
+  });
+
+  test("7d2: 起こした直後で、計画セッションが動いている", () => {
+    // **走っているセッションを片付ける action に当てない。**`o.session` は `resolve-<番号>` を
+    // 見るので計画中は常に `none` になり、`refine` の稼働で引かないと保護が一度も効かない ——
+    // 起こす → 次の tick で畳む → また起こす、の往復から出られなくなる（実物で踏んだ）。
+    expectIdle([observation({ ledger: present("未計画"), refineSession: session.running })]);
+  });
+
+  test("7d3: 台帳が進んだ後でも、計画セッションが動いているうちは畳まない", () => {
+    // `refine` は Status を進めてから終わるので、**この窓を毎回通る**。
+    expectAction(
+      [observation({ ledger: present("計画済み"), refineSession: session.running })],
+      "claim する",
+    );
+  });
+
+  test("7d4: retired-refine は片付けの対象ではなく、計画を塞ぐ印として残る", () => {
+    // rename 済みなので「計画セッションを片付ける」は当たらない（対象は `refine-<番号>` の完全一致）。
+    // **塞ぎは残る** —— 当てて消すと、次の tick で二重計画になる。
+    expectIdle([observation({ ledger: present("未計画"), retiredRefineExists: true })]);
   });
 
   test("7e: 計画セッションが idle", () => {
@@ -234,8 +375,7 @@ describe("実行器が消える / 止まる", () => {
       [
         observation({
           ledger: present("計画済み"),
-          session: session.idle,
-          refineSessionExists: true,
+          refineSession: session.idle,
         }),
       ],
       "計画セッションを片付ける",
@@ -247,7 +387,7 @@ describe("実行器が消える / 止まる", () => {
       observation({
         ledger: present("進行中"),
         claimBranchExists: present(true),
-        claimRecord: present({ members: [1], landing: ["control"] }),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
         surfaces: [surface({ hasCheckout: present(true) })],
         session: session.running,
       }),
@@ -260,7 +400,7 @@ describe("実行器が消える / 止まる", () => {
         observation({
           ledger: present("進行中"),
           claimBranchExists: present(true),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
           surfaces: [surface({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
           session: session.running,
         }),
@@ -347,7 +487,7 @@ describe("外から状態が動く", () => {
     const busy = Array.from({ length: 4 }, (_, i) =>
       implementing({
         issue: 10 + i,
-        claimRecord: present({ members: [10 + i], landing: ["control"] }),
+        claimRecord: present({ representative: 10, members: [10 + i], landing: ["control"] }),
         session: session.running,
       }),
     );
@@ -358,6 +498,21 @@ describe("外から状態が動く", () => {
       ],
       "未計画",
     );
+  });
+
+  test("8b4: いまの write 保持者と交わる在庫が陳腐化した", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const stale = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["skills"]),
+      readyRecordStale: present(true),
+    });
+    expectIdle([holder, stale]);
   });
 
   test("9b: 行 9 を伝えたが、受け手が計画の記録を更新しないまま tick が進む", () => {
@@ -376,14 +531,14 @@ describe("外から状態が動く", () => {
     });
     const b = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       session: session.running,
     });
     expectAction([a, b], "交差を解消する");
   });
 
-  test("9d: 休止の記録があるのに、そのセッションが動き続けている", () => {
+  test("9d: 休止の記録の to / keys が現在の交差と一致し、セッションは動き続けている", () => {
     const a = implementing({
       issue: 1,
       resourceKeys: present(["skills"]),
@@ -391,12 +546,30 @@ describe("外から状態が動く", () => {
     });
     const b = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       pauseRecordExists: true,
+      yieldRecord: present({ issues: [2], to: 1, keys: ["skills"] }),
       session: session.running,
     });
-    expectAction([a, b], "休止を促し直す");
+    expectIdle([a, b]);
+  });
+
+  test("9k: 休止の記録はあるが、to か keys が現在の交差と一致しない", () => {
+    const a = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const b = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      resourceKeys: present(["skills"]),
+      pauseRecordExists: true,
+      yieldRecord: present({ issues: [2], to: 1, keys: ["old"] }),
+      session: session.running,
+    });
+    expectAction([a, b], "交差を解消する");
   });
 
   test("9e: 先発が着地し、休止していた後発と交差する保持者が居なくなった", () => {
@@ -425,12 +598,12 @@ describe("外から状態が動く", () => {
     });
     const follower = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["api"]),
       pauseRecordExists: true,
       session: session.idle,
     });
-    const d = tick([lead, follower]);
+    const d = tick([lead, follower]).outcome;
     expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
       action: "枠を渡す",
       lease: "write",
@@ -449,7 +622,7 @@ describe("外から状態が動く", () => {
     });
     const follower = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["api"]),
       session: session.running,
     });
@@ -467,7 +640,7 @@ describe("外から状態が動く", () => {
     });
     const follower = implementing({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["api"]),
       session: session.running,
     });
@@ -545,7 +718,7 @@ describe("外から状態が動く", () => {
         waitRecord: wait.waiting,
         cycleRecord: present({ count: 3, mark: "mark-0" }),
       }),
-    ]);
+    ]).outcome;
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
   });
 
@@ -632,7 +805,7 @@ describe("外から状態が動く", () => {
         // `progress` が指紋に入っているので、提出中 へ進んだ時点で mark が動いている。
         cycleRecord: present({ count: 3, mark: "mark-prev" }),
       }),
-    ]);
+    ]).outcome;
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
   });
 
@@ -642,7 +815,7 @@ describe("外から状態が動く", () => {
         observation({
           ledger: present("進行中"),
           claimBranchExists: present(true),
-          claimRecord: present({ members: [1], landing: ["control"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
           surfaces: [surface({ hasCheckout: present(true) })],
           planCommentExists: present(true),
           session: session.idle,
@@ -690,7 +863,9 @@ describe("外から状態が動く", () => {
 
 describe("意図の確認", () => {
   test("15: 意図の確認が pending で、人待ちも waiting", () => {
-    const d = tick([awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting })]);
+    const d = tick([
+      awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting }),
+    ]).outcome;
     // merge の枠の受け手にしない。
     expect(d.kind === "action" && d.params.action === "枠を渡す" ? d.params.lease : null).not.toBe(
       "integration",
@@ -698,7 +873,9 @@ describe("意図の確認", () => {
   });
 
   test("15c: 一部の項目だけ明示承認され、残りは無反応", () => {
-    const d = tick([awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting })]);
+    const d = tick([
+      awaitingLanding({ intentRecord: intent.pending, waitRecord: wait.waiting }),
+    ]).outcome;
     // 沈黙は承認ではないので `pending` のまま。受け手にしない。
     expect(d.kind === "action" && d.params.action === "枠を渡す" ? d.params.lease : null).not.toBe(
       "integration",
@@ -727,11 +904,11 @@ describe("意図の確認", () => {
     });
     const other = awaitingLanding({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       claimedAt: present(200),
       session: session.idle,
     });
-    const d = tick([blocked, other]);
+    const d = tick([blocked, other]).outcome;
     expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
   });
 });
@@ -751,11 +928,11 @@ describe("merge の直列化（integration）", () => {
     });
     const other = awaitingLanding({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       claimedAt: present(50),
       session: session.idle,
     });
-    const d = tick([holder, other]);
+    const d = tick([holder, other]).outcome;
     // 記録を持つ側が保持者。**`着地待ち` に居ることは保持の条件ではない。**
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("枠を渡す");
   });
@@ -766,10 +943,33 @@ describe("merge の直列化（integration）", () => {
 });
 
 describe("group", () => {
-  test("11: group 内で 着地済み と 実装中 が混在している", () => {
+  test("11: 対象集合の 1 人だけが closed になり、終端が混在した", () => {
+    // 実体は 1 セットなので、**どちらに倒しても壊れる** —— 片付ければ走っている実装が消え、
+    // 放置すれば closed の課題が終端に達しないまま資源を握り続ける。
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const closed = observation({ issue: 2, ledger: present("進行中"), open: present(false) });
+    expectConflict([lead, closed], "group の終端が混在");
+  });
+
+  test("12g: claim 済み group の非代表成員を正規化する", () => {
+    // **共有する実体は代表の番号で 1 セット**（`same-branch.md`「共有するもの」）。
+    // 成員ごとに自分の番号で引くと branch も worktree もセッションも見えず、
+    // **claim するたびに代表以外の全員が `ledger が期待より先` になる**。
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const member = observation({ issue: 2, ledger: present("進行中"), sameBranchAs: [1] });
+    expect(tick([lead, member]).conflicts).toEqual([]);
+  });
+
+  test("12h: 行 12g の group が着地した", () => {
     const landed = implementing({
       issue: 1,
-      sameBranchAs: [2],
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
       surfaces: [
         surface({
           aheadOfIntegration: present(true),
@@ -779,12 +979,69 @@ describe("group", () => {
       ],
       submissionEvidence: present(true),
     });
-    const working = implementing({
-      issue: 2,
-      sameBranchAs: [1],
-      claimRecord: present({ members: [2], landing: ["control"] }),
+    const member = observation({ issue: 2, ledger: present("進行中"), sameBranchAs: [1] });
+    const records = buildGroups([landed, member]).flatMap((g) => g.records);
+    expect(records.find((r) => r.issue === 2)?.progress).toBe("着地済み");
+    expect(tick([landed, member]).conflicts).toEqual([]);
+  });
+
+  test("12i: claim の記録の members にだけ居る番号", () => {
+    // 加入は記録への追記が実体。**本文の宣言を待たない。**
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
     });
-    expectConflict([landed, working], "group の終端が混在");
+    const joined = observation({ issue: 2, ledger: present("進行中") });
+    const d = tick([lead, joined]);
+    expect(d.conflicts).toEqual([]);
+    expect(d.outcome.kind === "action" ? d.outcome.target.members : null).toEqual([1, 2]);
+  });
+
+  test("12k: 片方向の宣言で、書いていない側が先に観測される", () => {
+    // **宣言は片方向でも group が成立する**（`same-branch.md`「譲っても機能は失われない」）。
+    // 有向辺のまま辿ると、辺を持たない側を先に訪問した時点でそこが確定し、
+    // **board の並び順で連結成分が割れる** —— 1 本で直すための宣言が 2 本の branch を生む。
+    const silent = observation({ issue: 1, ledger: present("計画済み") });
+    const declaring = observation({ issue: 2, ledger: present("計画済み"), sameBranchAs: [1] });
+    // 宣言していない側が先（board の並び順がそうなりうる）。
+    const groups = buildGroups([silent, declaring]);
+    expect(groups.length).toBe(1);
+    expect(groups[0]?.members).toEqual([1, 2]);
+    expect(groups[0]?.representative).toBe(1);
+    // 並びを逆にしても同じ（順序に依存しない）。
+    expect(buildGroups([declaring, silent])[0]?.members).toEqual([1, 2]);
+  });
+
+  test("12j: claim 前の group で、成員の側にだけ人待ちの記録がある", () => {
+    // claim 前の人待ちは渡された Issue に書かれる（代表がまだ決まっていない）。
+    const a = observation({ issue: 1, ledger: present("未計画"), sameBranchAs: [2] });
+    const b = observation({
+      issue: 2,
+      ledger: present("未計画"),
+      sameBranchAs: [1],
+      waitRecord: wait.waiting,
+    });
+    const records = buildGroups([a, b]).flatMap((g) => g.records);
+    expect(records.find((r) => r.issue === 2)?.runtime).toBe("人待ち");
+  });
+
+  test("12l: claim 済み。wait は成員にだけあり、代表のセッションは blocked", () => {
+    // claim 後の wait は代表のコメントだけを読む。成員の記録は runtime に写さない。
+    const lead = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+      session: session.blocked,
+    });
+    const member = observation({
+      issue: 2,
+      ledger: present("進行中"),
+      sameBranchAs: [1],
+      waitRecord: wait.waiting,
+    });
+    const records = buildGroups([lead, member]).flatMap((g) => g.records);
+    expect(records.find((r) => r.issue === 1)?.runtime).not.toBe("人待ち");
+    expect(records.find((r) => r.issue === 2)?.runtime).not.toBe("人待ち");
+    expectConflict([lead, member], "証跡が矛盾している");
   });
 
   test("12: group の一部だけ計画済み。group は claim の候補にしない", () => {
@@ -804,15 +1061,13 @@ describe("group", () => {
     const a = observation({
       issue: 1,
       ledger: present("未計画"),
-      refineSessionExists: true,
-      session: session.running,
+      refineSession: session.running,
       sameBranchAs: [2],
     });
     const b = observation({
       issue: 2,
       ledger: present("未計画"),
-      refineSessionExists: true,
-      session: session.running,
+      refineSession: session.running,
       sameBranchAs: [1],
     });
     expectIdle([a, b]);
@@ -821,7 +1076,7 @@ describe("group", () => {
   test("12d: conductor がこの tick で規約の穴を見つけた", () => {
     const d = tick([observation({ issue: 1, ledger: present("計画済み") })], {
       specGap: { issue: 1, fact: "片付けの述語が 2 箇所に在る" },
-    });
+    }).outcome;
     expect(d.kind === "action" ? d.params.action : d.kind).toBe("規約の穴を起票する");
   });
 
@@ -838,7 +1093,7 @@ describe("group", () => {
       sameBranchAs: [1],
       readyRecordStale: present(true),
     });
-    const d = tick([fresh, stale]);
+    const d = tick([fresh, stale]).outcome;
     expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
       action: "差し戻す",
       to: "未計画",
@@ -883,12 +1138,12 @@ describe("入場を止める宣言（続き）", () => {
       issue: 2,
       ledger: present("進行中"),
       claimBranchExists: present(true),
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       surfaces: [surface({ hasCheckout: present(true) })],
       // 計画コメントがまだ無い = `準備中` なので、この課題は write を保持していない。
       session: session.idle,
     });
-    const d = tick([blocker, waiting]);
+    const d = tick([blocker, waiting]).outcome;
     expect(d.kind === "action" && d.params.action === "枠を渡す" ? d.params.lease : null).not.toBe(
       "write",
     );
@@ -917,17 +1172,73 @@ describe("入場を止める宣言（続き）", () => {
   });
 
   test("14f: 行 14e と同じく 退避先 だが、セッションはまだ動いている", () => {
-    expectConflict(
-      [
-        implementing({
-          issue: 1,
-          blocksEntry: true,
-          ledger: present("退避先"),
-          session: session.running,
-        }),
-      ],
-      "退避先だがセッションが止まらない",
-    );
+    const shelved = (s: IssueObservation["session"]) =>
+      implementing({
+        issue: 1,
+        blocksEntry: true,
+        ledger: present("退避先"),
+        session: s,
+      });
+    expectConflict([shelved(session.running)], "退避先だがセッションが止まらない");
+    expectConflict([shelved(session.blocked)], "退避先だがセッションが止まらない");
+  });
+});
+
+describe("claim 前の交差", () => {
+  test("18: 計画済みの候補のキーが、いま write を保持している課題と交わる", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["skills"]),
+    });
+    expectIdle([holder, candidate]);
+  });
+
+  test("18b: 行 18 と同じ保持者が居るが、候補のキーが読めない", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: { kind: "absent" },
+    });
+    expectAction([holder, candidate], "claim する");
+  });
+
+  test("18c: 候補のキーは読めるが、write 保持者のキーが読めない", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: { kind: "absent" },
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["skills"]),
+    });
+    expectIdle([holder, candidate]);
+  });
+
+  test("18d: 候補のキーは読めるが、いまの write 保持者と交わらない", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["ui"]),
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["api"]),
+    });
+    expectAction([holder, candidate], "claim する");
   });
 });
 
@@ -940,11 +1251,11 @@ describe("merge の直列化（続き）", () => {
     });
     const reentered = awaitingLanding({
       issue: 2,
-      claimRecord: present({ members: [2], landing: ["control"] }),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       claimedAt: present(1),
       session: session.idle,
     });
-    const d = tick([holder, reentered]);
+    const d = tick([holder, reentered]).outcome;
     expect(d.kind === "action" ? d.target.representative : null).not.toBe(2);
   });
 
@@ -1002,7 +1313,7 @@ describe("順序", () => {
       dependsOn: [1],
       boardOrder: 90,
     });
-    const d = tick([blocker, board, waiter]);
+    const d = tick([blocker, board, waiter]).outcome;
     expect(d.kind === "action" ? d.target.representative : d.kind).toBe(1);
   });
 
@@ -1015,7 +1326,7 @@ describe("順序", () => {
       boardOrder: 90,
     });
     const board = observation({ issue: 2, ledger: present("計画済み"), boardOrder: 1 });
-    const d = tick([first, shelved, board]);
+    const d = tick([first, shelved, board]).outcome;
     expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
   });
 });
@@ -1025,7 +1336,7 @@ describe("硬い上限", () => {
     const busy = Array.from({ length: 4 }, (_, i) =>
       implementing({
         issue: 10 + i,
-        claimRecord: present({ members: [10 + i], landing: ["control"] }),
+        claimRecord: present({ representative: 10, members: [10 + i], landing: ["control"] }),
         session: session.running,
       }),
     );
@@ -1038,8 +1349,7 @@ describe("硬い上限", () => {
       observation({
         issue: 10 + i,
         ledger: present("未計画"),
-        refineSessionExists: true,
-        session: session.running,
+        refineSession: session.running,
       }),
     );
     const candidate = observation({ issue: 1, ledger: present("未計画") });
@@ -1055,7 +1365,7 @@ describe("硬い上限", () => {
         }),
       ],
       config: { ...DEFAULT_CONFIG, retryBudget: 2 },
-    });
+    }).outcome;
     expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
       action: "差し戻す",
       to: "退避先",
@@ -1070,7 +1380,7 @@ describe("action の選択と独立な精算", () => {
         ledger: present("退避先"),
         failureRecord: present({ count: 3, lastAction: "解決を起こし直す" }),
       }),
-    ]);
+    ]).outcome;
     expect(d.kind).toBe("settle-record");
   });
 
@@ -1100,7 +1410,7 @@ describe("着地面が制御面と違う（action）", () => {
       ledger: present("進行中"),
       claimBranchExists: present(true),
       planCommentExists: present(true),
-      claimRecord: present({ members: [1], landing: ["control", "skills"] }),
+      claimRecord: present({ representative: 1, members: [1], landing: ["control", "skills"] }),
       surfaces: [control(), secondary({ hasCheckout: present(true) })],
       ...over,
     });
@@ -1111,7 +1421,7 @@ describe("着地面が制御面と違う（action）", () => {
         observation({
           ledger: present("進行中"),
           claimBranchExists: present(true),
-          claimRecord: present({ members: [1], landing: ["control", "skills"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control", "skills"] }),
           surfaces: [control(), secondary()],
         }),
       ],
@@ -1225,7 +1535,7 @@ describe("着地面が制御面と違う（action）", () => {
   test("17l: 依存先が closed かつ 完了 なら、依存は解けている", () => {
     const dependency = observation({
       issue: 1,
-      open: false,
+      open: present(false),
       ledger: present("完了"),
       surfaces: [control(), secondary()],
     });
@@ -1238,7 +1548,7 @@ describe("着地面が制御面と違う（action）", () => {
       [
         landed({
           surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
-          claimRecord: present({ members: [1], landing: ["skills"] }),
+          claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
           submissionEvidence: present(false),
           session: session.none,
         }),

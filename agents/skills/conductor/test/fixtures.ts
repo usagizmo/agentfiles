@@ -31,6 +31,7 @@ export const surface = (over: Partial<SurfaceObservation> = {}): SurfaceObservat
 export const session = {
   running: { kind: "running" } as const satisfies SessionObservation,
   idle: { kind: "idle" } as const satisfies SessionObservation,
+  blocked: { kind: "blocked" } as const satisfies SessionObservation,
   none: { kind: "none" } as const satisfies SessionObservation,
   unclassifiable: (raw: string): SessionObservation => ({ kind: "unclassifiable", raw }),
 };
@@ -62,8 +63,9 @@ export const intent = {
 
 export const observation = (over: Partial<IssueObservation> = {}): IssueObservation => ({
   issue: 1,
-  open: true,
+  open: present(true),
   ledger: present("未計画"),
+  sourceReadable: present(true),
 
   claimBranchExists: present(false),
   planCommentExists: present(false),
@@ -81,10 +83,11 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
 
   session: session.none,
   retiredRefineExists: false,
-  refineSessionExists: false,
+  refineSession: { kind: "none" },
 
   waitRecord: wait.absent,
   pauseRecordExists: false,
+  yieldRecord: absent(),
   intentRecord: intent.absent,
   integrationRecordCount: present(0),
 

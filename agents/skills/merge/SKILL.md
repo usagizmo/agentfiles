@@ -1,15 +1,30 @@
 ---
 name: merge
 description: >-
-  PR を出さずにローカルで `--no-ff` マージするときに必ずこの skill を経由する
+  PR を出さずにローカルでマージするときに必ずこの skill を経由する
   （`git merge` を直接実行しない）。既定の着地は PR 経由で、これは例外経路。
 ---
 
-指定ブランチを `--no-ff` でマージする。
+# ローカル統合
+
+指定ブランチを統合先へ入れる。
 
 **通常は使わない**。変更を default へ入れる既定の経路は PR。この skill は PR を経由せずにローカルで統合すると決めたときだけ発動する。
 
 **自動では走らない**。統合先が出ている checkout は、人と走っている全セッションが読む共有面なので、**そこへ何をいつ入れるかは人が決める**。ここは、人がそう決めたときの手順。
+
+## 形
+
+本数は `git -C <統合先> rev-list --count HEAD..<branch>`。
+
+| 本数   | 形                     |
+| ------ | ---------------------- |
+| 0      | しない。報告して終わる |
+| 1      | `--ff-only`            |
+| 2 以上 | `--no-ff`              |
+
+`--ff-only` は merge commit を作ら**ない**。メッセージは書かない。
+`--no-ff` だけメッセージを付ける。
 
 ## 操作台は統合先が出ている checkout
 
@@ -33,22 +48,25 @@ description: >-
 
 **`checkout` / `stash` / `reset` を使わない**。行ってよいのは fetch と、この merge だけ。
 
-**例外は、自分が始めた merge の `--abort` だけ**。merge の commit は hook と署名を通るので、祖先関係が成立していても最後で落ちうる（lint / test の hook、署名鍵が取れない等）。落ちると `MERGING` と staged な変更が残り、そのままでは live が壊れた状態で共有される。直前に clean を確かめてあるので、`--abort` が戻すのは自分が作った状態だけ —— 他人の作業は最初から無い。
+**例外は、自分が始めた `--no-ff` の `--abort` だけ**。merge の commit は hook と署名を通るので、祖先関係が成立していても最後で落ちうる（lint / test の hook、署名鍵が取れない等）。落ちると `MERGING` と staged な変更が残り、そのままでは live が壊れた状態で共有される。直前に clean を確かめてあるので、`--abort` が戻すのは自分が作った状態だけ —— 他人の作業は最初から無い。
 
 **`--abort` で戻したら、そこで止めて報告する**。`--no-verify` や `--no-gpg-sign` で通し直さない ——落ちた検査は、その面の規約が要求しているもの。
 
 **統合先が upstream より先行していることは異常ではない**。push が人の領分の面では、それが常態
 。ここを gate にすると、**その面へは一度も着地できなくなる。**
 
-**衝突しうる状態では merge しない**。統合先の HEAD が対象 branch の祖先なら、`--no-ff` の merge は
-必ず成功する（衝突は起きえない）。祖先でないなら**自分の worktree で rebase してから出直す** ——
+**衝突しうる状態では merge しない**。統合先の HEAD が対象 branch の祖先なら、上のどちらの形も衝突しない。祖先でないなら**自分の worktree で rebase してから出直す** ——
 先に merge してから `--abort` で戻す形にすると、**衝突から abort までのあいだ live に conflict marker の
 入った木が残り、全セッションがそれを読む**。abort 自体も、live に許した操作（fetch と merge）の外。
 
 1. 対象ブランチ名と、統合先が出ている checkout の path を取得する
 2. **その checkout で** `git log --oneline HEAD..<branch>` と `git diff HEAD...<branch>` で変更を把握する
-3. `git log -1 --format="%s%n%n%b"` で直前コミットの言語・スタイルを合わせる
-4. 変更の性質で gitmoji を1つ選び、マージする
+3. 本数を取る
+4. 形の表に従う。`--no-ff` のときだけ直前コミットの言語・スタイルに合わせ、gitmoji を 1 つ選んでメッセージを付ける
+
+```
+git -C <統合先の checkout> merge --ff-only <branch>
+```
 
 ```
 git -C <統合先の checkout> merge --no-ff <branch> -m "{gitmoji} {変更の本質}

@@ -83,8 +83,8 @@ export type Conflict = {
 // ---------------------------------------------------------------------------
 
 /**
- * **action 名の SSOT はこの配列**（`SKILL.md` の「action の優先順」はこれを説明する）。
- * 配列の順がそのまま優先順で、上から最初に当たったものを 1 つだけ実行する。
+ * **action 名の閉集合**。順序の実体は `decide.ts` の `LADDER`。
+ * 配列の順は優先順では**ない**。
  */
 export const ACTION_LADDER = [
   "報告して止める",
@@ -99,7 +99,6 @@ export const ACTION_LADDER = [
   "解決を起こし直す",
   "失効した記録を片付ける",
   "交差を解消する",
-  "休止を促し直す",
   "checks を引き直させる",
   "意図の確認を促す",
   "枠を渡す",
@@ -145,10 +144,10 @@ export const NON_ACTION_KINDS = [
 export type NonActionKind = (typeof NON_ACTION_KINDS)[number];
 
 /**
- * tick が 1 周で出す結論。**`Action | null` にしない** —— 表は遷移 / 制約 / action 外の
+ * tick が 1 周で選ぶ 1 手。**`Action | null` にしない** —— 表は遷移 / 制約 / action 外の
  * 3 形を強度順で使い分けており、制約行を「何も選ばない」へ潰すと回帰がそのぶん薄くなる。
  */
-export type Decision =
+export type Outcome =
   | {
       readonly kind: "action";
       readonly params: ActionParams;
@@ -158,8 +157,22 @@ export type Decision =
   | { readonly kind: "settle-record"; readonly settlement: Settlement }
   | { readonly kind: "constraint"; readonly constraint: ConstraintKind; readonly detail: string }
   | { readonly kind: "non-action"; readonly nonAction: NonActionKind; readonly detail: string }
-  | { readonly kind: "conflict"; readonly conflicts: readonly Conflict[] }
   | { readonly kind: "idle" };
+
+/**
+ * tick が 1 周で出す結論。
+ *
+ * **`Conflict` は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他の課題は
+ * 回す。1 件を止める / 全体を止めるの切り分けは `SKILL.md`「硬い上限」。
+ *
+ * **選出対象外にしても資源の数え上げからは外さない**（write / integration lease）ので、
+ * その課題の実体は他の課題の action から守られたまま。
+ */
+export type Decision = {
+  /** 当たった課題を選出対象外にする。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
+  readonly conflicts: readonly Conflict[];
+  readonly outcome: Outcome;
+};
 
 /**
  * action の選択とは独立に行う精算。**action として書かない** ——

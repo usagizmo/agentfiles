@@ -78,7 +78,7 @@ flowchart TB
 **依存の実体は [`structure.md`](structure.md) の図**（ここに写すと片方が古くなる）。
 
 - **禁止するのは下位から上位への逆参照と循環**。`resolve` は `conductor` を知らないし、leaf は flow を知らない
-- 同じ層どうしの依存・言及も作らない（leaf 同士は特に）。例外はデータ資産の共有だけで、張り方は [`structure.md`](structure.md)
+- 同じ層どうしの依存・言及も作らない（leaf 同士は特に）。例外はデータ資産の共有だけで、張り方は [`../../AGENTS.md`](../../AGENTS.md)（何が張られているかは [`structure.md`](structure.md)）
 - 検出手順は `docs` skill の品質パス。**層の割り当ての正は `agents/skills/docs/scripts/layers.tsv`**（leaf は既定なので書かれない）。この節はその導出で、ずれると品質パスの `derived` 検査が落ちる
 
 ## 上位層の役割分担
@@ -119,10 +119,10 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 
 ### レビューの委譲先
 
-| skill                        | 委譲先                                    | 契約の SSOT                        |
-| ---------------------------- | ----------------------------------------- | ---------------------------------- |
-| `consult` / `zero-base-loop` | 別 harness の CLI を read-only で並列起動 | `agents/shared/advisors.md`        |
-| `docs` / `tidy`              | 同 harness の subagent                    | `agents/shared/review-contract.md` |
+| skill                        | 委譲先                               | 契約の SSOT                        |
+| ---------------------------- | ------------------------------------ | ---------------------------------- |
+| `consult` / `zero-base-loop` | Herdr の tab に read-only で並列起動 | `agents/shared/advisors.md`        |
+| `docs` / `tidy`              | 同 harness の subagent               | `agents/shared/review-contract.md` |
 
 **アドバイザーは実行中の自分を除いて選ぶ**ので、メインが Claude でも Codex でも同じ表から組み替わる（人数と選び方は上の SSOT）。
 

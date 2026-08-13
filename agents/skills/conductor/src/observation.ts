@@ -1,17 +1,24 @@
 // `normalize` / `decide` が読む観測の型。**ここが decode 境界の出口**で、
 // `watch.sh --snapshot` の生テキストと固定 marker の本文は `decode.ts` がここへ写す。
 
+import type { YieldRecord } from "./records.ts";
 import type { Ledger, Observed } from "./types.ts";
 
 /**
  * セッションの生の状態。**`分類不能` を `稼働中` にも `待機` にも丸めない**
  * （丸めると、人が入力を書いている最中の pane を閉じる action が `done` と区別できない）。
+ * **`blocked` も丸めない**（承認・質問 UI。人待ちの印であって、記録の人待ちではない）。
  */
 export type SessionObservation =
   | { readonly kind: "running" }
   | { readonly kind: "idle" }
+  | { readonly kind: "blocked" }
   | { readonly kind: "none" }
   | { readonly kind: "unclassifiable"; readonly raw: string };
+
+/** 実行器がまだ動いている（書いている、または承認・質問で止まっている）。 */
+export const sessionActive = (s: SessionObservation): boolean =>
+  s.kind === "running" || s.kind === "blocked";
 
 /**
  * 人待ちの記録が有効かどうか。**判定は質問の本文の有無と、実行資源待ちの証跡の有無だけ**
@@ -63,8 +70,16 @@ export type SurfaceObservation = {
 /** 1 課題ぶんの観測。**group へ畳む前**の、Issue 単位の材料。 */
 export type IssueObservation = {
   readonly issue: number;
-  readonly open: boolean;
+  /** Issue が open か。**board に居るのに `issues` 節に無いことを closed へ畳まない** */
+  readonly open: Observed<boolean>;
   readonly ledger: Observed<Ledger>;
+
+  /**
+   * 本文とコメントを読めたか。**読めなかったことを「無い」に畳まない** ——
+   * 畳むと Issue 契約が「欠けている」に、記録が全部「無い」に読まれる。
+   * 偽なら `観測できない` の `Conflict` が最上段で当たり、他の値は誰も読まない。
+   */
+  readonly sourceReadable: Observed<boolean>;
 
   /** 制御面の claim branch。**成果物の段とは混ぜない**（`準備中` / `準備済み` はここから引く） */
   readonly claimBranchExists: Observed<boolean>;
@@ -72,8 +87,9 @@ export type IssueObservation = {
   readonly planCommentExists: Observed<boolean>;
   /** Issue 契約が揃っているか（項目の SSOT は `refine` の Issue 契約） */
   readonly issueContractComplete: Observed<boolean>;
-  /** claim の記録。`landing` の欠落は `Conflict` */
+  /** claim の記録。`landing` の欠落は `Conflict`。**対象集合と代表を定めるのはこれ** */
   readonly claimRecord: Observed<{
+    readonly representative: number;
     readonly members: readonly number[];
     readonly landing: readonly string[];
   }>;
@@ -95,12 +111,18 @@ export type IssueObservation = {
   readonly session: SessionObservation;
   /** `retired-refine-<番号>` が残っているか。**`runtime` には写さない**（`無し` として扱う） */
   readonly retiredRefineExists: boolean;
-  /** `refine-<番号>` のセッションがあるか（完全一致） */
-  readonly refineSessionExists: boolean;
+  /**
+   * `refine-<番号>` のセッション（完全一致）。**存在の有無ではなく状態で持つ** ——
+   * `session` は `resolve-<番号>` を見るので計画中は常に `none` になり、
+   * 有無だけでは「走っているものを畳まない」を書けない。
+   */
+  readonly refineSession: SessionObservation;
 
   readonly waitRecord: WaitRecord;
   /** 休止の記録。**「記録あり」だけでは `休止` にならない**（非稼働も要る） */
   readonly pauseRecordExists: boolean;
+  /** 休止の記録の本体。交差の記述（`to` / `keys`）を突き合わせるときだけ読む */
+  readonly yieldRecord: Observed<YieldRecord>;
   readonly intentRecord: IntentRecord;
   /** merge の枠の渡しの記録。2 件以上は `Conflict` */
   readonly integrationRecordCount: Observed<number>;

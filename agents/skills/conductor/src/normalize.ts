@@ -1,7 +1,13 @@
 // 観測 1 件を 4 フィールドへ畳む純関数。**`progress` と `runtime` は排他ラダー**で、
 // 上から読んで先に当たった行が勝つ。生の条件は重なってよい —— 重なりは順序が解決する。
 
-import type { IssueObservation, SurfaceObservation } from "./observation.ts";
+import {
+  sessionActive,
+  type IssueObservation,
+  type SessionObservation,
+  type SurfaceObservation,
+  type WaitRecord,
+} from "./observation.ts";
 import type {
   Capacity,
   Conflict,
@@ -18,6 +24,10 @@ const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.va
 
 const isUnreadable = (o: Observed<unknown>): boolean =>
   o.kind === "unobservable" || o.kind === "invalid";
+
+/** 読めなかった理由。読めているなら `undefined`。**判定と理由を 1 回で取る。** */
+const reasonOf = (o: Observed<unknown>): string | undefined =>
+  o.kind === "unobservable" || o.kind === "invalid" ? o.reason : undefined;
 
 /**
  * **commit が 0 の面は透過する**。予定した面に結局書かなかったことは通常運用で、
@@ -45,9 +55,21 @@ const terminalMixed = (surfaces: readonly SurfaceObservation[]): boolean => {
   return terminal > 0 && terminal < surfaces.length;
 };
 
-/** `実装中` — **`統合先..branch` が非空か、worktree が dirty**（`-` も dirty 側）。 */
-const hasWorkInProgress = (surfaces: readonly SurfaceObservation[]): boolean =>
-  surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) !== false);
+/**
+ * `実装中` — **`統合先..branch` が非空か、worktree が dirty**。
+ *
+ * **読めた証跡だけで決める。**読めない面から `実装中` を導くと、branch も worktree も
+ * セッションも無い課題が write を握り、**幽霊の保持者として本物の実行器を止める**
+ * （`交差を解消する` がそれに当たる）。読めない面には `着地面が解決できない` が別に立つ。
+ *
+ * **終端側の fail-closed はここではない。**「全着地面が dirty でない（`0` のみ。読めなかった
+ * `-` は不可）」は `allSurfacesClean` が持つ（`landing-surface.md`「終端」）。
+ *
+ * **`decide` の「成果物がある」と同じ述語**。割れると、契約が欠けた計画済みが差し戻されずに
+ * Conflict へ落ちる。**2 つ書かない。**
+ */
+export const hasWorkInProgress = (surfaces: readonly SurfaceObservation[]): boolean =>
+  surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) === true);
 
 export const normalizeProgress = (o: IssueObservation): Progress => {
   const clean = allSurfacesClean(o.surfaces);
@@ -55,7 +77,8 @@ export const normalizeProgress = (o: IssueObservation): Progress => {
 
   if (allSurfacesTerminalOrTransparent(o.surfaces) && clean && submitted) return "着地済み";
 
-  const withdrawn = o.open === false || value(o.latestPrClosedUnmerged) === true;
+  // **読めなかった `open` を closed 側へ倒さない**（同じ観測が `観測できない` を立てる）。
+  const withdrawn = value(o.open) === false || value(o.latestPrClosedUnmerged) === true;
   if (withdrawn && !terminalMixed(o.surfaces)) return "取り下げ";
 
   if (allSurfacesLandableOrTransparent(o.surfaces) && clean && submitted) return "着地待ち";
@@ -92,6 +115,10 @@ const conflict = (reason: ConflictReason, issue: number, ...evidence: string[]):
   issues: [issue],
 });
 
+/** 印はあるが記録が `absent` / `cleared`。`waiting` の無効は別行。 */
+const markWithoutWait = (s: SessionObservation, wait: WaitRecord): boolean =>
+  s.kind === "blocked" && (wait.kind === "absent" || wait.kind === "cleared");
+
 /**
  * ラダーで解決できないものだけを集める。**「2 つの行に当たった」は含まない。**
  * `ledger` と期待値のずれは、5 事象の入力が要るので `decide` が見る。
@@ -99,6 +126,23 @@ const conflict = (reason: ConflictReason, issue: number, ...evidence: string[]):
 const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] => {
   const found: Conflict[] = [];
   const n = o.issue;
+  // **記録の整合の Conflict は、その記録がこれから読まれる課題にだけ当てる。**
+  // 台帳が `完了` に達した課題の記録は二度と分岐に使われないので、当てても人が動かす先が
+  // 無く、**ラダー最上段なのでキューが恒久的に止まる**（実測で、キュー以前に着地した
+  // 40 件が全部ここへ落ち、`片付ける` にも届かなかった）。
+  //
+  // **実体を守る Conflict には掛けない** —— 成果物を伴う 2 つ・着地面・live checkout は、
+  // `片付ける` が消しにいく対象そのものを見ている。
+  const settled = value(o.ledger) === "完了";
+
+  // **本文とコメントを読めていないなら、他の値は詰め物。**先に報告して止める。
+  if (o.sourceReadable.kind !== "present" || o.sourceReadable.value === false) {
+    found.push(conflict("観測できない", n, "Issue の本文かコメントを読めない"));
+  }
+
+  if (o.open.kind !== "present") {
+    found.push(conflict("観測できない", n, "board に居るが Issue の open / closed を読めない"));
+  }
 
   if (o.session.kind === "unclassifiable") {
     found.push(conflict("観測できない", n, `セッションの生の状態が分類できない: ${o.session.raw}`));
@@ -113,26 +157,49 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // **`退避先` は論理 lease を返す**ので、そこでセッションが動いているのは
   // 「lease を持たないまま書いている」状態。人が Status だけ動かすと起きる。
   // 出さないと、入場を止める宣言も merge の枠も外れないまま誰にも見えない。
-  if (value(o.ledger) === "退避先" && o.session.kind === "running") {
+  if (value(o.ledger) === "退避先" && sessionActive(o.session)) {
     found.push(
-      conflict("退避先だがセッションが止まらない", n, "退避先へ移ったのにセッションが稼働中"),
+      conflict(
+        "退避先だがセッションが止まらない",
+        n,
+        "退避先へ移ったのにセッションが止まっていない",
+      ),
+    );
+  }
+
+  // **印だけ。**`blocked` は人待ちの印。記録が無い／`cleared` なら書き手が残す前に落ちた。
+  // **`waiting` の無効・壊れは下の既存行が扱う**（7h の自己修復を Conflict で潰さない）。
+  // **終端には当てない** —— 当てると `片付ける` が選出対象外になり、pane が残る。
+  if (
+    !settled &&
+    (markWithoutWait(o.session, o.waitRecord) || markWithoutWait(o.refineSession, o.waitRecord))
+  ) {
+    found.push(
+      conflict("証跡が矛盾している", n, "実行器が承認か質問で止まっているが、人待ちの記録が無い"),
     );
   }
 
   // **本文の欠落だけで解除しない** —— 本物の質問を選択 UI にだけ出して書き損ねた経路がある。
-  if (o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "undecidable") {
+  if (!settled && o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "undecidable") {
     found.push(
       conflict("証跡が矛盾している", n, "人待ちの記録に質問の本文が無く、実行資源待ちの証跡も無い"),
     );
   }
-  if (o.waitRecord.kind === "broken") {
+  if (!settled && o.waitRecord.kind === "broken") {
     found.push(
       conflict("証跡が矛盾している", n, `人待ちの記録が壊れている: ${o.waitRecord.reason}`),
     );
   }
 
+  // **面を読めないなら、その面の成果物も読めない。**fail-closed で「成果物あり」側へ倒れるが、
+  // そこから成果物の Conflict を出すと、実際には無い実装を人へ報告することになる ——
+  // 根の `着地面が解決できない` は同じ観測が立てているので、そちらだけを出す。
+  const artifacts =
+    o.surfaces.every((s) => !isUnreadable(s.terminal) && !isUnreadable(s.landable)) &&
+    hasWorkInProgress(o.surfaces);
+
   // **保守的に全交差のまま保持し続ける**（非保持へ倒すと、投稿に失敗した課題が無防備に書く）。
-  if (value(o.planCommentExists) === false && hasWorkInProgress(o.surfaces)) {
+  if (value(o.planCommentExists) === false && artifacts) {
     found.push(
       conflict(
         "計画コメントが無いまま実装の証跡がある",
@@ -142,7 +209,7 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     );
   }
 
-  if (value(o.issueContractComplete) === false && hasWorkInProgress(o.surfaces)) {
+  if (value(o.issueContractComplete) === false && artifacts) {
     found.push(
       conflict(
         "Issue 契約が欠けたまま成果物がある",
@@ -154,11 +221,22 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
 
   // **`取り下げ` に落とさない** —— 実体は着地しているのに `完了` が付かず、依存が永久に解けない。
   // **PR を使わない面には当てない**（あちらは提出の証跡そのものが終端の条件）。
-  if (value(o.prMerged) === true && value(o.submissionEvidence) !== true) {
+  // 守っているのは台帳が進んでいないことだけなので、`完了` には当てない
+  // （`完了` なら依存は `closed かつ 完了` の経路で解ける）。
+  if (!settled && value(o.prMerged) === true && value(o.submissionEvidence) !== true) {
     found.push(
       conflict("着地済みだが提出の証跡が無い", n, "merged な PR があるのに提出のまとめが無い"),
     );
   }
+
+  // **終端に達して、片付けが触る実体が 1 つも残っていない課題には当てない。**面を解決する
+  // 必要そのものが無いので、報告しても人が動かす先が無く、毎 tick 出続けるだけになる。
+  // **実体が残っているなら出す** —— 面を解決できないまま片付けにいかせない。
+  const nothingLeft =
+    settled &&
+    normalizeCapacity(o) === "無し" &&
+    o.session.kind === "none" &&
+    value(o.claimBranchExists) !== true;
 
   const claim = value(o.claimRecord);
   if (
@@ -172,9 +250,12 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   if (isUnreadable(o.claimRecord) && value(o.claimBranchExists) === true) {
     found.push(conflict("着地面が解決できない", n, "claim の記録を読めない"));
   }
+  // **理由を握り潰さない。**座標表から外れたのか・checkout が無いのか・git が落ちたのかで
+  // 人が次にやることが違う。`unobservable` と `invalid` はどちらも理由を持っている。
   for (const s of o.surfaces) {
-    if (isUnreadable(s.terminal) || isUnreadable(s.landable)) {
-      found.push(conflict("着地面が解決できない", n, `面 ${s.name} の観測が読めない`));
+    const why = nothingLeft ? undefined : (reasonOf(s.terminal) ?? reasonOf(s.landable));
+    if (why !== undefined) {
+      found.push(conflict("着地面が解決できない", n, `面 ${s.name} の観測が読めない: ${why}`));
     }
   }
 
@@ -194,17 +275,18 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   }
 
   // **待つのをやめたのに要求が残っている形。**放置すると実物を見せないまま着地する。
-  if (o.intentRecord.kind === "pending" && o.waitRecord.kind !== "waiting") {
+  if (!settled && o.intentRecord.kind === "pending" && o.waitRecord.kind !== "waiting") {
     found.push(
       conflict("意図の確認が pending なのに人待ちが無い", n, "人待ちの記録が cleared か無い"),
     );
   }
 
+  // `完了` の課題に残った渡しの記録は、報告ではなく `片付ける` が消す。
   const integrationRecords = value(o.integrationRecordCount);
-  if (integrationRecords !== undefined && integrationRecords >= 2) {
+  if (!settled && integrationRecords !== undefined && integrationRecords >= 2) {
     found.push(conflict("渡しの記録が複数", n, `渡しの記録が ${integrationRecords} 件ある`));
   }
-  if (isUnreadable(o.integrationRecordCount)) {
+  if (!settled && isUnreadable(o.integrationRecordCount)) {
     found.push(conflict("渡しの記録が複数", n, "渡しの記録を読めない"));
   }
 

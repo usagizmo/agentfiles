@@ -67,27 +67,27 @@
 
 **セッションは消える。外部化したものだけが復旧契約になる**。いずれも固定 marker 付きの Issue コメント。
 
-| 語               | marker        | 書く人               | SSOT                                  |
-| ---------------- | ------------- | -------------------- | ------------------------------------- |
-| claim の記録     | `claim`       | `conductor`          | `agents/shared/same-branch.md`        |
-| 在庫の鮮度       | `ready`       | `refine`             | `agents/shared/ready-record.md`       |
-| 計画             | `plan`        | `resolve`            | `resolve/SKILL.md`                    |
-| 人待ちの記録     | `wait`        | `refine` / `resolve` | `agents/shared/wait-record.md`        |
-| 意図の確認の記録 | `intent`      | `resolve`            | `agents/shared/intent-record.md`      |
-| 渡しの記録       | `integration` | `conductor`          | `agents/shared/integration-record.md` |
-| 休止の記録       | `yield`       | `conductor`          | `conductor/references/protocols.md`   |
-| 失敗の記録       | `retry`       | `conductor`          | `conductor/references/protocols.md`   |
-| 周回の記録       | `cycle`       | `conductor`          | `conductor/references/protocols.md`   |
+| 語               | marker        | 書く人               | SSOT                                        |
+| ---------------- | ------------- | -------------------- | ------------------------------------------- |
+| claim の記録     | `claim`       | `conductor`          | `agents/shared/queue/same-branch.md`        |
+| 在庫の鮮度       | `ready`       | `refine`             | `agents/shared/queue/ready-record.md`       |
+| 計画             | `plan`        | `resolve`            | `resolve/SKILL.md`                          |
+| 人待ちの記録     | `wait`        | `refine` / `resolve` | `agents/shared/queue/wait-record.md`        |
+| 意図の確認の記録 | `intent`      | `resolve`            | `agents/shared/queue/intent-record.md`      |
+| 渡しの記録       | `integration` | `conductor`          | `agents/shared/queue/integration-record.md` |
+| 休止の記録       | `yield`       | `conductor`          | `conductor/references/protocols.md`         |
+| 失敗の記録       | `retry`       | `conductor`          | `conductor/references/protocols.md`         |
+| 周回の記録       | `cycle`       | `conductor`          | `conductor/references/protocols.md`         |
 
 **marker に版番号を付けない**。版で分岐する読み手が要るようになったことが一度も無く、upsert は marker 文字列の一致で既存を探すので、版を上げると古いコメントが見つからなくなって新旧が併存する（移行経路を与えるどころか孤児を作る）。schema の不一致は block の必須キーの有無で検出でき、`conductor` の「計画 schema 不明 → 全体 pause」がそれを受ける。
 
-**Artifact は marker コメントではない**。復旧契約ではなく、人が読み返すための面で、そのときの原本から作り直せる projection（履歴を持たない）。課題の枚は計画から着地まで複数の工程が 1 枚を書き直し、単独の書き手が持つ枚（`conductor` の状況ボード）は書き手が 1 つ。規則は `agents/shared/artifact.md`。
+**譜面は marker コメントではない**。復旧契約ではなく、人が読み返すための面で、そのときの原本から作り直せる projection（履歴を持たない）。課題の譜面は計画から着地まで複数の工程が 1 ファイルを書き直し、単独の書き手が持つ譜面（`conductor` の状況ボード）は書き手が 1 つ。規則は `agents/shared/queue/score.md`。
 
 ## 課題のまとまり
 
-| 語      | 意味                                                                                                                                                                                                                                                                                                               | SSOT                           |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| 課題    | **1 branch で着地する 1 まとまり**。Issue 1 件とは限らず、group なら全 Issue で 1 件。`resolve` が進める単位・claim / 在庫 / lease を数える単位はこれ。例外は 2 つ —— `conductor` の正規化（一部だけ計画済みの group を表せなくなるため）と、在庫の鮮度（記録が成員ごとに別々に書かれるため）。どちらも Issue 単位 | `conductor/SKILL.md`           |
-| group   | `Same branch as #N` で結ばれた Issue の集合。**推移的に閉じる**                                                                                                                                                                                                                                                    | `agents/shared/same-branch.md` |
-| 代表    | group の最小番号。**claim 時点で固定**し、以後引き直さない                                                                                                                                                                                                                                                         | `agents/shared/same-branch.md` |
-| variant | **claim 済みとして渡されたか**。`managed` = 台帳と branch が claim を示す（枠が空くまで待つ）/ `interactive` = そうでない（待たずに進む）。起動主体では決まらない — 人が claim 済みの課題を直接渡せば `managed`                                                                                                    | `resolve/SKILL.md`             |
+| 語      | 意味                                                                                                                                                                                                                                                                                                               | SSOT                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| 課題    | **1 branch で着地する 1 まとまり**。Issue 1 件とは限らず、group なら全 Issue で 1 件。`resolve` が進める単位・claim / 在庫 / lease を数える単位はこれ。例外は 2 つ —— `conductor` の正規化（一部だけ計画済みの group を表せなくなるため）と、在庫の鮮度（記録が成員ごとに別々に書かれるため）。どちらも Issue 単位 | `conductor/SKILL.md`                 |
+| group   | `Same branch as #N` で結ばれた Issue の集合。**推移的に閉じる**                                                                                                                                                                                                                                                    | `agents/shared/queue/same-branch.md` |
+| 代表    | group の最小番号。**claim 時点で固定**し、以後引き直さない                                                                                                                                                                                                                                                         | `agents/shared/queue/same-branch.md` |
+| variant | **claim 済みとして渡されたか**。`managed` = 台帳と branch が claim を示す（枠が空くまで待つ）/ `interactive` = そうでない（待たずに進む）。起動主体では決まらない — 人が claim 済みの課題を直接渡せば `managed`                                                                                                    | `resolve/SKILL.md`                   |

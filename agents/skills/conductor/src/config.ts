@@ -8,13 +8,16 @@ import { DEFAULT_CONFIG } from "./decide.ts";
 import { LEDGER_VALUES } from "./types.ts";
 import type { Ledger } from "./types.ts";
 
+/**
+ * 面の座標。**checkout path を持たない** —— 端末ごとに違うので、設定 file へ入れると
+ * その file が tracked にできない（マシン固有の絶対パスが commit される）。
+ * path は起動時に `--surface-path <name>=<path>` で渡し、`ResolvedSurface` で束ねる。
+ */
 export type SurfaceConfig = {
   /** 面の名前（`<owner>/<repo>`）。claim の記録の `landing` と同じ字面 */
   readonly name: string;
   /** その面が PR で着地するか */
   readonly usesPr: boolean;
-  /** その面の checkout path。**端末ごとに違うので座標表ではなく呼び出し側が渡す** */
-  readonly repoPath: string;
   /** 統合先の ref（base と追随の基準。**終端の判定には使わない**） */
   readonly integrationRef: string;
 };
@@ -35,8 +38,35 @@ export type ProjectConfig = {
    */
   readonly sessionsCmd: string;
   readonly workspacesCmd: string;
+  /**
+   * 工程ごとに何で実行器を起こすか（`herdr agent start --kind` の値）。**両方必須**。
+   *
+   * **何で起こすかは配線**（`~/.agents/AGENTS.md`「意味と手順は共通、起動・配線は個別」）——
+   * 共通 skill が harness を名指しすると、project ごとに変えられず、計画と実装で別の実行器を
+   * 試すこともできない。**モデルは持たない** —— 既定は harness の設定側が持っている。
+   */
+  readonly executors: { readonly refine: string; readonly resolve: string };
   readonly tick: TickConfig;
 };
+
+/** 座標に checkout path を束ねたもの。`port` が実際に触るのはこちら。 */
+export type ResolvedSurface = SurfaceConfig & { readonly repoPath: string };
+
+/**
+ * 座標と `--surface-path` を突き合わせる。**1 面でも欠けたら止まる**（fail-closed）——
+ * 落ちた面は観測に出ないので、そこで書き進んでいる課題が成果ゼロの周として数えられる。
+ */
+export const resolveSurfaces = (
+  surfaces: readonly SurfaceConfig[],
+  paths: ReadonlyMap<string, string>,
+): ResolvedSurface[] =>
+  surfaces.map((s) => {
+    const repoPath = paths.get(s.name);
+    if (repoPath === undefined || repoPath === "") {
+      throw new ConfigError(`--surface-path が無い面がある: ${s.name}`);
+    }
+    return { ...s, repoPath };
+  });
 
 export class ConfigError extends Error {}
 
@@ -80,7 +110,7 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     if (typeof s !== "object" || s === null)
       throw new ConfigError("surfaces の要素が object ではない");
     const e = s as Record<string, unknown>;
-    for (const key of ["name", "repoPath", "integrationRef"]) {
+    for (const key of ["name", "integrationRef"]) {
       if (typeof e[key] !== "string" || e[key] === "")
         throw new ConfigError(`surfaces の ${key} が無い`);
     }
@@ -89,10 +119,18 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     return {
       name: e["name"] as string,
       usesPr: e["usesPr"],
-      repoPath: e["repoPath"] as string,
       integrationRef: e["integrationRef"] as string,
     };
   });
+
+  const executorsRaw = required("executors");
+  if (typeof executorsRaw !== "object" || executorsRaw === null)
+    throw new ConfigError("executors が object ではない");
+  const executor = (stage: "refine" | "resolve"): string => {
+    const kind = (executorsRaw as Record<string, unknown>)[stage];
+    if (typeof kind !== "string" || kind === "") throw new ConfigError(`executors.${stage} が無い`);
+    return kind;
+  };
 
   return {
     ghRepo: String(required("ghRepo")),
@@ -103,6 +141,7 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     surfaces,
     sessionsCmd: String(required("sessionsCmd")),
     workspacesCmd: String(required("workspacesCmd")),
+    executors: { refine: executor("refine"), resolve: executor("resolve") },
     // 硬い上限は既定を持つ（推測が外れても待ちが伸びるだけ）。
     tick: {
       ...DEFAULT_CONFIG,

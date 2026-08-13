@@ -42,8 +42,10 @@ inventory_define() {
   inv_symlink harnesses/codex/hooks.json "$HOME/.codex/hooks.json"
 
   # --- Grok ---
+  # Grok は `~/.grok/AGENTS.md` を global rules として読む（探索順は global → repo root → cwd）
   inv_section "grok"
   inv_home "$HOME/.grok"
+  inv_symlink agents/AGENTS.md "$HOME/.grok/AGENTS.md"
   inv_symlink harnesses/grok/hooks/hooks.json "$HOME/.grok/hooks/hooks.json"
   inv_guard_dir "$HOME/.grok/hooks"
   inv_harness_skills "$HOME/.grok/skills" grok

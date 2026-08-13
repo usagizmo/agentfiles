@@ -2,13 +2,7 @@
 //
 // **押さえるのは 1 点** —— baseline は watcher が起動時に取り直すものではなく、**tick が
 // action を決めるのに使った観測**であること。取り直す実装だと、tick の観測から watcher の
-// 起動までの隙間に入った遷移が baseline に吸われ、fallback まで誰にも見えない（実測で
-// 30 分の停止が 2 回）。
-//
-// **修正前に落ちることを実測してある。**旧実装では 4 件とも fail（mode を持たないので
-// `unknown option: --baseline`）。窓そのものも同じ shim で再現した —— 状態を "done" へ変えてから
-// 旧 watch.sh を起こすと、`--max 6 --interval 1` でも差分は 1 度も出ず、6 秒後の
-// `no change for 6s (fallback wake)` だけが出る。
+// 起動までの隙間に入った遷移が baseline に吸われ、fallback まで誰にも見えない。
 //
 // gh / git は PATH shim で偽装する（本物を呼ぶと network と checkout に依存して測れない）。
 // 状態の変化は `--sessions-cmd` に渡す file の中身で作る —— そこは元から注入点なので、
@@ -30,7 +24,7 @@ function sandbox() {
   return { dir, state, snapshot: join(dir, "snapshot") };
 }
 
-async function watch(args, { state }) {
+async function watch(args, { state, env = {} }) {
   const p = Bun.spawn(
     [
       "bash",
@@ -55,7 +49,7 @@ async function watch(args, { state }) {
     ],
     {
       cwd: ROOT,
-      env: { ...process.env, PATH: `${SHIM}:${process.env.PATH}` },
+      env: { ...process.env, PATH: `${SHIM}:${process.env.PATH}`, ...env },
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -168,6 +162,38 @@ test("値の無い option は、観測の失敗と区別できる終了コード
   expect(exitCode).toBe(2);
   expect(stderr).toContain("missing value for --snapshot");
 });
+
+test("baseline の 1 周ごとのコスト行はモニター出力に出さない。超過は残す", async () => {
+  const box = sandbox();
+
+  const snap = await watch(["--snapshot", box.snapshot], box);
+  expect(snap.exitCode).toBe(0);
+
+  const quiet = await watch(["--baseline", box.snapshot, "--interval", "1", "--max", "3"], box);
+  expect(quiet.exitCode).toBe(0);
+  expect(quiet.stdout).not.toContain("graphql cost this round");
+  expect(quiet.stderr).not.toContain("graphql cost this round");
+  expect(quiet.stdout).toContain("fallback wake");
+
+  const over = await watch(["--snapshot", box.snapshot, "--cost-limit", "1"], box);
+  expect(over.exitCode).toBe(2);
+  expect(over.stderr).toContain("exceeds --cost-limit");
+}, 20_000);
+
+test("fetch 失敗を毎周 stdout に出さない", async () => {
+  const box = sandbox();
+
+  const snap = await watch(["--snapshot", box.snapshot], box);
+  expect(snap.exitCode).toBe(0);
+
+  const run = await watch(["--baseline", box.snapshot, "--interval", "1", "--max", "3"], {
+    ...box,
+    env: { GIT_CONFIG_GLOBAL: "/dev/null" },
+  });
+  expect(run.exitCode).toBe(0);
+  expect(run.stdout).not.toMatch(/fetch|Username|Permission denied|publickey/i);
+  expect(run.stdout).toContain("観測不能");
+}, 20_000);
 
 test("読めない baseline は自分で取り直さず起動を止める", async () => {
   const box = sandbox();

@@ -13,9 +13,10 @@
 #   VIOLATION  規約違反。レビューへ出す前に直す
 #   REVIEW     候補。機械では意味を判定できないので、棄却可否はレビュアーが判定する
 #   SKIP       検査を飛ばした。緑と区別がつくよう必ず出す（黙ると検査済みに見える）
-# location は `<path>:<行>`。行を持たない検査（shared）はパスだけ、複数箇所を
-# 1 行へ畳む検査（numeric / marker）は集約キーが入り、位置は detail の at= に
-# 並ぶ（at= は同じ行を畳むので count とは一致しない）。
+# location は `<path>:<行>`。行を持たない検査（shared / sibling / queue / derived）は
+# パスだけ、複数箇所を 1 行へ畳む検査（numeric / marker）は集約キーが入り、位置は
+# detail の at= に並ぶ（at= は同じ行を畳むので count とは一致しない）。
+# fence と引用の中は参照として読まない（layer / ref / ref-heading / sibling）。
 # exit 0=違反なし / 1=VIOLATION あり / 2=検査自体が実行できない
 
 set -u
@@ -33,7 +34,7 @@ LAYERS=$(dirname "$0")/layers.tsv
 
 # **queue package の構成員。**キュー機構専用の共有実体（`shared/queue/`）を張ってよい skill。
 # **rank ではなくドメインで決める** —— rank 2 の subflow が queue adapter になることがあり、
-# rank 境界だと正当な参照まで落ちる。project 差分の adapter は `--queue-member` で足す。
+# rank 境界だと正当な参照まで落ちる。
 QUEUE_MEMBERS="conductor
 refine
 resolve"
@@ -88,6 +89,34 @@ canon() {
 
 emit() {
 	printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >>"$FINDINGS"
+}
+
+# fence と引用の中は参照ではない。書式の実例や他所からの引用が入る。
+# **消さずに空行へ潰す** —— 行を詰めると location が別の行を指す。
+# **開閉は文字種と本数で判定する。**単純なトグルだと、記録形式が使う fence の
+# 入れ子（```` の中の ```）で反転し、以降の本物の参照が全部消える。
+strip_noncode() {
+	awk '
+		{
+			line = $0
+			sub(/^[ \t]+/, "", line)
+			ch = substr(line, 1, 1)
+			if (ch == "`" || ch == "~") {
+				n = 0
+				while (substr(line, n + 1, 1) == ch) n++
+				if (n >= 3) {
+					rest = substr(line, n + 1)
+					if (!fence) { fence = 1; fch = ch; fn = n }
+					else if (ch == fch && n >= fn && rest ~ /^[ \t]*$/) fence = 0
+					print ""
+					next
+				}
+			}
+			if (fence) { print ""; next }
+			if (line ~ /^>/) { print ""; next }
+			print
+		}
+	' "$1"
 }
 
 # --- 引数 ---------------------------------------------------------------
@@ -210,12 +239,12 @@ sort -t "	" -k2,2 -k1,1 "$INVENTORY" | awk -F "	" '!seen[$2]++' >"$WORK/unique"
 while read -r skill; do
 	is_layer_exempt "$skill" && continue
 	sr=$(rank "$skill")
-	awk '{
+	strip_noncode "$ROOT/$skill/SKILL.md" | awk '{
 		while (match($0, /`[a-z][a-z0-9-]*`/)) {
 			print NR "\t" substr($0, RSTART + 1, RLENGTH - 2)
 			$0 = substr($0, RSTART + RLENGTH)
 		}
-	}' "$ROOT/$skill/SKILL.md" | sort -u | while IFS="	" read -r ln word; do
+	}' | sort -u | while IFS="	" read -r ln word; do
 		[ "$word" = "$skill" ] && continue
 		grep -qx "$word" "$SKILLS" || continue
 		tr_=$(rank "$word")
@@ -230,12 +259,12 @@ while IFS="	" read -r disp phys; do
 	dir=${disp%/*}
 
 	# バッククォート内の相対 .md パス
-	awk '{
+	strip_noncode "$phys" | awk '{
 		while (match($0, /`[^`]*\.md`/)) {
 			print NR "\t" substr($0, RSTART + 1, RLENGTH - 2)
 			$0 = substr($0, RSTART + RLENGTH)
 		}
-	}' "$phys" | sort -u | while IFS="	" read -r ln target; do
+	}' | sort -u | while IFS="	" read -r ln target; do
 		case "$target" in
 		"~"* | /* | *" "*) continue ;;
 		# **プレースホルダは参照ではない。**`<skill>/references/<file>.md` の
@@ -261,7 +290,7 @@ while IFS="	" read -r disp phys; do
 	done
 
 	# `PATH` の「見出し」 / 「見出し」の節
-	awk -v disp="$disp" '
+	strip_noncode "$phys" | awk -v disp="$disp" '
 		function emit_h(ln, path, head) { print ln "\t" path "\t" head }
 		{
 			s = $0
@@ -294,7 +323,7 @@ while IFS="	" read -r disp phys; do
 				if (substr(after, 1, 6) == "の節") emit_h(NR, "-", head)
 			}
 		}
-	' "$phys" | sort -u | while IFS="	" read -r ln target head; do
+	' | sort -u | while IFS="	" read -r ln target head; do
 		[ -n "$head" ] || continue
 		if [ "$target" = "-" ]; then
 			hfile=$phys
@@ -391,10 +420,9 @@ done
 # --- check shared: shared/ への symlink 健全性 ---------------------------
 # queue 判定に実体の在処が要るので、symlink 検査より前に解決しておく。
 SHARED_ROOT=$(CDPATH= cd -P -- "$ROOT/../shared" 2>/dev/null && pwd -P) || SHARED_ROOT=""
-# 規約は `skills/<name>/{references,scripts}/<file>` → `../../../shared/<同名>`。
-# 張り先はモデルの扱い（読む / 実行する）で決まり、拡張子では決まらない。
+# 張り先と名前の規約は repo の AGENTS.md。ここはその検査。
 : >"$WORK/shared_use"
-for d in "$ROOT"/*/references "$ROOT"/*/scripts; do
+for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets; do
 	[ -d "$d" ] || continue
 	skill=${d%/*}
 	skill=${skill##*/}
@@ -463,7 +491,7 @@ done
 
 # shared に同名の実体があるのに skill 側が通常ファイル = コピーによる重複。
 if [ -n "$SHARED_DIR" ]; then
-	for d in "$ROOT"/*/references "$ROOT"/*/scripts; do
+	for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets; do
 		[ -d "$d" ] || continue
 		skill=${d%/*}
 		skill=${skill##*/}
@@ -472,10 +500,52 @@ if [ -n "$SHARED_DIR" ]; then
 			[ -f "$f" ] || continue
 			[ -L "$f" ] && continue
 			b=${f##*/}
-			[ -f "$SHARED_DIR/$b" ] &&
+			# symlink 側と同じく queue も見る。片側だけだと queue の実体コピーが素通りする。
+			if [ -f "$SHARED_DIR/$b" ]; then
 				emit VIOLATION shared "$skill/$kind/$b" "note=shared/$b の実体があるのに通常ファイル"
+			elif [ -f "$SHARED_DIR/queue/$b" ]; then
+				emit VIOLATION shared "$skill/$kind/$b" "note=shared/queue/$b の実体があるのに通常ファイル"
+			fi
 		done
 	done
+fi
+
+# --- check sibling: shared が bare 名で挙げる兄弟が、張った skill の references/ にも在るか ---
+# **代表 1 件へ畳む前の一覧を回す。**畳むと辞書順で最初の skill しか検査されず、
+# 張り忘れた skill の読み手だけが名前を辿れない状態が緑で通る。
+# 兄弟と断定できるのは shared に実体がある名前だけ。生成物の名前を巻き込まない。
+# 同じ兄弟を複数回引用する shared が在るので、行番号は持たずファイル単位へ畳む。
+if [ -n "$SHARED_ROOT" ]; then
+	while IFS="	" read -r disp phys; do
+		case "$phys" in "$SHARED_ROOT"/*) ;; *) continue ;; esac
+		case "$disp" in */references/*) ;; *) continue ;; esac
+		dir=${disp%/*}
+		skill=${disp%%/*}
+		strip_noncode "$phys" | awk '{
+			while (match($0, /`[a-z][a-z0-9-]*\.md`/)) {
+				print substr($0, RSTART + 1, RLENGTH - 2)
+				$0 = substr($0, RSTART + RLENGTH)
+			}
+		}' | sort -u | while read -r sib; do
+			[ -e "$ROOT/$dir/$sib" ] && continue
+			# 同名 basename は queue を先に見る（symlink 検査の want と同じ順）。
+			if [ -f "$SHARED_ROOT/queue/$sib" ]; then
+				case "$phys" in
+				"$SHARED_ROOT"/queue/*)
+					if is_queue_member "$skill"; then
+						emit VIOLATION sibling "$disp" "sibling=$sib note=bare 名で挙げた兄弟が張られていない"
+					else
+						emit REVIEW sibling "$disp" "sibling=$sib note=queue の兄弟を非 member が読めない"
+					fi
+					;;
+				# 張らせると queue 検査と両立しない。直す先は引用元の bare 名。
+				*) emit REVIEW sibling "$disp" "sibling=$sib note=universal shared が queue の兄弟を bare 名で挙げている" ;;
+				esac
+			elif [ -f "$SHARED_ROOT/$sib" ]; then
+				emit VIOLATION sibling "$disp" "sibling=$sib note=bare 名で挙げた兄弟が張られていない"
+			fi
+		done
+	done <"$INVENTORY"
 fi
 
 # --- check derived: agents/docs/ が skills の実態からずれていないか --------
@@ -519,8 +589,10 @@ else
 				emit VIOLATION derived "docs/structure.md" "note=shared/${s##*/} が図にも一覧にも無い"
 		done
 		# 逆向き。shared 図に残った幽霊エントリもドリフト。
-		awk '/subgraph shared/ { on = 1; next } on && /^ *end/ { exit } on' "$DOCS_DIR/structure.md" |
-			awk '{ while (match($0, /[a-z][a-z0-9-]+\.(md|sh|tsv)/)) { print substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH) } }' |
+		# **拾う条件は subgraph の id ではなくラベルに `agents/shared/` が在ること**。
+		# id で拾うと、図を整える改名で検査が黙って外れる。拡張子も限定しない。
+		awk '/subgraph .*agents\/shared/ { on = 1; next } on && /^ *end/ { on = 0; next } on' "$DOCS_DIR/structure.md" |
+			awk '{ while (match($0, /[a-z][a-z0-9-]+\.[a-z][a-z0-9]{1,4}/)) { print substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH) } }' |
 			sort -u | while read -r n; do
 			grep -qx "$n" "$WORK/shared_real" ||
 				emit VIOLATION derived "docs/structure.md" "note=図の $n は shared に実体が無い"

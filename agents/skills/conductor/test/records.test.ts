@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   claimRecord,
+  planRecord,
   cycleRecord,
   extractMarker,
   intentRecord,
@@ -12,6 +13,7 @@ import {
   reportRecord,
   retryRecord,
   waitRecord,
+  yieldRecord,
 } from "../src/records.ts";
 
 const wrap = (marker: string, yaml: string) =>
@@ -35,6 +37,53 @@ describe("marker の取り出し", () => {
     expect(extractMarker("<!-- claim -->\nただの文\n<!-- /claim -->", "claim").kind).toBe(
       "invalid",
     );
+  });
+
+  test("散文の中で字面に言及した行を marker として拾わない", () => {
+    // 記録の説明をする文（再計画の報告・経緯のまとめ・移行の告知）は運用で必ず出る。
+    // **拾うと、正しい記録がある課題が「壊れている」に化けて**ラダー最上段に固定される。
+    const prose = [
+      "製品判断は確定済み（`<!-- wait -->` は `cleared`）で、前提が動かなかったため、",
+      "1. **種別違い** — 実際に待っていたのは write lease で、`<!-- yield -->` の役目だった",
+      "| `<!-- claim -->` / `<!-- plan -->` | **どれも無し** |",
+      "### ゲートの結果（`<!-- report -->` の要求）",
+    ].join("\n");
+    for (const marker of ["wait", "yield", "claim", "plan", "report"] as const) {
+      expect(extractMarker(prose, marker).kind).toBe("absent");
+    }
+  });
+
+  test("散文の言及があっても、単独行で立っている記録へ到達する", () => {
+    const body = `前置き（\`<!-- wait -->\` は \`cleared\`）と書いた行\n\n${wrap("wait", "asked: x")}`;
+    expect(extractMarker(body, "wait").kind).toBe("present");
+  });
+
+  test("閉じの字面が中身の散文に出ても、そこで打ち切らない", () => {
+    const body = [
+      "<!-- wait -->",
+      "",
+      "この記録は `<!-- /wait -->` で閉じる、と説明する行",
+      "",
+      "```yaml",
+      "asked: x",
+      "```",
+      "",
+      "<!-- /wait -->",
+    ].join("\n");
+    expect(extractMarker(body, "wait").kind).toBe("present");
+  });
+
+  test("散文の言及は「2 つある」にも数えない", () => {
+    const body = `${wrap("claim", "representative: 1")}\n表の中の \`<!-- claim -->\` という言及\n`;
+    expect(extractMarker(body, "claim").kind).toBe("present");
+  });
+
+  test("CRLF の本文でも読める（実データに混在する）", () => {
+    const body = wrap("claim", "representative: 1\nmembers: [1]\nlanding: [control]").replace(
+      /\n/g,
+      "\r\n",
+    );
+    expect(claimRecord(body).kind).toBe("present");
   });
 });
 
@@ -128,5 +177,56 @@ describe("提出と在庫と枠", () => {
   test("integration は pr が無くても読める（PR を使う面が無い課題）", () => {
     const r = integrationRecord(wrap("integration", "issues: [1]"));
     expect(r).toEqual({ kind: "present", value: { issues: [1], pr: null } });
+  });
+});
+
+describe("休止の記録", () => {
+  test("to と keys を残す", () => {
+    expect(yieldRecord(wrap("yield", "issues: [2]\nto: 1\nkeys: [skills]"))).toEqual({
+      kind: "present",
+      value: { issues: [2], to: 1, keys: ["skills"] },
+    });
+  });
+
+  test("必須の欄が欠けていれば invalid（既定へ丸めない）", () => {
+    expect(yieldRecord(wrap("yield", "issues: [2]\nto: 1")).kind).toBe("invalid");
+  });
+});
+
+describe("面の接頭辞を持つ記録", () => {
+  // **yaml では `- key: value` は文字列ではなく 1 要素の map。**`landing-surface.md` と
+  // `ready-record.md` が定める `<owner>/<repo>: <path>` はその形なので、文字列の配列だけを
+  // 受けると**面をまたぐ課題の記録が必ず invalid** になる（在庫は計画した瞬間に陳腐化扱い）。
+  const readyBody = (scope: string) =>
+    wrap("ready", `readySha: aaa\nissueDigest: d1\ninvalidationScope:\n${scope}`);
+
+  test("`- <面>: <path>` を面つきの項目として読む", () => {
+    const r = readyRecord(readyBody("  - acme/skills: agents/x\n  - plain/path.ts"));
+    expect(r.kind === "present" ? r.value.invalidationScope : r.kind).toEqual([
+      "acme/skills: agents/x",
+      "plain/path.ts",
+    ]);
+  });
+
+  test("plan の invalidationScope と expectedWrites も同じ形で読む", () => {
+    const r = planRecord(
+      wrap(
+        "plan",
+        [
+          "baseSha: aaa",
+          'issueDigests:\n  "12": d12',
+          "invalidationScope:\n  - acme/skills: agents/x",
+          "expectedWrites:\n  - acme/skills: agents/y",
+          "resourceKeys: []",
+        ].join("\n"),
+      ),
+    );
+    expect(r.kind === "present" ? r.value.invalidationScope : r.kind).toEqual([
+      "acme/skills: agents/x",
+    ]);
+  });
+
+  test("2 つ以上のキーを持つ map は読めない（どちらが面か決まらない）", () => {
+    expect(readyRecord(readyBody("  - {a: 1, b: 2}")).kind).toBe("invalid");
   });
 });

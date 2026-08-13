@@ -8,7 +8,8 @@
 // 語っている唯一の担保になる。
 
 import { describe, expect, test } from "bun:test";
-import { normalize } from "../src/normalize.ts";
+import { normalize, normalizeProgress } from "../src/normalize.ts";
+import { holdsWrite } from "../src/resources.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { Capacity, ConflictReason, Ledger, Progress, Runtime } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
@@ -66,7 +67,7 @@ describe("台帳と実体のずれ", () => {
     expectFields(
       observation({
         ledger: present("進行中"),
-        claimRecord: present({ members: [1], landing: ["control"] }),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
       }),
       { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "進行中" },
     );
@@ -76,7 +77,7 @@ describe("台帳と実体のずれ", () => {
     expectFields(
       observation({
         ledger: present("計画済み"),
-        claimRecord: present({ members: [1], landing: ["control"] }),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
       }),
       { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "計画済み" },
     );
@@ -139,8 +140,9 @@ describe("実行器が消える / 止まる", () => {
 
   test("6b: refine が Status も人待ちの記録も残さずに終わった（セッションは done）", () => {
     expectFields(
-      observation({ ledger: present("未計画"), session: session.idle, refineSessionExists: true }),
-      { progress: "未着手", runtime: "待機", capacity: "無し", ledger: "未計画" },
+      observation({ ledger: present("未計画"), refineSession: session.idle }),
+      // **`runtime` は `resolve-<番号>` から導く。**計画中は `無し`（`refine` の稼働を写さない）。
+      { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "未計画" },
     );
   });
 
@@ -176,10 +178,9 @@ describe("実行器が消える / 止まる", () => {
     expectFields(
       observation({
         ledger: present("計画済み"),
-        session: session.idle,
-        refineSessionExists: true,
+        refineSession: session.idle,
       }),
-      { progress: "未着手", runtime: "待機", capacity: "無し", ledger: "計画済み" },
+      { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "計画済み" },
     );
   });
 
@@ -211,6 +212,61 @@ describe("実行器が消える / 止まる", () => {
       observation({ ledger: present("進行中"), session: session.unclassifiable("weird") }),
       "観測できない",
     );
+  });
+
+  test("7f2: セッションが blocked。人待ちの記録は waiting かつ有効", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface()],
+      waitRecord: wait.waiting,
+      session: session.blocked,
+    });
+    expectFields(o, { progress: "実装中", runtime: "人待ち", capacity: "あり", ledger: "進行中" });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("観測できない");
+  });
+
+  test("7f3: セッションが blocked。人待ちの記録が無い", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface()],
+      session: session.blocked,
+    });
+    expectConflict(o, "証跡が矛盾している");
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("観測できない");
+    expect(normalize(o).runtime).not.toBe("待機");
+  });
+
+  test("7f4: 計画セッションが blocked。人待ちの記録が無い", () => {
+    const o = observation({
+      ledger: present("未計画"),
+      refineSession: session.blocked,
+    });
+    expectConflict(o, "証跡が矛盾している");
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("観測できない");
+  });
+
+  test("7f5: 終端に達し、セッションが blocked。人待ちの記録が無い", () => {
+    const o = observation({
+      ledger: present("完了"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface({ terminal: present(true) })],
+      submissionEvidence: present(true),
+      session: session.blocked,
+    });
+    expectFields(o, { progress: "着地済み", runtime: "無し", capacity: "あり", ledger: "完了" });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("証跡が矛盾している");
+  });
+
+  test("7n: board に居るのに issues 節に無く、open / closed を読めない", () => {
+    const o = observation({ ledger: present("進行中"), open: unobservable("issues 節に無い") });
+    expectConflict(o, "観測できない");
+    // **closed へ倒さない** —— 倒すと `取り下げ` に化け、生きている課題が片付けの対象になる。
+    expect(normalizeProgress(o)).not.toBe("取り下げ");
   });
 
   test("7g: write を渡された直後にターンが終わった（1 行も書いていない）", () => {
@@ -391,6 +447,125 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17h3: 面が読めない課題に、成果物の Conflict を重ねない", () => {
+    // 面を読めないなら **その面の dirty も commit も読めない**。fail-closed で「成果物あり」
+    // 側へ倒れるが、そこから「計画コメントが無いのに実装の証跡がある」を出すと、
+    // 実際には無い成果物を人へ報告することになる。根の Conflict は同じ観測が立てている。
+    const o = observation({
+      ledger: present("未計画"),
+      issueContractComplete: present(false),
+      // `observe` の `unknownSurface` と同じ形（面ごと観測できない）。
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("座標表に無い"),
+          dirty: unobservable("座標表に無い"),
+          hasCheckout: unobservable("座標表に無い"),
+          terminal: unobservable("座標表に無い"),
+          landable: unobservable("座標表に無い"),
+        }),
+      ],
+    });
+    const reasons = normalize(o).conflicts.map((c) => c.reason);
+    expect(reasons).toContain("着地面が解決できない");
+    expect(reasons).not.toContain("計画コメントが無いまま実装の証跡がある");
+    expect(reasons).not.toContain("Issue 契約が欠けたまま成果物がある");
+  });
+
+  test("17h4: 面が読めない未 claim の課題は、write を保持しない", () => {
+    // **`実装中` は読めた証跡だけで決める。**読めない面から `実装中` を導くと、branch も
+    // worktree もセッションも無い課題が write を握り、**幽霊の保持者として本物の実行器を
+    // 止める**（`交差を解消する` が当たる）。終端側の fail-closed は `allSurfacesClean` が
+    // 別に守っているので、ここで倒す必要は無い。
+    const o = observation({
+      ledger: present("未計画"),
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("座標表に無い"),
+          dirty: unobservable("座標表に無い"),
+          hasCheckout: unobservable("座標表に無い"),
+          terminal: unobservable("座標表に無い"),
+          landable: unobservable("座標表に無い"),
+        }),
+      ],
+    });
+    expect(normalizeProgress(o)).toBe("未着手");
+    expect(holdsWrite(normalize(o))).toBe(false);
+  });
+
+  test("17h5: 面を読めなくても、claim 済みなら write を保持し続ける", () => {
+    // 実体（branch）があることは読めているので、そちらは手放さない。
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("面の git を読めない"),
+          dirty: unobservable("面の git を読めない"),
+          terminal: unobservable("面の git を読めない"),
+          landable: unobservable("面の git を読めない"),
+        }),
+      ],
+    });
+    expect(holdsWrite(normalize(o))).toBe(true);
+  });
+
+  test("17h6: 終端の判定では、読めない dirty を clean へ倒さない", () => {
+    // `landing-surface.md`「全着地面が dirty でない（`0` のみ。読めなかった `-` は不可）」。
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      submissionEvidence: present(true),
+      surfaces: [
+        control({
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          terminal: present(true),
+          dirty: unobservable("worktree 一覧を読めない"),
+        }),
+      ],
+    });
+    expect(normalizeProgress(o)).not.toBe("着地済み");
+  });
+
+  test("17h7: 面が読めない課題が、終端に達して実体も残っていない", () => {
+    // **報告しても人が動かす先が無い。**`片付ける` が触る実体（容量・セッション・claim branch）が
+    // 1 つも残っていないので、面を解決する必要そのものが無い。当てると毎 tick 報告し続ける。
+    const settled: Partial<IssueObservation> = {
+      open: present(false),
+      ledger: present("完了"),
+      surfaces: [
+        control({
+          aheadOfIntegration: unobservable("座標表に無い"),
+          dirty: unobservable("座標表に無い"),
+          hasCheckout: unobservable("座標表に無い"),
+          terminal: unobservable("座標表に無い"),
+          landable: unobservable("座標表に無い"),
+        }),
+      ],
+    };
+    expect(normalize(observation(settled)).conflicts).toEqual([]);
+    // **実体が残っているなら出す** —— 面を解決できないまま片付けにいかせない。
+    const left = normalize(observation({ ...settled, claimBranchExists: present(true) }));
+    expect(left.conflicts.map((c) => c.reason)).toContain("着地面が解決できない");
+  });
+
+  test("17h2: 面が読めない理由を、そのまま人へ渡す", () => {
+    // **「読めない」だけでは人が動けない。**座標表から外れたのか、checkout が無いのか、
+    // git が落ちたのかで、次にやることが違う。観測が持っている理由を握り潰さない。
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      surfaces: [control({ terminal: unobservable("座標表に無い") })],
+    });
+    const evidence = normalize(o)
+      .conflicts.filter((c) => c.reason === "着地面が解決できない")
+      .flatMap((c) => c.evidence)
+      .join(" ");
+    expect(evidence).toContain("座標表に無い");
+  });
+
   test("17i: live checkout が dirty で、その面はまだ着地していない", () => {
     expectConflict(
       observation({
@@ -437,9 +612,32 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17m3: 記録の整合が壊れているが、台帳は既に 完了", () => {
+    // キュー以前に着地した課題。当てると**歴史側が全部ここへ落ち**、ラダー最上段なので
+    // `片付ける` にも永久に届かない（実測で 289 件中 40 件）。
+    const settled: Partial<IssueObservation> = {
+      open: present(false),
+      ledger: present("完了"),
+      surfaces: [control({ terminal: present(true) })],
+    };
+    const cases: Partial<IssueObservation>[] = [
+      { ...settled, prMerged: present(true) },
+      { ...settled, waitRecord: wait.broken("marker を読めない") },
+      { ...settled, waitRecord: wait.undecidable },
+      { ...settled, intentRecord: intent.pending },
+      { ...settled, integrationRecordCount: present(2) },
+      { ...settled, integrationRecordCount: unobservable("読めない") },
+    ];
+    for (const over of cases) expect(normalize(observation(over)).conflicts).toEqual([]);
+  });
+
   test("17k: 片付けが終わり、Issue は closed・worktree も無い", () => {
     expectFields(
-      observation({ open: false, ledger: present("完了"), claimBranchExists: present(true) }),
+      observation({
+        open: present(false),
+        ledger: present("完了"),
+        claimBranchExists: present(true),
+      }),
       { progress: "取り下げ", runtime: "無し", capacity: "無し", ledger: "完了" },
     );
   });
@@ -546,7 +744,11 @@ describe("merge の直列化（integration）", () => {
 describe("capacity", () => {
   test("checkout は無いが、所有している workspace が残っている", () => {
     expectFields(
-      observation({ ledger: present("完了"), prunableWorkspace: present(true), open: false }),
+      observation({
+        ledger: present("完了"),
+        prunableWorkspace: present(true),
+        open: present(false),
+      }),
       { progress: "取り下げ", runtime: "無し", capacity: "prunable", ledger: "完了" },
     );
   });
@@ -564,18 +766,24 @@ describe("capacity", () => {
 });
 
 describe("読めなかった観測を clean へ畳まない", () => {
-  test("dirty が `-` の面は `実装中` 側へ落ちる", () => {
+  test("dirty が `-` の面は、終端へ上がらない", () => {
+    // **守るのは終端側**（`allSurfacesClean` が `0` のみを通す）。`実装中` を名乗らせる必要は
+    // 無い —— 読めない dirty から `実装中` を導くと、実体を持たない課題まで write を握る。
     expectFields(
       observation({
         ledger: present("進行中"),
         claimBranchExists: present(true),
         planCommentExists: present(true),
         surfaces: [
-          surface({ dirty: unobservable("worktree を読めない"), hasCheckout: present(true) }),
+          surface({
+            dirty: unobservable("worktree を読めない"),
+            hasCheckout: present(true),
+            terminal: present(true),
+          }),
         ],
         submissionEvidence: present(true),
       }),
-      { progress: "実装中", runtime: "無し", capacity: "あり", ledger: "進行中" },
+      { progress: "準備済み", runtime: "無し", capacity: "あり", ledger: "進行中" },
     );
   });
 

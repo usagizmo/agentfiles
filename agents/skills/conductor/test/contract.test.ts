@@ -8,6 +8,25 @@ import { present } from "../src/types.ts";
 
 const full = CONTRACT_HEADINGS.map((h) => `${h}\n\n中身\n`).join("\n");
 
+/** `references/issue-contract.md` の項目表から、見出しの列だけを取る。 */
+const headingsInSsot = async (): Promise<string[]> => {
+  const text = await Bun.file(new URL("../references/issue-contract.md", import.meta.url)).text();
+  return text
+    .split("\n")
+    .filter((line) => line.startsWith("|"))
+    .map((line) => line.split("|")[1]?.trim() ?? "")
+    .map((cell) => /^`(## .+)`$/.exec(cell)?.[1])
+    .filter((h) => h !== undefined);
+};
+
+describe("見出しの字面", () => {
+  // **字面が契約の実体**なので、書く側と読む側が同じ 1 つの表を見ていなければならない。
+  // 実測で `## 目的` と `## 目的と期待する結果` が食い違い、**契約が永久に不足**と判定された。
+  test("読む側の一覧が SSOT の項目表と一致する", async () => {
+    expect(CONTRACT_HEADINGS.map(String)).toEqual(await headingsInSsot());
+  });
+});
+
 describe("契約の充足", () => {
   test("6 つの見出しに中身があれば揃っている", () => {
     expect(issueContractComplete(full)).toEqual(present(true));
@@ -29,8 +48,8 @@ describe("契約の充足", () => {
     expect(missingContractItems(renamed)).toEqual(["## 受入条件"]);
   });
 
-  test("先頭区画の宣言や枚の URL は契約の項目に数えない", () => {
-    const withHead = `Depends on #12\nhttps://example.com/artifact\n\n${full}`;
+  test("先頭区画の宣言は契約の項目に数えない", () => {
+    const withHead = `Depends on #12\nLands in example/repo\n\n${full}`;
     expect(issueContractComplete(withHead)).toEqual(present(true));
   });
 });

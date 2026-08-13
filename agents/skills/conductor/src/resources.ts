@@ -62,4 +62,4 @@ export const worktreeCount = (observations: readonly IssueObservation[]): number
  * `retired-refine-<番号>` は数えない。**人待ちでも返らない。**
  */
 export const planSlotUsage = (observations: readonly IssueObservation[]): number =>
-  observations.filter((o) => o.refineSessionExists).length;
+  observations.filter((o) => o.refineSession.kind !== "none").length;

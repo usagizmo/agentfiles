@@ -1,4 +1,4 @@
-// audit-skills.sh の emphasis 統合の smoke test。判定そのものは check-emphasis.test.mjs。
+// audit-skills.sh の統合 smoke test。強調の判定そのものは check-emphasis.test.mjs。
 //
 // ここで押さえるのは **sh 側の配線**: 検出が VIOLATION として出るか、道具が無いときに
 // 黙らず SKIP を出すか、SUMMARY が数を持つか。**「違反 0」と「検査していない」を
@@ -51,6 +51,52 @@ test("skills root が無ければ検査せずに落ちる（緑に見せない�
   const { stdout, exitCode } = await audit(fixture("does-not-exist"));
   expect(stdout).not.toContain("SUMMARY");
   expect(exitCode).toBe(2);
+});
+
+// --- sibling: shared が bare 名で挙げる兄弟 -------------------------------
+// fixture は 2 skill が同じ shared を張り、辞書順で後ろの skill だけ兄弟を張っていない木。
+// **代表 1 件へ畳んだ一覧を回す実装では violations=0 で通る。**
+
+test("兄弟を張り忘れた skill を VIOLATION sibling として出す", async () => {
+  const { stdout, exitCode } = await audit(fixture("sibling-missing/skills"));
+  expect(stdout).toContain("VIOLATION\tsibling\tzzz/references/alpha.md\tsibling=beta.md");
+  expect(exitCode).toBe(1);
+});
+
+test("兄弟を張っている skill は sibling に出ない", async () => {
+  const { stdout } = await audit(fixture("sibling-missing/skills"));
+  // 検査が走らなくても not.toContain は通るので、同じ実行に positive anchor を置く
+  expect(stdout).toContain("VIOLATION\tsibling\tzzz/references/alpha.md");
+  expect(stdout).not.toContain("sibling\taaa/references/alpha.md");
+});
+
+// 引用元が `shared/queue/` か universal かで直す先が変わる。3 分岐すべてを踏む。
+test("queue の兄弟は member なら VIOLATION、非 member なら REVIEW", async () => {
+  const { stdout } = await audit(fixture("sibling-queue/skills"));
+  expect(stdout).toContain("VIOLATION\tsibling\tconductor/references/host.md\tsibling=qq.md");
+  expect(stdout).toContain("REVIEW\tsibling\taaa/references/host.md\tsibling=qq.md");
+});
+
+test("universal shared が queue の兄弟を挙げたら member でも REVIEW", async () => {
+  const { stdout } = await audit(fixture("sibling-queue/skills"));
+  expect(stdout).toContain("REVIEW\tsibling\tconductor/references/uni.md\tsibling=qq.md");
+  expect(stdout).toContain("REVIEW\tsibling\taaa/references/uni.md\tsibling=qq.md");
+});
+
+// --- fence / 引用 --------------------------------------------------------
+// fixture は fence（入れ子つき）と引用の中に skill 名・.md・節見出しを置き、
+// **どちらの外にも行番号つきで検出できる違反を 1 件ずつ**置いた木。
+// 正例は行番号の保存と入れ子 fence の開閉を、負例は 4 検査の無視を押さえる。
+
+test("fence と引用の中は layer / ref / ref-heading / sibling に出ない", async () => {
+  const { stdout, exitCode } = await audit(fixture("fence-quote/skills"));
+  expect(stdout).toContain("VIOLATION\tref\taaa/SKILL.md:17\tmissing=missing/gone.md");
+  expect(stdout).toContain("VIOLATION\tref\taaa/references/host.md:14\tmissing=nope/none.md");
+  expect(stdout).not.toContain("VIOLATION\tlayer");
+  expect(stdout).not.toContain("VIOLATION\tref-heading");
+  expect(stdout).not.toContain("VIOLATION\tsibling");
+  expect(stdout).not.toContain("REVIEW\tref");
+  expect(exitCode).toBe(1);
 });
 
 // --- checker の異常系（EMPHASIS_JS で差し替える） -------------------------

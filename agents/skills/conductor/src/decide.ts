@@ -6,6 +6,7 @@
 // **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。
 
 import type { IssueObservation } from "./observation.ts";
+import { sessionActive } from "./observation.ts";
 import {
   blocks,
   holdsIntegration,
@@ -14,7 +15,7 @@ import {
   planSlotUsage,
   worktreeCount,
 } from "./resources.ts";
-import { ledgerAhead, ledgerBehind, normalize } from "./normalize.ts";
+import { hasWorkInProgress, ledgerAhead, ledgerBehind, normalize } from "./normalize.ts";
 import type {
   ActionParams,
   Conflict,
@@ -22,6 +23,7 @@ import type {
   Ledger,
   NormalizedIssue,
   Observed,
+  Outcome,
   Progress,
   Target,
 } from "./types.ts";
@@ -74,9 +76,74 @@ export type Group = {
   readonly leadObservation: IssueObservation;
 };
 
-/** `Same branch as #N` の連結成分。**代表は最小番号**（固定の規約は `same-branch.md`）。 */
+/**
+ * その課題が同じ 1 本で直すと宣言している相手。
+ *
+ * **claim 済みなら記録の `members`、未 claim なら本文の宣言**（`same-branch.md`
+ * 「どちらの集合を見るか」）。記録は代表にしか無いので、成員の側は本文から辿る。
+ * **本文にだけ足された番号は claim 済みの対象集合に入らない**（次の着地まで別扱い）。
+ */
+const links = (o: IssueObservation): readonly number[] =>
+  o.claimRecord.kind === "present" ? o.claimRecord.value.members : o.sameBranchAs;
+
+/**
+ * 共有する実体の観測を、対象集合の全員へ揃える（`same-branch.md`「共有するもの」）。
+ *
+ * **branch も worktree もセッションも記録も、代表の番号で 1 セットしか無い。**成員ごとに
+ * 自分の番号で引くと、それらが 1 つも見えず全員が `未着手` に落ちる —— claim するたびに
+ * 代表以外が `ledger が期待より先` になり、着地すれば終端の混在になる。
+ *
+ * **Issue 単位のまま残すもの**: 台帳・open / closed・Issue 契約・本文から引くもの・
+ * 在庫の鮮度・`refine` のセッション（どれも成員ごとに別々に在る）。
+ *
+ * **claim 前には当てない。**代表がまだ決まっておらず、人待ちは渡された Issue に書かれる。
+ */
+const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueObservation =>
+  member.issue === lead.issue
+    ? member
+    : {
+        ...member,
+        claimBranchExists: lead.claimBranchExists,
+        planCommentExists: lead.planCommentExists,
+        claimRecord: lead.claimRecord,
+        surfaces: lead.surfaces,
+        openPr: lead.openPr,
+        checks: lead.checks,
+        latestPrClosedUnmerged: lead.latestPrClosedUnmerged,
+        prMerged: lead.prMerged,
+        submissionEvidence: lead.submissionEvidence,
+        session: lead.session,
+        waitRecord: lead.waitRecord,
+        pauseRecordExists: lead.pauseRecordExists,
+        yieldRecord: lead.yieldRecord,
+        intentRecord: lead.intentRecord,
+        integrationRecordCount: lead.integrationRecordCount,
+        prunableWorkspace: lead.prunableWorkspace,
+        failureRecord: lead.failureRecord,
+        cycleRecord: lead.cycleRecord,
+        currentMark: lead.currentMark,
+        planInvalidated: lead.planInvalidated,
+        resourceKeys: lead.resourceKeys,
+        blocksEntry: lead.blocksEntry,
+        claimedAt: lead.claimedAt,
+      };
+
+/**
+ * 対象集合（claim 済み）または group（未 claim）の連結成分。
+ * **代表は記録の `representative`、無ければ最小番号**（固定の規約は `same-branch.md`）。
+ */
 export const buildGroups = (observations: readonly IssueObservation[]): Group[] => {
   const byIssue = new Map(observations.map((o) => [o.issue, o]));
+  // **無向グラフにしてから辿る。**記録は代表にしか無く、本文の相互記載も漏れうるので、
+  // 片側からしか張られていない辺が実在する。有向のまま辿ると、走査の順で group が割れる。
+  const edges = new Map<number, Set<number>>();
+  const link = (a: number, b: number) => {
+    if (a === b) return;
+    (edges.get(a) ?? edges.set(a, new Set()).get(a))?.add(b);
+    (edges.get(b) ?? edges.set(b, new Set()).get(b))?.add(a);
+  };
+  for (const o of observations) for (const n of links(o)) link(o.issue, n);
+
   const seen = new Set<number>();
   const groups: Group[] = [];
 
@@ -89,22 +156,27 @@ export const buildGroups = (observations: readonly IssueObservation[]): Group[] 
       if (current === undefined || seen.has(current)) continue;
       seen.add(current);
       members.push(current);
-      const observation = byIssue.get(current);
-      if (observation === undefined) continue;
-      for (const linked of observation.sameBranchAs) if (!seen.has(linked)) queue.push(linked);
+      for (const linked of edges.get(current) ?? []) if (!seen.has(linked)) queue.push(linked);
     }
     members.sort((a, b) => a - b);
-    const groupObservations = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
-    if (groupObservations.length === 0) continue;
-    const records = groupObservations.map(normalize);
-    const representative = members[0] ?? o.issue;
+    const raw = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
+    if (raw.length === 0) continue;
+
+    const claim = raw.find((x) => x.claimRecord.kind === "present")?.claimRecord;
+    const representative =
+      claim?.kind === "present" ? claim.value.representative : (members[0] ?? o.issue);
     const leadIndex = Math.max(
       0,
-      groupObservations.findIndex((g) => g.issue === representative),
+      raw.findIndex((g) => g.issue === representative),
     );
+    const leadObservation = raw[leadIndex];
+    if (leadObservation === undefined) continue;
+    // **共有の反映は claim 済みのときだけ**（claim 前は記録が成員ごとに別々に在る）。
+    const groupObservations =
+      claim?.kind === "present" ? raw.map((x) => shareEvidence(x, leadObservation)) : raw;
+    const records = groupObservations.map(normalize);
     const lead = records[leadIndex];
-    const leadObservation = groupObservations[leadIndex];
-    if (lead === undefined || leadObservation === undefined) continue;
+    if (lead === undefined) continue;
     groups.push({
       representative,
       members,
@@ -174,7 +246,7 @@ const revertTarget = (
     cycle(g).count >= config.emptyCycleBudget &&
     markUnchanged(g) &&
     !(o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid") &&
-    o.session.kind !== "running"
+    !sessionActive(o.session)
   ) {
     return "退避先";
   }
@@ -214,17 +286,16 @@ const stockStale = (g: Group, ctx: Context): boolean =>
   // **停止の判定は成員ではなく group で行う。**`unit: "issue"` は solo group を渡すので、
   // そのまま評価すると「group の一部だけが計画済み」という停止が消え、揃っていない
   // group の計画済み側が交差のたびに未計画へ戻される。
-  !claimStructurallyBlocked(parentOf(g, ctx)) &&
+  !claimStructurallyBlocked(parentOf(g, ctx), ctx) &&
   value(g.leadObservation.readyRecordStale) === true;
 
 /** solo group から元の group を引く。`unit: "issue"` の rung が group の述語を使うときだけ要る。 */
 const parentOf = (g: Group, ctx: Context): Group =>
   ctx.groups.find((x) => x.members.includes(g.representative)) ?? g;
 
+/** **述語は `normalize` の 1 つだけ**。ここで書き直すと `実装中` の判定と割れる。 */
 const hasArtifacts = (g: Group): boolean =>
-  g.observations.some((o) =>
-    o.surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) !== false),
-  );
+  g.observations.some((o) => hasWorkInProgress(o.surfaces));
 
 // ---------------------------------------------------------------------------
 // 選出
@@ -247,7 +318,8 @@ const dependenciesResolved = (
       if (record === undefined) return false;
       // **解消 = `着地済み`、または closed かつ `完了`**（片付けが終端の証跡を消すため）。
       if (record.progress === "着地済み") return true;
-      return byIssue.get(n)?.open === false && record.ledger === "完了";
+      const dep = byIssue.get(n);
+      return dep !== undefined && value(dep.open) === false && record.ledger === "完了";
     }),
   );
 
@@ -257,7 +329,8 @@ const selectable = (
   all: readonly NormalizedIssue[],
   byIssue: Map<number, IssueObservation>,
 ): boolean => {
-  if (!g.observations.every((o) => o.open)) return false;
+  // **読めなかった `open` を選出の側へ倒さない**（claim は worktree を作る不可逆操作）。
+  if (!g.observations.every((o) => value(o.open) === true)) return false;
   if (!g.records.every((r) => r.ledger === "計画済み")) return false;
   if (alreadyClaimed(g)) return false;
   if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return false;
@@ -272,12 +345,12 @@ const selectable = (
  * **容量は含めない** —— 枠が無いだけの在庫は claim の前提が揃っていて、
  * そこは在庫の鮮度が守っている対象そのもの。
  */
-const claimStructurallyBlocked = (g: Group): boolean => {
-  if (!g.observations.every((o) => o.open)) return true;
+const claimStructurallyBlocked = (g: Group, ctx: Context): boolean => {
+  if (!g.observations.every((o) => value(o.open) === true)) return true;
   if (!g.records.every((r) => r.ledger === "計画済み")) return true;
   if (alreadyClaimed(g)) return true;
   if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return true;
-  return false;
+  return claimCrossesWriteHolders(g, ctx);
 };
 
 // ---------------------------------------------------------------------------
@@ -340,12 +413,93 @@ const crossingWriteHolders = (g: Group, ctx: Context): Group[] =>
       blocks(intersect(g.leadObservation.resourceKeys, other.leadObservation.resourceKeys)),
   );
 
+/**
+ * 候補のキーが読めて、いまの write 保持者と交わる。
+ * **読めなければ止めない** —— 倒すと計画コメントの無い在庫が全部止まる。
+ */
+const claimCrossesWriteHolders = (g: Group, ctx: Context): boolean => {
+  if (g.leadObservation.resourceKeys.kind !== "present") return false;
+  return crossingWriteHolders(g, ctx).length > 0;
+};
+
+const sharedKeys = (
+  a: Observed<readonly string[]>,
+  b: Observed<readonly string[]>,
+): readonly string[] | undefined => {
+  const left = value(a);
+  const right = value(b);
+  if (left === undefined || right === undefined) return undefined;
+  return left.filter((key) => right.includes(key));
+};
+
+const sameKeySet = (a: readonly string[], b: readonly string[]): boolean => {
+  const left = new Set(a);
+  const right = new Set(b);
+  if (left.size !== right.size) return false;
+  for (const key of left) if (!right.has(key)) return false;
+  return true;
+};
+
+/** 記録の `to` / `keys` が、この 2 者のいまの交差を記述しているか。 */
+const yieldDescribesPair = (holder: Group, partner: Group): boolean => {
+  const rec = holder.leadObservation.yieldRecord;
+  if (rec.kind !== "present") return false;
+  if (rec.value.to !== partner.representative && !partner.members.includes(rec.value.to)) {
+    return false;
+  }
+  const shared = sharedKeys(
+    holder.leadObservation.resourceKeys,
+    partner.leadObservation.resourceKeys,
+  );
+  if (shared === undefined) return false;
+  return sameKeySet(rec.value.keys, shared);
+};
+
+/** 交差相手のすべてについて、どちらかの yield が現況を記述しているか。 */
+const crossingDescribed = (g: Group, crossing: readonly Group[]): boolean =>
+  crossing.every((partner) => yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g));
+
+/**
+ * 位置に依らない Conflict。**ラダーへ乗せない** —— どの rung より先に、その group を
+ * 選出対象外にする。`ledger が期待より先` だけは差し戻しの後でなければ判定できないので
+ * ラダー上に残る（そちらも当たった group を選出対象外にする）。
+ */
+const standingConflicts = (g: Group): Conflict[] => {
+  const found: Conflict[] = g.records.flatMap((r) => [...r.conflicts]);
+  if (terminalMixedInGroup(g)) {
+    found.push({
+      reason: "group の終端が混在",
+      evidence: ["group 内で終端と非終端が混在している"],
+      issues: g.members,
+    });
+  }
+  return found;
+};
+
+const sameEvidence = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((s, i) => s === b[i]);
+
+/** reason + evidence が同じものを 1 件にし、`issues` に番号を集める。選出対象外は畳まない。 */
+const foldConflicts = (xs: readonly Conflict[]): Conflict[] => {
+  const out: { reason: Conflict["reason"]; evidence: readonly string[]; issues: number[] }[] = [];
+  for (const c of xs) {
+    const hit = out.find((x) => x.reason === c.reason && sameEvidence(x.evidence, c.evidence));
+    if (hit === undefined) {
+      out.push({ reason: c.reason, evidence: c.evidence, issues: [...c.issues] });
+      continue;
+    }
+    for (const n of c.issues) {
+      if (!hit.issues.includes(n)) hit.issues.push(n);
+    }
+  }
+  return out.map((c) => ({
+    reason: c.reason,
+    evidence: c.evidence,
+    issues: [...c.issues].sort((a, b) => a - b),
+  }));
+};
+
 const LADDER: readonly Rung[] = [
-  {
-    params: () => ({ action: "報告して止める" }),
-    why: "ラダーで解決できない証跡がある",
-    match: (g) => g.records.some((r) => r.conflicts.length > 0) || terminalMixedInGroup(g),
-  },
   {
     params: () => ({ action: "規約の穴を起票する" }),
     why: "この tick で規約の穴に当たった",
@@ -377,9 +531,13 @@ const LADDER: readonly Rung[] = [
     why: "計画セッションが残って計画枠を焼いている",
     match: (g, ctx) => {
       const o = g.leadObservation;
-      if (!o.refineSessionExists) return false;
+      if (o.refineSession.kind === "none") return false;
       if (g.lead.runtime === "人待ち") return false;
-      if (g.lead.ledger === "未計画" && o.session.kind === "running") return false;
+      // **走っている計画セッションには当てない。`ledger` で絞らない。**
+      // `runtime` は `resolve-<番号>` から導くので計画中は必ず `無し` になり、そちらでは
+      // 一度も止められない。`refine` は Status を進めてから終わるので `計画済み` の窓も通る ——
+      // 絞ると、起こす → 次の tick で畳む → また起こす、の往復から出られない。
+      if (sessionActive(o.refineSession)) return false;
       // **`count` 条件は `ledger` が `未計画` のときだけ掛かる。**
       if (g.lead.ledger === "未計画" && failure(g).count >= ctx.config.retryBudget) return false;
       return true;
@@ -434,7 +592,7 @@ const LADDER: readonly Rung[] = [
       !isShelved(g) &&
       g.lead.ledger === "未計画" &&
       g.lead.runtime === "人待ち" &&
-      !g.leadObservation.refineSessionExists &&
+      g.leadObservation.refineSession.kind === "none" &&
       ctx.planSlotsUsed < ctx.config.planSlots,
   },
   {
@@ -471,7 +629,7 @@ const LADDER: readonly Rung[] = [
       // ③ 渡しの記録があり、回収の表の行に当たる
       if (holdsIntegration(o)) {
         if (g.lead.runtime === "人待ち") return true;
-        if (g.lead.ledger === "退避先" && o.session.kind !== "running") return true;
+        if (g.lead.ledger === "退避先" && !sessionActive(o.session)) return true;
       }
       // **解除の述語に「交差する保持者が居ない」を足さない。**`休止` は write の保持者から
       // 外れるので、足すと消した瞬間に保持者へ戻り、休止と解除を往復する。
@@ -481,20 +639,14 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "交差を解消する" }),
-    why: "資源キーが交差する write 保持者が並んでいる",
+    why: "資源キーが交差する write 保持者が並び、休止の記録が現在の交差を記述していない",
     match: (g, ctx) => {
       if (isShelved(g) || !holdsWrite(g.lead)) return false;
       const crossing = crossingWriteHolders(g, ctx);
       if (crossing.length === 0) return false;
-      // **そのうち休止の記録を持つものが 1 つも無い**ときだけ。
-      return ![g, ...crossing].some((x) => x.leadObservation.pauseRecordExists);
+      // **記録の有無だけでは見ない。**`to` / `keys` が現況と一致しているあいだは送らない。
+      return !crossingDescribed(g, crossing);
     },
-  },
-  {
-    params: () => ({ action: "休止を促し直す" }),
-    why: "休止の記録があるのにセッションが動き続けている",
-    match: (g) =>
-      g.leadObservation.pauseRecordExists && g.leadObservation.session.kind === "running",
   },
   {
     params: () => ({ action: "checks を引き直させる" }),
@@ -546,7 +698,7 @@ const LADDER: readonly Rung[] = [
       if (isShelved(g)) return false;
       if (g.lead.ledger !== "未計画" || g.lead.progress !== "未着手") return false;
       // `retired-refine-<番号>` も「有る」に数える。
-      if (g.leadObservation.refineSessionExists || g.leadObservation.retiredRefineExists)
+      if (g.leadObservation.refineSession.kind !== "none" || g.leadObservation.retiredRefineExists)
         return false;
       if (g.leadObservation.waitRecord.kind === "waiting") return false;
       if (ctx.planSlotsUsed >= ctx.config.planSlots) return false;
@@ -555,13 +707,14 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "claim する" }),
-    why: "選出の条件が揃い、容量にも空きがある",
+    why: "選出の条件が揃い、容量に空きがあり、いまの write 保持者と交わらない",
     match: (g, ctx) => {
       if (isShelved(g)) return false;
       if (!selectable(g, ctx.all, ctx.byIssue)) return false;
       // **作っても容量が目安を超えない**（作ると超えるなら選ばない）。
       if (ctx.worktrees + g.leadObservation.surfaces.length > ctx.config.capacityTarget)
         return false;
+      if (claimCrossesWriteHolders(g, ctx)) return false;
       return !ctx.entryBlocked;
     },
   },
@@ -601,15 +754,29 @@ export const decide = (input: TickInput): Decision => {
   const shelved = groups.find(
     (g) => isShelved(g) && (failure(g).count !== 0 || cycle(g).count !== 0),
   );
+  // **Conflict は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他は回す。
+  const conflicts: Conflict[] = [];
+  const excluded = new Set<number>();
+  for (const g of groups) {
+    const found = standingConflicts(g);
+    if (found.length === 0) continue;
+    conflicts.push(...found);
+    for (const n of g.members) excluded.add(n);
+  }
+  const decision = (outcome: Outcome): Decision => ({
+    conflicts: foldConflicts(conflicts),
+    outcome,
+  });
+
   if (shelved !== undefined) {
-    return {
+    return decision({
       kind: "settle-record",
       settlement: {
         target: target(shelved),
         kind: "退避先の count を 0 に揃える",
         detail: `失敗 ${failure(shelved).count} / 周回 ${cycle(shelved).count} を 0 へ`,
       },
-    };
+    });
   }
 
   const ctx: Context = {
@@ -629,7 +796,7 @@ export const decide = (input: TickInput): Decision => {
         g.leadObservation.blocksEntry &&
         !TERMINAL.includes(g.lead.progress) &&
         g.lead.runtime !== "人待ち" &&
-        !(g.lead.ledger === "退避先" && g.leadObservation.session.kind !== "running"),
+        !(g.lead.ledger === "退避先" && !sessionActive(g.leadObservation.session)),
     ),
     input,
   };
@@ -654,43 +821,42 @@ export const decide = (input: TickInput): Decision => {
       .filter((x) => x !== undefined),
   );
 
+  const inPlay = (g: Group): boolean => !g.members.some((n) => excluded.has(n));
+
+  // **候補を 1 度だけ舐める。**`ledger が期待より先` は当たった課題を選出対象外にするだけ
+  // なので、その rung の次の候補へ進む。**同じ rung を当て直す形にしない** ——
+  // 終了が「外したものが次から外れる」という述語の一致に依存し、食い違うと tick が返らなくなる
+  // （返らないのは、誤った action より重い）。
   for (const rung of LADDER) {
-    const candidates = rung.unit === "issue" ? solo : ordered;
-    const hit = candidates.find((g) => rung.match(g, ctx));
-    if (hit === undefined) continue;
-    if (rung.params(hit, ctx).action === "報告して止める") {
-      const conflicts: Conflict[] = hit.records.flatMap((r) => [...r.conflicts]);
-      if (terminalMixedInGroup(hit)) {
-        conflicts.push({
-          reason: "group の終端が混在",
-          evidence: ["group 内で終端と非終端が混在している"],
-          issues: hit.members,
-        });
+    for (const g of rung.unit === "issue" ? solo : ordered) {
+      if (!inPlay(g) || !rung.match(g, ctx)) continue;
+      if (rung.params(g, ctx).action === "報告して止める") {
+        for (const r of g.records) {
+          if (!ledgerAhead(r)) continue;
+          conflicts.push({
+            reason: "ledger が期待より先",
+            evidence: [`progress が ${r.progress} なのに ledger が ${r.ledger}`],
+            issues: [r.issue],
+          });
+        }
+        for (const n of g.members) excluded.add(n);
+        continue;
       }
-      for (const r of hit.records) {
-        if (!ledgerAhead(r)) continue;
-        conflicts.push({
-          reason: "ledger が期待より先",
-          evidence: [`progress が ${r.progress} なのに ledger が ${r.ledger}`],
-          issues: [r.issue],
-        });
-      }
-      return { kind: "conflict", conflicts };
+      return decision({
+        kind: "action",
+        params: rung.params(g, ctx),
+        target: target(g),
+        evidence: {
+          progress: g.lead.progress,
+          runtime: g.lead.runtime,
+          capacity: g.lead.capacity,
+          ledger: g.lead.ledger,
+          why: rung.why,
+        },
+      });
     }
-    return {
-      kind: "action",
-      params: rung.params(hit, ctx),
-      target: target(hit),
-      evidence: {
-        progress: hit.lead.progress,
-        runtime: hit.lead.runtime,
-        capacity: hit.lead.capacity,
-        ledger: hit.lead.ledger,
-        why: rung.why,
-      },
-    };
   }
 
   // **空キューは終了条件ではなく idle。**次の観測まで待つ。
-  return { kind: "idle" };
+  return decision({ kind: "idle" });
 };

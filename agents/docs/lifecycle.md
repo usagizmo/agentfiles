@@ -119,7 +119,7 @@ sequenceDiagram
     M->>R: /resolve #N
 
     R->>GH: 計画コメント（plan）
-    R-->>U: 枚に実装計画を載せて提示（答えは待たない。人待ちの記録も書かない）
+    R-->>U: 譜面に実装計画を載せて提示（答えは待たない。人待ちの記録も書かない）
     R-->>C: 応答を終えて待機（何を待つか 1 行）
     C->>C: write が空いた
     C->>M: 実装を始めてよい
@@ -127,7 +127,7 @@ sequenceDiagram
 
     alt Issue 本文に無い判断が必要
         R->>GH: 人待ちの記録（wait / waiting）
-        R-->>U: 同じ枚を書き直して判断を提示する
+        R-->>U: 同じ譜面を書き直して判断を提示する
         R-->>C: 待機
         C->>C: write を返す。詰まりとして出す
         C-->>U: 状況ボードに「何を答えれば進むか」
@@ -144,8 +144,8 @@ sequenceDiagram
         Note over R,GH: PR の Closes で着地と同時に閉じる。<br/>元の受入条件が偽になったなら Issue ではなく<br/>本文を更新し、再承認を待って再 plan（PR へは進まない）
     end
     R->>GH: PR を作る（CI が緑になるまでここ）
-    R->>GH: 緑になったらセッションまとめを PR へコメント、枚の URL を PR 本文へ
-    R-->>U: 同じ枚にセッションまとめを載せて提示（可否を決める材料）
+    R->>GH: 緑になったらセッションまとめを PR へコメント
+    R-->>U: 同じ譜面にセッションまとめを載せて提示（可否を決める材料）
     Note over R,C: PR 作成と CI は integration の外。<br/>write を持ったまま進む
 
     alt 意図の確認が要る変更（述語は intent-record）
@@ -158,7 +158,7 @@ sequenceDiagram
     end
 
     R-->>C: 待機
-    C->>C: integration は PR 作成が最も早い 1 件
+    C->>C: integration は claim が最も古い 1 件
     C->>M: 着地してよい
     M->>R: 再開
     R->>GH: latest default へ追随 → merge
@@ -186,14 +186,14 @@ sequenceDiagram
     C->>F: /refine #N
     F->>GH: Issue と関連コードを読む
     F->>F: consult で方針を確定
-    F-->>U: 課題の Artifact を引き当てて計画を書く（無ければ作る）
-    Note over F,U: 聞くことが無くても必ず作る。<br/>URL を本文へ入れるので本文更新より先
+    F-->>U: 課題の譜面を引き当てて計画を書く（無ければ作る）
+    Note over F,U: 聞くことが無くても必ず作る。<br/>Issue / PR にパスは書かない
 
     alt 製品判断が要る項目が埋まらない
         F->>GH: 埋まった項目を先に本文へ書ききる
         Note over F,GH: ここで落ちても埋めた判断が消えない。<br/>それでも Status は動かさない
         F->>GH: 人待ちの記録（waiting）
-        F-->>U: 枚に判断待ちを書き、記録を指す短い問いだけ出す
+        F-->>U: 譜面に判断待ちを書き、記録を指す短い問いだけ出す
         F-->>C: 待機
         C-->>U: 状況ボードに出す
         U->>F: 答える
@@ -203,7 +203,7 @@ sequenceDiagram
         Note over F,GH: 待たずに終えて計画枠を空ける。<br/>人が未計画へ戻すまで拾われない
     end
 
-    F->>GH: 契約の 6 項目と Artifact の URL を 1 回の本文更新で書く
+    F->>GH: 契約の 6 項目を 1 回の本文更新で書く
     F->>GH: 同じブランチで直るものに Same branch as を相互に書く
     F->>GH: 更新後の本文を取り直して digest を計算
     F->>GH: 在庫の鮮度（ready）を upsert

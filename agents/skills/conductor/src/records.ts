@@ -28,21 +28,39 @@ export const MARKERS = [
 export type Marker = (typeof MARKERS)[number];
 
 /**
+ * marker が**行として単独で立っている**位置。
+ *
+ * **散文の中の字面を拾わない。**記録の説明をする文（再計画の報告・経緯のまとめ・移行の告知）は
+ * 運用で必ず出るので、行の途中や code span の中を marker として数えると、**正しい記録がある
+ * 課題が「壊れている」に化けて**ラダー最上段に固定される。書く側の規約では塞がらない ——
+ * 既に書かれたコメントは残るし、記録について説明する文は今後も書かれる。
+ *
+ * **行末の `\r` は許す** —— CRLF の本文が実データに混在する。
+ */
+const standaloneLines = (body: string, tag: string): { start: number; end: number }[] => {
+  const found: { start: number; end: number }[] = [];
+  let offset = 0;
+  for (const line of body.split("\n")) {
+    const bare = line.endsWith("\r") ? line.slice(0, -1) : line;
+    if (bare === tag) found.push({ start: offset, end: offset + line.length });
+    offset += line.length + 1;
+  }
+  return found;
+};
+
+/**
  * コメント本文から marker の中身（YAML）を取り出す。
  * **同じ marker が 2 つある本文は `invalid`** —— どちらを拾うか決まらない。
  */
 export const extractMarker = (body: string, marker: Marker): Observed<string> => {
-  const open = `<!-- ${marker} -->`;
-  const close = `<!-- /${marker} -->`;
-  const first = body.indexOf(open);
-  if (first < 0) return absent();
-  if (body.indexOf(open, first + open.length) >= 0) {
-    return invalid(body, `marker ${marker} が 2 つある`);
-  }
-  const end = body.indexOf(close, first);
-  if (end < 0) return invalid(body, `marker ${marker} が閉じていない`);
-  const inner = body.slice(first + open.length, end);
-  const fence = /```(?:yaml)?\n([\s\S]*?)```/.exec(inner);
+  const opens = standaloneLines(body, `<!-- ${marker} -->`);
+  const open = opens[0];
+  if (open === undefined) return absent();
+  if (opens.length >= 2) return invalid(body, `marker ${marker} が 2 つある`);
+  const close = standaloneLines(body, `<!-- /${marker} -->`).find((c) => c.start >= open.end);
+  if (close === undefined) return invalid(body, `marker ${marker} が閉じていない`);
+  const inner = body.slice(open.end, close.start);
+  const fence = /```(?:yaml)?\r?\n([\s\S]*?)```/.exec(inner);
   if (fence === null) return invalid(inner, `marker ${marker} に yaml ブロックが無い`);
   return present(fence[1] ?? "");
 };
@@ -66,6 +84,34 @@ const isNumberArray = (v: unknown): v is number[] =>
 
 const isStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/**
+ * 面の接頭辞を持ちうる項目の列（`invalidationScope` / `expectedWrites`）を、
+ * `<面>: <path>` の文字列へ揃える。
+ *
+ * **yaml では `- <面>: <path>` は文字列ではなく 1 要素の map。**`landing-surface.md` と
+ * `ready-record.md` が定める書式はその形なので、文字列の配列だけを受けると
+ * **面をまたぐ課題の記録が必ず壊れていると読まれる**（在庫は計画した瞬間に陳腐化扱いになり、
+ * 計画 → 差し戻し → 計画 の往復から出られない）。
+ *
+ * **2 つ以上のキーを持つ map は読めない**（どちらが面か決まらない）。
+ */
+const scopeList = (v: unknown): readonly string[] | undefined => {
+  if (!Array.isArray(v)) return undefined;
+  const out: string[] = [];
+  for (const item of v) {
+    if (typeof item === "string") {
+      out.push(item);
+      continue;
+    }
+    if (!isRecord(item)) return undefined;
+    const pairs = Object.entries(item);
+    const only = pairs[0];
+    if (pairs.length !== 1 || only === undefined || typeof only[1] !== "string") return undefined;
+    out.push(`${only[0]}: ${only[1]}`);
+  }
+  return out;
+};
 
 // ---------------------------------------------------------------------------
 
@@ -185,8 +231,12 @@ export const reportRecord = (body: string): Observed<ReportRecord> =>
   parseYaml(extractMarker(body, "report"), isReport);
 
 export type ReadyRecord = {
+  /** **制御面の** base。他の面は `landingReadyShas` */
   readonly readySha: string;
+  /** 制御面以外の着地面の base。**無いキーは判定不能**（`ready-record.md`） */
+  readonly landingReadyShas: Readonly<Record<string, string>>;
   readonly issueDigest: string;
+  /** `<面>: <path>` へ揃えた列（素の path は制御面のもの） */
   readonly invalidationScope: readonly string[];
 };
 
@@ -195,11 +245,18 @@ const isReady = (v: unknown): v is ReadyRecord =>
   typeof v["readySha"] === "string" &&
   typeof v["issueDigest"] === "string" &&
   // **空にしない**（空だと何も失効しないので、陳腐化が永久に検出されない）
-  isStringArray(v["invalidationScope"]) &&
-  v["invalidationScope"].length > 0;
+  (scopeList(v["invalidationScope"])?.length ?? 0) > 0;
 
-export const readyRecord = (body: string): Observed<ReadyRecord> =>
-  parseYaml(extractMarker(body, "ready"), isReady);
+export const readyRecord = (body: string): Observed<ReadyRecord> => {
+  const parsed = parseYaml(extractMarker(body, "ready"), isReady);
+  if (parsed.kind !== "present") return parsed;
+  const raw = parsed.value as { invalidationScope?: unknown; landingReadyShas?: unknown };
+  return present({
+    ...parsed.value,
+    invalidationScope: scopeList(raw.invalidationScope) ?? [],
+    landingReadyShas: isStringMap(raw.landingReadyShas) ? raw.landingReadyShas : {},
+  });
+};
 
 export type YieldRecord = {
   readonly issues: readonly number[];
@@ -217,7 +274,10 @@ export const yieldRecord = (body: string): Observed<YieldRecord> =>
   parseYaml(extractMarker(body, "yield"), isYield);
 
 export type PlanRecord = {
+  /** **制御面の** base。他の面は `landingBaseShas`（形式は `resolve` の計画コメント） */
   readonly baseSha: string;
+  /** 制御面以外の着地面の base。**面ごとに引く**（制御面の SHA を他 repo で使えない） */
+  readonly landingBaseShas: Readonly<Record<string, string>>;
   /** 対象集合の全件。**キーが無いものは不一致として扱う**（fail-closed） */
   readonly issueDigests: Readonly<Record<string, string>>;
   /** ここが変わったら計画が無効になる。**空にしない** */
@@ -232,15 +292,24 @@ const isPlan = (v: unknown): v is PlanRecord =>
   isRecord(v) &&
   typeof v["baseSha"] === "string" &&
   isStringMap(v["issueDigests"]) &&
-  isStringArray(v["invalidationScope"]) &&
-  v["invalidationScope"].length > 0 &&
+  (scopeList(v["invalidationScope"])?.length ?? 0) > 0 &&
   isStringArray(v["resourceKeys"]);
 
 export const planRecord = (body: string): Observed<PlanRecord> => {
   const parsed = parseYaml(extractMarker(body, "plan"), isPlan);
   if (parsed.kind !== "present") return parsed;
-  const also = (parsed.value as { alsoResolves?: unknown }).alsoResolves;
-  return present({ ...parsed.value, alsoResolves: isNumberArray(also) ? also : [] });
+  const raw = parsed.value as {
+    alsoResolves?: unknown;
+    landingBaseShas?: unknown;
+    invalidationScope?: unknown;
+  };
+  // **どちらも省略できる**（制御面だけの課題・同居しない課題）。**無いことを異常にしない。**
+  return present({
+    ...parsed.value,
+    alsoResolves: isNumberArray(raw.alsoResolves) ? raw.alsoResolves : [],
+    landingBaseShas: isStringMap(raw.landingBaseShas) ? raw.landingBaseShas : {},
+    invalidationScope: scopeList(raw.invalidationScope) ?? [],
+  });
 };
 
 /**
