@@ -139,6 +139,18 @@ keys: [skills]
     expect(twelve.yieldRecord).toEqual(present({ issues: [12], to: 34, keys: ["skills"] }));
   });
 
+  test("blocked は分類する（unclassifiable にしない）", async () => {
+    const blocked = SNAP.replace("resolve-12 working", "resolve-12 blocked");
+    const rows = await observe(port({ snapshot: async () => blocked }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "blocked" });
+  });
+
+  test("unknown は分類できないまま残す", async () => {
+    const unknown = SNAP.replace("resolve-12 working", "resolve-12 unknown");
+    const rows = await observe(port({ snapshot: async () => unknown }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "unclassifiable", raw: "unknown" });
+  });
+
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {
     // **代用すると計画中は必ず `none` になり**、走っているものを畳まない保護が一度も効かない。
     const planning = SNAP.replace("resolve-12 working", "refine-12 working");

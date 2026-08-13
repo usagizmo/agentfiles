@@ -215,6 +215,52 @@ describe("実行器が消える / 止まる", () => {
     );
   });
 
+  test("7f2: セッションが blocked。人待ちの記録は waiting かつ有効", () => {
+    expectIdle([
+      implementing({
+        waitRecord: wait.waiting,
+        session: session.blocked,
+      }),
+    ]);
+  });
+
+  test("7f3: セッションが blocked。人待ちの記録が無い", () => {
+    expectConflict([implementing({ session: session.blocked })], "証跡が矛盾している");
+    expectIdle([implementing({ session: session.blocked })]);
+  });
+
+  test("7f4: 計画セッションが blocked。人待ちの記録が無い", () => {
+    const rows = [
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.blocked,
+      }),
+    ];
+    expectConflict(rows, "証跡が矛盾している");
+    const o = tick(rows).outcome;
+    expect(o.kind === "action" ? o.params.action : o.kind).not.toBe("計画セッションを片付ける");
+  });
+
+  test("7f5: 終端に達し、セッションが blocked。人待ちの記録が無い", () => {
+    expectAction(
+      [
+        implementing({
+          surfaces: [
+            surface({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              terminal: present(true),
+            }),
+          ],
+          submissionEvidence: present(true),
+          session: session.blocked,
+          ledger: present("完了"),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
   test("7a: dirty worktree のまま人待ちへ入り、セッションは生きている", () => {
     expectIdle([
       implementing({
@@ -1055,17 +1101,15 @@ describe("入場を止める宣言（続き）", () => {
   });
 
   test("14f: 行 14e と同じく 退避先 だが、セッションはまだ動いている", () => {
-    expectConflict(
-      [
-        implementing({
-          issue: 1,
-          blocksEntry: true,
-          ledger: present("退避先"),
-          session: session.running,
-        }),
-      ],
-      "退避先だがセッションが止まらない",
-    );
+    const shelved = (s: IssueObservation["session"]) =>
+      implementing({
+        issue: 1,
+        blocksEntry: true,
+        ledger: present("退避先"),
+        session: s,
+      });
+    expectConflict([shelved(session.running)], "退避先だがセッションが止まらない");
+    expectConflict([shelved(session.blocked)], "退避先だがセッションが止まらない");
   });
 });
 

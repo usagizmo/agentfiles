@@ -214,6 +214,54 @@ describe("実行器が消える / 止まる", () => {
     );
   });
 
+  test("7f2: セッションが blocked。人待ちの記録は waiting かつ有効", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface()],
+      waitRecord: wait.waiting,
+      session: session.blocked,
+    });
+    expectFields(o, { progress: "実装中", runtime: "人待ち", capacity: "あり", ledger: "進行中" });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("観測できない");
+  });
+
+  test("7f3: セッションが blocked。人待ちの記録が無い", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface()],
+      session: session.blocked,
+    });
+    expectConflict(o, "証跡が矛盾している");
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("観測できない");
+    expect(normalize(o).runtime).not.toBe("待機");
+  });
+
+  test("7f4: 計画セッションが blocked。人待ちの記録が無い", () => {
+    const o = observation({
+      ledger: present("未計画"),
+      refineSession: session.blocked,
+    });
+    expectConflict(o, "証跡が矛盾している");
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("観測できない");
+  });
+
+  test("7f5: 終端に達し、セッションが blocked。人待ちの記録が無い", () => {
+    const o = observation({
+      ledger: present("完了"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface({ terminal: present(true) })],
+      submissionEvidence: present(true),
+      session: session.blocked,
+    });
+    expectFields(o, { progress: "着地済み", runtime: "無し", capacity: "あり", ledger: "完了" });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("証跡が矛盾している");
+  });
+
   test("7n: board に居るのに issues 節に無く、open / closed を読めない", () => {
     const o = observation({ ledger: present("進行中"), open: unobservable("issues 節に無い") });
     expectConflict(o, "観測できない");

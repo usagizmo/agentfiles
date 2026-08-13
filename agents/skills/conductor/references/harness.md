@@ -172,7 +172,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 - **`idle` と `done` は別物** —— `idle` は「入力待ち かつ そのタブが focused UI で seen」、`done` は「未 seen のまま background 作業が終わった」。CLI から読んでも seen にはならない
 - **`unknown` は「agent は居るが分類できない」**。完了の証明ではないので `Conflict` へ写す（`../SKILL.md` の `runtime`）
-- **`blocked` は人待ち**。何を聞かれているかは `herdr pane read <id> --source visible` で読む
+- **`blocked` は実行器の印**（承認または質問 UI）。人待ちの SSOT は Issue の記録。印だけの扱いは `src/normalize.ts`
 
 **入力欄の文字列は観測材料ではない**。サジェストか人の未送信入力かを区別できないので、どちらの理由にも使わ**ない**。
 

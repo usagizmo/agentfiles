@@ -190,6 +190,7 @@ const classifySession = (rows: readonly string[], name: string): SessionObservat
   const raw = row.split(" ")[1] ?? "";
   if (raw === "working") return { kind: "running" };
   if (raw === "idle" || raw === "done") return { kind: "idle" };
+  if (raw === "blocked") return { kind: "blocked" };
   return { kind: "unclassifiable", raw };
 };
 

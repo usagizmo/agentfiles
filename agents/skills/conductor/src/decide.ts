@@ -6,6 +6,7 @@
 // **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。
 
 import type { IssueObservation } from "./observation.ts";
+import { sessionActive } from "./observation.ts";
 import {
   blocks,
   holdsIntegration,
@@ -245,7 +246,7 @@ const revertTarget = (
     cycle(g).count >= config.emptyCycleBudget &&
     markUnchanged(g) &&
     !(o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid") &&
-    o.session.kind !== "running"
+    !sessionActive(o.session)
   ) {
     return "退避先";
   }
@@ -504,7 +505,7 @@ const LADDER: readonly Rung[] = [
       // `runtime` は `resolve-<番号>` から導くので計画中は必ず `無し` になり、そちらでは
       // 一度も止められない。`refine` は Status を進めてから終わるので `計画済み` の窓も通る ——
       // 絞ると、起こす → 次の tick で畳む → また起こす、の往復から出られない。
-      if (o.refineSession.kind === "running") return false;
+      if (sessionActive(o.refineSession)) return false;
       // **`count` 条件は `ledger` が `未計画` のときだけ掛かる。**
       if (g.lead.ledger === "未計画" && failure(g).count >= ctx.config.retryBudget) return false;
       return true;
@@ -596,7 +597,7 @@ const LADDER: readonly Rung[] = [
       // ③ 渡しの記録があり、回収の表の行に当たる
       if (holdsIntegration(o)) {
         if (g.lead.runtime === "人待ち") return true;
-        if (g.lead.ledger === "退避先" && o.session.kind !== "running") return true;
+        if (g.lead.ledger === "退避先" && !sessionActive(o.session)) return true;
       }
       // **解除の述語に「交差する保持者が居ない」を足さない。**`休止` は write の保持者から
       // 外れるので、足すと消した瞬間に保持者へ戻り、休止と解除を往復する。
@@ -759,7 +760,7 @@ export const decide = (input: TickInput): Decision => {
         g.leadObservation.blocksEntry &&
         !TERMINAL.includes(g.lead.progress) &&
         g.lead.runtime !== "人待ち" &&
-        !(g.lead.ledger === "退避先" && g.leadObservation.session.kind !== "running"),
+        !(g.lead.ledger === "退避先" && !sessionActive(g.leadObservation.session)),
     ),
     input,
   };

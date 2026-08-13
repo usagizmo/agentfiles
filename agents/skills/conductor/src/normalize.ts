@@ -1,7 +1,13 @@
 // 観測 1 件を 4 フィールドへ畳む純関数。**`progress` と `runtime` は排他ラダー**で、
 // 上から読んで先に当たった行が勝つ。生の条件は重なってよい —— 重なりは順序が解決する。
 
-import type { IssueObservation, SurfaceObservation } from "./observation.ts";
+import {
+  sessionActive,
+  type IssueObservation,
+  type SessionObservation,
+  type SurfaceObservation,
+  type WaitRecord,
+} from "./observation.ts";
 import type {
   Capacity,
   Conflict,
@@ -109,6 +115,10 @@ const conflict = (reason: ConflictReason, issue: number, ...evidence: string[]):
   issues: [issue],
 });
 
+/** 印はあるが記録が `absent` / `cleared`。`waiting` の無効は別行。 */
+const markWithoutWait = (s: SessionObservation, wait: WaitRecord): boolean =>
+  s.kind === "blocked" && (wait.kind === "absent" || wait.kind === "cleared");
+
 /**
  * ラダーで解決できないものだけを集める。**「2 つの行に当たった」は含まない。**
  * `ledger` と期待値のずれは、5 事象の入力が要るので `decide` が見る。
@@ -147,9 +157,25 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // **`退避先` は論理 lease を返す**ので、そこでセッションが動いているのは
   // 「lease を持たないまま書いている」状態。人が Status だけ動かすと起きる。
   // 出さないと、入場を止める宣言も merge の枠も外れないまま誰にも見えない。
-  if (value(o.ledger) === "退避先" && o.session.kind === "running") {
+  if (value(o.ledger) === "退避先" && sessionActive(o.session)) {
     found.push(
-      conflict("退避先だがセッションが止まらない", n, "退避先へ移ったのにセッションが稼働中"),
+      conflict(
+        "退避先だがセッションが止まらない",
+        n,
+        "退避先へ移ったのにセッションが止まっていない",
+      ),
+    );
+  }
+
+  // **印だけ。**`blocked` は人待ちの印。記録が無い／`cleared` なら書き手が残す前に落ちた。
+  // **`waiting` の無効・壊れは下の既存行が扱う**（7h の自己修復を Conflict で潰さない）。
+  // **終端には当てない** —— 当てると `片付ける` が選出対象外になり、pane が残る。
+  if (
+    !settled &&
+    (markWithoutWait(o.session, o.waitRecord) || markWithoutWait(o.refineSession, o.waitRecord))
+  ) {
+    found.push(
+      conflict("証跡が矛盾している", n, "実行器が承認か質問で止まっているが、人待ちの記録が無い"),
     );
   }
 

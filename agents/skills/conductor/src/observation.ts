@@ -7,12 +7,18 @@ import type { Ledger, Observed } from "./types.ts";
 /**
  * セッションの生の状態。**`分類不能` を `稼働中` にも `待機` にも丸めない**
  * （丸めると、人が入力を書いている最中の pane を閉じる action が `done` と区別できない）。
+ * **`blocked` も丸めない**（承認・質問 UI。人待ちの印であって、記録の人待ちではない）。
  */
 export type SessionObservation =
   | { readonly kind: "running" }
   | { readonly kind: "idle" }
+  | { readonly kind: "blocked" }
   | { readonly kind: "none" }
   | { readonly kind: "unclassifiable"; readonly raw: string };
+
+/** 実行器がまだ動いている（書いている、または承認・質問で止まっている）。 */
+export const sessionActive = (s: SessionObservation): boolean =>
+  s.kind === "running" || s.kind === "blocked";
 
 /**
  * 人待ちの記録が有効かどうか。**判定は質問の本文の有無と、実行資源待ちの証跡の有無だけ**

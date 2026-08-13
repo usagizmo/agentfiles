@@ -31,6 +31,7 @@ export const surface = (over: Partial<SurfaceObservation> = {}): SurfaceObservat
 export const session = {
   running: { kind: "running" } as const satisfies SessionObservation,
   idle: { kind: "idle" } as const satisfies SessionObservation,
+  blocked: { kind: "blocked" } as const satisfies SessionObservation,
   none: { kind: "none" } as const satisfies SessionObservation,
   unclassifiable: (raw: string): SessionObservation => ({ kind: "unclassifiable", raw }),
 };

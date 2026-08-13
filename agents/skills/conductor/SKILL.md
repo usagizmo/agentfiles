@@ -121,7 +121,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 コードに無い規約:
 
 - checks の緑は `gh pr checks` の判定を使う。JSON を自前で畳ま**ない**（畳むときは `conclusion // state`）。`mergeStateStatus` で代用し**ない**
-- 人待ちの SSOT は Issue の記録であって、multiplexer の印では**ない**。**印と記録が食い違ったら記録が正**（印だけがあるときは `Conflict`）
+- 人待ちの SSOT は Issue の記録であって、multiplexer の印では**ない**。**印と記録が食い違ったら記録が正**。印だけの判定は `src/normalize.ts` の `collectConflicts`
 - `計画中` を `progress` に置か**ない**
 - 容量を数えるのは `あり` だけ。`prunable` は片付けの対象だが枠は食っていない。branch を `capacity` に入れ**ない**
 - 数えるのは worktree の本数であって課題の数では**ない**。live checkout と repo の本体 checkout は数え**ない**
