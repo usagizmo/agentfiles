@@ -88,12 +88,14 @@ flowchart LR
         ME[merge]
         PR[pr]
         SH[ship]
+        RD[rabi-design]
     end
     subgraph shared["agents/shared/ — 普遍"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
+        RB["rabi.css<br/><small>ブランドのトークンと部品</small>"]
     end
     subgraph sharedq["agents/shared/queue/ — キュー機構専用"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
@@ -147,6 +149,7 @@ flowchart LR
     IS --> GM
     PR --> GM
     SH --> GM
+    RD --> RB
 ```
 
 vendored な skill（一覧は `../.skill-lock.json`）は載せない。`*.test.*` は本体の行へ畳む。
@@ -171,9 +174,9 @@ skill 固有の `scripts/`:
 
 skill 固有の `assets/`:
 
-| skill         | 実体       | 何を持つか                       |
-| ------------- | ---------- | -------------------------------- |
-| `rabi-design` | `rabi.css` | ブランドの値と、文書の部品クラス |
+| skill | 実体                                            | 何を持つか                       |
+| ----- | ----------------------------------------------- | -------------------------------- |
+| 共有  | `shared/rabi.css`（`rabi-design` から symlink） | ブランドの値と、文書の部品クラス |
 
 ## 追加・変更するとき
 

@@ -1,0 +1,92 @@
+/* Rabi コーポレートスタイル — HTML / 譜面 / UI 用デザイントークン */
+/* 明暗は `light-dark()` の 1 行で持つ。値の重複を作らず、OS の設定と
+ * `data-theme` の両方で切り替わる。 */
+:root {
+  color-scheme: light dark; /* ネイティブ部品とスクロールバーを地に合わせる */
+  accent-color: var(--rabi-accent);
+  --rabi-ink: light-dark(#1a1a1a, #ececec); /* 本文・見出し */
+  --rabi-soft: light-dark(#595959, #ababab); /* 補足テキスト */
+  --rabi-faint: light-dark(#707070, #8a8a8a); /* ラベル・キャプション */
+  --rabi-accent: light-dark(#dc143c, #f0466b); /* クリムゾン */
+  --rabi-accent-soft: light-dark(#fbe4ea, #3a1420); /* 合計行・選択行の地 */
+  --rabi-on-accent: light-dark(#ffffff, #171717); /* 赤ベタの上に載る文字 */
+  --rabi-shade: light-dark(#000000, #ffffff); /* 混色の入力。地・文字に直接使わない */
+  --rabi-accent-hover: color-mix(in oklab, var(--rabi-accent) 88%, var(--rabi-shade));
+  --rabi-accent-active: color-mix(in oklab, var(--rabi-accent) 76%, var(--rabi-shade));
+  --rabi-line: light-dark(#e5e5e5, #2e2e2e); /* 罫線・区切り */
+  --rabi-edge: light-dark(#8a8a8a, #6a6a6a); /* 操作部品の輪郭 */
+  --rabi-paper: light-dark(#ffffff, #171717); /* 地 */
+  --rabi-paper-2: light-dark(#f5f5f5, #1f1f1f); /* グループ行・薄背景 */
+  --rabi-header: light-dark(#1a1a1a, #000000); /* 表ヘッダー・帯の地 */
+  --rabi-on-header: #ffffff; /* 帯の上に載る文字。light / dark とも白 */
+  --rabi-r-round: 999px; /* 角丸を持つ部品の半径 */
+  --rabi-font:
+    "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", YuGothic, Meiryo,
+    system-ui, sans-serif;
+}
+
+/* 閲覧側のトグル。無ければ OS の設定に従う */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* 印刷は常にライト値。dark の地は印刷されず文字だけが薄く残る */
+@media print {
+  :root {
+    color-scheme: light;
+  }
+}
+
+body {
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+  font-family: var(--rabi-font);
+}
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+.rabi-heading {
+  color: var(--rabi-ink);
+  font-weight: 800;
+  border-bottom: 2px solid var(--rabi-accent);
+  padding-bottom: 6px;
+}
+
+.rabi-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.rabi-table th,
+.rabi-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rabi-line);
+  text-align: left;
+}
+.rabi-table th.num,
+.rabi-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rabi-table thead th {
+  background: var(--rabi-header);
+  color: var(--rabi-on-header);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.rabi-table tr.group td {
+  background: var(--rabi-paper-2);
+  font-weight: 700;
+}
+.rabi-table tr.total td {
+  background: var(--rabi-accent-soft);
+  border-top: 2px solid var(--rabi-accent);
+  color: var(--rabi-ink);
+  font-weight: 800;
+}
