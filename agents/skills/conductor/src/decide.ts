@@ -286,7 +286,7 @@ const stockStale = (g: Group, ctx: Context): boolean =>
   // **停止の判定は成員ではなく group で行う。**`unit: "issue"` は solo group を渡すので、
   // そのまま評価すると「group の一部だけが計画済み」という停止が消え、揃っていない
   // group の計画済み側が交差のたびに未計画へ戻される。
-  !claimStructurallyBlocked(parentOf(g, ctx)) &&
+  !claimStructurallyBlocked(parentOf(g, ctx), ctx) &&
   value(g.leadObservation.readyRecordStale) === true;
 
 /** solo group から元の group を引く。`unit: "issue"` の rung が group の述語を使うときだけ要る。 */
@@ -345,12 +345,12 @@ const selectable = (
  * **容量は含めない** —— 枠が無いだけの在庫は claim の前提が揃っていて、
  * そこは在庫の鮮度が守っている対象そのもの。
  */
-const claimStructurallyBlocked = (g: Group): boolean => {
+const claimStructurallyBlocked = (g: Group, ctx: Context): boolean => {
   if (!g.observations.every((o) => value(o.open) === true)) return true;
   if (!g.records.every((r) => r.ledger === "計画済み")) return true;
   if (alreadyClaimed(g)) return true;
   if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return true;
-  return false;
+  return claimCrossesWriteHolders(g, ctx);
 };
 
 // ---------------------------------------------------------------------------
@@ -412,6 +412,15 @@ const crossingWriteHolders = (g: Group, ctx: Context): Group[] =>
       holdsWrite(other.lead) &&
       blocks(intersect(g.leadObservation.resourceKeys, other.leadObservation.resourceKeys)),
   );
+
+/**
+ * 候補のキーが読めて、いまの write 保持者と交わる。
+ * **読めなければ止めない** —— 倒すと計画コメントの無い在庫が全部止まる。
+ */
+const claimCrossesWriteHolders = (g: Group, ctx: Context): boolean => {
+  if (g.leadObservation.resourceKeys.kind !== "present") return false;
+  return crossingWriteHolders(g, ctx).length > 0;
+};
 
 const sharedKeys = (
   a: Observed<readonly string[]>,
@@ -698,13 +707,14 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "claim する" }),
-    why: "選出の条件が揃い、容量にも空きがある",
+    why: "選出の条件が揃い、容量に空きがあり、いまの write 保持者と交わらない",
     match: (g, ctx) => {
       if (isShelved(g)) return false;
       if (!selectable(g, ctx.all, ctx.byIssue)) return false;
       // **作っても容量が目安を超えない**（作ると超えるなら選ばない）。
       if (ctx.worktrees + g.leadObservation.surfaces.length > ctx.config.capacityTarget)
         return false;
+      if (claimCrossesWriteHolders(g, ctx)) return false;
       return !ctx.entryBlocked;
     },
   },

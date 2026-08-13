@@ -500,6 +500,21 @@ describe("外から状態が動く", () => {
     );
   });
 
+  test("8b4: いまの write 保持者と交わる在庫が陳腐化した", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const stale = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["skills"]),
+      readyRecordStale: present(true),
+    });
+    expectIdle([holder, stale]);
+  });
+
   test("9b: 行 9 を伝えたが、受け手が計画の記録を更新しないまま tick が進む", () => {
     // 再送は冪等。同じ観測が続くあいだ同じ action を返す（失敗として数えるのは実行側）。
     expectAction(
@@ -1166,6 +1181,64 @@ describe("入場を止める宣言（続き）", () => {
       });
     expectConflict([shelved(session.running)], "退避先だがセッションが止まらない");
     expectConflict([shelved(session.blocked)], "退避先だがセッションが止まらない");
+  });
+});
+
+describe("claim 前の交差", () => {
+  test("18: 計画済みの候補のキーが、いま write を保持している課題と交わる", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["skills"]),
+    });
+    expectIdle([holder, candidate]);
+  });
+
+  test("18b: 行 18 と同じ保持者が居るが、候補のキーが読めない", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: { kind: "absent" },
+    });
+    expectAction([holder, candidate], "claim する");
+  });
+
+  test("18c: 候補のキーは読めるが、write 保持者のキーが読めない", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: { kind: "absent" },
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["skills"]),
+    });
+    expectIdle([holder, candidate]);
+  });
+
+  test("18d: 候補のキーは読めるが、いまの write 保持者と交わらない", () => {
+    const holder = implementing({
+      issue: 1,
+      resourceKeys: present(["ui"]),
+      session: session.running,
+    });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["api"]),
+    });
+    expectAction([holder, candidate], "claim する");
   });
 });
 
