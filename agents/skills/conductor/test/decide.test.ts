@@ -133,8 +133,7 @@ describe("台帳と実体のずれ", () => {
 
   test("3d: Conflict のある課題は選出対象外になるだけで、他の課題は回る", () => {
     // **1 件を止めるのは差し戻し、全体を止めるのは conductor セッション自体の停止**
-    // （SKILL.md「硬い上限」）。1 件で全体が凍ると、健全な課題まで人が触るまで動かない
-    // （実測で 289 件中 287 件が健全でも 1 手も出なかった）。
+    // （SKILL.md「硬い上限」）。1 件で全体が凍ると、健全な課題まで人が触るまで動かない。
     const broken = observation({
       issue: 1,
       ledger: present("進行中"),
@@ -744,18 +743,77 @@ describe("外から状態が動く", () => {
   });
 
   test("10f2: PR は緑・使わない面のまとめが出ない。意図の確認は confirmed", () => {
-    expectLease(
-      [
-        implementing({
-          session: session.idle,
-          submissionEvidence: present(true),
-          openPr: present(true),
-          checks: present({ running: 0, green: true }),
-          intentRecord: intent.confirmed,
-        }),
-      ],
-      "write",
-    );
+    const d = tick([
+      implementing({
+        session: session.idle,
+        submissionEvidence: present(false),
+        openPr: present(true),
+        checks: present({ running: 0, green: true }),
+        intentRecord: intent.confirmed,
+        surfaces: [
+          surface({
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            landable: present(true),
+          }),
+          surface({
+            name: "skills",
+            usesPr: false,
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+          }),
+        ],
+      }),
+    ]).outcome;
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "枠を渡す",
+      lease: "write",
+      missing: "report",
+    });
+  });
+
+  /** 緑・clean・report 無しの `提出中` × `待機`。意図の確認は上位が当たらないよう confirmed。 */
+  const submittedJam = (over: Partial<IssueObservation> = {}): IssueObservation =>
+    implementing({
+      session: session.idle,
+      openPr: present(true),
+      checks: present({ running: 0, green: true }),
+      submissionEvidence: present(false),
+      intentRecord: intent.confirmed,
+      ...over,
+    });
+
+  test("10f3: 提出中 × 緑 × clean × report 無し。claim できる課題は無い", () => {
+    const d = tick([submittedJam()]).outcome;
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "枠を渡す",
+      lease: "write",
+      missing: "report",
+    });
+  });
+
+  test("10f4: 行 10f3 と同じ状態に、claim できる課題がある", () => {
+    const jammed = submittedJam({ issue: 1 });
+    const candidate = observation({ issue: 2, ledger: present("計画済み") });
+    const d = tick([jammed, candidate]).outcome;
+    expect(d.kind === "action" ? d.params.action : d.kind).toBe("claim する");
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
+  });
+
+  test("10f5: 行 10f3 と同じ状態に、資源キーが交差する候補だけがある", () => {
+    const jammed = submittedJam({ issue: 1, resourceKeys: present(["skills"]) });
+    const candidate = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      resourceKeys: present(["skills"]),
+    });
+    const d = tick([jammed, candidate]).outcome;
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "枠を渡す",
+      lease: "write",
+      missing: "report",
+    });
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(1);
   });
 
   test("10i: refine が閉じられては起こし直されるが、本文も ledger も動いていない", () => {

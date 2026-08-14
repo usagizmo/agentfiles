@@ -415,6 +415,20 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  // characterization: `着地待ち` から `submitted` を外すと `着地待ち` になり落ちる。
+  test("17c3: 全着地面が透過で、提出の証跡が無く、open PR がある", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [control(), secondary({ hasCheckout: present(true) })],
+        openPr: present(true),
+      }),
+      { progress: "提出中", runtime: "無し", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
   test("17g2: 書いた面は clean で report もあるが、書かなかった面が dirty", () => {
     expectFields(
       observation({
@@ -614,7 +628,7 @@ describe("着地面が制御面と違う", () => {
 
   test("17m3: 記録の整合が壊れているが、台帳は既に 完了", () => {
     // キュー以前に着地した課題。当てると**歴史側が全部ここへ落ち**、ラダー最上段なので
-    // `片付ける` にも永久に届かない（実測で 289 件中 40 件）。
+    // `片付ける` にも永久に届かない。
     const settled: Partial<IssueObservation> = {
       open: present(false),
       ledger: present("完了"),

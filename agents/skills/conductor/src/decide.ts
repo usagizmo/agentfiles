@@ -15,7 +15,13 @@ import {
   planSlotUsage,
   worktreeCount,
 } from "./resources.ts";
-import { hasWorkInProgress, ledgerAhead, ledgerBehind, normalize } from "./normalize.ts";
+import {
+  allSurfacesClean,
+  hasWorkInProgress,
+  ledgerAhead,
+  ledgerBehind,
+  normalize,
+} from "./normalize.ts";
 import type {
   ActionParams,
   Conflict,
@@ -438,6 +444,27 @@ const claimCrossesWriteHolders = (g: Group, ctx: Context): boolean => {
   return crossingWriteHolders(g, ctx).length > 0;
 };
 
+/** 「claim する」の match と同一。譲位の判定が別実装になると、譲った先が空になる。 */
+const canClaim = (g: Group, ctx: Context): boolean => {
+  if (isShelved(g)) return false;
+  if (!selectable(g, ctx.all, ctx.byIssue)) return false;
+  if (ctx.worktrees + g.leadObservation.surfaces.length > ctx.config.capacityTarget) return false;
+  if (claimCrossesWriteHolders(g, ctx)) return false;
+  return !ctx.entryBlocked;
+};
+
+/**
+ * `提出中` × checks 緑 × 全面 clean × 有効な `report` が無い。
+ * **`runtime` は見ない** —— 渡す本文の欠けは成果物側の事実。
+ */
+const needsSubmissionReport = (g: Group): boolean => {
+  if (g.lead.progress !== "提出中") return false;
+  const checks = value(g.leadObservation.checks);
+  if (checks === undefined || checks.running !== 0 || !checks.green) return false;
+  if (!allSurfacesClean(g.leadObservation.surfaces)) return false;
+  return value(g.leadObservation.submissionEvidence) !== true;
+};
+
 const sharedKeys = (
   a: Observed<readonly string[]>,
   b: Observed<readonly string[]>,
@@ -691,6 +718,7 @@ const LADDER: readonly Rung[] = [
     params: (g) => ({
       action: "枠を渡す",
       lease: g.lead.progress === "着地待ち" ? "integration" : "write",
+      ...(needsSubmissionReport(g) ? { missing: "report" as const } : {}),
     }),
     why: "止まっている実行器に資源を渡せる",
     match: (g, ctx) => {
@@ -703,6 +731,16 @@ const LADDER: readonly Rung[] = [
       if (crossingWriteHolders(g, ctx).length > 0) return false;
       // **入場を止める宣言**は、まだ write を保持していない課題への貸し出しだけを止める。
       if (ctx.entryBlocked && !holdsWrite(g.lead) && !g.leadObservation.blocksEntry) return false;
+      // **`待機` に限る。**`休止` は交差の再開で、claim へ譲ると再開が後回しになる。
+      if (
+        g.lead.runtime === "待機" &&
+        needsSubmissionReport(g) &&
+        ctx.groups.some(
+          (other) => other.representative !== g.representative && canClaim(other, ctx),
+        )
+      ) {
+        return false;
+      }
       return true;
     },
   },
@@ -724,15 +762,7 @@ const LADDER: readonly Rung[] = [
   {
     params: () => ({ action: "claim する" }),
     why: "選出の条件が揃い、容量に空きがあり、いまの write 保持者と交わらない",
-    match: (g, ctx) => {
-      if (isShelved(g)) return false;
-      if (!selectable(g, ctx.all, ctx.byIssue)) return false;
-      // **作っても容量が目安を超えない**（作ると超えるなら選ばない）。
-      if (ctx.worktrees + g.leadObservation.surfaces.length > ctx.config.capacityTarget)
-        return false;
-      if (claimCrossesWriteHolders(g, ctx)) return false;
-      return !ctx.entryBlocked;
-    },
+    match: canClaim,
   },
 ];
 

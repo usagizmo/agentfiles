@@ -37,7 +37,7 @@ const reasonOf = (o: Observed<unknown>): string | undefined =>
 const isTransparent = (s: SurfaceObservation): boolean => value(s.aheadOfIntegration) === false;
 
 /** **dirty は全面の共通前提**（`0` のみ。`1` も、読めなかった `-` も不可）。 */
-const allSurfacesClean = (surfaces: readonly SurfaceObservation[]): boolean =>
+export const allSurfacesClean = (surfaces: readonly SurfaceObservation[]): boolean =>
   surfaces.every((s) => value(s.dirty) === false);
 
 const allSurfacesTerminalOrTransparent = (surfaces: readonly SurfaceObservation[]): boolean =>

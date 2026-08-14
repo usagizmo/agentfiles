@@ -117,7 +117,11 @@ export type LeaseKind = "write" | "integration";
 export type ActionParams =
   | { readonly action: Exclude<ActionName, "差し戻す" | "枠を渡す"> }
   | { readonly action: "差し戻す"; readonly to: RevertTarget }
-  | { readonly action: "枠を渡す"; readonly lease: LeaseKind };
+  | {
+      readonly action: "枠を渡す";
+      readonly lease: LeaseKind;
+      readonly missing?: "report";
+    };
 
 // ---------------------------------------------------------------------------
 // Decision
