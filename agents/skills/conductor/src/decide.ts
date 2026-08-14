@@ -21,6 +21,7 @@ import {
   ledgerAhead,
   ledgerBehind,
   normalize,
+  settledSubmitted,
 } from "./normalize.ts";
 import type {
   ActionParams,
@@ -550,11 +551,11 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "片付ける" }),
-    why: "終端に達したものの実体と記録が残っている",
+    why: "片付ける対象が残っている",
     match: (g) => {
       const r = g.lead;
       const o = g.leadObservation;
-      const done = TERMINAL.includes(r.progress) || r.ledger === "完了";
+      const done = TERMINAL.includes(r.progress) || settledSubmitted(o);
       if (!done) return false;
       // **片付ける対象が全部消えるまで当たり続ける述語にする**（branch も入れる）。
       return (

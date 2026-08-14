@@ -1518,6 +1518,43 @@ describe("着地面が制御面と違う（action）", () => {
     );
   });
 
+  test("17d2: 提出の証跡がある 完了 の残骸。非 PR 面は終端でなく、live / 計画 / 契約が欠ける", () => {
+    const remnants = (over: Partial<ReturnType<typeof secondary>> = {}) =>
+      secondary({
+        aheadOfIntegration: present(true),
+        hasCheckout: present(true),
+        ...over,
+      });
+    const cases: Partial<IssueObservation>[] = [
+      {
+        surfaces: [
+          control({ terminal: present(true) }),
+          remnants({ liveCheckoutHealthy: present(false) }),
+        ],
+      },
+      {
+        planCommentExists: present(false),
+        surfaces: [control({ terminal: present(true) }), remnants()],
+      },
+      {
+        issueContractComplete: present(false),
+        surfaces: [control({ terminal: present(true) }), remnants()],
+      },
+    ];
+    for (const over of cases) {
+      expectAction(
+        [
+          landed({
+            ledger: present("完了"),
+            submissionEvidence: present(true),
+            ...over,
+          }),
+        ],
+        "片付ける",
+      );
+    }
+  });
+
   test("17e: 着地面は clean で commit あり、セッションまとめの記録が無い", () => {
     expectLease(
       [
@@ -1626,6 +1663,21 @@ describe("着地面が制御面と違う（action）", () => {
         }),
       ],
       "解決を起こし直す",
+    );
+  });
+
+  test("17m4: 完了 だが提出の証跡が無く、残骸がある", () => {
+    const d = tick([
+      landed({
+        ledger: present("完了"),
+        surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
+        claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+        submissionEvidence: present(false),
+      }),
+    ]);
+    expect(d.conflicts.map((c) => c.reason)).toContain("着地済みだが提出の証跡が無い");
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).not.toBe(
+      "片付ける",
     );
   });
 });

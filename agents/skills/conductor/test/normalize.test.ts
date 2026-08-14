@@ -613,6 +613,38 @@ describe("着地面が制御面と違う", () => {
     expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("live checkout が異常");
   });
 
+  test("17d2: 提出の証跡がある 完了 の残骸。非 PR 面は終端でなく、live / 計画 / 契約が欠ける", () => {
+    const base = {
+      ledger: present("完了" as const),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      issueContractComplete: present(true),
+      submissionEvidence: present(true),
+    };
+    const remnants = (over: Partial<ReturnType<typeof secondary>> = {}) =>
+      secondary({
+        aheadOfIntegration: present(true),
+        hasCheckout: present(true),
+        ...over,
+      });
+    const cases: Partial<IssueObservation>[] = [
+      { ...base, surfaces: [remnants({ liveCheckoutHealthy: present(false) })] },
+      { ...base, planCommentExists: present(false), surfaces: [remnants()] },
+      { ...base, issueContractComplete: present(false), surfaces: [remnants()] },
+    ];
+    const blocked: readonly ConflictReason[] = [
+      "live checkout が異常",
+      "計画コメントが無いまま実装の証跡がある",
+      "Issue 契約が欠けたまま成果物がある",
+    ];
+    for (const over of cases) {
+      const o = observation(over);
+      expectFields(o, { progress: "実装中", runtime: "無し", capacity: "あり", ledger: "完了" });
+      const reasons = normalize(o).conflicts.map((c) => c.reason);
+      for (const reason of blocked) expect(reasons).not.toContain(reason);
+    }
+  });
+
   test("17m: PR が merged なのに提出の証跡が無い", () => {
     expectConflict(
       observation({
@@ -643,6 +675,18 @@ describe("着地面が制御面と違う", () => {
       { ...settled, integrationRecordCount: unobservable("読めない") },
     ];
     for (const over of cases) expect(normalize(observation(over)).conflicts).toEqual([]);
+  });
+
+  test("17m4: 完了 だが提出の証跡が無く、残骸がある", () => {
+    expectConflict(
+      observation({
+        ledger: present("完了"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
+      }),
+      "着地済みだが提出の証跡が無い",
+    );
   });
 
   test("17k: 片付けが終わり、Issue は closed・worktree も無い", () => {

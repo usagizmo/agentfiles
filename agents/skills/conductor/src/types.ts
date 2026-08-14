@@ -224,6 +224,6 @@ export type NormalizedIssue = {
   readonly runtime: Runtime;
   readonly capacity: Capacity;
   readonly ledger: Ledger;
-  /** ラダーで解決できなかったもの。空でなければ `報告して止める` が最上位で当たる */
+  /** ラダーで解決できなかったもの。空なら選出対象外にはしない。`報告して止める` は `ledgerAhead` だけ */
   readonly conflicts: readonly Conflict[];
 };
