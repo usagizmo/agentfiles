@@ -260,7 +260,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 #### 計画セッションの rename
 
-`idle` では閉じ**ない**。`retired-refine-<番号>` へ rename する（`idle` には人が入力を書いている最中が含まれ、pane を閉じたら戻せない）。閉じる直前に生値を取り直す。
+`idle` では閉じ**ない**。`retired-refine-<番号>` へ rename する。手順は `references/harness.md`「片付ける」。
 
 - rename した番号は、`retired-` が残っているあいだ計画が起きない。その Issue の「計画を起こす」「計画を起こし直す」は塞ぐ。物理枠の述語からは外し、「計画セッションが無い」の判定には含める
 - `runtime` には写さ**ない**（`無し` として扱う）

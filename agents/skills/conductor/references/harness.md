@@ -89,15 +89,12 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 
 | 終わったもの                    | 片付けるもの                                                          |
 | ------------------------------- | --------------------------------------------------------------------- |
-| `refine`（`done`）              | セッションが載っている pane だけ                                      |
+| `refine`（`done`）              | セッションが載っている tab                                            |
 | `refine`（`idle`）              | **閉じない。**`retired-refine-<番号>` へ rename するだけ              |
 | `resolve`（セッションを置く面） | 下記の 3 つ（workspace ごと消す）                                     |
 | `resolve`（二次面）             | 下記の 3 つを **git だけで**行う（`remove-worktree.py` は当たらない） |
 
-| 操作                       | herdr                                             |
-| -------------------------- | ------------------------------------------------- |
-| rename する                | `herdr agent rename <名前> retired-refine-<番号>` |
-| 閉じる直前に生値を取り直す | `herdr agent get <名前>` の `agent_status`        |
+`refine` は実行直前に生値を取り直して上表を引く。`working` / `blocked` では実行しない。`unknown` は `Conflict`。コマンドは「herdr での実現」。
 
 **branch を作る述語は 1 つ —— 在れば checkout、無ければ統合先から作る**（`protocols.md` が SSOT）。契機では分かれ**ない**。
 
@@ -140,7 +137,9 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | worktree を作り直す（起こし直し。二次面）    | **`git -C <その面の checkout> worktree add <path> <名>`**（**`-b` を付けない。base も渡さない** —— 既存の branch を出すだけ）                                                                                                                                                 |
 | worktree を観測する                          | **`git -C <面の checkout> worktree list --porcelain`**（**面ごとに 1 回**）                                                                                                                                                                                                   |
 | 実行器だけ止める                             | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。送っても `agent_status` が変わらないときだけ `Conflict` |
-| 片付ける（`refine`）                         | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                     |
+| 片付ける（`refine`・生値）                   | 先に `herdr agent get <名前>`。返った `agent_status` で契約の `refine` 行を引く                                                                                                                                                                                               |
+| 片付ける（`refine`・`idle`）                 | `herdr agent rename <名前> retired-refine-<番号>`（閉じ**ない**）                                                                                                                                                                                                             |
+| 片付ける（`refine`・`done`）                 | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                     |
 | 片付ける（`resolve`）                        | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`                                                                                                                                                                                                           |
 | 片付けに要る workspace ID                    | **`herdr worktree list --cwd <面の checkout>`** の `open_workspace_id`                                                                                                                                                                                                        |
 | 孤児 workspace を洗う                        | **`herdr workspace list`**（repo 非依存）                                                                                                                                                                                                                                     |
@@ -171,6 +170,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 `agent_status` の意味は `herdr` skill が SSOT。conductor が足すのは次だけ。
 
+- **`idle` と `done` は片付け方が違う**
+- **`unknown` は完了の証明ではない**。`Conflict` へ写す（`src/normalize.ts` の `collectConflicts`）
 - 分類できない生値は `src/normalize.ts` の `collectConflicts` が `観測できない` にする
 - **`blocked` は実行器の印**（承認または質問 UI）。人待ちの SSOT は Issue の記録。印だけの扱いは `collectConflicts`
 
@@ -183,7 +184,10 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 **入力欄の文字列は観測材料ではない**。サジェストか人の未送信入力かを区別できないので、どちらの理由にも使わ**ない**。
 
 - 「人の入力かもしれない」で送信を控え**ない**
+- 未送信の下書きがあると分かっていても控え**ない**
 - **見えた文字列を自分の本文へ写さない**。判断に関わりそうに見えたら、渡すのではなく状況ボードへ出す
+
+下書きを守るのは計画セッションの `idle` を閉じない側（`../SKILL.md`「計画セッションの rename」）。送信を控える側では**ない**。
 
 片付けは**標準出力から成否が読めない**（返る JSON は通知のエンベロープ）。確認するのは、実際に消す対象にしたものだけ —— 面ごとの worktree 一覧、merge 済みで消したローカル branch、制御面の claim remote branch。
 
