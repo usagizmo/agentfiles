@@ -10,6 +10,7 @@ import type { IssueObservation } from "./observation.ts";
 import type { BoardView } from "./observe.ts";
 import { countKey } from "./observe.ts";
 import { holdsIntegration, holdsWrite } from "./resources.ts";
+import type { RecentTick } from "./journal.ts";
 import type { Capacity, Conflict, ConflictReason, Decision, Outcome } from "./types.ts";
 import { LEDGER_VALUES, PROGRESS_LADDER, RUNTIME_LADDER } from "./types.ts";
 
@@ -25,6 +26,7 @@ export type HumanTodo = {
   readonly issues: readonly number[];
   readonly kind: string;
   readonly since?: string;
+  readonly id?: string;
 };
 
 export type BoardOverlay = {
@@ -38,6 +40,7 @@ export type BoardInput = {
   readonly config: ProjectConfig;
   readonly view: BoardView;
   readonly overlay?: BoardOverlay;
+  readonly recent?: readonly RecentTick[];
   readonly observedAt: string;
   readonly tick?: number;
   readonly actionsUsed?: number;
@@ -384,6 +387,7 @@ export const toBoard = (input: BoardInput): Record<string, unknown> => {
       ),
     ),
     conflicts: input.decision.conflicts,
+    ...(input.recent !== undefined && input.recent.length > 0 ? { recent: input.recent } : {}),
   };
 };
 

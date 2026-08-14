@@ -157,6 +157,21 @@ describe("toBoard", () => {
     expect(issues[0]?.title).toBe("#1");
   });
 
+  test("recent は渡したときだけ載せる。判断には使わない", () => {
+    const recent = [
+      {
+        at: "2026-08-14T00:00:00Z",
+        outcome: "action",
+        why: "claim できる",
+        action: "claim する",
+        target: 1,
+        result: "ok" as const,
+      },
+    ];
+    expect(toBoard(input({ recent }))["recent"]).toEqual(recent);
+    expect(toBoard(input())["recent"]).toBeUndefined();
+  });
+
   test("write lease は保持の述語から復元する", () => {
     const o = observation({
       issue: 4,

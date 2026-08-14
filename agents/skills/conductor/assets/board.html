@@ -121,6 +121,21 @@
   .tickbar .name { font-weight: 800; }
   .tickbar .why { color: var(--rabi-soft); font-size: 0.88rem; }
   .tickbar .target { font-family: var(--rabi-mono); font-size: 0.85rem; }
+  .recent {
+    margin: 0;
+    padding: 0 1.6rem 0.9rem;
+    list-style: none;
+    color: var(--rabi-soft);
+    font-size: 0.8rem;
+  }
+  .recent li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.8rem;
+    padding: 0.15rem 0;
+  }
+  .recent .name { font-weight: 700; color: var(--rabi-ink); }
+  .recent .target { font-family: var(--rabi-mono); }
 
   /* --- 操作 ------------------------------------------------------------ */
   .toolbar {
@@ -480,6 +495,7 @@
   <section class="human" id="human" hidden></section>
 
   <div class="tickbar" id="tickbar"></div>
+  <ol class="recent" id="recent" hidden></ol>
 
   <div class="toolbar">
     <input class="search" id="q" type="search" placeholder="番号・タイトル・branch で絞る  /" aria-label="絞り込み">
@@ -1170,6 +1186,20 @@ window.Board = (function () {
         ${tick.note ? `<span class="why">${esc(tick.note)}</span>` : ""}`;
     }
 
+    function renderRecent() {
+      const host = document.getElementById("recent");
+      const rows = data.recent || [];
+      host.hidden = rows.length === 0;
+      if (!rows.length) return;
+      host.innerHTML = rows.map((r) => `
+        <li>
+          <span class="name">${esc(r.action || r.outcome)}</span>
+          ${r.target ? `<span class="target">#${r.target}</span>` : ""}
+          ${r.result ? `<span class="why">${esc(r.result)}</span>` : ""}
+          <span class="why">${esc(r.why || "")}</span>
+        </li>`).join("");
+    }
+
     function renderHuman() {
       const host = document.getElementById("human");
       const todos = data.humanTodo || [];
@@ -1294,6 +1324,7 @@ window.Board = (function () {
 
     function renderAll() {
       renderHeader();
+      renderRecent();
       renderHuman();
       renderChips();
       renderLanes();

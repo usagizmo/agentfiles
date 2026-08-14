@@ -50,7 +50,11 @@ const configFile = (name: string, over: Record<string, unknown> = {}): string =>
 const SURFACE = ["--surface-path", `acme/control=${TMP}`];
 
 const run = async (args: string[]) => {
-  const p = Bun.spawn(["bun", CLI, ...args], { stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawn(["bun", CLI, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, XDG_STATE_HOME: TMP },
+  });
   const [code, out, err] = await Promise.all([
     p.exited,
     new Response(p.stdout).text(),
@@ -162,6 +166,70 @@ describe("checkout path", () => {
       "acme/control",
     ]);
     expect(code).toBe(2);
+  });
+});
+
+describe("事実コマンド", () => {
+  test("note は id だけを出し、JSON を stdout に出さない", async () => {
+    const journal = join(TMP, "note.ndjson");
+    const { code, out } = await run([
+      "note",
+      "--title",
+      "pane が拒否した",
+      "--detail",
+      "agent_not_ready",
+      "--unblocks",
+      "idle になる",
+      "--kind",
+      "env",
+      "--journal",
+      journal,
+    ]);
+    expect(code).toBe(0);
+    expect(out.trim()).toMatch(/^[0-9a-f-]{8}$/);
+    expect(out).not.toContain("{");
+    const lines = (await Bun.file(journal).text()).trim().split("\n");
+    expect(JSON.parse(lines.at(-1) ?? "")).toMatchObject({
+      kind: "note",
+      title: "pane が拒否した",
+    });
+  });
+
+  test("clear は足した id で消す。無い id は 2", async () => {
+    const journal = join(TMP, "clear.ndjson");
+    const added = await run([
+      "note",
+      "--title",
+      "t",
+      "--detail",
+      "d",
+      "--unblocks",
+      "u",
+      "--kind",
+      "intake",
+      "--journal",
+      journal,
+    ]);
+    const id = added.out.trim();
+    const cleared = await run(["clear", "--id", id, "--journal", journal]);
+    expect(cleared.code).toBe(0);
+    const missing = await run(["clear", "--id", id, "--journal", journal]);
+    expect(missing.code).toBe(2);
+  });
+
+  test("result は journal に 1 行足す", async () => {
+    const journal = join(TMP, "journal.ndjson");
+    const { code, out } = await run(["result", "--status", "ok", "--journal", journal]);
+    expect(code).toBe(0);
+    expect(out.trim()).toBe("");
+    const line = (await Bun.file(journal).text()).trim();
+    expect(JSON.parse(line)).toMatchObject({ kind: "result", status: "ok" });
+  });
+
+  test("result の status が閉集合の外なら 2", async () => {
+    const { code, err } = await run(["result", "--status", "maybe"]);
+    expect(code).toBe(2);
+    expect(err).toContain("usage");
   });
 });
 

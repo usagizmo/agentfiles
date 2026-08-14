@@ -131,11 +131,10 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 ```bash
 bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
   --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>... \
-  --board-out <データ.json> --tick-used <この tick で実行した action 数> \
-  --board-overlay "$XDG_STATE_HOME/agents/conductor-overlay.json"
+  --tick-used <この tick で実行した action 数>
 ```
 
-`--board-overlay` は file があるときだけ渡す。`cli.ts` を呼び直すときも同じ path。無い path を渡すと exit 2。`--tick-used` を落とすと盤面の actions が常に 0。譜面へは `scripts/board.mjs`。置き場は `references/score.md`。
+`--tick-used` を落とすと盤面の actions が常に 0。盤面 JSON と overlay の path は渡さ**ない**。読ま**ない**。譜面は `cli.ts` が書く。置き場は `references/score.md`。
 
 設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` に入れる中身は `references/harness.md`。
 
@@ -201,7 +200,7 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 - action 上限にも数えず、観測もやり直さ**ない**
 - 次の tick でも同じ action を選び続ける
-- 状況ボードの overlay（`humanTodo`、`kind: env`）へ出す。**時間切れで解除しない**
+- `cli.ts note`（`kind: env`）へ出す。**時間切れで解除しない**
 
 ### 記録の精算
 
@@ -546,28 +545,16 @@ branch 名は `{prefix}/{Issue 番号}-{slug}`（prefix の既定は `feat` / `f
 
 **自分の context の残量を制約として報告しない**（ボードにも応答にも）。交代の契機は `references/harness.md`「交代」が持つ。
 
-毎 tick、観測からファイル全体を上書きする。**HTML を書かない**。構造は `cli.ts --board-out`。形の SSOT は `references/board.md`、投影は `src/board.ts`。描画は `assets/board.html`。置き場は `references/score.md`。
-
-```bash
-bun run <skill>/scripts/board.mjs <データ.json> <譜面のパス>
-```
+毎 tick、観測からファイル全体を上書きする。**HTML を書かない**。盤面 JSON を読まない。構造は `cli.ts` が書く。形の SSOT は `references/board.md`、投影は `src/board.ts`。描画は `assets/board.html`。置き場は `references/score.md`。
 
 観測から決まる `humanTodo` はテンプレ。wait の問いは記録本文をそのまま使う。言い換えない。
 
-観測外の行（実行環境の拒否・intake）だけ overlay に書く。観測から出る Conflict・退避先・入場宣言・retired は書か**ない**。完成済みの盤面 JSON を編集し**ない**。載せ先は `humanTodo[]` で、`conflicts[]` ではない。
+観測外の行（実行環境の拒否・intake）と実行結果は `cli.ts` の事実コマンド。JSON を編集し**ない**。観測から出る Conflict・退避先・入場宣言・retired は書か**ない**。載せ先は `humanTodo[]` で、`conflicts[]` ではない。形と解除は `references/board.md`。
 
-置き場は `$XDG_STATE_HOME/agents/conductor-overlay.json`（無ければ `~/.local/state/agents/conductor-overlay.json`）。事象が立ったときに書き、解けるまで消さ**ない**。file があるあいだ、`cli.ts` を呼ぶたびに同じ path を渡す。
-
-```json
-{
-  "humanTodo": [
-    {
-      "title": "指定の pane へ送れない",
-      "detail": "herdr agent prompt が agent_not_ready",
-      "unblocks": "対象 pane で実行器が idle になる",
-      "issues": [],
-      "kind": "env"
-    }
-  ]
-}
+```bash
+bun run <skill>/src/cli.ts note --title ... --detail ... --unblocks ... --kind env
+bun run <skill>/src/cli.ts clear --id <id>
+bun run <skill>/src/cli.ts result --status ok
 ```
+
+`note` は id を 1 行返す。解けるまで消さ**ない**。`result` は action を実行した直後。idle では呼ばない。履歴は判断の入力にしない。
