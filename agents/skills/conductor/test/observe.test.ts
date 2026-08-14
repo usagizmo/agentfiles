@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ObservePort, StatusMap } from "../src/observe.ts";
-import { observeTick } from "../src/observe.ts";
+import { observeTick, worktreeBusy } from "../src/observe.ts";
 import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
 import type { Ledger, Observed } from "../src/types.ts";
@@ -176,6 +176,26 @@ keys: [skills]
     const unknown = SNAP.replace("resolve-12 working", "resolve-12 unknown");
     const rows = await observe(port({ snapshot: async () => unknown }), STATUS, SURFACES);
     expect(find(rows, 12).session).toEqual({ kind: "unclassifiable", raw: "unknown" });
+  });
+
+  test("同じ worktree の consult 子が working なら worktreeBusy", async () => {
+    const snap = SNAP.replace(
+      "resolve-12 working",
+      "resolve-12 done\na-grok-1 working /tmp/wt/feat-12-x",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).worktreeBusy).toBe(true);
+    expect(find(rows, 34).worktreeBusy).toBe(false);
+  });
+
+  test("worktreeBusy: 同じ path かその配下だけを同じ worktree と読む", () => {
+    const owned = ["/tmp/wt/feat-12-x"];
+    expect(worktreeBusy(["a-grok-1 working /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeBusy(["a-grok-1 working /tmp/wt/feat-12-x/src"], owned)).toBe(true);
+    expect(worktreeBusy(["a-grok-1 working /tmp/other"], owned)).toBe(false);
+    expect(worktreeBusy(["a-grok-1 working"], owned)).toBe(false);
+    expect(worktreeBusy(["resolve-12 working /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeBusy(["conductor working /tmp/wt/feat-12-x"], owned)).toBe(false);
   });
 
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {

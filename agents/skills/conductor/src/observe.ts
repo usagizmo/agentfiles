@@ -238,7 +238,7 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
   return found;
 };
 
-/** `sessions` の行は `<名前> <状態>`。**分類できない値を丸めない。** */
+/** `sessions` の行は `<名前> <状態>`。任意で後ろに cwd。**分類できない値を丸めない。** */
 const classifySession = (rows: readonly string[], name: string): SessionObservation => {
   const row = rows.find((r) => r.split(" ")[0] === name);
   if (row === undefined) return { kind: "none" };
@@ -248,6 +248,23 @@ const classifySession = (rows: readonly string[], name: string): SessionObservat
   if (raw === "blocked") return { kind: "blocked" };
   return { kind: "unclassifiable", raw };
 };
+
+const OWNED_SESSION = /^(retired-)?(refine|resolve)-\d+$/;
+
+/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が working か。 */
+export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
+  rows.some((row) => {
+    const [name, status, ...cwdParts] = row.split(" ");
+    if (name === undefined || name === "conductor" || OWNED_SESSION.test(name)) return false;
+    if (status !== "working") return false;
+    const cwd = cwdParts.join(" ");
+    // **cwd が無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
+    // 帰属できない 1 本が全課題の write を止める。
+    if (cwd === "") return false;
+    return ownedPaths.some(
+      (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
+    );
+  });
 
 /** 全コメントを 1 本に連ねる。marker は本文をまたがないので、重複検知はそのまま効く。 */
 const joinComments = (comments: readonly string[]): string => comments.join("\n\n");
@@ -461,6 +478,10 @@ export const observeTick = async (
       session: classifySession(sessionRows, `resolve-${issue}`),
       retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
       refineSession: classifySession(sessionRows, `refine-${issue}`),
+      worktreeBusy: worktreeBusy(
+        sessionRows,
+        worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
+      ),
 
       waitRecord: waitRecord(commentText, pause),
       pauseRecordExists: pause,

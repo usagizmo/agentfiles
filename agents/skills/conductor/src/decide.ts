@@ -122,6 +122,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         prMerged: lead.prMerged,
         submissionEvidence: lead.submissionEvidence,
         session: lead.session,
+        worktreeBusy: lead.worktreeBusy,
         waitRecord: lead.waitRecord,
         pauseRecordExists: lead.pauseRecordExists,
         yieldRecord: lead.yieldRecord,
@@ -604,7 +605,10 @@ const LADDER: readonly Rung[] = [
     match: (g) => {
       const r = g.lead;
       const o = g.leadObservation;
-      const done = TERMINAL.includes(r.progress) || settledSubmitted(o);
+      const done =
+        TERMINAL.includes(r.progress) ||
+        settledSubmitted(o) ||
+        (value(o.prMerged) === true && value(o.claimBranchExists) === false);
       if (!done) return false;
       // **片付ける対象が全部消えるまで当たり続ける述語にする**（branch も入れる）。
       return (
@@ -774,6 +778,8 @@ const LADDER: readonly Rung[] = [
     match: (g, ctx) => {
       if (isShelved(g)) return false;
       if (g.lead.runtime !== "待機" && g.lead.runtime !== "休止") return false;
+      // **consult の子が同じ worktree で working なら write を渡さない。**integration は別資源。
+      if (g.lead.progress !== "着地待ち" && g.leadObservation.worktreeBusy) return false;
       if (g.lead.progress === "着地待ち") {
         if (holdsIntegration(g.leadObservation)) return true;
         return nextIntegrationReceiver(ctx)?.representative === g.representative;

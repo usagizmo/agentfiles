@@ -452,6 +452,14 @@ describe("実行器が消える / 止まる", () => {
   test("7r: 起こし直しのあと、記録は cleared でセッションは 稼働中", () => {
     expectIdle([implementing({ waitRecord: wait.cleared, session: session.running })]);
   });
+
+  test("7s: 行 7m と同じく待機だが、同じ worktree に他の agent が working", () => {
+    expectIdle([implementing({ session: session.idle, worktreeBusy: true })]);
+  });
+
+  test("7s2: 行 7s と同じく他の agent が working だが、着地待ち", () => {
+    expectLease([awaitingLanding({ session: session.idle, worktreeBusy: true })], "integration");
+  });
 });
 
 describe("外から状態が動く", () => {
@@ -1704,5 +1712,57 @@ describe("着地面が制御面と違う（action）", () => {
     expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).not.toBe(
       "片付ける",
     );
+  });
+
+  test("17m5: 行 17m と同じく証跡が無いが、claim の remote branch が無い", () => {
+    const d = tick([
+      landed({
+        prMerged: present(true),
+        claimBranchExists: present(false),
+        surfaces: [
+          control({
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            terminal: present(true),
+          }),
+          secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+        ],
+        submissionEvidence: present(false),
+      }),
+    ]);
+    expect(d.conflicts.map((c) => c.reason)).not.toContain("着地済みだが提出の証跡が無い");
+    expectAction(
+      [
+        landed({
+          prMerged: present(true),
+          claimBranchExists: present(false),
+          surfaces: [
+            control({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              terminal: present(true),
+            }),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          submissionEvidence: present(false),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17m6: 行 17m4 と同じく完了 × 残骸だが、claim の remote branch が無い", () => {
+    const d = tick([
+      landed({
+        ledger: present("完了"),
+        claimBranchExists: present(false),
+        prMerged: present(true),
+        surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
+        claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+        submissionEvidence: present(false),
+      }),
+    ]);
+    expect(d.conflicts.map((c) => c.reason)).not.toContain("着地済みだが提出の証跡が無い");
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe("片付ける");
   });
 });

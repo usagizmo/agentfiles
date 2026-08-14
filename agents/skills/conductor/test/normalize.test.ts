@@ -689,6 +689,32 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17m5: 行 17m と同じく証跡が無いが、claim の remote branch が無い", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(false),
+      planCommentExists: present(true),
+      prMerged: present(true),
+      surfaces: [workingSurface({ terminal: present(true) })],
+    });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain(
+      "着地済みだが提出の証跡が無い",
+    );
+  });
+
+  test("17m6: 行 17m4 と同じく完了 × 残骸だが、claim の remote branch が無い", () => {
+    const o = observation({
+      ledger: present("完了"),
+      claimBranchExists: present(false),
+      planCommentExists: present(true),
+      prMerged: present(true),
+      surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
+    });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain(
+      "着地済みだが提出の証跡が無い",
+    );
+  });
+
   test("17k: 片付けが終わり、Issue は closed・worktree も無い", () => {
     expectFields(
       observation({

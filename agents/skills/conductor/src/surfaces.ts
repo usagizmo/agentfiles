@@ -43,6 +43,10 @@ export const surfaceReported = (
 ): Observed<boolean> => {
   if (report.kind === "absent") return present(false);
   if (report.kind !== "present") return unobservable("提出のまとめを読めない");
+  if (head.kind === "absent") {
+    // **branch が無いのは「読めなかった」ではない。**ship の既定が消す。記録にあれば提出済み。
+    return present(report.value.heads[name] !== undefined);
+  }
   const current = value(head);
   if (current === undefined) return unobservable("面の head を読めない");
   const recorded = report.value.heads[name];

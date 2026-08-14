@@ -110,4 +110,8 @@ describe("提出の証跡", () => {
       surfaceReported("o/r", unobservable("branch が無い"), report({ "o/r": "aaa" })).kind,
     ).toBe("unobservable");
   });
+
+  test("head が無い（branch 削除）なら、記録にあれば提出済み", () => {
+    expect(surfaceReported("o/r", absent(), report({ "o/r": "aaa" }))).toEqual(present(true));
+  });
 });

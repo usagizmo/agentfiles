@@ -111,5 +111,6 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
 
   boardOrder: 0,
   claimedAt: absent(),
+  worktreeBusy: false,
   ...over,
 });

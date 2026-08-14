@@ -229,7 +229,16 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // **PR を使わない面には当てない**（あちらは提出の証跡そのものが終端の条件）。
   // 守っているのは台帳が進んでいないことだけなので、`完了` には当てない
   // （`完了` なら依存は `closed かつ 完了` の経路で解ける）。
-  if (!settled && value(o.prMerged) === true && value(o.submissionEvidence) !== true) {
+  // **claim の remote branch が無い着地済みには当てない**（ship の既定が branch を消す）。
+  const landedWithoutClaimBranch =
+    value(o.claimBranchExists) === false &&
+    (value(o.prMerged) === true || value(o.ledger) === "完了");
+  if (
+    !settled &&
+    value(o.prMerged) === true &&
+    value(o.submissionEvidence) !== true &&
+    !landedWithoutClaimBranch
+  ) {
     found.push(
       conflict("着地済みだが提出の証跡が無い", n, "merged な PR があるのに提出のまとめが無い"),
     );
@@ -245,7 +254,13 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     value(o.claimBranchExists) !== true;
 
   // **提出の証跡が無い `完了` の残骸は片付けに入らず、人が見る。**残骸が無い形（17m3）には立てない。
-  if (settled && value(o.submissionEvidence) !== true && !nothingLeft) {
+  // **claim の remote branch が無い着地済みには当てない**（行 17m6）。
+  if (
+    settled &&
+    value(o.submissionEvidence) !== true &&
+    !nothingLeft &&
+    !landedWithoutClaimBranch
+  ) {
     found.push(conflict("着地済みだが提出の証跡が無い", n, "台帳は完了なのに提出のまとめが無い"));
   }
 
