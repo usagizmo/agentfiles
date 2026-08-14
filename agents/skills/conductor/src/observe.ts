@@ -14,7 +14,7 @@ import {
   workspaces,
   worktrees as decodeWorktrees,
 } from "./decode.ts";
-import type { LiveCheckoutRow, Tri } from "./decode.ts";
+import type { Tri } from "./decode.ts";
 import type { IssueObservation, SessionObservation, SurfaceObservation } from "./observation.ts";
 import {
   claimRecord,
@@ -24,7 +24,6 @@ import {
   integrationRecordCount,
   reportRecord,
   retryRecord,
-  waitQuestionText,
   waitRecord,
   yieldRecord,
 } from "./records.ts";
@@ -36,49 +35,14 @@ import type { SurfaceFacts } from "./surfaces.ts";
 import type { Ledger, Observed, Progress } from "./types.ts";
 import { absent, invalid, present, unobservable } from "./types.ts";
 
-/** 同じ観測プロセスが display 用に残した材料。**決定は読まない。** */
-export type BoardView = {
-  readonly titles: ReadonlyMap<number, string>;
-  readonly wait: ReadonlyMap<number, { readonly question: string; readonly since: string }>;
-  readonly prs: ReadonlyMap<number, number>;
-  readonly branches: ReadonlyMap<number, string>;
-  readonly counts: ReadonlyMap<
-    string,
-    { readonly dirty: number; readonly ahead: number; readonly behind: number }
-  >;
-  readonly live: readonly LiveCheckoutRow[];
-  readonly worktreesBySurface: ReadonlyMap<string, number>;
-};
-
-export const countKey = (issue: number, surface: string): string => `${issue}\t${surface}`;
-
-export const emptyView = (): BoardView => ({
-  titles: new Map(),
-  wait: new Map(),
-  prs: new Map(),
-  branches: new Map(),
-  counts: new Map(),
-  live: [],
-  worktreesBySurface: new Map(),
-});
-
-/** 盤面の経過時刻用。**決定は `body` だけ読む。** */
-export type IssueCommentView = {
-  readonly body: string;
-  readonly at: string;
-};
-
 /**
- * 面ごとの git。**数を一度取り、boolean はそこから導く。**
- * 数は盤面用。決定は `ahead` / `head` だけ読む。
+ * 面ごとの git。
+ * **`統合先..branch` で測る** —— branch 上の commit の存在で読むと、追随しただけの空 branch が
+ * `実装中` に化ける。
  */
 export type SurfaceGit = {
   readonly ahead: Observed<boolean>;
   readonly head: Observed<string>;
-  readonly branch?: Observed<string>;
-  readonly aheadCount?: Observed<number>;
-  readonly behindCount?: Observed<number>;
-  readonly dirtyCount?: Observed<number>;
 };
 
 /** snapshot に無い材料を取る口。**実装は 1 つで、テストは fake を渡す。** */
@@ -89,27 +53,12 @@ export type ObservePort = {
   readonly issueBodies: (
     issues: readonly number[],
   ) => Promise<ReadonlyMap<number, Observed<string>>>;
-  /**
-   * Issue 題。**`issueBodies` と同じ一覧から取る。**本文の後に呼び、取り直さない。
-   * 決定は読まない。
-   */
-  readonly issueTitles: (
-    issues: readonly number[],
-  ) => Promise<ReadonlyMap<number, Observed<string>>>;
   /** 固定 marker のコメント本文（番号 → 本文の配列） */
   readonly issueComments: (
     issues: readonly number[],
-  ) => Promise<ReadonlyMap<number, Observed<readonly IssueCommentView[]>>>;
-  /**
-   * 面ごとの git。`統合先..branch` が非空かと、その面の branch head。
-   * **`統合先..branch` で測る** —— branch 上の commit の存在で読むと、追随しただけの空 branch が
-   * `実装中` に化ける。
-   */
-  readonly surfaceGit: (
-    issue: number,
-    surface: string,
-    worktreePath?: string | null,
-  ) => Promise<SurfaceGit>;
+  ) => Promise<ReadonlyMap<number, Observed<readonly string[]>>>;
+  /** 面ごとの git。`統合先..branch` が非空かと、その面の branch head。 */
+  readonly surfaceGit: (issue: number, surface: string) => Promise<SurfaceGit>;
   /**
    * 成果の指紋（`scripts/cycle-mark.py`）。**渡すのは正規化済みの値だけ** ——
    * 成分の名前と符号化はスクリプトが専任する（引数表は `references/protocols.md`）。
@@ -269,18 +218,12 @@ export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly strin
 /** 全コメントを 1 本に連ねる。marker は本文をまたがないので、重複検知はそのまま効く。 */
 const joinComments = (comments: readonly string[]): string => comments.join("\n\n");
 
-export type ObserveResult = {
-  readonly observations: readonly IssueObservation[];
-  readonly view: BoardView;
-};
-
-/** 決定と盤面が同じ観測を共有する。**盤面だけ取り直さない。** */
 export const observeTick = async (
   port: ObservePort,
   statusMap: StatusMap,
   /** 座標表。面の名前 → PR で着地するか */
   surfaceUsesPr: ReadonlyMap<string, boolean>,
-): Promise<ObserveResult> => {
+): Promise<readonly IssueObservation[]> => {
   const snapshot = parseSnapshot(await port.snapshot());
   const statuses = projectStatus(snapshot);
   const issueRows = new Map(decodeIssues(snapshot).map((r) => [r.issue, r]));
@@ -288,8 +231,8 @@ export const observeTick = async (
   const worktreeRows = decodeWorktrees(snapshot);
   const prRows = pullRequests(snapshot);
 
-  // **dirty か、HEAD が統合先の branch でない状態は異常**。upstream より先行しているのは
-  // 異常ではない（push が人の領分の面では常態）。**読めなかったものを clean 側へ倒さない。**
+  // **dirty か、統合先より behind なら異常**。upstream より先行しているのは異常ではない
+  // （push が人の領分の面では常態）。**読めなかったものを clean 側へ倒さない。**
   const liveHealth = new Map<string, Observed<boolean>>(
     liveCheckouts(snapshot).map((row) => [
       row.surface,
@@ -323,11 +266,6 @@ export const observeTick = async (
     port.issueBodies(numbers),
     port.issueComments(numbers),
   ]);
-  // **本文と同じ一覧から取る。**並列にすると cache が空のまま 2 本目の API になる。
-  const titles = await port.issueTitles(numbers);
-
-  const branches = new Map<number, string>();
-  const counts = new Map<string, { dirty: number; ahead: number; behind: number }>();
 
   // **件数ぶん並行に投げない**（`limit.ts`）。1 件につき計画と PR の 2 経路が走るので、
   // ここを開けると board の件数の 2 倍が同時に立つ。
@@ -340,9 +278,7 @@ export const observeTick = async (
     const commentsObserved = comments.get(issue) ?? absent();
     const body = bodyObserved.kind === "present" ? bodyObserved.value : "";
     const commentText =
-      commentsObserved.kind === "present"
-        ? joinComments(commentsObserved.value.map((c) => c.body))
-        : "";
+      commentsObserved.kind === "present" ? joinComments(commentsObserved.value) : "";
 
     const parsedYield = yieldRecord(commentText);
     const pause = extractMarker(commentText, "yield").kind === "present";
@@ -382,34 +318,7 @@ export const observeTick = async (
         const worktree = worktreeRows.find(
           (w) => w.surface === name && ownsWorktreePath(w.path, issue),
         );
-        const git = await port.surfaceGit(issue, name, worktree?.path ?? null);
-        if (git.branch?.kind === "present") branches.set(issue, git.branch.value);
-        const dirtyN =
-          git.dirtyCount?.kind === "present"
-            ? git.dirtyCount.value
-            : worktree === undefined
-              ? 0
-              : worktree.dirty === true
-                ? 1
-                : worktree.dirty === false
-                  ? 0
-                  : undefined;
-        const aheadN =
-          git.aheadCount?.kind === "present"
-            ? git.aheadCount.value
-            : git.ahead.kind === "present"
-              ? git.ahead.value
-                ? 1
-                : 0
-              : undefined;
-        const behindN = git.behindCount?.kind === "present" ? git.behindCount.value : undefined;
-        if (dirtyN !== undefined || aheadN !== undefined || behindN !== undefined) {
-          counts.set(countKey(issue, name), {
-            dirty: dirtyN ?? 0,
-            ahead: aheadN ?? 0,
-            behind: behindN ?? 0,
-          });
-        }
+        const git = await port.surfaceGit(issue, name);
         const blind = blindSurfaces.has(name);
         const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
         const facts: SurfaceFacts = {
@@ -524,7 +433,7 @@ export const observeTick = async (
   await mapLimit(needsMark, CONCURRENCY, async (o) => {
     if (o.ledger.kind !== "present") return;
     const raw = comments.get(o.issue);
-    const text = raw?.kind === "present" ? joinComments(raw.value.map((c) => c.body)) : "";
+    const text = raw?.kind === "present" ? joinComments(raw.value) : "";
     const plan = extractMarker(text, "plan");
     const waitBlock = extractMarker(text, "wait");
     // **有効な人待ちだけ渡す**（判定は呼び出し側、と引数表が定めている）。
@@ -561,53 +470,7 @@ export const observeTick = async (
     );
   });
 
-  const observations = base.map((o) => ({ ...o, currentMark: marks.get(o.issue) ?? absent() }));
-
-  const titleMap = new Map<number, string>();
-  for (const [n, t] of titles) {
-    if (t.kind === "present" && t.value !== "") titleMap.set(n, t.value);
-  }
-
-  const wait = new Map<number, { question: string; since: string }>();
-  for (const n of numbers) {
-    const cs = comments.get(n);
-    if (cs === undefined || cs.kind !== "present") continue;
-    const text = joinComments(cs.value.map((c) => c.body));
-    const question = waitQuestionText(text);
-    if (question === undefined) continue;
-    const hit = cs.value.find((c) => extractMarker(c.body, "wait").kind === "present");
-    wait.set(n, { question, since: hit?.at ?? "" });
-  }
-
-  const prs = new Map<number, number>();
-  for (const o of observations) {
-    const owned = prRows.filter((p) => new RegExp(`^[^/]+/${o.issue}-`).test(p.headRef));
-    const branch = branches.get(o.issue);
-    const exact = branch === undefined ? undefined : owned.find((p) => p.headRef === branch);
-    const picked = exact ?? [...owned].sort((a, b) => a.number - b.number)[0];
-    if (picked !== undefined) prs.set(o.issue, picked.number);
-  }
-
-  const worktreesBySurface = new Map<string, number>();
-  for (const w of worktreeRows) {
-    if (w.dirty === "unreadable") continue;
-    worktreesBySurface.set(w.surface, (worktreesBySurface.get(w.surface) ?? 0) + 1);
-  }
-
-  const live: readonly LiveCheckoutRow[] = liveCheckouts(snapshot);
-
-  return {
-    observations,
-    view: {
-      titles: titleMap,
-      wait,
-      prs,
-      branches,
-      counts,
-      live,
-      worktreesBySurface,
-    },
-  };
+  return base.map((o) => ({ ...o, currentMark: marks.get(o.issue) ?? absent() }));
 };
 
 /**

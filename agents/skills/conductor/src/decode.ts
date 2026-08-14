@@ -140,12 +140,10 @@ export const worktrees = (s: Snapshot): WorktreeRow[] =>
       path: p[3] ?? "",
     }));
 
-/** `--- live checkout (面 branch dirty(0/1/-) ahead behind) ---` */
+/** `--- live checkout (面 branch dirty(0/1/-) ahead behind) ---`。決定は dirty と behind だけ読む。 */
 export type LiveCheckoutRow = {
   readonly surface: string;
-  readonly branch: string;
   readonly dirty: Tri;
-  readonly ahead: number;
   readonly behind: number;
 };
 
@@ -155,9 +153,7 @@ export const liveCheckouts = (s: Snapshot): LiveCheckoutRow[] =>
     .filter((p) => p.length >= 5)
     .map((p) => ({
       surface: p[0] ?? "",
-      branch: p[1] ?? "",
       dirty: tri(p[2] ?? "", "live checkout.dirty"),
-      ahead: Number(p[3]),
       behind: Number(p[4]),
     }));
 

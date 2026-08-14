@@ -205,29 +205,6 @@ export const waitRecord = (body: string, hasPauseRecord: boolean): WaitRecord =>
   };
 };
 
-/**
- * 盤面用の問い本文。**決定層の `WaitRecord` には載せない。**
- * 「いま待っている問い」が在ればそれを使い、無ければ yaml の `reason`。
- */
-export const waitQuestionText = (body: string): string | undefined => {
-  const rec = waitRecord(body, false);
-  if (rec.kind !== "waiting" || rec.validity.kind !== "valid") return undefined;
-  const section = /## いま待っている問い\r?\n\r?\n([\s\S]*?)(?=\r?\n## |\s*$)/.exec(body);
-  const asked = section?.[1]?.trim();
-  if (asked !== undefined && asked !== "") return asked;
-  const extracted = extractMarker(body, "wait");
-  if (extracted.kind !== "present") return undefined;
-  let parsed: unknown;
-  try {
-    parsed = parse(extracted.value);
-  } catch {
-    return undefined;
-  }
-  if (!isRecord(parsed)) return undefined;
-  const reason = parsed["reason"];
-  return typeof reason === "string" && reason.trim() !== "" ? reason.trim() : undefined;
-};
-
 /** 意図の確認。**`not-required` と推測しない**（無い / 壊れているはそのまま返す）。 */
 export const intentRecord = (body: string): IntentRecord => {
   const extracted = extractMarker(body, "intent");

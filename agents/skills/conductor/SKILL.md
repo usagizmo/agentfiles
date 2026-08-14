@@ -19,7 +19,6 @@ description: >-
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | action を実行するとき                | `references/protocols.md`（手順）・`references/harness.md`（multiplexer 操作） |
 | 人が tick の外から何か渡してきたとき | `references/intake.md`                                                         |
-| 状況ボードを引き当てるとき           | `references/score.md`                                                          |
 | tick の意味論を書き換えるとき        | 下記                                                                           |
 
 意味論を変えるなら、先にテストを変える。期待の SSOT は `test/decide.test.ts` と `test/normalize.test.ts` で、`references/scenarios.md` は同じ行 ID の解説。表だけを直しても何も変わら**ない**。
@@ -34,7 +33,7 @@ description: >-
 | 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` |
 | 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                            |
 
-自分がやるのは 5 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、状況ボードの観測外の行、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。盤面の `conflicts[]` は `cli.ts` が出す。
+自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` は `cli.ts` が出す。
 
 project 差分が無くても動く。**例外は Status の対応**で、これだけは project 必須（無ければ fail-closed で止まる）。推測が外れても待ちが伸びるだけの項目には既定値を置き、間違ったものを掴む項目には置か**ない**。
 
@@ -130,11 +129,8 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 ```bash
 bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
-  --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>... \
-  --tick-used <この tick で実行した action 数>
+  --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>...
 ```
-
-`--tick-used` を落とすと盤面の actions が常に 0。盤面 JSON と overlay の path は渡さ**ない**。読ま**ない**。譜面は `cli.ts` が書く。置き場は `references/score.md`。
 
 設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` に入れる中身は `references/harness.md`。
 
@@ -143,7 +139,7 @@ bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
 ```mermaid
 flowchart TD
     S[tick 開始] --> D[cli.ts を呼ぶ<br/>観測 → 正規化 → Decision]
-    D --> C[conflicts を状況ボードの<br/>「制約・異常」へ出す]
+    D --> C[conflicts を応答へ出す]
     C --> K{outcome の種類}
     K -->|settle-record| W[記録を精算して書く]
     W --> D
@@ -159,7 +155,7 @@ flowchart TD
 
 | `Decision`      | 何をするか                                                                                                                                                                                                                            |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `conflicts`     | 触らずに状況ボードへ出す。1 手を選べた周でもボードへ出す。応答への出し方は下の「応答に出すもの」                                                                                                                                      |
+| `conflicts`     | 触らずに応答へ出す。1 手を選べた周でも出す。出し方は下の「応答に出すもの」                                                                                                                                                            |
 | `action`        | `params` の action を `target.representative` に対して実行する（手順は `references/protocols.md` と `references/harness.md`）。**`evidence` は実行の直前に前提を引き直すため**に持たされている。成功後の周回加算は `countsEmptyCycle` |
 | `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                                                                   |
 | `idle`          | watcher を張って終える                                                                                                                                                                                                                |
@@ -171,12 +167,12 @@ flowchart TD
 | `idle` かつ `conflicts` が直前の tick と同じ | 出さない                                     |
 | それ以外                                     | outcome の行。`conflicts` の人向け説明も出す |
 
-状況ボードはどちらの段でも、観測からファイル全体を上書きする。`cli.ts` はどちらの段でも省かない。
-
 - 比較の相手は、このセッションで直前に `cli.ts` が返した JSON の `conflicts`
 - 相等は畳み後の reason + evidence + issues（順不同）
 - action の選択には使わない
 - 起動直後の最初の tick は「直前」が無いので、下の段へ倒す
+
+**自分の context の残量を制約として報告しない**。交代の契機は `references/harness.md`「交代」が持つ。
 
 **終了コードで分ける**。`1` は観測に失敗した（**直前に成功した snapshot を渡して watcher を張る**。
 取り直して張らない）。`2` は設定が壊れている（報告して止まる）。
@@ -200,7 +196,7 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 - action 上限にも数えず、観測もやり直さ**ない**
 - 次の tick でも同じ action を選び続ける
-- `cli.ts note`（`kind: env`）へ出す。**時間切れで解除しない**
+- 応答へ出す。**時間切れで解除しない**
 
 ### 記録の精算
 
@@ -253,7 +249,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 - rename した番号は、`retired-` が残っているあいだ計画が起きない。その Issue の「計画を起こす」「計画を起こし直す」は塞ぐ。物理枠の述語からは外し、「計画セッションが無い」の判定には含める
 - `runtime` には写さ**ない**（`無し` として扱う）
 - 塞ぎが解けるのは、人が pane を閉じたとき**だけ**。時間切れでも解か**ない**
-- 差し戻しの側では塞がない。出口はボードで、`retired-` が残っている Issue を「人がやること」へ出す
+- 差し戻しの側では塞がない
 - rename は失敗として数え**ない**。`resolve` には rename を適用し**ない**
 - `ledger` が `未計画` のまま片付けるなら失敗の記録を進める。**ただし `done` で閉じたときだけ**
 
@@ -266,7 +262,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 - 渡すのは、その tick が action を決めるのに使った観測。**起床側で取り直さない**
 - `--interval` / `--max` は検知の遅延の調整であって、この窓の対策では**ない**（既定は `references/harness.md`）
 - 指紋を動かす書き込みをしたら、観測からやり直す。**action に数えない書き込み**（周回・失敗の記録の精算）も含む（上限には数えないまま）
-- 指紋に入らない出力は含め**ない**（状況ボードは譜面か応答）
+- 指紋に入らない出力は含め**ない**
 - 観測できなかった tick も張る。渡すのは直前に成功した snapshot（`--snapshot` は失敗しても既存の file を壊さない）。**取り直さない**
 - 張らずに終えてよいのは、一度も観測に成功していないときだけ（起動直後）。**渡せる baseline が無いので報告して止まる**
 
@@ -290,7 +286,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 
 snapshot の取り方は harness 依存（`references/harness.md`）。
 
-**rate limit でも観測項目を間引かない**。縮退は backoff（間隔を空けて、全項目を取り直す）。観測できていないことは状況ボードに出す。
+**rate limit でも観測項目を間引かない**。縮退は backoff（間隔を空けて、全項目を取り直す）。
 
 ## 資源
 
@@ -310,7 +306,7 @@ snapshot の取り方は harness 依存（`references/harness.md`）。
 - `人待ち` は merge の枠も返す（回収の表）。**`休止` は merge の枠の条件に足さない**
 - 記録が `cleared` になった課題・休止の記録を消した課題には、**write を渡し直す**。交差していれば「予定範囲を超えたとき」の後発として休止させる
 
-**容量だけは目安で、超えても止めない**。新しい checkout を伴う action だけ控え、既存の課題を進める action は選び続け、超過は状況ボードに出す。`退避先` が返すのは論理 lease だけで、容量は占有したまま。
+**容量だけは目安で、超えても止めない**。新しい checkout を伴う action だけ控え、既存の課題を進める action は選び続ける。`退避先` が返すのは論理 lease だけで、容量は占有したまま。
 
 計画枠は人待ちでも返らない。空くのはセッションが消えたか rename されたときだけ（「計画セッションを片付ける」がその行）。
 
@@ -367,7 +363,7 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 
 置き場は固定 marker のコメント（`references/issue-contract.md`）。**指紋に入らない形に置かない。**
 
-**時間切れで解除しない**。状況ボードへ出し続ける（誰が止めているか・いつから・何を待っているか・人がどう解除できるか）。人が直接走らせた課題は止められない。
+**時間切れで解除しない**。人が直接走らせた課題は止められない。
 
 ### 予定範囲を超えたとき
 
@@ -481,7 +477,7 @@ Status は claim から着地まで単調に進む。戻すのは 5 事象だけ
 5. `Depends on #N` の依存がすべて解消している
 6. 着地面が解決できる（宣言された面が project 差分の座標表にあり、group の成員全員で同じ集合。`references/landing-surface.md` と `references/same-branch.md`）
 
-**claim 済みの判定は記録と remote branch**。branch 名には番号が 1 つしか入らないので、記録の `members` と「同じ group の代表が claim されている」も見る（group は `src/decide.ts` の `buildGroups`）。**`alsoResolves` では判定しない**（加入の実体は記録の `members`。`same-branch.md`）。
+**claim 済みの判定は記録と remote branch**。branch 名には番号が 1 つしか入らないので、記録の `members` と「同じ group の代表が claim されている」も見る（group は `src/decide.ts` の `buildGroups`）。**`alsoResolves` では判定しない**（加入の実体は記録の `members`。`references/same-branch.md`）。
 
 ### claim の構造的な停止
 
@@ -533,23 +529,3 @@ branch 名は `{prefix}/{Issue 番号}-{slug}`（prefix の既定は `feat` / `f
 **全着地面で同じ名前を使う**（片付けと容量の帰属が名前から引かれる）。
 
 選んだ後の手順は `references/protocols.md`（順序・部分失敗の扱い・base の取り方）。
-
-## 状況ボード
-
-**1 つの譜面を更新し続ける**。ユーザーがそれを見れば、今どの worktree で何が起きているかが分かる状態にする。
-
-**自分の context の残量を制約として報告しない**（ボードにも応答にも）。交代の契機は `references/harness.md`「交代」が持つ。
-
-毎 tick、観測からファイル全体を上書きする。**HTML を書かない**。盤面 JSON を読まない。構造は `cli.ts` が書く。形の SSOT は `references/board.md`、投影は `src/board.ts`。描画は `assets/board.html`。置き場は `references/score.md`。
-
-観測から決まる `humanTodo` はテンプレ。wait の問いは記録本文をそのまま使う。言い換えない。
-
-観測外の行（実行環境の拒否・intake）と実行結果は `cli.ts` の事実コマンド。JSON を編集し**ない**。観測から出る Conflict・退避先・入場宣言・retired は書か**ない**。載せ先は `humanTodo[]` で、`conflicts[]` ではない。形と解除は `references/board.md`。
-
-```bash
-bun run <skill>/src/cli.ts note --title ... --detail ... --unblocks ... --kind env
-bun run <skill>/src/cli.ts clear --id <id>
-bun run <skill>/src/cli.ts result --status ok
-```
-
-`note` は id を 1 行返す。解けるまで消さ**ない**。`result` は action を実行した直後。idle では呼ばない。履歴は判断の入力にしない。

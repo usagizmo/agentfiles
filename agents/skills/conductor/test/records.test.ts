@@ -13,7 +13,6 @@ import {
   readyRecord,
   reportRecord,
   retryRecord,
-  waitQuestionText,
   waitRecord,
   yieldRecord,
 } from "../src/records.ts";
@@ -129,15 +128,6 @@ describe("人待ちの記録", () => {
 
   test("state が 2 値のどちらでもなければ broken", () => {
     expect(waitRecord(wrap("wait", "state: done"), false).kind).toBe("broken");
-  });
-
-  test("盤面の問いは「いま待っている問い」を優先し、無ければ reason", () => {
-    const withSection = `${wrap("wait", "state: waiting\nissues: [1]\nreason: 短い")}\n## いま待っている問い\n\n戻し先はどれか\n\n## 決着した問答\n`;
-    expect(waitQuestionText(withSection)).toBe("戻し先はどれか");
-    expect(waitQuestionText(wrap("wait", "state: waiting\nissues: [1]\nreason: 短い"))).toBe(
-      "短い",
-    );
-    expect(waitQuestionText(wrap("wait", "state: waiting\nissues: [1]"))).toBeUndefined();
   });
 });
 

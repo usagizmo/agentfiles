@@ -71,11 +71,11 @@ landing: [o/control]
 
 <!-- /claim -->`;
 
-const comment = (body: string, at = "2026-08-12T00:00:00Z") => present([{ body, at }]);
+const comment = (body: string) => present([body]);
 
 const observe = async (
   ...args: Parameters<typeof observeTick>
-): Promise<readonly IssueObservation[]> => (await observeTick(...args)).observations;
+): Promise<readonly IssueObservation[]> => observeTick(...args);
 
 const port = (over: Partial<ObservePort> = {}): ObservePort => ({
   snapshot: async () => SNAP,
@@ -84,7 +84,6 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
       [12, present("Depends on #34\nSame branch as #99\n\n本文")],
       [34, present("本文")],
     ]),
-  issueTitles: async () => new Map(),
   issueComments: async () =>
     new Map([
       [12, comment(claimComment)],

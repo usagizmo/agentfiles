@@ -211,7 +211,7 @@ export type Evidence = {
   readonly runtime: Runtime;
   readonly capacity: Capacity;
   readonly ledger: Ledger;
-  /** その action を選んだ理由。状況ボードの「この tick の action」がそのまま読む */
+  /** その action を選んだ理由。実行の直前に前提を引き直すため */
   readonly why: string;
 };
 

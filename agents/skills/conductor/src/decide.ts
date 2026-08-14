@@ -367,7 +367,7 @@ const alreadyClaimed = (g: Group): boolean =>
     (o) => o.claimRecord.kind === "present" || value(o.claimBranchExists) === true,
   );
 
-/** 盤面の `limits[]` と選出が同じ数え方をする。**式を盤面側で書き直さない。** */
+/** 選出が使う数え方。容量・計画枠・在庫の上限判定が同じ式を引く。 */
 export const usageOf = (
   observations: readonly IssueObservation[],
 ): { readonly worktrees: number; readonly planSlotsUsed: number; readonly readyStock: number } => {

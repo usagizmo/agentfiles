@@ -274,7 +274,7 @@ MODE=snapshot
 if [ -n "$BASELINE_IN" ]; then
   MODE=watch
   # **読めない・空の baseline は起動を止める。**自分で取り直す側へ倒すと、tick の観測との
-  # 隙間が窓になる（mode を分けているのはこのため）。止まれば状況ボードに出る。
+  # 隙間が窓になる（mode を分けているのはこのため）。止まれば応答に出る。
   [ -f "$BASELINE_IN" ] || { echo "baseline not found: $BASELINE_IN" >&2; exit 2; }
   [ -s "$BASELINE_IN" ] || { echo "baseline is empty: $BASELINE_IN" >&2; exit 2; }
 fi
@@ -595,7 +595,7 @@ SNAP
 # `set -m` で background job を group leader にし、`kill -- -$pid` で group 全体へ送る。
 #
 # **deadline を `--max` の残り時間で頭打ちにしない。**そうすると境界のラウンドが健全でも殺され、
-# 「観測不能・backoff 中」と誤って報告される（状況ボードに嘘の異常が出る）。
+# 「観測不能・backoff 中」と誤って報告される（応答に嘘の異常が出る）。
 # fallback が最大 `--deadline` だけ遅れるのは許容する（1800 秒に対する 90 秒）。
 CHILD_PGID=''
 

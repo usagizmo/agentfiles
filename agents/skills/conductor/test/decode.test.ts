@@ -92,10 +92,8 @@ describe("行の decode", () => {
     ).toThrow(SnapshotDecodeError);
   });
 
-  test("live checkout の ahead / behind を読む", () => {
-    expect(liveCheckouts(snap)).toEqual([
-      { surface: "skills", branch: "main", dirty: false, ahead: 0, behind: 3 },
-    ]);
+  test("live checkout の dirty / behind を読む", () => {
+    expect(liveCheckouts(snap)).toEqual([{ surface: "skills", dirty: false, behind: 3 }]);
   });
 
   test("project status はボード順を index として保つ", () => {
