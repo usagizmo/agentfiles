@@ -24,9 +24,11 @@ import {
   settledSubmitted,
 } from "./normalize.ts";
 import type {
+  ActionName,
   ActionParams,
   Conflict,
   Decision,
+  LeaseKind,
   Ledger,
   NormalizedIssue,
   Observed,
@@ -204,6 +206,53 @@ const target = (g: Group): Target => ({ representative: g.representative, member
 
 const TERMINAL: readonly Progress[] = ["着地済み", "取り下げ"];
 const WRITE_STAGES: readonly Progress[] = ["準備済み", "実装中", "提出中"];
+/** write を渡す周。`準備中` は保持しないが周には入る（行 10q）。 */
+const WRITE_PASS_STAGES: readonly Progress[] = ["準備中", "準備済み", "実装中", "提出中"];
+const RESTART_ACTIONS: readonly ActionName[] = [
+  "claim する",
+  "解決を起こし直す",
+  "計画を起こす",
+  "計画を起こし直す",
+];
+
+export type EmptyCycleInput = {
+  readonly action: ActionName;
+  readonly lease?: LeaseKind;
+  readonly progress: Progress;
+  readonly checks: Observed<{ readonly running: number; readonly green: boolean }>;
+};
+
+const emptyCycleKind = (input: EmptyCycleInput): "write" | "restart" | undefined => {
+  if (input.action === "枠を渡す" && input.lease !== "integration") return "write";
+  if (RESTART_ACTIONS.includes(input.action)) return "restart";
+  return undefined;
+};
+
+/**
+ * `着地待ち` と、実行中の checks がある `提出中` を外す。
+ * **`提出中` を無条件では外さない** —— checks が 0 件の `提出中` は待ちではなく詰まり。
+ */
+const excludedFromEmptyCycle = (input: EmptyCycleInput): boolean => {
+  if (input.progress === "着地待ち") return true;
+  if (input.progress === "提出中") {
+    return input.checks.kind === "present" && input.checks.value.running > 0;
+  }
+  return false;
+};
+
+/**
+ * 回すことに成功したあと、周回の記録の `count` を +1 するか。
+ * 指紋の一致と成功は呼び出し側（`protocols.md` の更新順）が見る。
+ *
+ * 除外は write を渡す周と起こす周の**どちらにも**掛かる。write 側だけに縮めると
+ * 行 10f6 / 10g2 が落ちる。
+ */
+export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
+  const kind = emptyCycleKind(input);
+  if (kind === undefined) return false;
+  if (kind === "write" && !WRITE_PASS_STAGES.includes(input.progress)) return false;
+  return !excludedFromEmptyCycle(input);
+};
 
 /** group 内で終端と非終端が混在しているか。共有実体をどちらに倒しても壊れる。 */
 const terminalMixedInGroup = (g: Group): boolean => {
@@ -887,10 +936,17 @@ export const decide = (input: TickInput): Decision => {
         for (const n of g.members) excluded.add(n);
         continue;
       }
+      const params = rung.params(g, ctx);
       return decision({
         kind: "action",
-        params: rung.params(g, ctx),
+        params,
         target: target(g),
+        countsEmptyCycle: countsEmptyCycle({
+          action: params.action,
+          ...(params.action === "枠を渡す" ? { lease: params.lease } : {}),
+          progress: g.lead.progress,
+          checks: g.leadObservation.checks,
+        }),
         evidence: {
           progress: g.lead.progress,
           runtime: g.lead.runtime,

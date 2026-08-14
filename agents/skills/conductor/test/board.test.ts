@@ -47,6 +47,7 @@ describe("tick.why", () => {
       kind: "action",
       params: { action: "claim する" },
       target: { representative: 1, members: [1] },
+      countsEmptyCycle: true,
       evidence: {
         progress: "未着手",
         runtime: "無し",
@@ -86,6 +87,7 @@ describe("toBoard", () => {
         kind: "action",
         params: { action: "checks を引き直させる" },
         target: { representative: 3, members: [3] },
+        countsEmptyCycle: false,
         evidence: {
           progress: "提出中",
           runtime: "待機",

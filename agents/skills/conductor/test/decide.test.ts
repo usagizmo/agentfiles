@@ -34,6 +34,12 @@ const expectIdle = (observations: readonly IssueObservation[]) => {
   expect(o.kind === "action" ? o.params.action : o.kind).toBe("idle");
 };
 
+/** 加算は `decide()` が出した `countsEmptyCycle` で引く。 */
+const expectEmptyCycle = (observations: readonly IssueObservation[], counts: boolean) => {
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.countsEmptyCycle : o.kind).toBe(counts);
+};
+
 /** **Conflict は action の選択と直交する。**出ていることだけを見る。 */
 const expectConflict = (observations: readonly IssueObservation[], reason: ConflictReason) => {
   expect(tick(observations).conflicts.map((c) => c.reason)).toContain(reason);
@@ -675,24 +681,41 @@ describe("外から状態が動く", () => {
   });
 
   test("10f: 提出中 × 待機 で checks が実行中", () => {
-    expectLease(
-      [
-        implementing({
-          openPr: present(true),
-          checks: present({ running: 2, green: false }),
-          intentRecord: intent.confirmed,
-          session: session.idle,
-        }),
-      ],
-      "write",
-    );
+    const obs = [
+      implementing({
+        openPr: present(true),
+        checks: present({ running: 2, green: false }),
+        intentRecord: intent.confirmed,
+        session: session.idle,
+      }),
+    ];
+    expectLease(obs, "write");
+    expectEmptyCycle(obs, false);
+  });
+
+  test("10f6: 提出中 × 無し で checks が実行中。セッションは死んでいる", () => {
+    const obs = [
+      implementing({
+        openPr: present(true),
+        checks: present({ running: 2, green: false }),
+        intentRecord: intent.confirmed,
+        session: session.none,
+      }),
+    ];
+    expectAction(obs, "解決を起こし直す");
+    expectEmptyCycle(obs, false);
   });
 
   test("10g: 着地待ち で渡しの記録を持ったまま 待機", () => {
-    expectLease(
-      [awaitingLanding({ integrationRecordCount: present(1), session: session.idle })],
-      "integration",
-    );
+    const obs = [awaitingLanding({ integrationRecordCount: present(1), session: session.idle })];
+    expectLease(obs, "integration");
+    expectEmptyCycle(obs, false);
+  });
+
+  test("10g2: 着地待ち で渡しの記録を持ったままセッションが消えた", () => {
+    const obs = [awaitingLanding({ integrationRecordCount: present(1), session: session.none })];
+    expectAction(obs, "解決を起こし直す");
+    expectEmptyCycle(obs, false);
   });
 
   test("10h: セッションが死んでは起こし直されるのを繰り返している", () => {
@@ -831,15 +854,14 @@ describe("外から状態が動く", () => {
   });
 
   test("10i: refine が閉じられては起こし直されるが、本文も ledger も動いていない", () => {
-    expectAction(
-      [
-        observation({
-          ledger: present("未計画"),
-          cycleRecord: present({ count: 1, mark: "mark-0" }),
-        }),
-      ],
-      "計画を起こす",
-    );
+    const obs = [
+      observation({
+        ledger: present("未計画"),
+        cycleRecord: present({ count: 1, mark: "mark-0" }),
+      }),
+    ];
+    expectAction(obs, "計画を起こす");
+    expectEmptyCycle(obs, true);
   });
 
   test("10m: 人待ちのまま起こし直しを繰り返し、成果が何も出ていない", () => {
@@ -864,7 +886,9 @@ describe("外から状態が動く", () => {
   });
 
   test("10o: セッションが無い状態から起こして成功した。指紋は不変", () => {
-    expectAction([implementing({ session: session.none })], "解決を起こし直す");
+    const obs = [implementing({ session: session.none })];
+    expectAction(obs, "解決を起こし直す");
+    expectEmptyCycle(obs, true);
   });
 
   test("10p: count が上限に達した後、新規 commit 無しに 提出中 へ進んだ", () => {
@@ -882,23 +906,24 @@ describe("外から状態が動く", () => {
   });
 
   test("10q: 準備中 のまま枠を渡すが成功し続け、計画コメントも commit も出ない", () => {
-    expectLease(
-      [
-        observation({
-          ledger: present("進行中"),
-          claimBranchExists: present(true),
-          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
-          surfaces: [surface({ hasCheckout: present(true) })],
-          planCommentExists: present(true),
-          session: session.idle,
-        }),
-      ],
-      "write",
-    );
+    const obs = [
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
+        surfaces: [surface({ hasCheckout: present(true) })],
+        planCommentExists: present(true),
+        session: session.idle,
+      }),
+    ];
+    expectLease(obs, "write");
+    expectEmptyCycle(obs, true);
   });
 
   test("10s: 未着手 から claim する。branch も worktree もまだ無い", () => {
-    expectAction([observation({ ledger: present("計画済み") })], "claim する");
+    const obs = [observation({ ledger: present("計画済み") })];
+    expectAction(obs, "claim する");
+    expectEmptyCycle(obs, true);
   });
 
   test("10t: 問いの空な waiting を書いては止まる往復", () => {

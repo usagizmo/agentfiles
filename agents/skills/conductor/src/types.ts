@@ -157,6 +157,8 @@ export type Outcome =
       readonly params: ActionParams;
       readonly target: Target;
       readonly evidence: Evidence;
+      /** 回すことに成功し、指紋が一致していたら周回の `count` を +1 するか */
+      readonly countsEmptyCycle: boolean;
     }
   | { readonly kind: "settle-record"; readonly settlement: Settlement }
   | { readonly kind: "constraint"; readonly constraint: ConstraintKind; readonly detail: string }
