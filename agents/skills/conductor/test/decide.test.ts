@@ -660,6 +660,20 @@ describe("外から状態が動く", () => {
     );
   });
 
+  test("9s: 提出中 で SUCCESS と SKIPPED だけなら緑なので引き直させない", () => {
+    expectLease(
+      [
+        implementing({
+          openPr: present(true),
+          checks: present({ running: 0, green: true }),
+          intentRecord: intent.confirmed,
+          session: session.idle,
+        }),
+      ],
+      "write",
+    );
+  });
+
   test("10f: 提出中 × 待機 で checks が実行中", () => {
     expectLease(
       [

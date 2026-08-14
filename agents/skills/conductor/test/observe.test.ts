@@ -18,8 +18,8 @@ ${SNAPSHOT_SCHEMA}
 --- default ---
 abc123
 --- landing tips ---
-o/control def456
-o/other 111222
+o/control origin/main def456
+o/other refs/heads/main 111222
 --- landing local branches ---
 o/control feat/12-x aaa
 o/other feat/12-x bbb
@@ -46,7 +46,7 @@ ws-old /tmp/wt/feat-34-y
 --- recent issue comments ---
 900 2026-08-12T00:00:00Z claim
 --- PRs ---
-7 feat/12-x OPEN draft=false checks=SUCCESS
+7 feat/12-x OPEN draft=false checks=SUCCESS@2026-08-12T00:00:00Z@lint
 `;
 
 const STATUS: StatusMap = new Map<string, Ledger>([
@@ -116,22 +116,20 @@ const find = (rows: readonly IssueObservation[], n: number): IssueObservation =>
 };
 
 describe("snapshot から導くもの", () => {
-  test("SUCCESS と SKIPPED だけの checks は緑", async () => {
-    const snap = SNAP.replace("checks=SUCCESS", "checks=SUCCESS,SKIPPED");
-    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
-    expect(find(rows, 12).checks).toEqual(present({ running: 0, green: true }));
-    const prSurface = find(rows, 12).surfaces.find((s) => s.usesPr);
-    expect(prSurface?.landable).toEqual(present(true));
-  });
-
   test("SUCCESS と NEUTRAL だけの checks は緑", async () => {
-    const snap = SNAP.replace("checks=SUCCESS", "checks=NEUTRAL,SUCCESS");
+    const snap = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=NEUTRAL@2026-08-12T00:00:00Z@audit|SUCCESS@2026-08-12T00:00:00Z@lint",
+    );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).checks).toEqual(present({ running: 0, green: true }));
   });
 
   test("CANCELLED を含む checks は緑にしない", async () => {
-    const snap = SNAP.replace("checks=SUCCESS", "checks=SUCCESS,CANCELLED");
+    const snap = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint|CANCELLED@2026-08-12T00:00:00Z@Preview DB",
+    );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).checks).toEqual(present({ running: 0, green: false }));
     const prSurface = find(rows, 12).surfaces.find((s) => s.usesPr);
@@ -375,6 +373,27 @@ keys: [skills]
     const dirty = SNAP.replace("o/control main 0 0 0", "o/control main 1 0 0");
     const rows = await observe(port({ snapshot: async () => dirty }), STATUS, SURFACES);
     expect(find(rows, 12).surfaces[0]?.liveCheckoutHealthy).toEqual(present(false));
+  });
+
+  test("SKIPPED を含む checks は緑で、面の着地してよいと同じ値を読む", async () => {
+    const mixed = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint|SKIPPED@2026-08-12T00:00:00Z@Preview DB",
+    );
+    const rows = await observe(port({ snapshot: async () => mixed }), STATUS, SURFACES);
+    const twelve = find(rows, 12);
+    expect(twelve.checks).toEqual(present({ running: 0, green: true }));
+    const control = twelve.surfaces.find((s) => s.name === "o/control");
+    expect(control?.landable).toEqual(present(true));
+  });
+
+  test("IN_PROGRESS だけでも実行中として残る", async () => {
+    const pending = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=IN_PROGRESS@2026-08-12T01:00:00Z@Root gate (drift)",
+    );
+    const rows = await observe(port({ snapshot: async () => pending }), STATUS, SURFACES);
+    expect(find(rows, 12).checks).toEqual(present({ running: 1, green: false }));
   });
 });
 

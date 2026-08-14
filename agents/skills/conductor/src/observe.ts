@@ -30,6 +30,7 @@ import {
 } from "./records.ts";
 import { CONCURRENCY, mapLimit } from "./limit.ts";
 import { normalizeProgress } from "./normalize.ts";
+import { classifyChecks } from "./checks.ts";
 import { deriveSurface } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
 import type { Ledger, Observed, Progress } from "./types.ts";
@@ -418,7 +419,7 @@ export const observeTick = async (
           checksGreen:
             pr === undefined || pr.checks === "untracked"
               ? absent()
-              : present(rollupChecks(pr.checks).green),
+              : present(classifyChecks(pr.checks).green),
         };
         return deriveSurface(facts, report);
       }),
@@ -607,17 +608,6 @@ const snapshotHasClaimBranch = (
     new RegExp(`^origin/[^/]+/${issue}-`).test(b),
   );
 
-const CHECK_RUNNING = new Set(["PENDING", "IN_PROGRESS", "QUEUED"]);
-/** cancel は入れない。全部 cancel を待ちと読むと引き直しが消える。 */
-const CHECK_GREEN = new Set(["SUCCESS", "SKIPPED", "NEUTRAL"]);
-
-export const rollupChecks = (
-  checks: readonly string[],
-): { readonly running: number; readonly green: boolean } => ({
-  running: checks.filter((c) => CHECK_RUNNING.has(c)).length,
-  green: checks.length > 0 && checks.every((c) => CHECK_GREEN.has(c)),
-});
-
 const checksOf = (
   prs: ReturnType<typeof pullRequests>,
   issue: number,
@@ -626,5 +616,5 @@ const checksOf = (
   if (pr === undefined) return absent();
   // **追跡していない PR の checks を「無し」と読まない。**
   if (pr.checks === "untracked") return unobservable("追跡していない PR");
-  return present(rollupChecks(pr.checks));
+  return present(classifyChecks(pr.checks));
 };

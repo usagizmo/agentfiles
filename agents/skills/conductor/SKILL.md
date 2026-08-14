@@ -26,13 +26,13 @@ description: >-
 
 触る関数の周りだけを読ま**ない**。規則の理由は doc comment にあり、述語の理由は関数の直上、順序と単位の理由は `LADDER` と `Rung` の定義側にある。
 
-| 変えるもの          | 全文を読むファイル                                      |
-| ------------------- | ------------------------------------------------------- |
-| 正規化              | `src/normalize.ts` + `references/tick.md`               |
-| action の選択・順序 | `src/decide.ts` + `references/tick.md`                  |
-| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`          |
-| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `scripts/watch.sh` |
-| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`   |
+| 変えるもの          | 全文を読むファイル                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| 正規化              | `src/normalize.ts` + `references/tick.md`                                                        |
+| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                           |
+| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                   |
+| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` |
+| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                            |
 
 自分がやるのは 5 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、状況ボードの観測外の行、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。盤面の `conflicts[]` は `cli.ts` が出す。
 
@@ -120,7 +120,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 コードに無い規約:
 
-- checks の緑は `src/observe.ts` の `rollupChecks`。JSON の欄は `scripts/watch.sh`。`mergeStateStatus` で代用し**ない**
+- checks の緑は `src/checks.ts` の `classifyChecks`。抽出は `scripts/pr-list.jq`。`mergeStateStatus` で代用し**ない**
 - 人待ちの SSOT は Issue の記録であって、multiplexer の印では**ない**。**印と記録が食い違ったら記録が正**。印だけの判定は `src/normalize.ts` の `collectConflicts`
 - `計画中` を `progress` に置か**ない**
 - 容量を数えるのは `あり` だけ。`prunable` は片付けの対象だが枠は食っていない。branch を `capacity` に入れ**ない**
@@ -294,7 +294,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 
 - worktree が prepare を抜けたかは 0 か 1 に丸める。読めなかったときの `-` は 3 つ目の値で、clean へ**畳まない**
 - 正規化で同じ値になるものは、指紋でも同じ文字列に畳む。**意味が違うものは畳まない**（`稼働中` と人待ちの手掛かり、セッションの `done` と `idle`）
-- 同じ項目を、遷移を駆動しうる部分集合へ絞る（追跡していない PR の checks）。判定を branch 名の形だけで行うこと・判定できないものは残す側（fail-open）へ倒すことは `scripts/watch.sh` が持つ
+- 同じ項目を、遷移を駆動しうる部分集合へ絞る（追跡していない PR の checks）。判定を branch 名の形だけで行うこと・判定できないものは残す側（fail-open）へ倒すことは `scripts/pr-list.jq` が持つ
 - 先発判定の 2 段目（作業量）は入れ**ない**。値は action が読む
 - 自分の状態は落とし、**存在は残す**（多重起動の判定に要る）
 

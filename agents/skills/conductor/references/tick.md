@@ -12,7 +12,7 @@ group を 1 レコードに畳まない: 一部だけ計画済みの group は `
 
 worktree の有無を見ない: 有無を入れると、着地待ちの worktree が消えた瞬間に `未着手` へ退行し、着地済みの課題を未着手として選び直す。dirty は別で、worktree ごと消えたならその実装は失われているので `準備済み` へ戻るのが正しい。
 
-checks の緑を自前で畳まない: `statusCheckRollup` には結果の入る欄が違う 2 種類が混ざり（`CheckRun` は `conclusion`、外部サービスの `StatusContext` は `state` で `conclusion` は常に `null`）、`conclusion` だけを見ると外部サービスの成功が「実行中」に化ける。cancel を緑にすると、全部 cancel の `提出中` が待ちになり「checks を引き直させる」が消える。
+checks の緑は `classifyChecks` だけが出す: `statusCheckRollup` には結果の入る欄が違う 2 種類が混ざる（`CheckRun` は `conclusion` / `status`、外部サービスの `StatusContext` は `state` で `conclusion` は常に `null`）。`status` を落とすと実行中の CheckRun が空になり、`running === 0` に見える。条件付きで飛ばす check を未完了に倒すと、それが混ざる PR は永久に `着地待ち` へ上がらない。抽出は `scripts/pr-list.jq`、畳みと緑は `src/checks.ts`。
 
 `mergeStateStatus` で代用しない: `CLEAN` は checks 以外（衝突・必須レビュー・default への追随）まで含むので、default が動くたびに `BEHIND` へ落ちて `着地待ち` から外れる。追随は渡された後にやる契約なので、渡す前に要求すると誰も受け手になれない。
 

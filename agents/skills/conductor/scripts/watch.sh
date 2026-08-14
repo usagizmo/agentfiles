@@ -290,6 +290,7 @@ done
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 QUERY_FILE="$DIR/project-status.graphql"
 [ -f "$QUERY_FILE" ] || { echo "not found: $QUERY_FILE" >&2; exit 2; }
+[ -f "$DIR/pr-list.jq" ] || { echo "not found: $DIR/pr-list.jq" >&2; exit 2; }
 
 # 起動のたびに使い捨てる。**外へ残すのは `--snapshot` で明示的に指定された path だけ**
 # （呼び出し側がその file の寿命を持ち、次の起動で baseline として渡す）。
@@ -366,13 +367,11 @@ snapshot() {
   # 瞬間、その課題だけ `提出中` → `着地待ち` が永久に起きなくなる。
   # **判定できないものは残す側（fail-open）へ倒す** —— `headRefName` が取れないときは追跡中として
   # 扱い、checks をそのまま指紋へ入れる。
-  prs=$(gh pr list --repo "$GH_REPO" --state open --limit "$PR_LIMIT" \
-    --json number,headRefName,state,isDraft,statusCheckRollup --jq '
-      .[] | . as $p
-      | ($p.headRefName != null and (($p.headRefName | test("^[^/]+/[0-9]+-")) | not)) as $untracked
-      | "\($p.number) \($p.headRefName) \($p.state) draft=\($p.isDraft) checks=\(
-          if $untracked then "untracked"
-          else ([$p.statusCheckRollup[]? | (.conclusion // .state)] | sort | join(",")) end)"') || return 1
+  # **畳みと分類は `src/checks.ts`。**ここは identity と status を落とさずに出す。
+  # CheckRun の実行中は `status` を読まないと空になり、pending が消える。
+  prs_json=$(gh pr list --repo "$GH_REPO" --state open --limit "$PR_LIMIT" \
+    --json number,headRefName,state,isDraft,statusCheckRollup) || return 1
+  prs=$(printf '%s' "$prs_json" | jq -r -f "$DIR/pr-list.jq") || return 1
   pr_count=$(printf '%s' "$prs" | grep -c . || true)
   if [ "$pr_count" -ge "$PR_LIMIT" ]; then
     echo "[watch] open PR が --pr-limit ${PR_LIMIT} に達した: 一覧が不完全なのでこのラウンドを捨てる" >&2
@@ -555,12 +554,12 @@ snapshot() {
   require_nonempty worktrees "$worktrees" || return 1
 
   # **節の集合と並びは実質 API。**読む側（`src/decode.ts`）が節の欠落を fail-closed で
-  # 弾けるよう版数を先頭に置く。**節を足す・消す・名前を変えたら上げる** —— 上げずに変えると、
-  # 読む側は古い形のつもりで新しい出力を解釈し、欠けた節を「値が無い」と読む。
+  # 弾けるよう版数を先頭に置く。**節を足す・消す・名前を変えたら上げる。行の形を変えたときも上げる** ——
+  # 上げずに変えると、読む側は古い形のつもりで新しい出力を解釈し、欠けた節を「値が無い」と読む。
   # baseline との比較は全文の digest なので、定数行が 1 本増えても差分の意味は変わらない。
   cat <<SNAP
 --- schema ---
-1
+2
 --- default ---
 $default
 --- landing tips ---
