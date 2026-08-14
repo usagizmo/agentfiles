@@ -9,6 +9,7 @@ import {
   extractMarker,
   intentRecord,
   integrationRecord,
+  integrationRecordCount,
   readyRecord,
   reportRecord,
   retryRecord,
@@ -16,6 +17,7 @@ import {
   waitRecord,
   yieldRecord,
 } from "../src/records.ts";
+import { present } from "../src/types.ts";
 
 const wrap = (marker: string, yaml: string) =>
   `本文\n\n<!-- ${marker} -->\n\n\`\`\`yaml\n${yaml}\n\`\`\`\n\n<!-- /${marker} -->\n`;
@@ -187,6 +189,16 @@ describe("提出と在庫と枠", () => {
   test("integration は pr が無くても読める（PR を使う面が無い課題）", () => {
     const r = integrationRecord(wrap("integration", "issues: [1]"));
     expect(r).toEqual({ kind: "present", value: { issues: [1], pr: null } });
+  });
+
+  test("integration の件数は 2 つを 0 に畳まない", () => {
+    const one = wrap("integration", "issues: [1]");
+    expect(integrationRecordCount("")).toEqual(present(0));
+    expect(integrationRecordCount(one)).toEqual(present(1));
+    expect(integrationRecordCount(one + one)).toEqual(present(2));
+    expect(
+      integrationRecordCount("<!-- integration -->\nただの文\n<!-- /integration -->").kind,
+    ).toBe("invalid");
   });
 });
 

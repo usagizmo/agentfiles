@@ -25,7 +25,7 @@ export const holdsWrite = (r: NormalizedIssue): boolean => {
  * （`着地待ち` に居なくてよい —— 追随中の `提出中` を含む）。
  */
 export const holdsIntegration = (o: IssueObservation): boolean =>
-  (value(o.integrationRecordCount) ?? 0) >= 1;
+  o.integrationRecordCount.kind !== "present" || o.integrationRecordCount.value >= 1;
 
 /** 交差の判定は 3 値。**`unknown` は `incompatible` として扱う。** */
 export type Compatibility = "compatible" | "incompatible" | "unknown";

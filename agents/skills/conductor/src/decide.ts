@@ -358,7 +358,10 @@ const hasArtifacts = (g: Group): boolean =>
 // 選出
 // ---------------------------------------------------------------------------
 
-/** **claim 済みの判定は 4 通り**。branch 名には番号が 1 つしか入らないので 1 つでは漏れる。 */
+/**
+ * claim 済みか。記録か remote branch のどれか 1 つ。
+ * 成員と代表は `buildGroups` が同じ group に載せているので、ここで辿り直さない。
+ */
 const alreadyClaimed = (g: Group): boolean =>
   g.observations.some(
     (o) => o.claimRecord.kind === "present" || value(o.claimBranchExists) === true,

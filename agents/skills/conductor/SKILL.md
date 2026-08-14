@@ -481,12 +481,7 @@ Status は claim から着地まで単調に進む。戻すのは 5 事象だけ
 5. `Depends on #N` の依存がすべて解消している
 6. 着地面が解決できる（宣言された面が project 差分の座標表にあり、group の成員全員で同じ集合。`references/landing-surface.md` と `references/same-branch.md`）
 
-**claim 済みの判定は 4 通りある**。branch 名には番号が 1 つしか入らないので、1 つだけでは漏れる。
-
-- claim の記録の `members` に含まれている
-- その Issue 番号の remote branch がある（**実体の有無は問わない**。実体が無いものは「起こし直す」が扱う）
-- 計画コメントの `alsoResolves` に番号が含まれている。**セッションの生死で判定しない**
-- 同じ group の代表が claim されている
+**claim 済みの判定は記録と remote branch**。branch 名には番号が 1 つしか入らないので、記録の `members` と「同じ group の代表が claim されている」も見る（group は `src/decide.ts` の `buildGroups`）。**`alsoResolves` では判定しない**（加入の実体は記録の `members`。`same-branch.md`）。
 
 ### claim の構造的な停止
 

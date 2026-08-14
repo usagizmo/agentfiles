@@ -53,17 +53,7 @@ export const surfaceReported = (
   return present(recorded !== undefined && recorded === current);
 };
 
-/**
- * 面の型ごとの着地の条件。
- *
- * | 面の型          | 着地した                          | 着地してよい               |
- * | --------------- | --------------------------------- | -------------------------- |
- * | PR を使う面     | PR が `merged`                    | open PR があり checks が緑 |
- * | PR を使わない面 | commit があり、その面が提出済み   | 同じ（2 つが一致する）     |
- *
- * **PR を使わない面で merge を条件にしない** —— push も merge も人の領分なので、
- * 条件にすると人が動かすまで終端に到達せず、worktree が枠を焼き続ける。
- */
+/** 面の型ごとの着地の条件は `references/landing-surface.md`。ここに写さない。 */
 export const deriveSurface = (
   f: SurfaceFacts,
   report: Observed<ReportRecord>,

@@ -9,7 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { normalize, normalizeProgress } from "../src/normalize.ts";
-import { holdsWrite } from "../src/resources.ts";
+import { holdsIntegration, holdsWrite } from "../src/resources.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { Capacity, ConflictReason, Ledger, Progress, Runtime } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
@@ -822,6 +822,14 @@ describe("merge の直列化（integration）", () => {
       observation({ ledger: present("進行中"), integrationRecordCount: present(2) }),
       "渡しの記録が複数",
     );
+  });
+
+  test("渡しの記録が読めなければ保持している側へ倒す", () => {
+    expect(
+      holdsIntegration(observation({ integrationRecordCount: unobservable("読めない") })),
+    ).toBe(true);
+    expect(holdsIntegration(observation({ integrationRecordCount: present(0) }))).toBe(false);
+    expect(holdsIntegration(observation({ integrationRecordCount: present(1) }))).toBe(true);
   });
 });
 

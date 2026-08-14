@@ -21,7 +21,7 @@ import {
   cycleRecord,
   extractMarker,
   intentRecord,
-  integrationRecord,
+  integrationRecordCount,
   reportRecord,
   retryRecord,
   waitQuestionText,
@@ -487,7 +487,7 @@ export const observeTick = async (
       pauseRecordExists: pause,
       yieldRecord: parsedYield,
       intentRecord: intentRecord(commentText),
-      integrationRecordCount: present(integrationRecord(commentText).kind === "present" ? 1 : 0),
+      integrationRecordCount: integrationRecordCount(commentText),
 
       // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
       prunableWorkspace: present(

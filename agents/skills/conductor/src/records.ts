@@ -9,7 +9,7 @@
 import { parse } from "yaml";
 import type { IntentRecord, WaitRecord } from "./observation.ts";
 import type { Observed } from "./types.ts";
-import { absent, invalid, present } from "./types.ts";
+import { absent, invalid, present, unobservable } from "./types.ts";
 
 /** marker 名。**allowlist を増やしたらここだけ直す。** */
 export const MARKERS = [
@@ -161,6 +161,16 @@ export const integrationRecord = (body: string): Observed<IntegrationRecord> => 
   if (parsed.kind !== "present") return parsed;
   const pr = (parsed.value as { pr?: unknown }).pr;
   return present({ issues: parsed.value.issues, pr: typeof pr === "number" ? pr : null });
+};
+
+/** 渡しの記録の件数。**2 件を 0 に畳まない**（畳むと Conflict も保持も消える）。 */
+export const integrationRecordCount = (body: string): Observed<number> => {
+  const n = standaloneLines(body, "<!-- integration -->").length;
+  if (n >= 2) return present(n);
+  const rec = integrationRecord(body);
+  if (rec.kind === "present") return present(1);
+  if (rec.kind === "absent") return present(0);
+  return rec.kind === "invalid" ? invalid(rec.raw, rec.reason) : unobservable(rec.reason);
 };
 
 /**

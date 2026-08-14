@@ -146,6 +146,22 @@ describe("snapshot から導くもの", () => {
     expect(find(rows, 34).claimBranchExists).toEqual(present(false));
   });
 
+  test("渡しの記録が 2 つあるコメントを 0 件に畳まない", async () => {
+    const one = `<!-- integration -->
+
+\`\`\`yaml
+issues: [12]
+\`\`\`
+
+<!-- /integration -->`;
+    const rows = await observe(
+      port({ issueComments: async () => new Map([[12, comment(one + "\n" + one)]]) }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).integrationRecordCount).toEqual(present(2));
+  });
+
   test("休止の記録の to / keys を本体として残す", async () => {
     const yieldComment = `<!-- yield -->
 
