@@ -133,6 +133,7 @@ describe("decisionEvent", () => {
         kind: "action",
         params: { action: "claim する" },
         target: { representative: 4, members: [4, 5] },
+        countsEmptyCycle: false,
         evidence: {
           progress: "未着手",
           runtime: "無し",
