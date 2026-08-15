@@ -709,7 +709,8 @@ def build_parser():
         allow_abbrev=False,
         description="周回の記録の成果の指紋を作る（conductor の tick が呼ぶ）",
         epilog=(
-            "渡すのは conductor が既に正規化している値だけ。git の観測と符号化はこの実装が"
+            "渡すのは conductor が既に正規化している値だけ。file の bytes は"
+            " references/protocols.md の「file の bytes」。git の観測と符号化はこの実装が"
             "専任する —— 呼び出し側に成分の名前を並べさせると、名前を決める自由度が境界へ"
             "移るだけになる。"
         ),
@@ -758,11 +759,14 @@ def build_parser():
         metavar="repo",
         help="worktree を持たない着地面ごとに 1 つ（面の名前だけ）",
     )
-    parser.add_argument("--plan-comment", help="計画コメントの本文を入れた file")
+    parser.add_argument(
+        "--plan-comment",
+        help="計画コメントを入れた file。bytes は references/protocols.md の「file の bytes」",
+    )
     parser.add_argument("--no-plan-comment", action="store_true", help="計画コメントが無いことの明示")
     parser.add_argument(
         "--wait-record",
-        help="人待ちの記録のコメント本文を入れた file。**有効なときだけ渡す**（判定は呼び出し側）",
+        help="人待ちの記録を入れた file。**有効なときだけ渡す**（判定は呼び出し側）。bytes は references/protocols.md の「file の bytes」",
     )
     parser.add_argument("--no-wait-record", action="store_true", help="人待ちの記録が無い / 無効であることの明示")
     parser.add_argument(
@@ -771,7 +775,7 @@ def build_parser():
         default=[],
         type=issue_body_arg,
         metavar="番号:file",
-        help="計画の周で必須。対象集合の全件を渡す（並べ替えは実装が行う）",
+        help="計画の周で必須。対象集合の全件を渡す（並べ替えは実装が行う）。bytes は references/protocols.md の「file の bytes」",
     )
     return parser
 

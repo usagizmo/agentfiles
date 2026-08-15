@@ -595,6 +595,63 @@ def test_stale_index(tmp):
     check("index が古くても値が動かない", mark(resolve_argv(repo, worktree=repo)), baseline)
 
 
+def test_input_file_bytes_are_literal(tmp):
+    """入力 file の bytes をそのまま指紋に入れる。
+
+    これは characterization test。`emit_file` は渡された file を bytes のまま読むので、
+    この性質は読み取りから自動的に従う。末尾改行を strip する読みに変えると落ちる。
+    """
+    repo = os.path.join(tmp, "literal-bytes")
+    head = make_repo(repo)
+    exact = os.path.join(tmp, "literal-exact")
+    plus_nl = os.path.join(tmp, "literal-plus-nl")
+    body = "yaml\nvalue\n".encode("utf-8")
+    write(exact, body)
+    write(plus_nl, body + b"\n")
+
+    without = mark(resolve_argv(repo, worktree=repo, plan_comment=exact))
+    with_nl = mark(resolve_argv(repo, worktree=repo, plan_comment=plus_nl))
+    check(
+        "計画コメントの末尾改行なし",
+        without,
+        ref_one("実装中", "worktree", head, [], [], body, None),
+    )
+    check(
+        "計画コメントの末尾改行あり",
+        with_nl,
+        ref_one("実装中", "worktree", head, [], [], body + b"\n", None),
+    )
+    check_distinct(
+        "計画コメントの末尾改行 1 byte が同じ指紋になる",
+        [("exact", without), ("plus-nl", with_nl)],
+    )
+
+    wait_exact = os.path.join(tmp, "wait-exact")
+    wait_nl = os.path.join(tmp, "wait-plus-nl")
+    write(wait_exact, body)
+    write(wait_nl, body + b"\n")
+    wait_without = mark(resolve_argv(repo, worktree=repo, wait_record=wait_exact))
+    wait_with_nl = mark(resolve_argv(repo, worktree=repo, wait_record=wait_nl))
+    check_distinct(
+        "人待ちの記録の末尾改行 1 byte が同じ指紋になる",
+        [("exact", wait_without), ("plus-nl", wait_with_nl)],
+    )
+
+    issue = "本文が改行で終わる\n".encode("utf-8")
+    issue_exact = os.path.join(tmp, "issue-exact")
+    issue_nl = os.path.join(tmp, "issue-plus-nl")
+    write(issue_exact, issue)
+    write(issue_nl, issue + b"\n")
+    plan_without = mark(["--ledger", "未計画", "--issue-body", "1:" + issue_exact, "--no-wait-record"])
+    plan_with_nl = mark(["--ledger", "未計画", "--issue-body", "1:" + issue_nl, "--no-wait-record"])
+    check("計画の周の末尾改行なし", plan_without, ref_plan("未計画", [(1, issue)], None))
+    check("計画の周の末尾改行あり", plan_with_nl, ref_plan("未計画", [(1, issue + b"\n")], None))
+    check_distinct(
+        "計画の周の末尾改行 1 byte が同じ指紋になる",
+        [("exact", plan_without), ("plus-nl", plan_with_nl)],
+    )
+
+
 def test_optional_files(tmp):
     """在ると無いが分離されること —— **空の file と `--no-*` を同じ値にしない。**"""
     repo = os.path.join(tmp, "optional")
@@ -1426,6 +1483,7 @@ def main():
             test_tracked_states,
             test_special_kinds,
             test_stale_index,
+            test_input_file_bytes_are_literal,
             test_optional_files,
             test_head_sources,
             test_local_branch_head,

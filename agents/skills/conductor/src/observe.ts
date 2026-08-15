@@ -129,11 +129,11 @@ export type CycleMarkInput = {
   readonly progress: Progress;
   /** 着地面ごとの worktree。**無いことも明示して渡す**（省略は usage error） */
   readonly surfaces: readonly { readonly name: string; readonly worktree: string | null }[];
-  /** 計画コメントの本文。無ければ null */
+  /** 計画コメント。bytes は `protocols.md` の「file の bytes」。無ければ null */
   readonly planComment: string | null;
-  /** 人待ちの記録の本文。**有効なときだけ渡す**（判定は呼び出し側） */
+  /** 人待ちの記録。bytes は `protocols.md` の「file の bytes」 */
   readonly waitRecord: string | null;
-  /** 計画の周のみ。対象集合の全件 */
+  /** 計画の周のみ。対象集合の全件。bytes は `protocols.md` の「file の bytes」 */
   readonly issueBodies: readonly { readonly issue: number; readonly body: string }[];
 };
 
@@ -485,15 +485,25 @@ export const observeTick = async (
           ? waitBlock.value
           : null
         : null;
-    const bodyOf = (n: number): string => {
-      const b = bodies.get(n);
-      return b?.kind === "present" ? b.value : "";
-    };
+    const ledger = o.ledger.value;
+    const issueBodies: { issue: number; body: string }[] = [];
+    if (ledger === "未計画") {
+      // **計画の周は対象集合の全件**。claim 前なので group は本文の宣言から引く。
+      // **読めない番号を空へ畳まない。**畳むと「本文が無い」周と同じ指紋になる。
+      for (const n of [o.issue, ...o.sameBranchAs]) {
+        const b = bodies.get(n);
+        if (b?.kind !== "present") {
+          marks.set(o.issue, unobservable(`Issue ${String(n)} の本文を読めない`));
+          return;
+        }
+        issueBodies.push({ issue: n, body: b.value });
+      }
+    }
     marks.set(
       o.issue,
       await port.cycleMark({
         issue: o.issue,
-        ledger: o.ledger.value,
+        ledger,
         progress: normalizeProgress(o),
         surfaces: o.surfaces.map((s) => ({
           name: s.name,
@@ -503,11 +513,7 @@ export const observeTick = async (
         })),
         planComment: plan.kind === "present" ? plan.value : null,
         waitRecord: validWait,
-        // **計画の周は対象集合の全件**。claim 前なので group は本文の宣言から引く。
-        issueBodies:
-          o.ledger.value === "未計画"
-            ? [o.issue, ...o.sameBranchAs].map((n) => ({ issue: n, body: bodyOf(n) }))
-            : [],
+        issueBodies,
       }),
     );
   });
