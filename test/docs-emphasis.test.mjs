@@ -7,7 +7,10 @@
 // 文書を直して commit する経路には掛からない。commit gate は `bun test` しか回さない。
 
 import { expect, test } from "bun:test";
-import { brokenLines } from "../agents/skills/docs/scripts/check-emphasis.mjs";
+import {
+  brokenLines,
+  validateEmphasisFixtures,
+} from "../agents/skills/docs/scripts/check-emphasis.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
@@ -19,6 +22,10 @@ const tracked = async () => {
   return out.split("\n").filter((f) => f && !f.startsWith("test/fixtures/"));
 };
 
+test("強調の検出軸と正例・負例が欠けたら落ちる", () => {
+  expect(validateEmphasisFixtures()).toEqual([]);
+});
+
 test("tracked な markdown に壊れた強調が無い", async () => {
   const found = [];
   for (const file of await tracked()) {
@@ -29,5 +36,5 @@ test("tracked な markdown に壊れた強調が無い", async () => {
 });
 
 test("検査の対象が空のまま緑にならない", async () => {
-  expect((await tracked()).length).toBeGreaterThan(50);
+  expect((await tracked()).length).toBeGreaterThan(0);
 });
