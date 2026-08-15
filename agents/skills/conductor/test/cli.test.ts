@@ -187,6 +187,51 @@ describe("checkout path", () => {
   });
 });
 
+describe("規約の穴", () => {
+  const gap = (extra: string[]) =>
+    run([
+      "--config",
+      configFile(`gap-${extra.join("-").slice(0, 40)}`),
+      "--snapshot-out",
+      "/dev/null",
+      ...SURFACE,
+      ...extra,
+    ]);
+
+  test("USAGE に渡し口がある", async () => {
+    const { err } = await run(["--snapshot-out", join(TMP, "s"), ...SURFACE]);
+    expect(err).toContain("--spec-gap-issue");
+    expect(err).toContain("--spec-gap-fact");
+  });
+
+  test("片方だけ渡すと 2 で止まる", async () => {
+    const onlyIssue = await gap(["--spec-gap-issue", "12"]);
+    expect(onlyIssue.code).toBe(2);
+    const onlyFact = await gap(["--spec-gap-fact", "片付けの述語が 2 箇所に在る"]);
+    expect(onlyFact.code).toBe(2);
+    const flagOnly = await gap(["--spec-gap-issue"]);
+    expect(flagOnly.code).toBe(2);
+  });
+
+  test("番号が読めなければ 2 で止まる", async () => {
+    const { code } = await gap(["--spec-gap-issue", "x", "--spec-gap-fact", "事実"]);
+    expect(code).toBe(2);
+  });
+
+  test("値が空なら 2 で止まる", async () => {
+    const emptyIssue = await gap(["--spec-gap-issue", "", "--spec-gap-fact", "事実"]);
+    expect(emptyIssue.code).toBe(2);
+    const emptyFact = await gap(["--spec-gap-issue", "12", "--spec-gap-fact", ""]);
+    expect(emptyFact.code).toBe(2);
+  });
+
+  test("両方揃えば観測まで進む", async () => {
+    const { code, err } = await gap(["--spec-gap-issue", "12", "--spec-gap-fact", "事実"]);
+    expect(code).toBe(1);
+    expect(err).toContain("観測に失敗した");
+  });
+});
+
 describe("観測の失敗", () => {
   // **設定は通るが観測が落ちる形は 1。**2 で返すと呼び出し側が再起動せず、
   // 一時的な API 障害が永久停止に化ける。

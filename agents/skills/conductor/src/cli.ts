@@ -5,6 +5,7 @@
 //
 // 使い方:
 //   bun run src/cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...
+//     [--spec-gap-issue <n> --spec-gap-fact <text>]
 //
 // 終了コード:
 //   0  Decision を返した
@@ -12,7 +13,7 @@
 //   2  設定が壊れている（fail-closed。何も選ばずに止まる）
 
 import { ConfigError, parseConfig, resolveSurfaces } from "./config.ts";
-import { decide } from "./decide.ts";
+import { decide, type TickInput } from "./decide.ts";
 import { observeTick } from "./observe.ts";
 import { createPort } from "./port.ts";
 
@@ -47,11 +48,31 @@ const fail: (code: 1 | 2, message: string) => never = (code, message) => {
   process.exit(code);
 };
 
-const USAGE = "usage: cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...";
+const USAGE =
+  "usage: cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>..." +
+  " [--spec-gap-issue <n> --spec-gap-fact <text>]";
+
+/** 対で渡す。片方だけ・番号が非整数・空は exit 2。どちらも無いときは渡さない。 */
+const specGap = (): TickInput["specGap"] => {
+  const hasIssue = Bun.argv.includes("--spec-gap-issue");
+  const hasFact = Bun.argv.includes("--spec-gap-fact");
+  if (!hasIssue && !hasFact) return undefined;
+  if (!hasIssue || !hasFact) return fail(2, USAGE);
+  const issueRaw = arg("spec-gap-issue");
+  const factRaw = arg("spec-gap-fact");
+  if (issueRaw === undefined || factRaw === undefined || issueRaw === "" || factRaw === "") {
+    return fail(2, USAGE);
+  }
+  if (!/^[1-9]\d*$/.test(issueRaw)) return fail(2, USAGE);
+  const issue = Number(issueRaw);
+  if (!Number.isSafeInteger(issue)) return fail(2, USAGE);
+  return { issue, fact: factRaw };
+};
 
 const runTick = async (): Promise<void> => {
   const configPath = arg("config") ?? fail(2, USAGE);
   const snapshotOut = arg("snapshot-out") ?? fail(2, USAGE);
+  const gap = specGap();
 
   const scriptsDir = new URL("../scripts", import.meta.url).pathname;
 
@@ -86,7 +107,7 @@ const runTick = async (): Promise<void> => {
       fail(1, `観測に失敗した: ${String(error)}`),
   );
 
-  const decision = decide({ observations, config: config.tick });
+  const decision = decide({ observations, config: config.tick, specGap: gap });
   console.log(JSON.stringify(decision, null, 2));
 };
 
