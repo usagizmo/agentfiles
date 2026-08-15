@@ -762,6 +762,10 @@ const LADDER: readonly Rung[] = [
       if (isShelved(g) || !holdsWrite(g.lead)) return false;
       const crossing = crossingWriteHolders(g, ctx);
       if (crossing.length === 0) return false;
+      // **キーが present でない相手へは休止を送らない。**記述不能な記録は解除条件に届かない。
+      // 直列化（`intersect` の `unknown`）は残す。
+      if (g.leadObservation.resourceKeys.kind !== "present") return false;
+      if (crossing.some((p) => p.leadObservation.resourceKeys.kind !== "present")) return false;
       // **記録の有無だけでは見ない。**`to` / `keys` が現況と一致しているあいだは送らない。
       return !crossingDescribed(g, crossing);
     },
@@ -890,6 +894,29 @@ export const decide = (input: TickInput): Decision => {
     conflicts: foldConflicts(conflicts),
     outcome,
   });
+
+  // **計画 block の invalid は 1 件ずつの扱いに落とさない。**精算より前にセッションを止める。
+  // `absent` / `unobservable` は倒さない（コメント取得の一時失敗を全体停止にしない）。
+  const schemaUnknown = groups.flatMap((g) =>
+    g.observations.flatMap((o) =>
+      o.resourceKeys.kind === "invalid"
+        ? [
+            {
+              issue: o.issue,
+              evidence: `Issue ${o.issue} の marker plan が読めない: ${o.resourceKeys.reason}`,
+            },
+          ]
+        : [],
+    ),
+  );
+  if (schemaUnknown.length > 0) {
+    return decision({
+      kind: "halt",
+      reason: "計画 schema 不明",
+      evidence: schemaUnknown.map((x) => x.evidence),
+      issues: schemaUnknown.map((x) => x.issue).sort((a, b) => a - b),
+    });
+  }
 
   if (shelved !== undefined) {
     return decision({

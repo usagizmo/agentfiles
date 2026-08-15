@@ -167,6 +167,7 @@ skill 固有の `scripts/`:
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk` | 起床監視・checks 抽出・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
 | `docs`      | `audit-skills.sh` / `check-emphasis.mjs`                                                                                                  | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
+| `resolve`   | `serialize-plan.ts`                                                                                                                       | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                   |
 | `pr`        | `sync-and-push.sh`                                                                                                                        | base への追随と push（素の `git push` を使わせない）                                                       |
 | 共有        | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink）                                                                         | アドバイザーの起動と回収                                                                                   |
 

@@ -4,7 +4,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   claimRecord,
+  keysOfPlan,
   planRecord,
+  type PlanRecord,
   carriesReportOrHalt,
   cycleRecord,
   extractMarker,
@@ -20,7 +22,7 @@ import {
   waitRecord,
   yieldRecord,
 } from "../src/records.ts";
-import { present, unobservable } from "../src/types.ts";
+import { invalid, present, unobservable } from "../src/types.ts";
 
 const wrap = (marker: string, yaml: string) =>
   `本文\n\n<!-- ${marker} -->\n\n\`\`\`yaml\n${yaml}\n\`\`\`\n\n<!-- /${marker} -->\n`;
@@ -270,5 +272,36 @@ describe("面の接頭辞を持つ記録", () => {
 
   test("2 つ以上のキーを持つ map は読めない（どちらが面か決まらない）", () => {
     expect(readyRecord(readyBody("  - {a: 1, b: 2}")).kind).toBe("invalid");
+  });
+});
+
+describe("計画の資源キー", () => {
+  test("git の octal escape を載せた YAML は invalid（読み替えない）", () => {
+    const r = planRecord(
+      wrap(
+        "plan",
+        [
+          "baseSha: aaa",
+          'issueDigests:\n  "12": d12',
+          'invalidationScope:\n  - "docs/coding/\\343\\202\\267.md"',
+          "resourceKeys: []",
+        ].join("\n"),
+      ),
+    );
+    expect(r.kind).toBe("invalid");
+    if (r.kind !== "invalid") return;
+    expect(r.reason).toContain("yaml として読めない");
+  });
+
+  test("keysOfPlan は invalid を absent へ畳まない", () => {
+    const plan = invalid<PlanRecord>("raw", "yaml として読めない: Invalid escape");
+    const keys = keysOfPlan(plan);
+    expect(keys.kind).toBe("invalid");
+    if (keys.kind !== "invalid") return;
+    expect(keys.reason).toContain("yaml として読めない");
+  });
+
+  test("keysOfPlan は unobservable を absent へ畳まない", () => {
+    expect(keysOfPlan(unobservable("コメント一覧を読めない")).kind).toBe("unobservable");
   });
 });

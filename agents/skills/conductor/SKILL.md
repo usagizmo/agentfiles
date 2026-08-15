@@ -141,6 +141,7 @@ flowchart TD
     S[tick 開始] --> D[cli.ts を呼ぶ<br/>観測 → 正規化 → Decision]
     D --> C[conflicts を応答へ出す]
     C --> K{outcome の種類}
+    K -->|halt| STOP[evidence を出してセッションを止める]
     K -->|settle-record| W[記録を精算して書く]
     W --> D
     K -->|idle| END[最後の観測を baseline に<br/>watcher を張って終わる]
@@ -156,6 +157,7 @@ flowchart TD
 | `Decision`      | 何をするか                                                                                                                                                                                     |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `conflicts`     | 触らずに応答へ出す。1 手を選べた周でも出す。出し方は下の「応答に出すもの」                                                                                                                     |
+| `halt`          | 計画 schema 不明（scenarios のセッション停止）。evidence（Issue 番号・marker・読めない理由）を応答へ出し、**セッションを止める**。action / 精算は走らない                                      |
 | `action`        | `params` の action を `target.representative` に対して実行する（手順は `references/protocols.md` と `references/harness.md`）。**`evidence` は実行の直前に前提を引き直すため**に持たされている |
 | `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                            |
 | `idle`          | watcher を張って終える                                                                                                                                                                         |
@@ -266,7 +268,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 - 指紋を動かす書き込みをしたら、観測からやり直す。**action に数えない書き込み**（周回・失敗の記録の精算）も含む（上限には数えないまま）
 - 指紋に入らない出力は含め**ない**
 - 観測できなかった tick も張る。渡すのは直前に成功した snapshot（`--snapshot` は失敗しても既存の file を壊さない）。**取り直さない**
-- 張らずに終えてよいのは、一度も観測に成功していないときだけ（起動直後）。**渡せる baseline が無いので報告して止まる**
+- 張らずに終えてよいのは、一度も観測に成功していないときと、`halt` でセッションを止めるときだけ。前者は渡せる baseline が無い。後者は人が直すまで動かない
 
 指紋に入れるのは、正規化と action が読むものすべての digest。**項目を列挙して数え上げない**。snapshot の節の一覧は `src/decode.ts` の `SECTIONS`、digest は `src/port.ts`。
 

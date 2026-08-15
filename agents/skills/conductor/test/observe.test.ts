@@ -310,7 +310,7 @@ keys: [skills]
   test("完了 の課題には計画と鮮度を問い合わせない", async () => {
     const planSeen: number[] = [];
     const readySeen: number[] = [];
-    await observe(
+    const rows = await observe(
       port({
         planFacts: async (issue) => {
           planSeen.push(issue);
@@ -333,6 +333,7 @@ keys: [skills]
     );
     expect(planSeen).toEqual([34]);
     expect(readySeen).toEqual([34]);
+    expect(find(rows, 12).resourceKeys.kind).toBe("absent");
   });
 
   test("完了 で周回の記録も無い課題には指紋を作らない", async () => {

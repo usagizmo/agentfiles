@@ -343,6 +343,13 @@ const isPlan = (v: unknown): v is PlanRecord =>
   (scopeList(v["invalidationScope"])?.length ?? 0) > 0 &&
   isStringArray(v["resourceKeys"]);
 
+/**
+ * 計画コメントから資源キーを取り出す。**`invalid` / `unobservable` を `absent` へ畳まない。**
+ * 畳むと全体停止と一時失敗が同じ観測になり、倒す先が選べない。
+ */
+export const keysOfPlan = (plan: Observed<PlanRecord>): Observed<readonly string[]> =>
+  plan.kind === "present" ? present(plan.value.resourceKeys) : plan;
+
 export const planRecord = (body: string): Observed<PlanRecord> => {
   const parsed = parseYaml(extractMarker(body, "plan"), isPlan);
   if (parsed.kind !== "present") return parsed;

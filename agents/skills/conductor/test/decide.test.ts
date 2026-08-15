@@ -8,7 +8,7 @@ import { DEFAULT_CONFIG, buildGroups, decide } from "../src/decide.ts";
 import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
-import { present, unobservable } from "../src/types.ts";
+import { absent, invalid, present, unobservable } from "../src/types.ts";
 import { intent, observation, session, surface, wait } from "./fixtures.ts";
 
 const tick = (observations: readonly IssueObservation[], over: Partial<TickInput> = {}) =>
@@ -686,6 +686,66 @@ describe("外から状態が動く", () => {
       ],
       "write",
     );
+  });
+
+  test("9t: 計画 block が invalid ならセッションを止め、交差の解消も精算も走らない", () => {
+    const broken = implementing({
+      issue: 1,
+      resourceKeys: invalid('- "docs/\\\\343.md"\n', "yaml として読めない: Invalid escape"),
+      session: session.running,
+    });
+    const healthy = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      resourceKeys: present(["other"]),
+      session: session.running,
+    });
+    const shelved = observation({
+      issue: 3,
+      ledger: present("退避先"),
+      failureRecord: present({ count: 3, lastAction: "解決を起こし直す" }),
+    });
+    const d = tick([broken, healthy, shelved]);
+    expect(d.outcome.kind).toBe("halt");
+    if (d.outcome.kind !== "halt") return;
+    expect(d.outcome.reason).toBe("計画 schema 不明");
+    expect(d.outcome.issues).toContain(1);
+    expect(d.outcome.evidence.some((e) => e.includes("1") && e.includes("plan"))).toBe(true);
+    expect(d.outcome.evidence.some((e) => e.includes("yaml として読めない"))).toBe(true);
+  });
+
+  test("9u: キーが present でない交差相手へは休止を送らない", () => {
+    const unread = implementing({
+      issue: 1,
+      resourceKeys: unobservable("コメント一覧を読めない"),
+      session: session.running,
+    });
+    const healthy = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      resourceKeys: present(["skills"]),
+      session: session.running,
+    });
+    const d = tick([unread, healthy]).outcome;
+    expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("交差を解消する");
+    expect(d.kind).not.toBe("halt");
+  });
+
+  test("9v: 完了で planFacts を飛ばした absent は全体停止に倒さない", () => {
+    const done = observation({
+      issue: 1,
+      ledger: present("完了"),
+      resourceKeys: absent(),
+    });
+    const healthy = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      resourceKeys: present(["skills"]),
+      session: session.idle,
+    });
+    const d = tick([done, healthy]).outcome;
+    expect(d.kind).not.toBe("halt");
+    expect(d.kind === "action" ? d.params.action : d.kind).toBe("枠を渡す");
   });
 
   test("10f: 提出中 × 待機 で checks が実行中", () => {

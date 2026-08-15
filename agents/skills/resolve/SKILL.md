@@ -178,6 +178,8 @@ alsoResolves: [<Issue 番号>] # このブランチで一緒に片付ける Issu
 
 同じ marker のコメントを複数作らない。更新するときは既存コメントを書き換える。
 
+**投稿する直前に** `bun run <skill>/scripts/serialize-plan.ts --check <本文の file>` を通す。落ちたら投稿しない。
+
 ## 宣言を実体に合わせる
 
 **資源キーの宣言は、広げるのと狭めるので契機が違う。**

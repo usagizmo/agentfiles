@@ -13,6 +13,7 @@ import {
   entryBlockRecord,
   hasStandaloneLine,
   liveOwnedPrs,
+  keysOfPlan,
   planRecord,
   readyRecord,
 } from "./records.ts";
@@ -369,7 +370,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       return {
         bodyMatchesPlan: bodyMatchesPlan(plan, digests),
         planInvalidated: planInvalidated(plan, changed, control),
-        resourceKeys: plan.kind === "present" ? present(plan.value.resourceKeys) : absent(),
+        resourceKeys: keysOfPlan(plan),
       };
     },
 

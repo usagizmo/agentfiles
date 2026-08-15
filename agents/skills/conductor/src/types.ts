@@ -168,7 +168,13 @@ export type Outcome =
     }
   | { readonly kind: "constraint"; readonly constraint: ConstraintKind; readonly detail: string }
   | { readonly kind: "non-action"; readonly nonAction: NonActionKind; readonly detail: string }
-  | { readonly kind: "idle" };
+  | { readonly kind: "idle" }
+  | {
+      readonly kind: "halt";
+      readonly reason: "計画 schema 不明";
+      readonly evidence: readonly string[];
+      readonly issues: readonly number[];
+    };
 
 /**
  * 選んだ対象の記録。**精算は Decision から書く。**`observeTick` を再実行せず、
