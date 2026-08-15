@@ -16,11 +16,11 @@
 
 ## skill 間の参照
 
-| 何        | 正                                                                       | 含むもの           |
-| --------- | ------------------------------------------------------------------------ | ------------------ |
-| 層の rank | [`../skills/docs/scripts/layers.tsv`](../skills/docs/scripts/layers.tsv) | leaf 以外          |
-| 層表の名  | 所有集合（述語は `../skills/docs/scripts/audit-skills.sh`）              | 所有する skill     |
-| この図    | 参照があるもの                                                           | 所有しなくても残す |
+| 何        | 正                                                                       | 含むもの       |
+| --------- | ------------------------------------------------------------------------ | -------------- |
+| 層の rank | [`../skills/docs/scripts/layers.tsv`](../skills/docs/scripts/layers.tsv) | leaf 以外      |
+| 層表の名  | 所有集合（述語は `../skills/docs/scripts/audit-skills.sh`）              | 所有する skill |
+| この図    | 所有集合（述語は `../skills/docs/scripts/audit-skills.sh`）              | 所有する skill |
 
 ```mermaid
 flowchart LR
@@ -44,12 +44,10 @@ flowchart LR
         SH[ship]
         ME[merge]
         IS[issue]
-        HD[herdr]
     end
 
     CO --> RF
     CO --> RS
-    CO --> HD
     CO -.->|着地後に branch が残ることに依存| SH
     RS -.->|cwd の木しか見ないことに依存| CM
     RF --> CS
@@ -154,7 +152,7 @@ flowchart LR
     SH --> GM
 ```
 
-vendored な skill（一覧は `../.skill-lock.json`）は載せない。`*.test.*` は本体の行へ畳む。
+掲載条件は所有判定だけ。`*.test.*` は本体の行へ畳む。
 
 skill 固有の `references/`:
 
@@ -170,7 +168,7 @@ skill 固有の `scripts/`:
 | skill       | 実体                                                                                                                                      | 何をするか                                                                                                 |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk` | 起床監視・checks 抽出・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
-| `docs`      | `audit-skills.sh` / `check-emphasis.mjs`                                                                                                  | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
+| `docs`      | `audit-skills.sh` / `check-emphasis.mjs` / `check-hard-wrap.mjs`                                                                          | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
 | `resolve`   | `serialize-plan.ts`                                                                                                                       | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                   |
 | `pr`        | `sync-and-push.sh`                                                                                                                        | base への追随と push（素の `git push` を使わせない）                                                       |
 | 共有        | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink）                                                                         | アドバイザーの起動と回収                                                                                   |

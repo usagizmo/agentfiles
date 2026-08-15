@@ -1,12 +1,14 @@
 #!/bin/sh
 # skill 群の機械検査。品質パスがレビュアーへ渡す材料を作る。
 #
-#   sh audit-skills.sh [SKILLS_ROOT] [--anchor DIR]... [--layers FILE]
+#   sh audit-skills.sh [SKILLS_ROOT] [--anchor DIR]... [--peer DIR]... [--layers FILE]
 #
-#   SKILLS_ROOT  既定 ~/.agents/skills
+#   SKILLS_ROOT  既定はスクリプト自身の skills root
 #   --anchor     参照解決の基準点を足す（repo root 相対か絶対）。skills root と
 #                repo root（.git を持つ祖先）は既定で入るので、それ以外の置き場を
 #                指す規約がある project だけ渡す
+#   --peer       層検査の既知名に足す skills root。所有名だけを取る。本文・
+#                derived / shared は見ない。既定値は無い
 #   --layers     project 側の層定義を足す（形式は layers.tsv と同じ）
 #
 # 出力は TSV 1 行 1 件: <LEVEL> <check> <location> <detail>
@@ -54,10 +56,20 @@ rank() {
 }
 
 # skill 自体を対象にする skill。名指しは正当なので check layer から除く。
+# `<skill>-project` は本体の免除を引き継ぐ。
 is_layer_exempt() {
 	case "$1" in
 	docs | skill-creator) return 0 ;;
+	*-project) is_layer_exempt "${1%-project}" ;;
 	*) return 1 ;;
+	esac
+}
+
+# 層比較の source identity。`<skill>-project` は本体の rank で比べる。
+source_id() {
+	case "$1" in
+	*-project) printf '%s\n' "${1%-project}" ;;
+	*) printf '%s\n' "$1" ;;
 	esac
 }
 
@@ -122,15 +134,22 @@ strip_noncode() {
 # --- 引数 ---------------------------------------------------------------
 # **参照の基準点を 1 つに固定しない。**skills root からの相対しか解けないと、
 # repo 直下の `docs/**` や、project 固有の置き場を指す参照が全部 missing になる。
-# 実測で 38 件中 37 件が誤検知になり、**gate が常時赤で新しい違反を検出できなくなった。**
+# `--anchor` を必須にすると渡し忘れが常時赤になる。
 ROOT_ARG=
 ANCHORS=
+PEERS=
 EXTRA_LAYERS=
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--anchor)
 		[ $# -ge 2 ] || fatal "--anchor に値が無い"
 		ANCHORS="$ANCHORS
+$2"
+		shift 2
+		;;
+	--peer)
+		[ $# -ge 2 ] || fatal "--peer に値が無い"
+		PEERS="$PEERS
 $2"
 		shift 2
 		;;
@@ -147,7 +166,12 @@ $2"
 		;;
 	esac
 done
-[ -n "$ROOT_ARG" ] || ROOT_ARG=$HOME/.agents/skills
+# スクリプト自身の skills root。引数を省略したときの検査対象であり、
+# 検査 root と異なるときに peer が要るかの判定にも使う。
+SCRIPT_DIR=$(CDPATH= cd -P -- "$(dirname "$0")" 2>/dev/null && pwd -P) || fatal "スクリプトの dir を解決できない"
+SCRIPT_SKILLS=$(CDPATH= cd -P -- "$SCRIPT_DIR/../.." 2>/dev/null && pwd -P) ||
+	fatal "スクリプトの skills root を解決できない"
+[ -n "$ROOT_ARG" ] || ROOT_ARG=$SCRIPT_SKILLS
 
 # --- root ---------------------------------------------------------------
 # root 自体が dir symlink（`~/.agents/skills` が repo を指す）でも、canon が返す
@@ -194,6 +218,22 @@ for a in $ANCHORS; do
 $ap"
 done
 
+PEER_ROOTS=
+PEER_COUNT=0
+for p in $PEERS; do
+	[ -n "$p" ] || continue
+	case "$p" in
+	"~/"*) pp=$HOME/${p#"~/"} ;;
+	/*) pp=$p ;;
+	*) pp=${REPO_ROOT:-$ROOT}/$p ;;
+	esac
+	[ -d "$pp" ] || fatal "--peer が実在しない: $p"
+	pp=$(CDPATH= cd -P -- "$pp" 2>/dev/null && pwd -P) || fatal "peer を解決できない: $p"
+	PEER_ROOTS="$PEER_ROOTS
+$pp"
+	PEER_COUNT=$((PEER_COUNT + 1))
+done
+
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/audit-skills.XXXXXX") || fatal "作業 dir を作れない"
 # signal ハンドラは自分で終了する。戻ると $WORK が消えたまま走り続け、
 # 集計が空になって exit 0（ゲートの素通り）になる。
@@ -210,98 +250,175 @@ FINDINGS=$WORK/findings
 # `.git/info/exclude` と `core.excludesFile` は見ない（端末ごとに出力が変わる）。
 # 判定不能は repo が無いときと git が無いときだけ。空の所有集合へ畳まない。
 # 親の GIT_DIR を無視する。pre-commit 配下では GIT_DIR が検査対象を上書きする。
-git_in_repo() {
+# 所有集合と層の既知名は別の入力。畳まない。
+repo_of() {
+	r_probe=$1
+	while [ "$r_probe" != "/" ]; do
+		if [ -e "$r_probe/.git" ]; then
+			printf '%s\n' "$r_probe"
+			return 0
+		fi
+		r_probe=$(dirname "$r_probe")
+	done
+	return 1
+}
+
+git_in() {
+	g_repo=$1
+	shift
 	env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE \
 		-u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
 		-u GIT_PREFIX \
-		git -C "$REPO_ROOT" "$@"
+		git -C "$g_repo" "$@"
 }
 
-OWNERSHIP=ok
-TRACKED_GITIGNORE=$WORK/tracked_gitignore
-: >"$TRACKED_GITIGNORE"
-if [ -z "$REPO_ROOT" ]; then
-	OWNERSHIP=unknown
-	emit SKIP owned "-" "note=repo が無いので所有判定をしていない"
-elif ! command -v git >/dev/null 2>&1; then
-	OWNERSHIP=unknown
-	emit SKIP owned "-" "note=git が無いので所有判定をしていない"
-elif git_in_repo cat-file -e HEAD:.gitignore 2>/dev/null; then
-	git_in_repo show HEAD:.gitignore >"$TRACKED_GITIGNORE" ||
-		fatal "追跡中の .gitignore を読めない"
-fi
-
-# $1 = repo 相対の skill dir。追跡済みなら所有。SKILL.md が
-# 追跡中 gitignore に除外されていれば所有しない。git の失敗は無視されていない
-# に畳まない。
-is_owned() {
-	o_rel=$1
-	o_tracked=$(git_in_repo ls-files -- "$o_rel") ||
+# $1 = repo / $2 = repo 相対の skill dir / $3 = 追跡中 gitignore
+# 追跡済みなら所有。SKILL.md が追跡中 gitignore に除外されていれば所有しない。
+# git の失敗は無視されていないに畳まない。
+is_owned_in() {
+	o_repo=$1
+	o_rel=$2
+	o_gi=$3
+	o_tracked=$(git_in "$o_repo" ls-files -- "$o_rel") ||
 		fatal "git ls-files が失敗した: $o_rel"
 	[ -n "$o_tracked" ] && return 0
-	o_ignored=$(git_in_repo ls-files --others --ignored --exclude-from="$TRACKED_GITIGNORE" -- "$o_rel/SKILL.md") ||
+	o_ignored=$(git_in "$o_repo" ls-files --others --ignored --exclude-from="$o_gi" -- "$o_rel/SKILL.md") ||
 		fatal "git ls-files --ignored が失敗した: $o_rel"
 	[ -n "$o_ignored" ] && return 1
 	return 0
 }
 
+# $1 = skills root / $2 = 所有名の出力 / $3 = 状態の出力（ok|unknown-norepo|unknown-nogit）
+collect_owned() {
+	co_root=$1
+	co_names=$2
+	co_st=$3
+	: >"$co_names"
+	co_repo=$(repo_of "$co_root") || {
+		echo unknown-norepo >"$co_st"
+		return 0
+	}
+	if ! command -v git >/dev/null 2>&1; then
+		echo unknown-nogit >"$co_st"
+		return 0
+	fi
+	co_gi=$WORK/gi_$(printf '%s' "$co_root" | tr '/ ' '__')
+	: >"$co_gi"
+	if git_in "$co_repo" cat-file -e HEAD:.gitignore 2>/dev/null; then
+		git_in "$co_repo" show HEAD:.gitignore >"$co_gi" ||
+			fatal "追跡中の .gitignore を読めない"
+	fi
+	for co_d in "$co_root"/*/; do
+		[ -d "$co_d" ] || continue
+		co_name=${co_d%/}
+		co_name=${co_name##*/}
+		[ -f "$co_d/SKILL.md" ] || continue
+		co_abs=$(CDPATH= cd -P -- "$co_d" && pwd -P) || fatal "skill dir を解決できない: $co_d"
+		case "$co_abs" in
+		"$co_repo"/*) co_rel=${co_abs#"$co_repo"/} ;;
+		*) fatal "skill が repo の外にある: $co_abs" ;;
+		esac
+		is_owned_in "$co_repo" "$co_rel" "$co_gi" || continue
+		echo "$co_name" >>"$co_names"
+	done
+	echo ok >"$co_st"
+}
+
+OWNED=$WORK/owned
+KNOWN=$WORK/known
+collect_owned "$ROOT" "$OWNED" "$WORK/own_st"
+OWN_ST=$(cat "$WORK/own_st")
+OWNERSHIP=ok
+case "$OWN_ST" in
+unknown-norepo)
+	OWNERSHIP=unknown
+	emit SKIP owned "-" "note=repo が無いので所有判定をしていない"
+	;;
+unknown-nogit)
+	OWNERSHIP=unknown
+	emit SKIP owned "-" "note=git が無いので所有判定をしていない"
+	;;
+esac
+
+cp "$OWNED" "$KNOWN"
+for pp in $PEER_ROOTS; do
+	[ -n "$pp" ] || continue
+	collect_owned "$pp" "$WORK/peer_owned" "$WORK/peer_st"
+	[ "$(cat "$WORK/peer_st")" = ok ] ||
+		fatal "peer の所有判定ができない: $pp"
+	while read -r pname; do
+		[ -n "$pname" ] || continue
+		grep -qx "$pname" "$OWNED" &&
+			fatal "検査 root と peer で同じ skill 名がある: $pname"
+		grep -qx "$pname" "$KNOWN" &&
+			fatal "peer どうしで同じ skill 名がある: $pname"
+		echo "$pname" >>"$KNOWN"
+	done <"$WORK/peer_owned"
+done
+
 # --- 対象ファイルの棚卸し ------------------------------------------------
 # files: <display>\t<physical>  display は root 相対（両 root で同じ形になる）
+# 所有集合は 1 度だけ作る。ディスク直下を再列挙して所有外を足さない。
 INVENTORY=$WORK/files
 : >"$INVENTORY"
 SKILLS=$WORK/skills
 : >"$SKILLS"
 
-for d in "$ROOT"/*/; do
-	[ -d "$d" ] || continue
-	name=${d%/}
-	name=${name##*/}
-	[ -f "$d/SKILL.md" ] || continue
-	if [ "$OWNERSHIP" = ok ]; then
-		skill_abs=$(CDPATH= cd -P -- "$d" && pwd -P) || fatal "skill dir を解決できない: $d"
-		case "$skill_abs" in
-		"$REPO_ROOT"/*) rel=${skill_abs#"$REPO_ROOT"/} ;;
-		*) fatal "skill が repo の外にある: $skill_abs" ;;
-		esac
-		is_owned "$rel" || continue
-	fi
-	echo "$name" >>"$SKILLS"
-	if p=$(canon "$d/SKILL.md"); then
-		printf '%s\t%s\n' "$name/SKILL.md" "$p" >>"$INVENTORY"
-	fi
-	[ -d "$d/references" ] || continue
-	for f in "$d"references/*; do
-		[ -e "$f" ] || [ -L "$f" ] || continue
-		b=${f##*/}
-		case "$b" in *.md) ;; *) continue ;; esac
-		if p=$(canon "$f"); then
-			[ -f "$p" ] && printf '%s\t%s\n' "$name/references/$b" "$p" >>"$INVENTORY"
+if [ "$OWNERSHIP" = ok ]; then
+	while read -r name; do
+		[ -n "$name" ] || continue
+		echo "$name" >>"$SKILLS"
+		d=$ROOT/$name
+		if p=$(canon "$d/SKILL.md"); then
+			printf '%s\t%s\n' "$name/SKILL.md" "$p" >>"$INVENTORY"
 		fi
-	done
-done
-
-[ -s "$SKILLS" ] || fatal "SKILL.md を持つ skill が root 直下に無い: $ROOT"
+		[ -d "$d/references" ] || continue
+		for f in "$d"/references/*; do
+			[ -e "$f" ] || [ -L "$f" ] || continue
+			b=${f##*/}
+			case "$b" in *.md) ;; *) continue ;; esac
+			if p=$(canon "$f"); then
+				[ -f "$p" ] && printf '%s\t%s\n' "$name/references/$b" "$p" >>"$INVENTORY"
+			fi
+		done
+	done <"$OWNED"
+	[ -s "$SKILLS" ] || fatal "SKILL.md を持つ skill が root 直下に無い: $ROOT"
+fi
 
 # 物理パスごとに代表 1 件へ畳む。以降の内容検査はこれを回す。
 sort -t "	" -k2,2 -k1,1 "$INVENTORY" | awk -F "	" '!seen[$2]++' >"$WORK/unique"
 
 # --- check layer: 同じ層・上位層の名指し ---------------------------------
-while read -r skill; do
-	is_layer_exempt "$skill" && continue
-	sr=$(rank "$skill")
-	strip_noncode "$ROOT/$skill/SKILL.md" | awk '{
-		while (match($0, /`[a-z][a-z0-9-]*`/)) {
-			print NR "\t" substr($0, RSTART + 1, RLENGTH - 2)
-			$0 = substr($0, RSTART + RLENGTH)
-		}
-	}' | sort -u | while IFS="	" read -r ln word; do
-		[ "$word" = "$skill" ] && continue
-		grep -qx "$word" "$SKILLS" || continue
-		tr_=$(rank "$word")
-		[ "$tr_" -le "$sr" ] &&
-			emit VIOLATION layer "$skill/SKILL.md:$ln" "rank=$sr names=$word rank=$tr_"
-	done
-done <"$SKILLS"
+# 既知は検査 root の所有名 ∪ 各 peer の所有名。所有集合とは畳まない。
+LAYER_INCOMPLETE=0
+if [ "$OWNERSHIP" != ok ]; then
+	:
+elif [ "$ROOT" != "$SCRIPT_SKILLS" ] && [ "$PEER_COUNT" -eq 0 ]; then
+	emit SKIP layer "-" "note=検査 root がスクリプトの skills root と異なり peer が無い"
+	LAYER_INCOMPLETE=1
+else
+	while read -r skill; do
+		[ -n "$skill" ] || continue
+		is_layer_exempt "$skill" && continue
+		src=$(source_id "$skill")
+		sr=$(rank "$src")
+		strip_noncode "$ROOT/$skill/SKILL.md" | awk '{
+			while (match($0, /`\/?[a-z][a-z0-9-]*`/)) {
+				w = substr($0, RSTART + 1, RLENGTH - 2)
+				sub(/^\//, "", w)
+				print NR "\t" w
+				$0 = substr($0, RSTART + RLENGTH)
+			}
+		}' | sort -u | while IFS="	" read -r ln word; do
+			[ "$word" = "$skill" ] && continue
+			[ "$word" = "$src" ] && continue
+			grep -qx "$word" "$KNOWN" || continue
+			tr_=$(rank "$word")
+			[ "$tr_" -le "$sr" ] &&
+				emit VIOLATION layer "$skill/SKILL.md:$ln" "rank=$sr names=$word rank=$tr_"
+		done
+	done <"$SKILLS"
+fi
 
 # --- check ref: 参照先ファイルと節見出しの実在 ---------------------------
 # `~/...` と絶対パスは投影前の checkout で解決できないので対象外。
@@ -321,6 +438,16 @@ while IFS="	" read -r disp phys; do
 		# ような書式の説明そのものが規約文に出てくる。パスとして解こうとすると
 		# 必ず missing になり、直しようがない違反が永久に残る。
 		*"<"* | *">"* | *"{"* | *"}"* | *"*"*) continue ;;
+		esac
+		# 所有外 skill を先頭 segment に持つ参照は、ディスク上の有無に
+		# 関わらず所有集合の外。解けたことにも missing にもしない。
+		case "$target" in
+		*/*)
+			first=${target%%/*}
+			if [ "$OWNERSHIP" = ok ] && [ -f "$ROOT/$first/SKILL.md" ]; then
+				grep -qx "$first" "$OWNED" || continue
+			fi
+			;;
 		esac
 		hit=
 		for b in $RESOLVE_BASES; do
@@ -681,8 +808,7 @@ if ! command -v bun >/dev/null 2>&1; then
 elif [ ! -f "$EMPHASIS_JS" ]; then
 	emit SKIP emphasis "-" "note=$EMPHASIS_JS が無いので強調記法を検査していない"
 else
-	# **instructions 入口も入れる。**skills だけを対象にすると、全 project が毎回読む
-	# AGENTS.md が壊れたまま緑で通る（実際にそれで 1 度出荷した）。
+	# **instructions 入口も入れる。**skills だけを対象にすると AGENTS.md が対象外になる。
 	{
 		cat "$WORK/unique"
 		for f in "$ROOT/../AGENTS.md" "$ROOT/../CLAUDE.md"; do
@@ -725,4 +851,6 @@ s=$(grep -c '^SKIP	' "$FINDINGS")
 printf 'SUMMARY\troot=%s\tviolations=%s\treviews=%s\tskips=%s\n' "$ROOT_ARG" "$v" "$r" "$s"
 
 [ "$v" -gt 0 ] && exit 1
+[ "$OWNERSHIP" = unknown ] && exit 2
+[ "$LAYER_INCOMPLETE" = 1 ] && exit 2
 exit 0
