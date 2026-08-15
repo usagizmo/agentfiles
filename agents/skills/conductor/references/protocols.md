@@ -86,6 +86,7 @@ count: <成果ゼロで回った周の数>
 | `--worktree <repo>:<path>` \| `--no-worktree <repo>` | 解決の周のみ。**着地面ごとにどちらかを 1 回**（省いた面は成果が指紋に出ない） |
 | `--plan-comment <file>` \| `--no-plan-comment`       | 解決の周のみ。file の bytes は下表                                            |
 | `--wait-record <file>` \| `--no-wait-record`         | **有効なときだけ file を渡す**（有効の判定は `wait-record.md`）               |
+| `--occupied <名前>:<cwd>` \| `--no-occupied`         | 解決の周のみ。所有外セッションの name + cwd。**状態は入れない**               |
 | `--issue-body <番号>:<file>`                         | 計画の周のみ。対象集合の全件（並べ替えは実装が行う）                          |
 
 **file の bytes**は次の値そのもの。足しも落としもしない。
@@ -110,6 +111,7 @@ count: <成果ゼロで回った周の数>
 **成果物の側だけから作る**。成分の集合と符号化は `scripts/cycle-mark.py` が持つ。
 
 - **`runtime` とセッションの状態は入れない。commit 数でも引かない**（理由は `tick.md`）
+- **所有外セッションの name + cwd を入れる。状態は入れない**
 - **変わったかどうかの判定は git に任せる**
 - **中身まで入れる**。真偽値への丸めも不可
 - **git が見える未コミット状態を、置き場所を問わず入れる**。ignore 対象と git の外は入れない
@@ -198,9 +200,10 @@ keys: [<交差した資源キー>]
 - **報告先を混ぜない**。応答に出し、Issue コメントは同内容なら追記しない
 - **3 で止めたときは `cleared` にしない**。毎 tick 報告が出続けるのが正しい
 
-**実体を消す直前に、worktree の dirty と `refs/stash` を見る**。
+**実体を消す直前に、worktree の dirty と `refs/stash` と所有外セッションを見る**。
 
 - **dirty なら片付けず報告する**
+- **所有外セッションが worktree に居れば、退避より前に止まって消さない**
 - **stash が残っていれば報告してから片付ける**。stash は worktree 削除では消えない。pop / drop しない
 - checkout が既に無い孤児では dirty は見ない。stash は面の live checkout から見る（`landing-surface.md`）
 

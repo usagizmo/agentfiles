@@ -68,6 +68,7 @@ export const CONFLICT_REASONS = [
   "渡しの記録が複数",
   "渡しの記録が壊れている",
   "退避先だがセッションが止まらない",
+  "同じ worktree に所有外セッションがある",
 ] as const;
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 

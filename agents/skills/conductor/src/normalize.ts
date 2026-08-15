@@ -305,6 +305,20 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   if (!settled && isUnreadable(o.integrationRecordCount)) {
     found.push(conflict("渡しの記録が壊れている", n, "渡しの記録を読めない"));
   }
+
+  // **所有外セッションが worktree に居るあいだは起こし直さない・片付けない。**
+  // `session` が `none` のときだけ。名前付き `resolve-<番号>` が居る行 7s は
+  // `worktreeBusy` のまま。状態は問わない。
+  if (o.session.kind === "none" && o.worktreeOccupied) {
+    found.push(
+      conflict(
+        "同じ worktree に所有外セッションがある",
+        n,
+        "同じ worktree に refine / resolve / conductor 以外のセッションが居る",
+      ),
+    );
+  }
+
   return found;
 };
 

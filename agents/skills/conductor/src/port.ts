@@ -367,6 +367,12 @@ export const createPort = (options: PortOptions): ObservePort => {
           else args.push("--worktree", `${s.name}:${s.worktree}`);
         }
         await fileArg("--plan-comment", input.planComment, "--no-plan-comment");
+        if (input.occupied.length === 0) args.push("--no-occupied");
+        else {
+          for (const row of input.occupied) {
+            args.push("--occupied", `${row.name}:${row.cwd}`);
+          }
+        }
       }
       await fileArg("--wait-record", input.waitRecord, "--no-wait-record");
 

@@ -7,7 +7,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { ConfigError, parseConfig, resolveSurfaces } from "../src/config.ts";
+import { ConfigError, extractHarnessCmd, parseConfig, resolveSurfaces } from "../src/config.ts";
+import { readFileSync } from "node:fs";
 import { createPort, snapshotArgs } from "../src/port.ts";
 import { present } from "../src/types.ts";
 
@@ -116,6 +117,8 @@ describe("checkout path の解決", () => {
   });
 });
 
+const harnessMd = () => readFileSync(join(import.meta.dir, "../references/harness.md"), "utf8");
+
 describe("設定の fail-closed", () => {
   test("面の名前が重複したら止まる", () => {
     expect(() =>
@@ -126,14 +129,24 @@ describe("設定の fail-closed", () => {
     ).toThrow("name が重複");
   });
 
-  test("sessionsCmd が無ければ止まる", () => {
+  test("sessionsCmd を省略したら harness.md の code block を使う", () => {
     const { sessionsCmd: _drop, ...without } = raw;
-    expect(() => parseConfig(without)).toThrow("sessionsCmd");
+    expect(parseConfig(without).sessionsCmd).toBe(extractHarnessCmd(harnessMd(), "sessions-cmd"));
   });
 
-  test("workspacesCmd が無ければ止まる", () => {
+  test("workspacesCmd を省略したら harness.md の code block を使う", () => {
     const { workspacesCmd: _drop, ...without } = raw;
-    expect(() => parseConfig(without)).toThrow("workspacesCmd");
+    expect(parseConfig(without).workspacesCmd).toBe(
+      extractHarnessCmd(harnessMd(), "workspaces-cmd"),
+    );
+  });
+
+  test("sessionsCmd が空文字なら止まる", () => {
+    expect(() => parseConfig({ ...raw, sessionsCmd: "" })).toThrow("sessionsCmd");
+  });
+
+  test("workspacesCmd が空文字なら止まる", () => {
+    expect(() => parseConfig({ ...raw, workspacesCmd: "" })).toThrow("workspacesCmd");
   });
 });
 
@@ -223,6 +236,7 @@ describe("cycleMark の入力 file", () => {
       planComment: null,
       waitRecord: wait,
       issueBodies: [{ issue: 1, body }],
+      occupied: [],
     });
     const want = await markFromExactFiles(scriptsDir, body, wait);
     expect(got).toEqual(present(want));
@@ -238,6 +252,7 @@ describe("cycleMark の入力 file", () => {
       planComment: null,
       waitRecord: null,
       issueBodies: [{ issue: 1, body }],
+      occupied: [],
     });
     const extraNl = await markFromExactFiles(scriptsDir, `${body}\n`, null);
     expect(got).not.toEqual(present(extraNl));

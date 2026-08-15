@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
 import type { CycleMarkInput, ObservePort, StatusMap } from "../src/observe.ts";
-import { observeTick, worktreeBusy } from "../src/observe.ts";
+import { observeTick, worktreeBusy, worktreeOccupied } from "../src/observe.ts";
 import { extractMarker } from "../src/records.ts";
 import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
@@ -242,6 +242,52 @@ keys: [skills]
     expect(worktreeBusy(["a-grok-1 working"], owned)).toBe(false);
     expect(worktreeBusy(["resolve-12 working /tmp/wt/feat-12-x"], owned)).toBe(false);
     expect(worktreeBusy(["conductor working /tmp/wt/feat-12-x"], owned)).toBe(false);
+  });
+
+  test("所有外が idle でも worktreeOccupied。worktreeBusy は working のまま", async () => {
+    const snap = SNAP.replace(
+      "resolve-12 working",
+      "resolve-12 done\ntheme-polish-12 idle /tmp/wt/feat-12-x",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).worktreeOccupied).toBe(true);
+    expect(find(rows, 12).worktreeBusy).toBe(false);
+    expect(find(rows, 34).worktreeOccupied).toBe(false);
+  });
+
+  test("指紋へ渡す所有外は name + cwd だけで、状態を落とす", async () => {
+    const seen: CycleMarkInput[] = [];
+    const snap = SNAP.replace(
+      "resolve-12 working",
+      "resolve-12 done\ntheme-polish-12 idle /tmp/wt/feat-12-x",
+    );
+    await observe(
+      port({
+        snapshot: async () => snap,
+        cycleMark: async (input) => {
+          seen.push(input);
+          return present("mark-1");
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen.find((s) => s.issue === 12)?.occupied).toEqual([
+      { name: "theme-polish-12", cwd: "/tmp/wt/feat-12-x" },
+    ]);
+  });
+
+  test("worktreeOccupied: 状態を問わず、所有セッションは除外する", () => {
+    const owned = ["/tmp/wt/feat-12-x"];
+    expect(worktreeOccupied(["theme-polish-12 idle /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 blocked /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 done /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 working /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 idle /tmp/other"], owned)).toBe(false);
+    expect(worktreeOccupied(["theme-polish-12 idle"], owned)).toBe(false);
+    expect(worktreeOccupied(["resolve-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeOccupied(["retired-resolve-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeOccupied(["conductor idle /tmp/wt/feat-12-x"], owned)).toBe(false);
   });
 
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {

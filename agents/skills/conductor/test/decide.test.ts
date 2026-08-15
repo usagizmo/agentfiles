@@ -471,6 +471,46 @@ describe("実行器が消える / 止まる", () => {
   test("7s2: 行 7s と同じく他の agent が working だが、着地待ち", () => {
     expectLease([awaitingLanding({ session: session.idle, worktreeBusy: true })], "integration");
   });
+
+  test("7t: session が none で所有外が idle。起こし直さない", () => {
+    const obs = [implementing({ session: session.none, worktreeOccupied: true })];
+    expectConflict(obs, "同じ worktree に所有外セッションがある");
+    expectIdle(obs);
+  });
+
+  test("7t2: 所有外が working でも起こし直さない", () => {
+    const obs = [
+      implementing({ session: session.none, worktreeBusy: true, worktreeOccupied: true }),
+    ];
+    expectConflict(obs, "同じ worktree に所有外セッションがある");
+    expectIdle(obs);
+  });
+
+  test("7t3: 所有外が消えれば解決を起こし直す", () => {
+    expectAction(
+      [implementing({ session: session.none, worktreeOccupied: false })],
+      "解決を起こし直す",
+    );
+  });
+
+  test("7t4: 着地済みでも所有外が居るあいだは片付けない", () => {
+    const obs = [
+      implementing({
+        surfaces: [
+          surface({
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            terminal: present(true),
+          }),
+        ],
+        submissionEvidence: present(true),
+        session: session.none,
+        worktreeOccupied: true,
+      }),
+    ];
+    expectConflict(obs, "同じ worktree に所有外セッションがある");
+    expectIdle(obs);
+  });
 });
 
 describe("外から状態が動く", () => {

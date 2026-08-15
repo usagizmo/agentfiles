@@ -68,7 +68,7 @@ import sys
 # **符号化を変えたらここを上げる。**指紋の先頭に入るので、新旧が静かに同じ値へ化けない。
 # 互換は持たない（旧 `mark` の変換も新旧併用もしない）。上げた周は全件が不一致になり、
 # `count` が 1 度だけ 0 に戻る（退避が最大 1 周遅れる安全側）。
-SCHEMA = "cycle-mark/3"
+SCHEMA = "cycle-mark/4"
 
 # **レコード名は固定の ASCII 定数だけ。**可変長のものはすべて中身側へ置いて長さ前置きにする。
 # path を名前に埋めると（`untracked:<path>`）、改行を含む path で framing が曖昧になり、
@@ -638,7 +638,8 @@ def encode_resolve(enc, args):
     """解決の周。成果物の側だけから作る。
 
     **`runtime` とセッションの状態は入れない**（回した直後に必ず変わるので、入れると常に
-    成果ありになる）。**commit 数でも引かない**（amend / squash / rebase で減る）。
+    成果ありになる）。所有外セッションは name + cwd だけ入れる（出現・消滅・cwd が成果の
+    側の変化。状態は入れない）。**commit 数でも引かない**（amend / squash / rebase で減る）。
 
     **着地面ごとに撮る。**成果物が生まれる repo は Issue の repo とは限らず（`landing-surface.md`）、
     1 面だけを見ると、別の面で書き進んでいる周と何も書けずに止まっている周が同じ値になる ——
@@ -654,6 +655,7 @@ def encode_resolve(enc, args):
         )
     encode_optional_file(enc, "plan-comment", args.plan_comment)
     encode_optional_file(enc, "wait-record", args.wait_record)
+    encode_occupied(enc, args.occupied)
 
 
 def encode_plan(enc, args):
@@ -667,6 +669,20 @@ def encode_plan(enc, args):
         # 識別力は同じ。畳まないぶん、呼び出し側が digest を撮り損なう経路が消える。
         emit_file(enc, "issue-body", os.fsencode(path), "Issue 本文")
     encode_optional_file(enc, "wait-record", args.wait_record)
+
+
+def encode_occupied(enc, occupied):
+    """所有外セッション。**name + cwd だけ。状態は入れない。**
+
+    空（`--no-occupied`）と「居る」を別の値にする。省略は usage error。
+    """
+    if occupied is None:
+        enc.text("occupied-source", "absent")
+        return
+    enc.text("occupied-source", "present")
+    for name, cwd in occupied:
+        enc.text("occupied-name", name)
+        enc.text("occupied-cwd", cwd)
 
 
 def encode_optional_file(enc, name, path):
@@ -770,6 +786,19 @@ def build_parser():
     )
     parser.add_argument("--no-wait-record", action="store_true", help="人待ちの記録が無い / 無効であることの明示")
     parser.add_argument(
+        "--occupied",
+        action="append",
+        default=[],
+        type=landing_arg,
+        metavar="name:cwd",
+        help="解決の周。所有外セッションごとに 1 つ（name + cwd。状態は入れない）",
+    )
+    parser.add_argument(
+        "--no-occupied",
+        action="store_true",
+        help="所有外セッションが無いことの明示",
+    )
+    parser.add_argument(
         "--issue-body",
         action="append",
         default=[],
@@ -872,11 +901,19 @@ def parse_args(argv):
         if both:
             parser.error("worktree があるのに branch が無い面: {}".format(", ".join(both)))
         require_pair(parser, "plan-comment", args.plan_comment, args.no_plan_comment)
+        if args.occupied and args.no_occupied:
+            parser.error("--occupied と --no-occupied は排他")
+        if not args.occupied and not args.no_occupied:
+            parser.error("--occupied か --no-occupied のどちらかが要る")
+        for name, cwd in args.occupied:
+            require_value(parser, "occupied", name)
+            require_value(parser, "occupied", cwd)
 
         # 並べ替えを実装が持つ（呼び出し側の順序で指紋が動かない）。
         args.landing = sorted(args.landing)
         args.worktree = dict(args.worktree)
         args.branch = dict(args.branch)
+        args.occupied = None if args.no_occupied else sorted(args.occupied)
     else:
         forbid(
             parser,
@@ -890,6 +927,8 @@ def parse_args(argv):
             no_worktree=args.no_worktree,
             plan_comment=args.plan_comment,
             no_plan_comment=args.no_plan_comment,
+            occupied=args.occupied,
+            no_occupied=args.no_occupied,
         )
         if not args.issue_body:
             parser.error("--issue-body が 1 つ以上要る")

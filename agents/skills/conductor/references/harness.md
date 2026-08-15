@@ -299,8 +299,7 @@ herdr なら:
 herdr agent list | jq -S -r '.result.agents[]? | select(.name != null)
   | if .name == "conductor" then "conductor present"
     elif (.name | test("^(retired-)?(refine|resolve)-[0-9]+$")) then "\(.name) \(.agent_status)"
-    elif .agent_status == "working" then "\(.name) working \(.cwd // "")"
-    else empty end' | sort | grep .
+    else "\(.name) \(.agent_status) \(.cwd // "")" end' | sort | grep .
 
 # --workspaces-cmd
 herdr workspace list | jq -S -c '.result.workspaces[]?' | while IFS= read -r row; do
@@ -323,7 +322,7 @@ done | sort | grep .
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
 - **`done` と `idle` を畳まない**（片付け方が違う）
 - **`retired-refine-<番号>` も拾う**（rename しても対象 Issue の再計画は塞ぐ）
-- **`refine` / `resolve` / `conductor` 以外の `working` も出す**（cwd つき）
+- **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（cwd つき）
 
 worktree 一覧は面ごとの checkout から取る（スクリプトが `--repo` と `--landing` から行う）。
 

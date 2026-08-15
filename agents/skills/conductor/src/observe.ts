@@ -138,6 +138,11 @@ export type CycleMarkInput = {
   readonly waitRecord: string | null;
   /** 計画の周のみ。対象集合の全件。bytes は `protocols.md` の「file の bytes」 */
   readonly issueBodies: readonly { readonly issue: number; readonly body: string }[];
+  /**
+   * 同じ worktree に居る所有外セッション。**name + cwd だけ。状態は入れない。**
+   * 空は `--no-occupied`。
+   */
+  readonly occupied: readonly { readonly name: string; readonly cwd: string }[];
 };
 
 /** project の Status 名 → `ledger`。**対応表は project 必須**（無ければ fail-closed）。 */
@@ -223,20 +228,46 @@ const classifySession = (rows: readonly string[], name: string): SessionObservat
 
 const OWNED_SESSION = /^(retired-)?(refine|resolve)-\d+$/;
 
-/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が working か。 */
-export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
-  rows.some((row) => {
+const cwdOnOwned = (cwd: string, ownedPaths: readonly string[]): boolean =>
+  ownedPaths.some(
+    (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
+  );
+
+type ForeignRow = { readonly name: string; readonly status: string; readonly cwd: string };
+
+/** 所有外で、課題の worktree に cwd が載っている行。**cwd が無い行は入れない。** */
+const foreignOnOwned = (rows: readonly string[], ownedPaths: readonly string[]): ForeignRow[] => {
+  const out: ForeignRow[] = [];
+  for (const row of rows) {
     const [name, status, ...cwdParts] = row.split(" ");
-    if (name === undefined || name === "conductor" || OWNED_SESSION.test(name)) return false;
-    if (status !== "working") return false;
+    if (name === undefined || name === "conductor" || OWNED_SESSION.test(name)) continue;
+    if (status === undefined) continue;
     const cwd = cwdParts.join(" ");
     // **cwd が無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
     // 帰属できない 1 本が全課題の write を止める。
-    if (cwd === "") return false;
-    return ownedPaths.some(
-      (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
-    );
-  });
+    if (cwd === "") continue;
+    if (!cwdOnOwned(cwd, ownedPaths)) continue;
+    out.push({ name, status, cwd });
+  }
+  return out;
+};
+
+/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が working か。 */
+export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
+  foreignOnOwned(rows, ownedPaths).some((row) => row.status === "working");
+
+/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が居るか。**状態は問わない。** */
+export const worktreeOccupied = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
+  foreignOnOwned(rows, ownedPaths).length > 0;
+
+/** 指紋用。**状態は落とす。**出現・消滅・cwd だけが動く。 */
+export const occupiedSessions = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+): readonly { readonly name: string; readonly cwd: string }[] =>
+  foreignOnOwned(rows, ownedPaths)
+    .map(({ name, cwd }) => ({ name, cwd }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.cwd.localeCompare(b.cwd));
 
 /** 全コメントを 1 本に連ねる。marker は本文をまたがないので、重複検知はそのまま効く。 */
 const joinComments = (comments: readonly string[]): string => comments.join("\n\n");
@@ -426,6 +457,10 @@ export const observeTick = async (
         sessionRows,
         worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
       ),
+      worktreeOccupied: worktreeOccupied(
+        sessionRows,
+        worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
+      ),
 
       waitRecord: waitRecord(commentText, pause),
       waitRecordCreatedAt: extra.waitRecordCreatedAt,
@@ -506,6 +541,10 @@ export const observeTick = async (
         planComment: plan.kind === "present" ? plan.value : null,
         waitRecord: validWait,
         issueBodies,
+        occupied: occupiedSessions(
+          sessionRows,
+          worktreeRows.filter((w) => ownsWorktreePath(w.path, o.issue)).map((w) => w.path),
+        ),
       }),
     );
   });
