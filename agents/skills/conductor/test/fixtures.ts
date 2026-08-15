@@ -87,6 +87,7 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   refineSession: { kind: "none" },
 
   waitRecord: wait.absent,
+  waitRecordCreatedAt: absent(),
   pauseRecordExists: false,
   yieldRecord: absent(),
   intentRecord: intent.absent,

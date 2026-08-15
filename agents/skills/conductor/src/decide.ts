@@ -124,6 +124,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         session: lead.session,
         worktreeBusy: lead.worktreeBusy,
         waitRecord: lead.waitRecord,
+        waitRecordCreatedAt: lead.waitRecordCreatedAt,
         pauseRecordExists: lead.pauseRecordExists,
         yieldRecord: lead.yieldRecord,
         intentRecord: lead.intentRecord,
@@ -261,8 +262,11 @@ const terminalMixedInGroup = (g: Group): boolean => {
   return terminal > 0 && terminal < g.records.length;
 };
 
-/** **`退避先` に当てるのは上 3 つと、merge の枠の回収だけ。** */
+/** `ledger` が `退避先`。当てる rung はこれを見ていないものだけ。 */
 const isShelved = (g: Group): boolean => g.lead.ledger === "退避先";
+
+const validWaiting = (o: IssueObservation): boolean =>
+  o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid";
 
 const sessionAlive = (g: Group): boolean => g.leadObservation.session.kind !== "none";
 
@@ -310,7 +314,13 @@ const revertTarget = (
   const r = g.lead;
   const o = g.leadObservation;
 
-  if (REVERTABLE.includes(r.ledger) && failure(g).count >= config.retryBudget) return "退避先";
+  if (
+    REVERTABLE.includes(r.ledger) &&
+    failure(g).count >= config.retryBudget &&
+    failure(g).lastAction !== "計画枠の逼迫を伝える"
+  ) {
+    return "退避先";
+  }
 
   // **正規化後の `runtime` では引かない** —— 人待ちの記録があると生きたセッションでも
   // `人待ち` に写るので、起こした直後の実行器を結果が出る前に落とす。
@@ -318,7 +328,7 @@ const revertTarget = (
     REVERTABLE.includes(r.ledger) &&
     cycle(g).count >= config.emptyCycleBudget &&
     markUnchanged(g) &&
-    !(o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid") &&
+    !validWaiting(o) &&
     !sessionActive(o.session)
   ) {
     return "退避先";
@@ -444,14 +454,7 @@ const countsAsSupply = (
   if (g.members.some((n) => excluded.has(n))) return false;
   if (g.lead.ledger === "退避先") return false;
   if (g.observations.some((o) => o.retiredRefineExists)) return false;
-  if (
-    g.observations.some(
-      (o) =>
-        o.refineSession.kind !== "none" &&
-        o.waitRecord.kind === "waiting" &&
-        o.waitRecord.validity.kind === "valid",
-    )
-  ) {
+  if (g.observations.some((o) => o.refineSession.kind !== "none" && validWaiting(o))) {
     return false;
   }
   if (alreadyClaimed(g)) return false;
@@ -522,6 +525,77 @@ const byPriority = (groups: readonly Group[]) => (a: Group, b: Group) => {
   return a.leadObservation.boardOrder - b.leadObservation.boardOrder;
 };
 
+/**
+ * 「計画を起こす」の match から計画枠の条件だけを外したもの。
+ * 飽和の述語はこれを複製せず、この関数を共有する。
+ */
+const planStartable = (g: Group, ctx: Context): boolean => {
+  if (isShelved(g)) return false;
+  if (g.lead.ledger !== "未計画" || g.lead.progress !== "未着手") return false;
+  if (g.leadObservation.refineSession.kind !== "none" || g.leadObservation.retiredRefineExists)
+    return false;
+  if (g.leadObservation.waitRecord.kind === "waiting") return false;
+  return ctx.supply < ctx.supplyTarget;
+};
+
+/** 枠を占めている有効な人待ち refine。 */
+const waitingOccupant = (g: Group): boolean =>
+  g.leadObservation.refineSession.kind !== "none" && validWaiting(g.leadObservation);
+
+/**
+ * この経路で退避を始めたが三拍子が揃っていない。
+ * 飽和が一時的に解けても、始めた対象は完成させる。
+ */
+const incompleteRetreat = (g: Group): boolean => {
+  if (g.lead.ledger !== "退避先") return false;
+  if (failure(g).lastAction !== "計画枠の逼迫を伝える") return false;
+  return validWaiting(g.leadObservation) || g.leadObservation.refineSession.kind !== "none";
+};
+
+const retreatComplete = (g: Group): boolean =>
+  g.lead.ledger === "退避先" &&
+  !validWaiting(g.leadObservation) &&
+  g.leadObservation.refineSession.kind === "none";
+
+const asSolo = (g: Group): Group[] =>
+  g.observations.flatMap((o, i) => {
+    const record = g.records[i];
+    return record === undefined
+      ? []
+      : [
+          {
+            representative: o.issue,
+            members: [o.issue],
+            observations: [o],
+            records: [record],
+            lead: record,
+            leadObservation: o,
+          } satisfies Group,
+        ];
+  });
+
+const waitAge = (g: Group): number =>
+  value(g.leadObservation.waitRecordCreatedAt) ?? Number.MAX_SAFE_INTEGER;
+
+const olderWait = (a: Group, b: Group): number => {
+  const left = waitAge(a);
+  const right = waitAge(b);
+  return left === right ? a.representative - b.representative : left - right;
+};
+
+const promptPlanSlotRetreat = (g: Group, ctx: Context): boolean => {
+  const solos = ctx.groups.flatMap(asSolo);
+  if (incompleteRetreat(g)) {
+    const open = solos.filter(incompleteRetreat);
+    return open.sort(olderWait)[0]?.representative === g.representative;
+  }
+  if (ctx.planSlotsUsed < ctx.config.planSlots) return false;
+  if (!waitingOccupant(g)) return false;
+  if (!solos.some((other) => planStartable(other, ctx))) return false;
+  const occupants = solos.filter(waitingOccupant);
+  return occupants.sort(olderWait)[0]?.representative === g.representative;
+};
+
 // ---------------------------------------------------------------------------
 // ラダー
 // ---------------------------------------------------------------------------
@@ -533,8 +607,9 @@ type Rung = {
   readonly match: (g: Group, ctx: Context) => boolean;
   /**
    * 適用の単位。既定は group（**実体を触る action は代表の番号で 1 回**）。
-   * **`refine` を起こす / 片付ける 3 つだけが Issue 単位** —— `refine-<番号>` は Issue ごとで
-   * worktree を持たないので、group へ畳むと**揃っていない group の未計画側が永久に計画されない**。
+   * **`refine` を起こす / 片付ける / 計画枠の逼迫を伝えるだけが Issue 単位** ——
+   * `refine-<番号>` は Issue ごとで worktree を持たないので、group へ畳むと
+   * **揃っていない group の未計画側が永久に計画されない**。
    */
   readonly unit?: "issue";
 };
@@ -878,19 +953,16 @@ const LADDER: readonly Rung[] = [
     },
   },
   {
+    params: () => ({ action: "計画枠の逼迫を伝える" }),
+    unit: "issue",
+    why: "計画枠が人待ちの計画で飽和し、起こせる候補が待たされている",
+    match: (g, ctx) => promptPlanSlotRetreat(g, ctx),
+  },
+  {
     params: () => ({ action: "計画を起こす" }),
     unit: "issue",
     why: "未計画の課題に計画枠と在庫の空きがある",
-    match: (g, ctx) => {
-      if (isShelved(g)) return false;
-      if (g.lead.ledger !== "未計画" || g.lead.progress !== "未着手") return false;
-      // `retired-refine-<番号>` も「有る」に数える。
-      if (g.leadObservation.refineSession.kind !== "none" || g.leadObservation.retiredRefineExists)
-        return false;
-      if (g.leadObservation.waitRecord.kind === "waiting") return false;
-      if (ctx.planSlotsUsed >= ctx.config.planSlots) return false;
-      return ctx.supply < ctx.supplyTarget;
-    },
+    match: (g, ctx) => planStartable(g, ctx) && ctx.planSlotsUsed < ctx.config.planSlots,
   },
   {
     params: () => ({ action: "claim する" }),
@@ -930,7 +1002,10 @@ export const decide = (input: TickInput): Decision => {
   // **精算は action の選択より前。**`退避先` にはどの action も当たらないことがあるので、
   // action の側に置くと一度も揃わず、人が救出した瞬間に差し戻しの述語が真のまま当たって直帰する。
   const shelved = groups.find(
-    (g) => isShelved(g) && (failure(g).count !== 0 || cycle(g).count !== 0),
+    (g) =>
+      isShelved(g) &&
+      (failure(g).count !== 0 || cycle(g).count !== 0) &&
+      (failure(g).lastAction !== "計画枠の逼迫を伝える" || retreatComplete(g)),
   );
   // **Conflict は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他は回す。
   const conflicts: Conflict[] = [];
@@ -1004,24 +1079,7 @@ export const decide = (input: TickInput): Decision => {
   };
 
   const ordered = [...groups].sort(byPriority(groups));
-  // Issue 単位の rung 用に、成員 1 件ずつを単独の group として並べ直す。
-  const solo = ordered.flatMap((g) =>
-    g.observations
-      .map((o, i) => {
-        const record = g.records[i];
-        return record === undefined
-          ? undefined
-          : ({
-              representative: o.issue,
-              members: [o.issue],
-              observations: [o],
-              records: [record],
-              lead: record,
-              leadObservation: o,
-            } satisfies Group);
-      })
-      .filter((x) => x !== undefined),
-  );
+  const solo = ordered.flatMap(asSolo);
 
   const inPlay = (g: Group): boolean => !g.members.some((n) => excluded.has(n));
 

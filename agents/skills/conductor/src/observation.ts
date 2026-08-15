@@ -121,6 +121,8 @@ export type IssueObservation = {
   readonly refineSession: SessionObservation;
 
   readonly waitRecord: WaitRecord;
+  /** 人待ちコメントの `createdAt`。促す相手の順序キー。**`updatedAt` で代用しない** */
+  readonly waitRecordCreatedAt: Observed<number>;
   /** 休止の記録。**「記録あり」だけでは `休止` にならない**（非稼働も要る） */
   readonly pauseRecordExists: boolean;
   /** 休止の記録の本体。交差の記述（`to` / `keys`）を突き合わせるときだけ読む */
