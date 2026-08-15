@@ -128,6 +128,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         submissionEvidence: lead.submissionEvidence,
         session: lead.session,
         worktreeBusy: lead.worktreeBusy,
+        worktreeOccupied: lead.worktreeOccupied,
         waitRecord: lead.waitRecord,
         waitRecordCreatedAt: lead.waitRecordCreatedAt,
         pauseRecordExists: lead.pauseRecordExists,

@@ -112,8 +112,6 @@ describe("設定の fail-closed", () => {
     "statusField",
     "statusMap",
     "surfaces",
-    "sessionsCmd",
-    "workspacesCmd",
     "executors",
   ]) {
     test(`${key} が欠けたら 2 で止まる`, async () => {

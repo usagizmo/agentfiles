@@ -179,4 +179,9 @@ export type IssueObservation = {
    * **親が `done` でも consult の子が走っているあいだは write を渡さない。**
    */
   readonly worktreeBusy: boolean;
+  /**
+   * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が居るか。
+   * **状態は問わない。**`working` だけの `worktreeBusy` とは別。
+   */
+  readonly worktreeOccupied: boolean;
 };

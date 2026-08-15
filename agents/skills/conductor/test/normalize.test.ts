@@ -262,6 +262,33 @@ describe("実行器が消える / 止まる", () => {
     expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("証跡が矛盾している");
   });
 
+  test("7t: session が none で所有外が idle でも Conflict", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface()],
+      session: session.none,
+      worktreeOccupied: true,
+    });
+    expectConflict(o, "同じ worktree に所有外セッションがある");
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("証跡が矛盾している");
+  });
+
+  test("7t2: 所有外が working でも同じ reason。証跡が矛盾しているには相乗りしない", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface()],
+      session: session.none,
+      worktreeBusy: true,
+      worktreeOccupied: true,
+    });
+    expectConflict(o, "同じ worktree に所有外セッションがある");
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("証跡が矛盾している");
+  });
+
   test("7n: board に居るのに issues 節に無く、open / closed を読めない", () => {
     const o = observation({ ledger: present("進行中"), open: unobservable("issues 節に無い") });
     expectConflict(o, "観測できない");

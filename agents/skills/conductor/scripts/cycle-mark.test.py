@@ -65,7 +65,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "cycle-mark.py")
 
-SCHEMA = "cycle-mark/3"
+SCHEMA = "cycle-mark/4"
 
 # 検査の既定の面名。**path とは別の値にする** —— 同じ文字列だと、名前を落とす変異が通る。
 # **実在の repo 名を書かない**（この repo は public。規約は `AGENTS.md`）。
@@ -73,8 +73,8 @@ PLANE = "example/control"
 
 # **参照実装ごと書き換える変更を止めるための凍結値。**どちらも git を見ない周なので、
 # 環境が変わっても動かない。**符号化を意図して変えたときだけ更新する。**
-FROZEN_NO_ENTITY = "08f524660fd2a5c97aacd559b2851b0bda5b140ad3258b71c02820e5cc35a67b"
-FROZEN_PLAN = "503031b59bd83bdcf140612cc37887631680d08797f83d2c026ec9d8ca534172"
+FROZEN_NO_ENTITY = "a017b167fbeb8503e1d93ce999e27db9beca1a53eeca2399dbc7631105d88bae"
+FROZEN_PLAN = "b8ff60d16d0d868c73cf41b390df42d7ac04ef72c2816ee5939f5b79cf81bcc8"
 
 FAILURES = []
 CHECKS = [0]
@@ -119,13 +119,14 @@ def utf8(value):
     return value.encode("utf-8")
 
 
-def ref_resolve(progress, planes, plan_comment, wait_record):
+def ref_resolve(progress, planes, plan_comment, wait_record, occupied=None):
     """解決の周の期待レコード列。
 
     `planes` は `(repo, head_source, head, tracked, untracked[, stash])` の並び。
     `tracked` / `untracked` は `None`（worktree 無し）か entry の並び。`stash` は
     `None`（`refs/stash` 無し）か oid の並び。**並びはこちらで面の名前の昇順・
     生バイト昇順に揃えて渡す**（実装の並べ替えを写さない）。
+    `occupied` は `(name, cwd)` の並び。無しは `None`。
     """
     records = [
         ("schema", utf8(SCHEMA)),
@@ -143,13 +144,20 @@ def ref_resolve(progress, planes, plan_comment, wait_record):
         records += ref_stash(stash)
     records += ref_optional("plan-comment", plan_comment)
     records += ref_optional("wait-record", wait_record)
+    records += ref_occupied(occupied)
     return ref_digest(records)
 
 
-def ref_one(progress, head_source, head, tracked, untracked, plan_comment, wait_record, stash=None):
+def ref_one(
+    progress, head_source, head, tracked, untracked, plan_comment, wait_record, stash=None, occupied=None
+):
     """1 面だけの解決の周（既定の面名を使う）。"""
     return ref_resolve(
-        progress, [(PLANE, head_source, head, tracked, untracked, stash)], plan_comment, wait_record
+        progress,
+        [(PLANE, head_source, head, tracked, untracked, stash)],
+        plan_comment,
+        wait_record,
+        occupied,
     )
 
 
@@ -213,6 +221,16 @@ def ref_optional(name, content):
     if content is None:
         return [(name + "-source", utf8("absent")), (name, b"")]
     return [(name + "-source", utf8("present")), (name, content)]
+
+
+def ref_occupied(entries):
+    if entries is None:
+        return [("occupied-source", utf8("absent"))]
+    records = [("occupied-source", utf8("present"))]
+    for name, cwd in sorted(entries):
+        records.append(("occupied-name", utf8(name)))
+        records.append(("occupied-cwd", utf8(cwd)))
+    return records
 
 
 # ---------------------------------------------------------------- 実行
@@ -303,7 +321,9 @@ def write(path, content, mode=None):
         os.chmod(path, mode)
 
 
-def resolve_argv(repo, worktree=None, branch=None, progress="実装中", plan_comment=None, wait_record=None):
+def resolve_argv(
+    repo, worktree=None, branch=None, progress="実装中", plan_comment=None, wait_record=None, occupied=None
+):
     """1 面だけの呼び出し（既定の面名を使う）。
 
     **worktree を渡すなら branch も要る**（スクリプトが「その worktree にこの課題の branch が
@@ -312,10 +332,14 @@ def resolve_argv(repo, worktree=None, branch=None, progress="実装中", plan_co
     """
     if worktree and branch is None:
         branch = "main"
-    return multi_argv([(PLANE, repo, worktree)], branch, progress, plan_comment, wait_record)
+    return multi_argv(
+        [(PLANE, repo, worktree)], branch, progress, plan_comment, wait_record, occupied
+    )
 
 
-def multi_argv(planes, branch=None, progress="実装中", plan_comment=None, wait_record=None):
+def multi_argv(
+    planes, branch=None, progress="実装中", plan_comment=None, wait_record=None, occupied=None
+):
     """`planes` は `(面の名前, checkout, worktree | None)` の並び。"""
     argv = ["--ledger", "進行中", "--host", "github.com", "--progress", progress]
     for name, checkout, _ in planes:
@@ -326,6 +350,11 @@ def multi_argv(planes, branch=None, progress="実装中", plan_comment=None, wai
         argv += ["--branch", "{}:{}".format(name, branch)] if branch else ["--no-branch", name]
     argv += ["--plan-comment", plan_comment] if plan_comment else ["--no-plan-comment"]
     argv += ["--wait-record", wait_record] if wait_record else ["--no-wait-record"]
+    if occupied:
+        for name, cwd in occupied:
+            argv += ["--occupied", "{}:{}".format(name, cwd)]
+    else:
+        argv += ["--no-occupied"]
     return argv
 
 
@@ -342,6 +371,32 @@ def test_no_entity(tmp):
     got = mark(resolve_argv(repo))
     check("branch も worktree も無い周", got, ref_one("実装中", "absent", "", None, None, None, None))
     check("branch も worktree も無い周（凍結値）", got, FROZEN_NO_ENTITY)
+
+
+def test_occupied_presence(tmp):
+    """所有外セッションは name + cwd だけが指紋に入る。状態は引数に無い。"""
+    repo = os.path.join(tmp, "occupied")
+    make_repo(repo)
+    none = mark(resolve_argv(repo))
+    present = mark(resolve_argv(repo, occupied=[("theme-polish-9", "/tmp/wt/feat-9-x")]))
+    moved = mark(resolve_argv(repo, occupied=[("theme-polish-9", "/tmp/wt/other")]))
+    gone = mark(resolve_argv(repo))
+    check_distinct(
+        "所有外セッションの出現・cwd・消滅",
+        [("無し", none), ("出現", present), ("cwd 変化", moved)],
+    )
+    check("所有外の消滅で指紋が戻る", gone, none)
+    want = ref_one(
+        "実装中",
+        "absent",
+        "",
+        None,
+        None,
+        None,
+        None,
+        occupied=[("theme-polish-9", "/tmp/wt/feat-9-x")],
+    )
+    check("所有外の出現は独立に組み立てた期待値と一致する", present, want)
 
 
 def test_untracked_matrix(tmp):
@@ -823,7 +878,7 @@ def test_multiple_landing(tmp):
          "--progress", "実装中",
          "--branch", "a/control:" + branch, "--no-branch", "b/other",
          "--no-worktree", "a/control", "--no-worktree", "b/other",
-         "--no-plan-comment", "--no-wait-record"]
+         "--no-plan-comment", "--no-wait-record", "--no-occupied"]
     )
     check_distinct("面ごとの branch の有無が指紋に出ない", [("both", base), ("partial", partial)])
 
@@ -1379,63 +1434,73 @@ def test_failures(tmp):
         # 同じ終了コードのまま**意図した guard を 1 つも通らない**（緑のまま検査が空洞になる）。
         ("worktree の有無が宣言されていない",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch",
-          "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("同じ面で worktree の有無を 2 回宣言",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
-          "--worktree", land, "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--worktree", land, "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         # **1 面でも宣言を省けない。**省いた面の dirty は指紋に入らず、書き進んでいる周と
         # 成果ゼロの周が同値になる。
         ("2 面のうち 1 面だけ宣言",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--landing", "other/plane:" + repo,
           "--progress", "実装中", "--no-branch", PLANE, "--no-worktree", PLANE,
-          "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("--worktree の path が空文字",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
-          "--worktree", PLANE + ":", "--no-plan-comment", "--no-wait-record"], 2),
+          "--worktree", PLANE + ":", "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         # **面の名前を欠いた spec を弾く。**通すと、path の先頭が面の名前として観測される。
         ("--landing に面の名前が無い",
          ["--ledger", "進行中", "--host", "github.com", "--landing", repo, "--progress", "実装中", "--no-branch", PLANE,
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         # **worktree があるなら --branch が要る。**許すと branch の同一性検査を飛ばせる。
         ("worktree があるのに --no-branch",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
-          "--worktree", land, "--no-plan-comment", "--no-wait-record"], 2),
+          "--worktree", land, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         # **branch の有無も面ごとにちょうど 1 回。**省いた面の branch は指紋に出ない。
         ("branch の有無が宣言されていない",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中",
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         # **2 回宣言を弾く guard に届かせる。**`--no-branch` を値なしで渡すと argparse が先に
         # exit 2 するので、同じ終了コードのまま guard を 1 度も通らない。
         ("同じ面で branch の有無を 2 回宣言",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中",
           "--branch", PLANE + ":main", "--no-branch", PLANE,
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("--host が無い",
          ["--ledger", "進行中", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("--landing が 1 つも無い",
          ["--ledger", "進行中", "--host", "github.com", "--progress", "実装中", "--no-branch", PLANE,
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         # **面の重複を弾く。**同じ面を 2 回符号化した指紋と 2 面ぶんの指紋が区別できない。
         ("--landing の面が重複", multi_argv([(PLANE, repo, None), (PLANE, repo, None)]), 2),
         # **知らない面の worktree を弾く。**通すとその面は符号化されないまま黙って落ちる。
         ("--landing に無い面の worktree を宣言",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
           "--worktree", "other/plane:" + repo, "--no-worktree", PLANE,
-          "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("--branch が空文字",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--branch", PLANE + ":",
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("--plan-comment が空文字",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
-          "--no-worktree", PLANE, "--plan-comment", "", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--plan-comment", "", "--no-wait-record", "--no-occupied"], 2),
         ("--progress が空文字",
          ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "", "--no-branch", PLANE,
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("--ledger が空文字",
          ["--ledger", "", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
-          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record", "--no-occupied"], 2),
         ("解決の周に --issue-body", resolve_argv(repo, worktree=repo) + ["--issue-body", "1:" + plan], 2),
+        ("--occupied の指定が無い",
+         ["--ledger", "進行中", "--host", "github.com", "--landing", land, "--progress", "実装中", "--no-branch", PLANE,
+          "--no-worktree", PLANE, "--no-plan-comment", "--no-wait-record"], 2),
+        ("--occupied と --no-occupied は排他",
+         resolve_argv(repo, occupied=[("theme-polish-9", "/tmp/wt")]) + ["--no-occupied"], 2),
+        ("計画の周に --occupied",
+         ["--ledger", "未計画", "--issue-body", "1:" + plan, "--no-wait-record",
+          "--occupied", "theme-polish-9:/tmp/wt"], 2),
+        ("計画の周に --no-occupied",
+         ["--ledger", "未計画", "--issue-body", "1:" + plan, "--no-wait-record", "--no-occupied"], 2),
         ("計画の周に --landing", ["--ledger", "未計画", "--landing", land, "--issue-body", "1:" + plan,
                                  "--no-wait-record"], 2),
         # **空文字の禁止引数も弾く。**truthiness で判定すると「渡していない」に化ける。
@@ -1474,6 +1539,7 @@ def main():
     try:
         for test in (
             test_no_entity,
+            test_occupied_presence,
             test_untracked_matrix,
             test_untracked_paths,
             test_untracked_kinds,
