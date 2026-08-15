@@ -4,17 +4,25 @@
 import { describe, expect, test } from "bun:test";
 import {
   claimRecord,
+  keysOfPlan,
   planRecord,
+  type PlanRecord,
+  carriesReportOrHalt,
   cycleRecord,
   extractMarker,
+  hasStandaloneLine,
   intentRecord,
   integrationRecord,
+  integrationRecordCount,
+  liveOwnedPrs,
   readyRecord,
+  reportFromSources,
   reportRecord,
   retryRecord,
   waitRecord,
   yieldRecord,
 } from "../src/records.ts";
+import { invalid, present, unobservable } from "../src/types.ts";
 
 const wrap = (marker: string, yaml: string) =>
   `本文\n\n<!-- ${marker} -->\n\n\`\`\`yaml\n${yaml}\n\`\`\`\n\n<!-- /${marker} -->\n`;
@@ -169,6 +177,18 @@ describe("提出と在庫と枠", () => {
     expect(reportRecord(wrap("report", "heads:\n  o/r: aaa")).kind).toBe("invalid");
   });
 
+  test("report の written は無くても読める", () => {
+    const r = reportRecord(wrap("report", "heads:\n  o/r: aaa\nbases:\n  o/r: bbb"));
+    expect(r.kind === "present" ? r.value.written : r.kind).toEqual({});
+  });
+
+  test("report の written を面ごとの SHA 列として読む", () => {
+    const r = reportRecord(
+      wrap("report", "heads:\n  o/r: aaa\nbases:\n  o/r: bbb\nwritten:\n  o/r:\n    - old"),
+    );
+    expect(r.kind === "present" ? r.value.written : r.kind).toEqual({ "o/r": ["old"] });
+  });
+
   test("ready の invalidationScope は空にできない", () => {
     const empty = wrap("ready", "readySha: aaa\nissueDigest: bbb\ninvalidationScope: []");
     expect(readyRecord(empty).kind).toBe("invalid");
@@ -177,6 +197,42 @@ describe("提出と在庫と枠", () => {
   test("integration は pr が無くても読める（PR を使う面が無い課題）", () => {
     const r = integrationRecord(wrap("integration", "issues: [1]"));
     expect(r).toEqual({ kind: "present", value: { issues: [1], pr: null } });
+  });
+
+  test("integration の件数は 2 つを 0 に畳まない", () => {
+    const one = wrap("integration", "issues: [1]");
+    expect(integrationRecordCount("")).toEqual(present(0));
+    expect(integrationRecordCount(one)).toEqual(present(1));
+    expect(integrationRecordCount(one + one)).toEqual(present(2));
+    expect(
+      integrationRecordCount("<!-- integration -->\nただの文\n<!-- /integration -->").kind,
+    ).toBe("invalid");
+  });
+
+  test("散文の report 字面は PR 側の読み対象にしない", () => {
+    expect(carriesReportOrHalt("まとめは `<!-- report -->` を付ける")).toBe(false);
+    expect(carriesReportOrHalt(wrap("report", "heads:\n  o/r: a\nbases:\n  o/r: b"))).toBe(true);
+    expect(carriesReportOrHalt("<!-- halt -->\n止まった")).toBe(true);
+    expect(carriesReportOrHalt(wrap("claim", "representative: 1"))).toBe(false);
+    expect(hasStandaloneLine("記録は `<!-- claim -->` を付ける", "<!-- claim -->")).toBe(false);
+    expect(hasStandaloneLine(wrap("claim", "representative: 1"), "<!-- claim -->")).toBe(true);
+  });
+
+  test("closed-unmerged と他人の PR は生きた PR に入れない", () => {
+    const prs = [
+      { number: 10, state: "open", mergedAt: null, headRef: "feat/12-x" },
+      { number: 11, state: "closed", mergedAt: "2026-08-01T00:00:00Z", headRef: "feat/12-y" },
+      { number: 12, state: "closed", mergedAt: null, headRef: "feat/12-z" },
+      { number: 13, state: "open", mergedAt: null, headRef: "feat/99-x" },
+    ];
+    expect(liveOwnedPrs(12, prs).map((p) => p.number)).toEqual([10, 11]);
+  });
+
+  test("PR 一覧が読めない reportFromSources は unobservable", () => {
+    const ok = wrap("report", "heads:\n  o/r: aaa\nbases:\n  o/r: bbb");
+    expect(reportFromSources(ok, unobservable("PR 一覧を読めない")).kind).toBe("unobservable");
+    expect(reportFromSources("", present([ok])).kind).toBe("present");
+    expect(reportFromSources(ok, present([ok])).kind).toBe("invalid");
   });
 });
 
@@ -228,5 +284,36 @@ describe("面の接頭辞を持つ記録", () => {
 
   test("2 つ以上のキーを持つ map は読めない（どちらが面か決まらない）", () => {
     expect(readyRecord(readyBody("  - {a: 1, b: 2}")).kind).toBe("invalid");
+  });
+});
+
+describe("計画の資源キー", () => {
+  test("git の octal escape を載せた YAML は invalid（読み替えない）", () => {
+    const r = planRecord(
+      wrap(
+        "plan",
+        [
+          "baseSha: aaa",
+          'issueDigests:\n  "12": d12',
+          'invalidationScope:\n  - "docs/coding/\\343\\202\\267.md"',
+          "resourceKeys: []",
+        ].join("\n"),
+      ),
+    );
+    expect(r.kind).toBe("invalid");
+    if (r.kind !== "invalid") return;
+    expect(r.reason).toContain("yaml として読めない");
+  });
+
+  test("keysOfPlan は invalid を absent へ畳まない", () => {
+    const plan = invalid<PlanRecord>("raw", "yaml として読めない: Invalid escape");
+    const keys = keysOfPlan(plan);
+    expect(keys.kind).toBe("invalid");
+    if (keys.kind !== "invalid") return;
+    expect(keys.reason).toContain("yaml として読めない");
+  });
+
+  test("keysOfPlan は unobservable を absent へ畳まない", () => {
+    expect(keysOfPlan(unobservable("コメント一覧を読めない")).kind).toBe("unobservable");
   });
 });

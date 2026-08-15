@@ -37,7 +37,7 @@ const reasonOf = (o: Observed<unknown>): string | undefined =>
 const isTransparent = (s: SurfaceObservation): boolean => value(s.aheadOfIntegration) === false;
 
 /** **dirty は全面の共通前提**（`0` のみ。`1` も、読めなかった `-` も不可）。 */
-const allSurfacesClean = (surfaces: readonly SurfaceObservation[]): boolean =>
+export const allSurfacesClean = (surfaces: readonly SurfaceObservation[]): boolean =>
   surfaces.every((s) => value(s.dirty) === false);
 
 const allSurfacesTerminalOrTransparent = (surfaces: readonly SurfaceObservation[]): boolean =>
@@ -70,6 +70,10 @@ const terminalMixed = (surfaces: readonly SurfaceObservation[]): boolean => {
  */
 export const hasWorkInProgress = (surfaces: readonly SurfaceObservation[]): boolean =>
   surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) === true);
+
+/** `完了` かつ提出の証跡がある。片付けの再開入口と、成果物 / live Conflict の免除が同じ述語を読む。 */
+export const settledSubmitted = (o: IssueObservation): boolean =>
+  value(o.ledger) === "完了" && value(o.submissionEvidence) === true;
 
 export const normalizeProgress = (o: IssueObservation): Progress => {
   const clean = allSurfacesClean(o.surfaces);
@@ -131,9 +135,10 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // 無く、**ラダー最上段なのでキューが恒久的に止まる**（実測で、キュー以前に着地した
   // 40 件が全部ここへ落ち、`片付ける` にも届かなかった）。
   //
-  // **実体を守る Conflict には掛けない** —— 成果物を伴う 2 つ・着地面・live checkout は、
-  // `片付ける` が消しにいく対象そのものを見ている。
+  // **実体を守る Conflict には掛けない** —— 着地面は `片付ける` が消しにいく対象そのものを見ている。
+  // 成果物を伴う 2 つと live checkout は、`完了` かつ提出の証跡があるときにだけ立てない。
   const settled = value(o.ledger) === "完了";
+  const submitted = settledSubmitted(o);
 
   // **本文とコメントを読めていないなら、他の値は詰め物。**先に報告して止める。
   if (o.sourceReadable.kind !== "present" || o.sourceReadable.value === false) {
@@ -199,7 +204,8 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     hasWorkInProgress(o.surfaces);
 
   // **保守的に全交差のまま保持し続ける**（非保持へ倒すと、投稿に失敗した課題が無防備に書く）。
-  if (value(o.planCommentExists) === false && artifacts) {
+  // **`完了` かつ提出の証跡がある残骸には当てない** —— 当てると standing が片付けの入口を塞ぐ。
+  if (!submitted && value(o.planCommentExists) === false && artifacts) {
     found.push(
       conflict(
         "計画コメントが無いまま実装の証跡がある",
@@ -209,7 +215,7 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     );
   }
 
-  if (value(o.issueContractComplete) === false && artifacts) {
+  if (!submitted && value(o.issueContractComplete) === false && artifacts) {
     found.push(
       conflict(
         "Issue 契約が欠けたまま成果物がある",
@@ -223,7 +229,16 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // **PR を使わない面には当てない**（あちらは提出の証跡そのものが終端の条件）。
   // 守っているのは台帳が進んでいないことだけなので、`完了` には当てない
   // （`完了` なら依存は `closed かつ 完了` の経路で解ける）。
-  if (!settled && value(o.prMerged) === true && value(o.submissionEvidence) !== true) {
+  // **claim の remote branch が無い着地済みには当てない**（ship の既定が branch を消す）。
+  const landedWithoutClaimBranch =
+    value(o.claimBranchExists) === false &&
+    (value(o.prMerged) === true || value(o.ledger) === "完了");
+  if (
+    !settled &&
+    value(o.prMerged) === true &&
+    value(o.submissionEvidence) !== true &&
+    !landedWithoutClaimBranch
+  ) {
     found.push(
       conflict("着地済みだが提出の証跡が無い", n, "merged な PR があるのに提出のまとめが無い"),
     );
@@ -237,6 +252,17 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     normalizeCapacity(o) === "無し" &&
     o.session.kind === "none" &&
     value(o.claimBranchExists) !== true;
+
+  // **提出の証跡が無い `完了` の残骸は片付けに入らず、人が見る。**残骸が無い形（17m3）には立てない。
+  // **claim の remote branch が無い着地済みには当てない**（行 17m6）。
+  if (
+    settled &&
+    value(o.submissionEvidence) !== true &&
+    !nothingLeft &&
+    !landedWithoutClaimBranch
+  ) {
+    found.push(conflict("着地済みだが提出の証跡が無い", n, "台帳は完了なのに提出のまとめが無い"));
+  }
 
   const claim = value(o.claimRecord);
   if (
@@ -261,8 +287,9 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
 
   // **当てるのは、その面を着地面に持ち、かつその面がまだ終端していない課題だけ。**
   // **PR で着地する面は対象外** —— そちらは live へ merge しない。
+  // **`terminal` の免除は残す。**`submitted` を和で足す（置換すると、`完了` を書く前の窓が止まる）。
   for (const s of o.surfaces) {
-    if (s.usesPr || value(s.terminal) === true) continue;
+    if (s.usesPr || value(s.terminal) === true || submitted) continue;
     if (value(s.liveCheckoutHealthy) !== true) {
       found.push(
         conflict(
@@ -291,7 +318,7 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   }
 
   // `取り下げ` は人が置いた状態を尊重するので、終端の混在だけは別に見る。
-  if (progress !== "取り下げ" && terminalMixed(o.surfaces) && progress === "着地済み") {
+  if (progress === "着地済み" && terminalMixed(o.surfaces)) {
     found.push(conflict("group の終端が混在", n, "終端した面と終端していない面が混在している"));
   }
 
@@ -344,7 +371,7 @@ export const ledgerAhead = (r: NormalizedIssue): boolean => {
 export const normalize = (o: IssueObservation): NormalizedIssue => {
   const progress = normalizeProgress(o);
   // 読めなかったときの `未計画` は**この値を誰も読まないことが前提**の詰め物。
-  // 同じ観測が `ledger が解釈不能` を立て、`報告して止める` がラダー最上段で当たるので、
+  // 同じ観測が `ledger が解釈不能` を立て、standing が選出対象外にするので、
   // 4 フィールドの側は分岐に使われない。**既定値として意味を持たせない。**
   const ledger: Ledger = value(o.ledger) ?? "未計画";
   return {

@@ -4,16 +4,27 @@
 // 黙らず SKIP を出すか、SUMMARY が数を持つか。**「違反 0」と「検査していない」を
 // 取り違えると gate が素通りする**ので、そこを実際に走らせて確かめる。
 
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const AUDIT = `${ROOT}agents/skills/docs/scripts/audit-skills.sh`;
 const fixture = (name) => `${ROOT}test/fixtures/${name}`;
 
+function withoutGitEnv(base = process.env) {
+  const env = { ...base };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  return env;
+}
+
 async function audit(root, env = {}) {
   const p = Bun.spawn(["sh", AUDIT, root], {
     cwd: ROOT,
-    env: { ...process.env, ...env },
+    env: withoutGitEnv({ ...process.env, ...env }),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -120,4 +131,143 @@ test("依存が無い（exit 2）は SKIP として通す", async () => {
   const { stdout } = await audit(fixture("emphasis-clean"), checker("no-dep"));
   expect(stdout).toContain("SKIP\temphasis");
   expect(stdout).toContain("skips=1");
+});
+
+// --- owned: gitignore された skill を棚卸しから外す ----------------------
+// 祖先の .git を拾わないよう、独立した git repo を /tmp に作る。
+
+const derivedViolations = (stdout) =>
+  stdout
+    .split("\n")
+    .filter((l) => l.startsWith("VIOLATION\tderived"))
+    .sort();
+
+async function git(args, cwd) {
+  const p = Bun.spawn(["git", ...args], {
+    cwd,
+    env: withoutGitEnv(),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(p.stdout).text(),
+    new Response(p.stderr).text(),
+    p.exited,
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(`git ${args.join(" ")}: ${stderr || stdout}`);
+  }
+  return stdout;
+}
+
+function writeLayerReadme(dir, skills) {
+  const cells = skills.map((s) => `\`${s}\``).join(" ");
+  writeFileSync(
+    join(dir, "agents/docs/README.md"),
+    `# docs\n\n## 層構造\n\n| 層 | skills |\n| --- | --- |\n| leaf | ${cells} |\n\n## 次\n`,
+  );
+}
+
+function writeSkill(dir, name) {
+  mkdirSync(join(dir, "agents/skills", name), { recursive: true });
+  writeFileSync(join(dir, "agents/skills", name, "SKILL.md"), `# ${name}\n`);
+}
+
+async function ownedRepo({ table, extras = [] }) {
+  const dir = mkdtempSync(join(tmpdir(), "audit-owned-"));
+  mkdirSync(join(dir, "agents/docs"), { recursive: true });
+  writeFileSync(join(dir, ".gitignore"), "/agents/skills/ghost/\n");
+  writeSkill(dir, "owned");
+  writeLayerReadme(dir, table);
+  for (const name of extras) writeSkill(dir, name);
+  await git(["init"], dir);
+  await git(["config", "user.email", "test@example.com"], dir);
+  await git(["config", "user.name", "test"], dir);
+  await git(["add", ".gitignore", "agents/skills/owned", "agents/docs/README.md"], dir);
+  await git(["commit", "-m", "init"], dir);
+  return dir;
+}
+
+test("gitignore された skill の有無で derived の VIOLATION が変わらない", async () => {
+  const absent = await ownedRepo({ table: ["owned"] });
+  const present = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
+  try {
+    const a = await audit(join(absent, "agents/skills"));
+    const b = await audit(join(present, "agents/skills"));
+    expect(derivedViolations(a.stdout)).toEqual(derivedViolations(b.stdout));
+    expect(derivedViolations(b.stdout)).toEqual([]);
+  } finally {
+    rmSync(absent, { recursive: true, force: true });
+    rmSync(present, { recursive: true, force: true });
+  }
+});
+
+test("gitignore された名前を層表に戻すと derived が落ちる", async () => {
+  const dir = await ownedRepo({ table: ["owned", "ghost"], extras: ["ghost"] });
+  try {
+    const { stdout, exitCode } = await audit(join(dir, "agents/skills"));
+    expect(stdout).toContain(
+      "VIOLATION\tderived\tdocs/README.md\tnote=層構造の ghost を所有していない",
+    );
+    expect(exitCode).toBe(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// characterization: 層表と所有 skill の双方向。所有フィルタを外しても同じ入力で落ちる
+test("tracked な skill が層表に無いと derived が落ちる", async () => {
+  const dir = await ownedRepo({ table: [] });
+  try {
+    const { stdout, exitCode } = await audit(join(dir, "agents/skills"));
+    expect(stdout).toContain(
+      "VIOLATION\tderived\tdocs/README.md\tnote=skill owned が層構造の節に無い",
+    );
+    expect(exitCode).toBe(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// characterization: 層表と所有 skill の双方向。所有フィルタを外しても同じ入力で落ちる
+test("層表の余分なエントリは derived が落ちる", async () => {
+  const dir = await ownedRepo({ table: ["owned", "extra"] });
+  try {
+    const { stdout, exitCode } = await audit(join(dir, "agents/skills"));
+    expect(stdout).toContain(
+      "VIOLATION\tderived\tdocs/README.md\tnote=層構造の extra を所有していない",
+    );
+    expect(exitCode).toBe(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("gitignore された skill の shared コピーは VIOLATION に出ない", async () => {
+  const dir = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
+  try {
+    mkdirSync(join(dir, "agents/shared"), { recursive: true });
+    writeFileSync(join(dir, "agents/shared/host.md"), "# host\n");
+    mkdirSync(join(dir, "agents/skills/ghost/references"), { recursive: true });
+    writeFileSync(join(dir, "agents/skills/ghost/references/host.md"), "# copy\n");
+    const { stdout } = await audit(join(dir, "agents/skills"));
+    expect(stdout).not.toContain("VIOLATION\tshared\tghost/");
+    expect(derivedViolations(stdout)).toEqual([]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("repo が無いときは所有判定を SKIP する", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "audit-norepo-"));
+  try {
+    writeSkill(dir, "owned");
+    mkdirSync(join(dir, "agents/docs"), { recursive: true });
+    writeLayerReadme(dir, ["owned"]);
+    const { stdout } = await audit(join(dir, "agents/skills"));
+    expect(stdout).toContain("SKIP\towned");
+    expect(stdout).toMatch(/skips=[1-9]/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

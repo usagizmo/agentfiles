@@ -8,6 +8,7 @@ import {
   issues,
   landingTips,
   liveCheckouts,
+  localBranches,
   parseSnapshot,
   projectStatus,
   pullRequests,
@@ -19,8 +20,8 @@ ${SNAPSHOT_SCHEMA}
 --- default ---
 abc123
 --- landing tips ---
-control def456
-skills 789abc
+control origin/main def456
+skills refs/heads/main 789abc
 --- landing local branches ---
 control feat/1-x abcdef
 --- live checkout (面 branch dirty(0/1/-) ahead behind) ---
@@ -45,7 +46,7 @@ ws-1 /tmp/wt/feat-1-x
 --- recent issue comments ---
 999 2026-08-12T00:00:00Z claim,plan
 --- PRs ---
-7 feat/12-x OPEN draft=false checks=SUCCESS
+7 feat/12-x OPEN draft=false checks=SUCCESS@2026-08-12T00:00:00Z@lint
 8 scratch OPEN draft=true checks=untracked
 `;
 
@@ -92,10 +93,8 @@ describe("行の decode", () => {
     ).toThrow(SnapshotDecodeError);
   });
 
-  test("live checkout の ahead / behind を読む", () => {
-    expect(liveCheckouts(snap)).toEqual([
-      { surface: "skills", branch: "main", dirty: false, ahead: 0, behind: 3 },
-    ]);
+  test("live checkout の dirty / behind を読む", () => {
+    expect(liveCheckouts(snap)).toEqual([{ surface: "skills", dirty: false, behind: 3 }]);
   });
 
   test("project status はボード順を index として保つ", () => {
@@ -123,12 +122,49 @@ describe("行の decode", () => {
 
   test("untracked な PR の checks を「無し」へ畳まない", () => {
     expect(pullRequests(snap)).toEqual([
-      { number: 7, headRef: "feat/12-x", draft: false, checks: ["SUCCESS"] },
+      {
+        number: 7,
+        headRef: "feat/12-x",
+        draft: false,
+        checks: [{ status: "SUCCESS", at: "2026-08-12T00:00:00Z", name: "lint" }],
+      },
       { number: 8, headRef: "scratch", draft: true, checks: "untracked" },
     ]);
   });
 
+  test("IN_PROGRESS と空白を含む name を落とさない", () => {
+    const pending = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=IN_PROGRESS@2026-08-12T01:00:00Z@Root gate (drift)|SKIPPED@@Preview DB",
+    );
+    expect(pullRequests(parseSnapshot(pending))[0]?.checks).toEqual([
+      { status: "IN_PROGRESS", at: "2026-08-12T01:00:00Z", name: "Root gate (drift)" },
+      { status: "SKIPPED", at: "", name: "Preview DB" },
+    ]);
+  });
+
+  test("checks=none は空配列（無いことと untracked を混ぜない）", () => {
+    const none = SNAP.replace("checks=SUCCESS@2026-08-12T00:00:00Z@lint", "checks=none");
+    expect(pullRequests(parseSnapshot(none))[0]?.checks).toEqual([]);
+  });
+
+  test("旧形式の checks=SUCCESS,SKIPPED は投げて、空へ畳まない", () => {
+    const old = SNAP.replace("checks=SUCCESS@2026-08-12T00:00:00Z@lint", "checks=SUCCESS,SKIPPED");
+    expect(() => pullRequests(parseSnapshot(old))).toThrow(SnapshotDecodeError);
+  });
+
   test("統合先の tip を面ごとに引ける", () => {
     expect(landingTips(snap).get("skills")).toBe("789abc");
+  });
+
+  test("ローカル branch の tip を面ごとに引ける", () => {
+    expect(localBranches(snap)).toEqual([
+      { surface: "control", branch: "feat/1-x", sha: "abcdef" },
+    ]);
+  });
+
+  test("面が読めない `- -` を branch として残さない", () => {
+    const unknown = SNAP.replace("control feat/1-x abcdef", "control - -");
+    expect(localBranches(parseSnapshot(unknown))).toEqual([]);
   });
 });

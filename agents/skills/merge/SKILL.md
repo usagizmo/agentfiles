@@ -28,12 +28,9 @@ description: >-
 
 ## 操作台は統合先が出ている checkout
 
-**セッションの cwd では走らせない**。作業中の worktree に出ているのは作業 branch なので、そこで
-統合先への merge はできない（下の検査に必ず掛かる）。**統合先が checkout されている木へ `git -C` で
-入って行う**。
+**セッションの cwd では走らせない**。作業中の worktree に出ているのは作業 branch なので、そこで統合先への merge はできない（下の検査に必ず掛かる）。**統合先が checkout されている木へ `git -C` で入って行う**。
 
-**`checkout` で cwd の worktree を統合先へ切り替えない**。課題の branch が worktree から外れ、
-実装の続きも片付けも行き先を失う。
+**`checkout` で cwd の worktree を統合先へ切り替えない**。課題の branch が worktree から外れ、実装の続きも片付けも行き先を失う。
 
 ## マージ先を先に検査する
 
@@ -52,12 +49,9 @@ description: >-
 
 **`--abort` で戻したら、そこで止めて報告する**。`--no-verify` や `--no-gpg-sign` で通し直さない ——落ちた検査は、その面の規約が要求しているもの。
 
-**統合先が upstream より先行していることは異常ではない**。push が人の領分の面では、それが常態
-。ここを gate にすると、**その面へは一度も着地できなくなる。**
+**統合先が upstream より先行していることは異常ではない**。push が人の領分の面では、それが常態。ここを gate にすると、**その面へは一度も着地できなくなる。**
 
-**衝突しうる状態では merge しない**。統合先の HEAD が対象 branch の祖先なら、上のどちらの形も衝突しない。祖先でないなら**自分の worktree で rebase してから出直す** ——
-先に merge してから `--abort` で戻す形にすると、**衝突から abort までのあいだ live に conflict marker の
-入った木が残り、全セッションがそれを読む**。abort 自体も、live に許した操作（fetch と merge）の外。
+**衝突しうる状態では merge しない**。統合先の HEAD が対象 branch の祖先なら、上のどちらの形も衝突しない。祖先でないなら**自分の worktree で rebase してから出直す** —— 先に merge してから `--abort` で戻す形にすると、**衝突から abort までのあいだ live に conflict marker の入った木が残り、全セッションがそれを読む**。abort 自体も、live に許した操作（fetch と merge）の外。
 
 1. 対象ブランチ名と、統合先が出ている checkout の path を取得する
 2. **その checkout で** `git log --oneline HEAD..<branch>` と `git diff HEAD...<branch>` で変更を把握する

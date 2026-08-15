@@ -9,7 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { normalize, normalizeProgress } from "../src/normalize.ts";
-import { holdsWrite } from "../src/resources.ts";
+import { holdsIntegration, holdsWrite } from "../src/resources.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { Capacity, ConflictReason, Ledger, Progress, Runtime } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
@@ -415,6 +415,45 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17c4: 全着地面 0-ahead で妥当な report がある", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [control(), secondary({ hasCheckout: present(true) })],
+        submissionEvidence: present(true),
+      }),
+      { progress: "着地済み", runtime: "無し", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
+  test("17c5: 全着地面 0-ahead で report が無く、セッションも無い", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [control(), secondary({ hasCheckout: present(true) })],
+        submissionEvidence: present(false),
+      }),
+      { progress: "準備済み", runtime: "無し", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
+  test("17c3: 全着地面が透過で、提出の証跡が無く、open PR がある", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [control(), secondary({ hasCheckout: present(true) })],
+        openPr: present(true),
+      }),
+      { progress: "提出中", runtime: "無し", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
   test("17g2: 書いた面は clean で report もあるが、書かなかった面が dirty", () => {
     expectFields(
       observation({
@@ -599,6 +638,38 @@ describe("着地面が制御面と違う", () => {
     expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("live checkout が異常");
   });
 
+  test("17d2: 提出の証跡がある 完了 の残骸。非 PR 面は終端でなく、live / 計画 / 契約が欠ける", () => {
+    const base = {
+      ledger: present("完了" as const),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      issueContractComplete: present(true),
+      submissionEvidence: present(true),
+    };
+    const remnants = (over: Partial<ReturnType<typeof secondary>> = {}) =>
+      secondary({
+        aheadOfIntegration: present(true),
+        hasCheckout: present(true),
+        ...over,
+      });
+    const cases: Partial<IssueObservation>[] = [
+      { ...base, surfaces: [remnants({ liveCheckoutHealthy: present(false) })] },
+      { ...base, planCommentExists: present(false), surfaces: [remnants()] },
+      { ...base, issueContractComplete: present(false), surfaces: [remnants()] },
+    ];
+    const blocked: readonly ConflictReason[] = [
+      "live checkout が異常",
+      "計画コメントが無いまま実装の証跡がある",
+      "Issue 契約が欠けたまま成果物がある",
+    ];
+    for (const over of cases) {
+      const o = observation(over);
+      expectFields(o, { progress: "実装中", runtime: "無し", capacity: "あり", ledger: "完了" });
+      const reasons = normalize(o).conflicts.map((c) => c.reason);
+      for (const reason of blocked) expect(reasons).not.toContain(reason);
+    }
+  });
+
   test("17m: PR が merged なのに提出の証跡が無い", () => {
     expectConflict(
       observation({
@@ -614,7 +685,7 @@ describe("着地面が制御面と違う", () => {
 
   test("17m3: 記録の整合が壊れているが、台帳は既に 完了", () => {
     // キュー以前に着地した課題。当てると**歴史側が全部ここへ落ち**、ラダー最上段なので
-    // `片付ける` にも永久に届かない（実測で 289 件中 40 件）。
+    // `片付ける` にも永久に届かない。
     const settled: Partial<IssueObservation> = {
       open: present(false),
       ledger: present("完了"),
@@ -629,6 +700,44 @@ describe("着地面が制御面と違う", () => {
       { ...settled, integrationRecordCount: unobservable("読めない") },
     ];
     for (const over of cases) expect(normalize(observation(over)).conflicts).toEqual([]);
+  });
+
+  test("17m4: 完了 だが提出の証跡が無く、残骸がある", () => {
+    expectConflict(
+      observation({
+        ledger: present("完了"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
+      }),
+      "着地済みだが提出の証跡が無い",
+    );
+  });
+
+  test("17m5: 行 17m と同じく証跡が無いが、claim の remote branch が無い", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(false),
+      planCommentExists: present(true),
+      prMerged: present(true),
+      surfaces: [workingSurface({ terminal: present(true) })],
+    });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain(
+      "着地済みだが提出の証跡が無い",
+    );
+  });
+
+  test("17m6: 行 17m4 と同じく完了 × 残骸だが、claim の remote branch が無い", () => {
+    const o = observation({
+      ledger: present("完了"),
+      claimBranchExists: present(false),
+      planCommentExists: present(true),
+      prMerged: present(true),
+      surfaces: [secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) })],
+    });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain(
+      "着地済みだが提出の証跡が無い",
+    );
   });
 
   test("17k: 片付けが終わり、Issue は closed・worktree も無い", () => {
@@ -738,6 +847,14 @@ describe("merge の直列化（integration）", () => {
       observation({ ledger: present("進行中"), integrationRecordCount: present(2) }),
       "渡しの記録が複数",
     );
+  });
+
+  test("渡しの記録が読めなければ保持している側へ倒す", () => {
+    expect(
+      holdsIntegration(observation({ integrationRecordCount: unobservable("読めない") })),
+    ).toBe(true);
+    expect(holdsIntegration(observation({ integrationRecordCount: present(0) }))).toBe(false);
+    expect(holdsIntegration(observation({ integrationRecordCount: present(1) }))).toBe(true);
   });
 });
 

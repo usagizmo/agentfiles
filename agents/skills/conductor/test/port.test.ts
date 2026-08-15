@@ -21,8 +21,8 @@ const raw = {
     Shelved: "退避先",
   },
   surfaces: [
-    { name: "acme/control", usesPr: true, integrationRef: "origin/main" },
-    { name: "acme/skills", usesPr: false, integrationRef: "main" },
+    { name: "acme/control", usesPr: true, countsCapacity: true, integrationRef: "origin/main" },
+    { name: "acme/skills", usesPr: false, countsCapacity: false, integrationRef: "main" },
   ],
   sessionsCmd: "list-sessions",
   workspacesCmd: "list-workspaces",
@@ -46,6 +46,10 @@ const valuesOf = (flag: string) =>
   args().flatMap((a, i) => (a === flag ? [args()[i + 1] ?? ""] : []));
 
 describe("watch.sh の引数", () => {
+  test("watch.sh は bash で起動する（shebang は spawn では使われない）", () => {
+    expect(args()[0]).toBe("bash");
+  });
+
   test("watch.sh が要求する option をすべて渡す", () => {
     for (const flag of [
       "--snapshot",
@@ -64,6 +68,10 @@ describe("watch.sh の引数", () => {
   test("制御面は --repo で渡し、--landing に重ねない", () => {
     expect(valuesOf("--repo")).toEqual(["/w/control"]);
     expect(valuesOf("--landing")).toEqual(["acme/skills:main:/w/skills"]);
+  });
+
+  test("制御面の origin/<branch> を --default-branch に渡す", () => {
+    expect(valuesOf("--default-branch")).toEqual(["main"]);
   });
 
   test("制御面以外の着地面を 1 つも落とさない", () => {

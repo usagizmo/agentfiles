@@ -18,6 +18,7 @@ const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.va
 export type SurfaceFacts = {
   readonly name: string;
   readonly usesPr: boolean;
+  readonly countsCapacity: boolean;
   /** `統合先..branch` が非空か */
   readonly aheadOfIntegration: Observed<boolean>;
   /** その面の branch の head。提出の証跡の照合に使う */
@@ -43,23 +44,17 @@ export const surfaceReported = (
 ): Observed<boolean> => {
   if (report.kind === "absent") return present(false);
   if (report.kind !== "present") return unobservable("提出のまとめを読めない");
+  if (head.kind === "absent") {
+    // **branch が無いのは「読めなかった」ではない。**ship の既定が消す。記録にあれば提出済み。
+    return present(report.value.heads[name] !== undefined);
+  }
   const current = value(head);
   if (current === undefined) return unobservable("面の head を読めない");
   const recorded = report.value.heads[name];
   return present(recorded !== undefined && recorded === current);
 };
 
-/**
- * 面の型ごとの着地の条件。
- *
- * | 面の型          | 着地した                          | 着地してよい               |
- * | --------------- | --------------------------------- | -------------------------- |
- * | PR を使う面     | PR が `merged`                    | open PR があり checks が緑 |
- * | PR を使わない面 | commit があり、その面が提出済み   | 同じ（2 つが一致する）     |
- *
- * **PR を使わない面で merge を条件にしない** —— push も merge も人の領分なので、
- * 条件にすると人が動かすまで終端に到達せず、worktree が枠を焼き続ける。
- */
+/** 面の型ごとの着地の条件は `references/landing-surface.md`。ここに写さない。 */
 export const deriveSurface = (
   f: SurfaceFacts,
   report: Observed<ReportRecord>,
@@ -67,6 +62,7 @@ export const deriveSurface = (
   const base = {
     name: f.name,
     usesPr: f.usesPr,
+    countsCapacity: f.countsCapacity,
     aheadOfIntegration: f.aheadOfIntegration,
     dirty: f.dirty,
     hasCheckout: f.hasCheckout,

@@ -8,7 +8,15 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
-import { entryBlockRecord, planRecord, readyRecord } from "./records.ts";
+import {
+  carriesReportOrHalt,
+  entryBlockRecord,
+  hasStandaloneLine,
+  liveOwnedPrs,
+  keysOfPlan,
+  planRecord,
+  readyRecord,
+} from "./records.ts";
 import { bodyMatchesPlan, planBases, planInvalidated, readyBases, readyStale } from "./plan.ts";
 import type { ChangedPath, PlanBase } from "./plan.ts";
 import { issueContractComplete } from "./contract.ts";
@@ -46,8 +54,7 @@ const json = async <T>(cmd: readonly string[], cwd?: string): Promise<Observed<T
 };
 
 /** **本文はそのまま UTF-8 で SHA-256。正規化しない**（`body-digest.md`）。 */
-export const digest = (body: string): string =>
-  createHash("sha256").update(body, "utf8").digest("hex");
+const digest = (body: string): string => createHash("sha256").update(body, "utf8").digest("hex");
 
 export type PortOptions = {
   readonly config: ProjectConfig;
@@ -61,6 +68,9 @@ export type PortOptions = {
 
 const surfaceOf = (surfaces: readonly ResolvedSurface[], name: string) =>
   surfaces.find((s) => s.name === name);
+
+/** spawn の第 1 引数。shebang は使われない。`watch.sh` は bash。 */
+export const WATCH_SHELL = "bash";
 
 /**
  * `watch.sh --snapshot` の引数。**純関数にしてあるのは、渡し漏れが観測の穴になるから** ——
@@ -76,8 +86,10 @@ export const snapshotArgs = (
   snapshotPath: string,
 ): string[] => {
   const control = surfaces[0];
+  const origin = control?.integrationRef ?? "";
+  const defaultBranch = origin.startsWith("origin/") ? origin.slice("origin/".length) : "";
   return [
-    "sh",
+    WATCH_SHELL,
     `${scriptsDir}/watch.sh`,
     "--snapshot",
     snapshotPath,
@@ -98,6 +110,7 @@ export const snapshotArgs = (
     config.sessionsCmd,
     "--workspaces-cmd",
     config.workspacesCmd,
+    ...(defaultBranch !== "" ? ["--default-branch", defaultBranch] : []),
   ];
 };
 
@@ -112,15 +125,16 @@ export const createPort = (options: PortOptions): ObservePort => {
    * 1 周で secondary rate limit に達して観測そのものが落ちる（実測）。
    */
   let prsOnce:
-    | Promise<Observed<{ merged_at: string | null; state: string; head: { ref: string } }[]>>
+    | Promise<
+        Observed<
+          { number: number; merged_at: string | null; state: string; head: { ref: string } }[]
+        >
+      >
     | undefined;
   const allPrs = () =>
-    (prsOnce ??= json<{ merged_at: string | null; state: string; head: { ref: string } }[]>([
-      "gh",
-      "api",
-      `repos/${config.ghRepo}/pulls?state=all&per_page=100`,
-      "--paginate",
-    ]));
+    (prsOnce ??= json<
+      { number: number; merged_at: string | null; state: string; head: { ref: string } }[]
+    >(["gh", "api", `repos/${config.ghRepo}/pulls?state=all&per_page=100`, "--paginate"]));
 
   const bodies = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
@@ -180,12 +194,12 @@ export const createPort = (options: PortOptions): ObservePort => {
         }
         return map;
       }
-      const byNumber = new Map(all.value.map((i) => [i.number, i.body ?? ""]));
+      const byNumber = new Map(all.value.map((i) => [i.number, i]));
       for (const n of numbers) {
         // **board に居るのに一覧に無い**のは欠落。既定へ倒さない。
         const found = byNumber.get(n);
         const observed: Observed<string> =
-          found === undefined ? unobservable("Issue 一覧に居ない") : present(found);
+          found === undefined ? unobservable("Issue 一覧に居ない") : present(found.body ?? "");
         bodies.set(n, observed);
         map.set(n, observed);
       }
@@ -196,7 +210,12 @@ export const createPort = (options: PortOptions): ObservePort => {
     // 窓で切ると「計画はあるのに planCommentExists=false」が再発する。marker を持つ限り全ページ辿る。
     issueComments: async (numbers) => {
       const all = await json<
-        { issue_url: string; body: string | null; created_at: string; id: number }[]
+        {
+          issue_url: string;
+          body: string | null;
+          created_at: string;
+          id: number;
+        }[]
       >(["gh", "api", "--paginate", `repos/${config.ghRepo}/issues/comments?per_page=100`]);
       const map = new Map<number, Observed<readonly string[]>>();
       if (all.kind !== "present") {
@@ -218,16 +237,23 @@ export const createPort = (options: PortOptions): ObservePort => {
         list.push(c);
         byIssue.set(n, list);
       }
+      const sorted = (raw: typeof marked) =>
+        [...raw].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id);
+      // **PR 番号のコメントも残す。**提出のまとめは制御面 PR へ書くので、Issue 番号だけ
+      // 残すと親の提出証跡から落ちる。返す map は渡された番号のまま（他 marker を混ぜない）。
+      for (const [n, raw] of byIssue) {
+        comments.set(
+          n,
+          sorted(raw).map((c) => c.body ?? ""),
+        );
+      }
       for (const n of numbers) {
         // **Issue ごとに作成順で整列する。**repo 全体の endpoint は Issue をまたいで並ぶので、
         // そのまま連ねると `claimedAt`（merge の枠の順序キー）が別の意味になる。
-        const list = [...(byIssue.get(n) ?? [])].sort(
-          (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id,
-        );
-        const bodiesOfIssue = list.map((c) => c.body ?? "");
-        comments.set(n, bodiesOfIssue);
+        const list = sorted(byIssue.get(n) ?? []);
+        const bodiesOfIssue = comments.get(n) ?? list.map((c) => c.body ?? "");
         map.set(n, present(bodiesOfIssue));
-        const claim = list.find((c) => (c.body ?? "").includes("<!-- claim -->"));
+        const claim = list.find((c) => hasStandaloneLine(c.body ?? "", "<!-- claim -->"));
         claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
       }
       return map;
@@ -252,15 +278,36 @@ export const createPort = (options: PortOptions): ObservePort => {
       if (branch === undefined) return { ahead: present(false), head: absent() };
 
       const head = await run(["git", "rev-parse", branch.trim()], surface.repoPath);
-      // **`統合先..branch` で測る** —— branch 上の commit の存在で読むと空 branch が `実装中` に化ける。
       const ahead = await run(
         ["git", "rev-list", "--count", `${surface.integrationRef}..${branch.trim()}`],
         surface.repoPath,
       );
+      const aheadCount = ahead.ok ? Number(ahead.stdout.trim()) : Number.NaN;
       return {
-        ahead: ahead.ok ? present(Number(ahead.stdout.trim()) > 0) : unobservable(ahead.reason),
+        ahead: ahead.ok ? present(aheadCount > 0) : unobservable(ahead.reason),
         head: head.ok ? present(head.stdout.trim()) : unobservable(head.reason),
       };
+    },
+
+    isAncestor: async (name, ancestor, descendant) => {
+      if (ancestor === descendant) return present(true);
+      const surface = surfaceOf(surfaces, name);
+      if (surface === undefined) return unobservable(`座標表に無い面: ${name}`);
+      const proc = Bun.spawn(["git", "merge-base", "--is-ancestor", ancestor, descendant], {
+        cwd: surface.repoPath,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      if (code === 0) return present(true);
+      if (code === 1 || code === 128) return present(false);
+      return unobservable(
+        `git merge-base が ${String(code)} で終了: ${stderr.trim().slice(0, 200)}`,
+      );
     },
 
     // **引数表は `references/protocols.md` が SSOT。**「無い」も明示して渡す ——
@@ -344,7 +391,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       return {
         bodyMatchesPlan: bodyMatchesPlan(plan, digests),
         planInvalidated: planInvalidated(plan, changed, control),
-        resourceKeys: plan.kind === "present" ? present(plan.value.resourceKeys) : absent(),
+        resourceKeys: keysOfPlan(plan),
       };
     },
 
@@ -393,6 +440,20 @@ export const createPort = (options: PortOptions): ObservePort => {
         // **壊れている宣言を「無い」と読まない** —— 読むと、止めているつもりの横で claim が進む。
         blocksEntry: entryBlockRecord(commentText).kind !== "absent",
         claimedAt: claimTimes.get(issue) ?? absent(),
+        linkedPrReportComments:
+          prs.kind !== "present"
+            ? unobservable("PR 一覧を読めない")
+            : present(
+                liveOwnedPrs(
+                  issue,
+                  prs.value.map((p) => ({
+                    number: p.number,
+                    state: p.state,
+                    mergedAt: p.merged_at,
+                    headRef: p.head.ref,
+                  })),
+                ).flatMap((p) => (comments.get(p.number) ?? []).filter(carriesReportOrHalt)),
+              ),
       };
     },
   };

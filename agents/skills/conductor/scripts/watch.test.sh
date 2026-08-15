@@ -36,13 +36,13 @@ check() {
 
 # 必須 option を揃えて走らせる。追加分だけを引数で渡す。
 with_required() {
-  sh "$WATCH" "$@" \
+  bash "$WATCH" "$@" \
     --repo "$TMP" --gh-repo acme/x \
     --project-org acme --project-number 1 --status-field Status \
     --sessions-cmd "echo s" --workspaces-cmd "echo w" >/dev/null 2>&1
 }
 
-raw() { sh "$WATCH" "$@" >/dev/null 2>&1; }
+raw() { bash "$WATCH" "$@" >/dev/null 2>&1; }
 
 with_required
 check 2 $? "mode をどちらも渡さないと止まる"

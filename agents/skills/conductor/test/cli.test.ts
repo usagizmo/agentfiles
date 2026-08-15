@@ -31,7 +31,9 @@ const VALID = {
     Done: "完了",
     Shelved: "退避先",
   },
-  surfaces: [{ name: "acme/control", usesPr: true, integrationRef: "origin/main" }],
+  surfaces: [
+    { name: "acme/control", usesPr: true, countsCapacity: true, integrationRef: "origin/main" },
+  ],
   sessionsCmd: "echo conductor present",
   workspacesCmd: "echo ws -",
   executors: { refine: "claude", resolve: "claude" },
@@ -50,7 +52,11 @@ const configFile = (name: string, over: Record<string, unknown> = {}): string =>
 const SURFACE = ["--surface-path", `acme/control=${TMP}`];
 
 const run = async (args: string[]) => {
-  const p = Bun.spawn(["bun", CLI, ...args], { stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawn(["bun", CLI, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: process.env,
+  });
   const [code, out, err] = await Promise.all([
     p.exited,
     new Response(p.stdout).text(),
@@ -137,6 +143,22 @@ describe("設定の fail-closed", () => {
     const path = configFile("no-surface", { surfaces: [] });
     const { code } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
+  });
+
+  test("19q: tick.readyStockLimit が残っていれば 2 で止まる", async () => {
+    const path = configFile("old-stock", { tick: { readyStockLimit: 5 } });
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain("readyStockLimit");
+  });
+
+  test("19s: countsCapacity が無ければ 2 で止まる", async () => {
+    const path = configFile("no-counts", {
+      surfaces: [{ name: "acme/control", usesPr: true, integrationRef: "origin/main" }],
+    });
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain("countsCapacity");
   });
 });
 
