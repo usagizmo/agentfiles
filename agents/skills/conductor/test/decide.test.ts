@@ -877,7 +877,7 @@ describe("外から状態が動く", () => {
     });
   });
 
-  /** 緑・clean・report 無しの `提出中` × `待機`。意図の確認は上位が当たらないよう confirmed。 */
+  /** 緑・clean・report 無しの `提出中` × `待機`。 */
   const submittedJam = (over: Partial<IssueObservation> = {}): IssueObservation =>
     implementing({
       session: session.idle,
@@ -1052,6 +1052,40 @@ describe("意図の確認", () => {
       [awaitingLanding({ intentRecord: intent.absent, session: session.idle })],
       "意図の確認を促す",
     );
+    expectAction(
+      [awaitingLanding({ intentRecord: intent.broken("parse 失敗"), session: session.idle })],
+      "意図の確認を促す",
+    );
+  });
+
+  test("15h: 提出中 × 待機 × 記録なし × checks 実行中", () => {
+    const submitted = {
+      openPr: present(true),
+      checks: present({ running: 2, green: false }),
+      session: session.idle,
+    } as const;
+    expectLease([implementing({ ...submitted, intentRecord: intent.absent })], "write");
+    expectLease(
+      [implementing({ ...submitted, intentRecord: intent.broken("parse 失敗") })],
+      "write",
+    );
+  });
+
+  test("15i: 提出中 × 緑 × まとめ前 × 記録なし", () => {
+    const d = tick([
+      implementing({
+        session: session.idle,
+        openPr: present(true),
+        checks: present({ running: 0, green: true }),
+        submissionEvidence: present(false),
+        intentRecord: intent.absent,
+      }),
+    ]).outcome;
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "枠を渡す",
+      lease: "write",
+      missing: "report",
+    });
   });
 
   test("15d: 意図の確認が confirmed で PR は緑。merge の枠の受け手になれる", () => {
