@@ -317,8 +317,8 @@ require_nonempty() {
 }
 
 snapshot() {
-  local proj_json proj issues comments sessions workspaces prs pr_count
-  local default branches wt_raw worktrees page_cost
+  local proj_json proj issues comments sessions workspaces prs prs_json pr_count
+  local default branches wt_raw worktrees page_cost board_nums
   local tips checkout ref name tip wt spec branches_local lb live live_branch live_dirty live_out live_ahead live_behind rest
 
   proj_json=$(gh api graphql --paginate \
@@ -344,7 +344,8 @@ snapshot() {
   # **board 上の番号だけ残す。**board 外の updated_at が動いても起きない。
   # ページは最後まで取る。絞るのは出力であって打ち切りではない。
   board_nums=$(printf '%s\n' "$proj" | awk '{print $2}')
-  issues=$(printf '%s\n' "$issues" | awk -f "$RESTRICT" <(printf '%s\n' "$board_nums") -) || return 1
+  printf '%s\n' "$board_nums" > "$STATE_DIR/board_nums"
+  issues=$(printf '%s\n' "$issues" | awk -f "$RESTRICT" "$STATE_DIR/board_nums" -) || return 1
 
   # marker コメントの変化で起床する。upsert は必ず `updated_at` を更新するので、
   # `sort=updated` の窓に必ず入る。marker 名まで指紋に入れる（新設・消滅がそのまま digest に出る）。

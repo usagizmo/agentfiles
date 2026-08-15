@@ -234,11 +234,15 @@ scripts/watch.sh (--snapshot <path> | --baseline <path>)
                  [--landing <owner/name>:<統合先 ref>:<checkout>]...
                  --project-org <org> --project-number <n> --status-field <name>
                  --sessions-cmd <cmd> --workspaces-cmd <cmd>
+                 [--default-branch <name>]
 ```
+
+起動の interpreter は `src/port.ts` の `WATCH_SHELL`。`--snapshot` も `--baseline` も同じ。spawn の第 1 引数が interpreter なので shebang は使われない。
 
 - `--repo` は制御面。`--landing` は**制御面以外の着地面を面の数だけ**渡す（制御面は重ねて渡さない）
 - **渡し忘れた面は観測に出ない** —— そこで書き進んでいる課題が成果ゼロの周として数えられる
 - `--landing` は**checkout を最後に置く**。repo 名と ref に `:` は現れないので、最初の 2 つの `:` だけで切れば `:` を含む path が通る。**順序を入れ替えて書き写さない**
+- `--default-branch` を付ける条件は `src/port.ts` の `snapshotArgs`。`--baseline` は mode 以外を `--snapshot` と同じにする
 - **`--interval` と `--max` は渡さない**（既定のまま使う）。窓を抑えるために縮めるものでは**ない**
 
 `--sessions-cmd` / `--workspaces-cmd` を引数にしているのは、スクリプトに multiplexer を知らせないため。注入するコマンドの契約は 3 つ。

@@ -53,8 +53,7 @@ const json = async <T>(cmd: readonly string[], cwd?: string): Promise<Observed<T
 };
 
 /** **本文はそのまま UTF-8 で SHA-256。正規化しない**（`body-digest.md`）。 */
-export const digest = (body: string): string =>
-  createHash("sha256").update(body, "utf8").digest("hex");
+const digest = (body: string): string => createHash("sha256").update(body, "utf8").digest("hex");
 
 export type PortOptions = {
   readonly config: ProjectConfig;
@@ -68,6 +67,9 @@ export type PortOptions = {
 
 const surfaceOf = (surfaces: readonly ResolvedSurface[], name: string) =>
   surfaces.find((s) => s.name === name);
+
+/** spawn の第 1 引数。shebang は使われない。`watch.sh` は bash。 */
+export const WATCH_SHELL = "bash";
 
 /**
  * `watch.sh --snapshot` の引数。**純関数にしてあるのは、渡し漏れが観測の穴になるから** ——
@@ -86,7 +88,7 @@ export const snapshotArgs = (
   const origin = control?.integrationRef ?? "";
   const defaultBranch = origin.startsWith("origin/") ? origin.slice("origin/".length) : "";
   return [
-    "sh",
+    WATCH_SHELL,
     `${scriptsDir}/watch.sh`,
     "--snapshot",
     snapshotPath,

@@ -46,6 +46,10 @@ const valuesOf = (flag: string) =>
   args().flatMap((a, i) => (a === flag ? [args()[i + 1] ?? ""] : []));
 
 describe("watch.sh の引数", () => {
+  test("watch.sh は bash で起動する（shebang は spawn では使われない）", () => {
+    expect(args()[0]).toBe("bash");
+  });
+
   test("watch.sh が要求する option をすべて渡す", () => {
     for (const flag of [
       "--snapshot",
