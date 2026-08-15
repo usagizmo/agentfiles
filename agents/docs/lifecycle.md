@@ -168,7 +168,7 @@ sequenceDiagram
     Note over C: action の優先では片付けが台帳前進より上。<br/>手順では完了を先に書いてから実体を消す。
 ```
 
-**片付けの前に必ず成果を確認する**。worktree とセッションを消すとセッションまとめが一緒に消え、git にも Issue にも残らない。PR に載っていなければ pane から回収し、どこにも無ければ片付けずに報告する。
+**片付けの前に必ず成果を確認する**。worktree とセッションを消すとセッションまとめが一緒に消え、git にも Issue にも残らない。PR に載っていなければ pane から回収し、どこにも無ければ片付けずに報告する。**例外は** PR が `merged` で claim の remote branch が無いとき。手順は `conductor/references/protocols.md`。
 
 ## 計画済みになるまで
 

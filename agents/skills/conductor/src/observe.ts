@@ -14,10 +14,10 @@ import {
   pullRequests,
   remoteBranches,
   sessions as decodeSessions,
-  workspaces,
+  workspaceRows,
   worktrees as decodeWorktrees,
 } from "./decode.ts";
-import type { LocalBranchRow, Tri } from "./decode.ts";
+import type { LocalBranchRow, Tri, WorkspaceRow } from "./decode.ts";
 import type { IssueObservation, SessionObservation, SurfaceObservation } from "./observation.ts";
 import {
   claimRecord,
@@ -270,17 +270,7 @@ export const observeTick = async (
     ]),
   );
 
-  // `--- workspaces ---` に在るが worktree の path が無いものが `prunable`。
-  const worktreePaths = new Set(worktreeRows.map((w) => w.path));
-  const prunableWorkspaces = new Set(
-    workspaces(snapshot)
-      .map((row) => row.split(" "))
-      .filter((parts) => {
-        const path = parts.slice(1).join(" ");
-        return path !== "" && !worktreePaths.has(path);
-      })
-      .map((parts) => parts.slice(1).join(" ")),
-  );
+  const workspaceList = workspaceRows(snapshot);
 
   // **面ごとの worktree 一覧を読めたか。**`watch.sh` の `plane_unknown` は面ごと `-` で潰すので、
   // 実体が 0 件なのか読めなかったのかを行の有無では区別できない。**dirty を読めない行が
@@ -440,10 +430,7 @@ export const observeTick = async (
       intentRecord: intentRecord(commentText),
       integrationRecordCount: integrationRecordCount(commentText),
 
-      // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
-      prunableWorkspace: present(
-        [...prunableWorkspaces].some((path) => ownsWorktreePath(path, issue)),
-      ),
+      prunableWorkspace: present(isPrunableWorkspace(workspaceList, issue)),
 
       failureRecord: retryRecord(commentText),
       cycleRecord: cycleRecord(commentText),
@@ -572,6 +559,19 @@ const surfaceGitOf = async (
 const ownsWorktreePath = (path: string, issue: number): boolean => {
   const leaf = path.split("/").pop() ?? "";
   return new RegExp(`(^|[^0-9])${issue}-`).test(leaf);
+};
+
+/**
+ * 孤児 workspace の帰属。候補が 0 または 2 以上、あるいは linked でないなら触らない。
+ * 述語は `is_linked_worktree` が真かつ checkout_path が実在しないこと。
+ */
+const isPrunableWorkspace = (rows: readonly WorkspaceRow[], issue: number): boolean => {
+  const candidates = rows.filter(
+    (row) => row.path !== "" && row.path !== "-" && ownsWorktreePath(row.path, issue),
+  );
+  if (candidates.length !== 1) return false;
+  const row = candidates[0];
+  return row !== undefined && row.linked === true && row.exists === false;
 };
 
 /** `--- remote branches ---` に `{prefix}/{番号}-` の branch が在るか。 */

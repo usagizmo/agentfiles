@@ -36,8 +36,8 @@ o/other 0 bbb /tmp/wt2/feat-12-x
 --- sessions ---
 resolve-12 working
 --- workspaces ---
-ws-12 /tmp/wt/feat-12-x
-ws-old /tmp/wt/feat-34-y
+ws-12 1 1 /tmp/wt/feat-12-x
+ws-old 1 0 /tmp/wt/feat-34-y
 --- project status (board order) ---
 1 12 進行中
 2 34 計画済み
@@ -541,6 +541,27 @@ keys: [skills]
     const rows = await observe(port(), STATUS, SURFACES);
     expect(find(rows, 34).prunableWorkspace).toEqual(present(true));
     expect(find(rows, 12).prunableWorkspace).toEqual(present(false));
+  });
+
+  test("linked worktree でなく path が worktree 一覧に無くても prunable にしない", async () => {
+    const snap = SNAP.replace("ws-old 1 0 /tmp/wt/feat-34-y", "ws-old 0 1 /tmp/wt/feat-34-y");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 34).prunableWorkspace).toEqual(present(false));
+  });
+
+  test("帰属候補が 2 件ならどちらも触らず prunable にしない", async () => {
+    const snap = SNAP.replace(
+      "ws-old 1 0 /tmp/wt/feat-34-y",
+      "ws-a 1 0 /tmp/wt/feat-34-y\nws-b 1 0 /tmp/other/feat-34-z",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 34).prunableWorkspace).toEqual(present(false));
+  });
+
+  test("linked かつ path が実在しないなら、git の worktree 一覧に残っていても prunable", async () => {
+    const snap = SNAP.replace("ws-12 1 1 /tmp/wt/feat-12-x", "ws-12 1 0 /tmp/wt/feat-12-x");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).prunableWorkspace).toEqual(present(true));
   });
 
   test("worktree を持たない課題の面は dirty を false で確定する", async () => {
