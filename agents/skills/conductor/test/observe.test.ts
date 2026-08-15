@@ -90,6 +90,7 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
       [34, present([])],
     ]),
   surfaceGit: async () => ({ ahead: present(true), head: present("aaa") }),
+  isAncestor: async () => present(true),
   readyFacts: async () => present(false),
   cycleMark: async () => present("mark-1"),
   // 実引数の組み立ては port の責務。ここは「何を渡すか」だけを見る。
@@ -636,6 +637,74 @@ describe("PR コメントの report を提出証跡として読む", () => {
       SURFACES,
     );
     expect(find(rows, 12).submissionEvidence.kind).toBe("unobservable");
+  });
+
+  test("written の SHA がいまの統合先 tip の祖先なら、heads = bases でも提出証跡である", async () => {
+    const landed = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/control: aaa
+bases:
+  o/control: aaa
+written:
+  o/control:
+    - ccc
+\`\`\`
+
+<!-- /report -->`;
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([landed]) }),
+        isAncestor: async (_surface, ancestor, descendant) =>
+          present(ancestor === "ccc" && descendant === "def456"),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(true));
+  });
+
+  test("キーが着地面と一致しない report は提出証跡ではない", async () => {
+    const mismatch = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/other: aaa
+bases:
+  o/other: bbb
+\`\`\`
+
+<!-- /report -->`;
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([mismatch]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(false));
+  });
+
+  test("heads と bases が同一で written が無い report は提出証跡ではない", async () => {
+    const zero = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/control: aaa
+bases:
+  o/control: aaa
+\`\`\`
+
+<!-- /report -->`;
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([zero]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(false));
   });
 
   test("PR 上の claim は Issue 側の記録にならない", async () => {

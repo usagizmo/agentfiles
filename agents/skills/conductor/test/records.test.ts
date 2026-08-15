@@ -177,6 +177,18 @@ describe("提出と在庫と枠", () => {
     expect(reportRecord(wrap("report", "heads:\n  o/r: aaa")).kind).toBe("invalid");
   });
 
+  test("report の written は無くても読める", () => {
+    const r = reportRecord(wrap("report", "heads:\n  o/r: aaa\nbases:\n  o/r: bbb"));
+    expect(r.kind === "present" ? r.value.written : r.kind).toEqual({});
+  });
+
+  test("report の written を面ごとの SHA 列として読む", () => {
+    const r = reportRecord(
+      wrap("report", "heads:\n  o/r: aaa\nbases:\n  o/r: bbb\nwritten:\n  o/r:\n    - old"),
+    );
+    expect(r.kind === "present" ? r.value.written : r.kind).toEqual({ "o/r": ["old"] });
+  });
+
   test("ready の invalidationScope は空にできない", () => {
     const empty = wrap("ready", "readySha: aaa\nissueDigest: bbb\ninvalidationScope: []");
     expect(readyRecord(empty).kind).toBe("invalid");

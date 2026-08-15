@@ -67,18 +67,19 @@
 
 **セッションは消える。外部化したものだけが復旧契約になる**。固定 marker 付きのコメント。書き先は各記録の SSOT。
 
-| 語               | marker            | 書く人               | SSOT                                        |
-| ---------------- | ----------------- | -------------------- | ------------------------------------------- |
-| claim の記録     | `claim`           | `conductor`          | `agents/shared/queue/same-branch.md`        |
-| 在庫の鮮度       | `ready`           | `refine`             | `agents/shared/queue/ready-record.md`       |
-| 計画             | `plan`            | `resolve`            | `resolve/SKILL.md`                          |
-| 人待ちの記録     | `wait`            | `refine` / `resolve` | `agents/shared/queue/wait-record.md`        |
-| 意図の確認の記録 | `intent`          | `resolve`            | `agents/shared/queue/intent-record.md`      |
-| 渡しの記録       | `integration`     | `conductor`          | `agents/shared/queue/integration-record.md` |
-| 休止の記録       | `yield`           | `conductor`          | `conductor/references/protocols.md`         |
-| 失敗の記録       | `retry`           | `conductor`          | `conductor/references/protocols.md`         |
-| 周回の記録       | `cycle`           | `conductor`          | `conductor/references/protocols.md`         |
-| セッションまとめ | `report` / `halt` | `resolve`            | `agents/shared/queue/session-report.md`     |
+| 語               | marker            | 書く人               | SSOT                                                 |
+| ---------------- | ----------------- | -------------------- | ---------------------------------------------------- |
+| claim の記録     | `claim`           | `conductor`          | `agents/shared/queue/same-branch.md`                 |
+| 在庫の鮮度       | `ready`           | `refine`             | `agents/shared/queue/ready-record.md`                |
+| 計画             | `plan`            | `resolve`            | `resolve/SKILL.md`                                   |
+| 人待ちの記録     | `wait`            | `refine` / `resolve` | `agents/shared/queue/wait-record.md`                 |
+| 意図の確認の記録 | `intent`          | `resolve`            | `agents/shared/queue/intent-record.md`               |
+| 渡しの記録       | `integration`     | `conductor`          | `agents/shared/queue/integration-record.md`          |
+| 休止の記録       | `yield`           | `conductor`          | `conductor/references/protocols.md`                  |
+| 失敗の記録       | `retry`           | `conductor`          | `conductor/references/protocols.md`                  |
+| 周回の記録       | `cycle`           | `conductor`          | `conductor/references/protocols.md`                  |
+| セッションまとめ | `report` / `halt` | `resolve`            | `agents/shared/queue/session-report.md`              |
+| 書いた commit    | `written`         | `resolve`            | `agents/skills/resolve/references/written-record.md` |
 
 **marker に版番号を付けない**。版で分岐する読み手が要るようになったことが一度も無く、upsert は marker 文字列の一致で既存を探すので、版を上げると古いコメントが見つからなくなって新旧が併存する（移行経路を与えるどころか孤児を作る）。schema の不一致は block の必須キーの有無で検出でき、`conductor` の「計画 schema 不明 → 全体 pause」がそれを受ける。
 

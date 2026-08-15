@@ -289,6 +289,27 @@ export const createPort = (options: PortOptions): ObservePort => {
       };
     },
 
+    isAncestor: async (name, ancestor, descendant) => {
+      if (ancestor === descendant) return present(true);
+      const surface = surfaceOf(surfaces, name);
+      if (surface === undefined) return unobservable(`座標表に無い面: ${name}`);
+      const proc = Bun.spawn(["git", "merge-base", "--is-ancestor", ancestor, descendant], {
+        cwd: surface.repoPath,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      if (code === 0) return present(true);
+      if (code === 1 || code === 128) return present(false);
+      return unobservable(
+        `git merge-base が ${String(code)} で終了: ${stderr.trim().slice(0, 200)}`,
+      );
+    },
+
     // **引数表は `references/protocols.md` が SSOT。**「無い」も明示して渡す ——
     // 省略は usage error で、取得に失敗した周と本当に無い周を同じ指紋にしないための形。
     cycleMark: async (input) => {

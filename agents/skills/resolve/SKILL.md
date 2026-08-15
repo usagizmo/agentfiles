@@ -28,6 +28,8 @@ description: >-
 | **integration 待ち** | managed のみ。**merge だけが直列化点**                                                                                                                                                                                                                                                                                              | —                                                                                                                          |
 | **着地**             | **PR を使う面だけ** `ship`。**PR を使わない面は commit までで着地している**（統合先への merge は人が行う）。**`managed` は渡しの記録が自分の対象集合を指していることを先に確かめる**（意図の確認は variant を問わず見る）                                                                                                           | `references/integration-record.md`（`managed` のみ）・`references/landing-surface.md`                                      |
 
+**`finish` のあと、その面の HEAD を `<!-- written -->` へ足す**（形は `references/written-record.md`）。`report` の書き方は `references/session-report.md`。
+
 **仕上げは面ごとに通す**。`finish` とその先の `commit` は 1 つの木しか見ないので、**編集した面の数だけ
 回す**（規模の判定は課題全体で 1 回、通すのは面ごと）。1 面でも残すと、その面は dirty のままなので
 `着地待ち` に到達せず、**write を渡し直されては同じ所で止まる**。**面ごとに規約が違う**（検証も

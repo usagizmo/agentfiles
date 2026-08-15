@@ -415,7 +415,32 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
-  // characterization: `着地待ち` から `submitted` を外すと `着地待ち` になり落ちる。
+  test("17c4: 全着地面 0-ahead で妥当な report がある", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [control(), secondary({ hasCheckout: present(true) })],
+        submissionEvidence: present(true),
+      }),
+      { progress: "着地済み", runtime: "無し", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
+  test("17c5: 全着地面 0-ahead で report が無く、セッションも無い", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [control(), secondary({ hasCheckout: present(true) })],
+        submissionEvidence: present(false),
+      }),
+      { progress: "準備済み", runtime: "無し", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
   test("17c3: 全着地面が透過で、提出の証跡が無く、open PR がある", () => {
     expectFields(
       observation({

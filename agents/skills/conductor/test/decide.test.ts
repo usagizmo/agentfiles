@@ -1778,6 +1778,39 @@ describe("着地面が制御面と違う（action）", () => {
     );
   });
 
+  test("17c4: 全着地面 0-ahead で妥当な report があり、planInvalidated でも片付ける", () => {
+    expectAction(
+      [
+        landed({
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(false), hasCheckout: present(true) }),
+          ],
+          submissionEvidence: present(true),
+          planInvalidated: present(true),
+          session: session.running,
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17c5: 全着地面 0-ahead で report が無く、セッションも無い", () => {
+    expectAction(
+      [
+        landed({
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(false), hasCheckout: present(true) }),
+          ],
+          submissionEvidence: present(false),
+          session: session.none,
+        }),
+      ],
+      "解決を起こし直す",
+    );
+  });
+
   test("17j: 同じ面へ別の課題が着地し、統合先が動いた", () => {
     expectAction(
       [

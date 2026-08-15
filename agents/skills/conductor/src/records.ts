@@ -233,16 +233,41 @@ export const intentRecord = (body: string): IntentRecord => {
 export type ReportRecord = {
   readonly heads: Readonly<Record<string, string>>;
   readonly bases: Readonly<Record<string, string>>;
+  /** この claim が書いた SHA。無い面は空。 */
+  readonly written: Readonly<Record<string, readonly string[]>>;
 };
 
 const isStringMap = (v: unknown): v is Record<string, string> =>
   isRecord(v) && Object.values(v).every((x) => typeof x === "string");
 
-const isReport = (v: unknown): v is ReportRecord =>
-  isRecord(v) && isStringMap(v["heads"]) && isStringMap(v["bases"]);
+const isStringArrayMap = (v: unknown): v is Record<string, readonly string[]> => {
+  if (!isRecord(v)) return false;
+  return Object.values(v).every((x) => Array.isArray(x) && x.every((s) => typeof s === "string"));
+};
 
-export const reportRecord = (body: string): Observed<ReportRecord> =>
-  parseYaml(extractMarker(body, "report"), isReport);
+const isReportYaml = (
+  v: unknown,
+): v is {
+  heads: Record<string, string>;
+  bases: Record<string, string>;
+  written?: WrittenRecord;
+} => {
+  if (!isRecord(v) || !isStringMap(v["heads"]) || !isStringMap(v["bases"])) return false;
+  if (v["written"] !== undefined && !isStringArrayMap(v["written"])) return false;
+  return true;
+};
+
+export const reportRecord = (body: string): Observed<ReportRecord> => {
+  const parsed = parseYaml(extractMarker(body, "report"), isReportYaml);
+  if (parsed.kind !== "present") return parsed;
+  return present({
+    heads: parsed.value.heads,
+    bases: parsed.value.bases,
+    written: parsed.value.written ?? {},
+  });
+};
+
+type WrittenRecord = Readonly<Record<string, readonly string[]>>;
 
 /** 単独行の `report` / `halt` を持つコメントか。散文の字面は拾わない。 */
 export const carriesReportOrHalt = (body: string): boolean =>

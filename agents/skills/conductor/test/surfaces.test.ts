@@ -22,7 +22,7 @@ const facts = (over: Partial<SurfaceFacts> = {}): SurfaceFacts => ({
 });
 
 const report = (heads: Record<string, string>): Observed<ReportRecord> =>
-  present({ heads, bases: {} });
+  present({ heads, bases: {}, written: {} });
 
 describe("PR を使う面", () => {
   test("17n: PR がまだ無い面は、着地してよくないことが確定している", () => {

@@ -29,12 +29,14 @@ import {
   retryRecord,
   waitRecord,
   yieldRecord,
+  type ReportRecord,
 } from "./records.ts";
 import { CONCURRENCY, mapLimit } from "./limit.ts";
 import { normalizeProgress } from "./normalize.ts";
 import { classifyChecks } from "./checks.ts";
 import { deriveSurface } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
+import { reportValid } from "./report.ts";
 import type { Ledger, Observed, Progress } from "./types.ts";
 import { absent, invalid, present, unobservable } from "./types.ts";
 
@@ -62,6 +64,15 @@ export type ObservePort = {
   ) => Promise<ReadonlyMap<number, Observed<readonly string[]>>>;
   /** 面ごとの git。`統合先..branch` が非空かと、その面の branch head。 */
   readonly surfaceGit: (issue: number, surface: string) => Promise<SurfaceGit>;
+  /**
+   * `git merge-base --is-ancestor`。解決できない SHA は `present(false)`。
+   * git 自体が落ちたときだけ `unobservable`。
+   */
+  readonly isAncestor: (
+    surface: string,
+    ancestor: string,
+    descendant: string,
+  ) => Promise<Observed<boolean>>;
   /**
    * 成果の指紋（`scripts/cycle-mark.py`）。**渡すのは正規化済みの値だけ** ——
    * 成分の名前と符号化はスクリプトが専任する（引数表は `references/protocols.md`）。
@@ -404,10 +415,7 @@ export const observeTick = async (
       latestPrClosedUnmerged: extra.latestPrClosedUnmerged,
       prMerged: extra.prMerged,
 
-      submissionEvidence:
-        report.kind === "unobservable"
-          ? unobservable(report.reason)
-          : present(report.kind === "present"),
+      submissionEvidence: await submissionEvidenceOf(report, surfaceNames, tips, port),
 
       session: classifySession(sessionRows, `resolve-${issue}`),
       retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
@@ -496,6 +504,21 @@ export const observeTick = async (
   });
 
   return base.map((o) => ({ ...o, currentMark: marks.get(o.issue) ?? absent() }));
+};
+
+/**
+ * YAML の存在は提出ではない。妥当なら `present(true)`、YAML があるが妥当でないなら
+ * `present(false)`。PR 一覧が読めないときだけ `unobservable`。
+ */
+const submissionEvidenceOf = async (
+  report: Observed<ReportRecord>,
+  landing: readonly string[],
+  tips: ReadonlyMap<string, string>,
+  port: ObservePort,
+): Promise<Observed<boolean>> => {
+  if (report.kind === "unobservable") return unobservable(report.reason);
+  if (report.kind !== "present") return present(false);
+  return reportValid(report.value, landing, tips, port.isAncestor);
 };
 
 /**
