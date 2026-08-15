@@ -117,6 +117,8 @@ close 直前に引き直して述語を外れていたら、閉じずその tick
 | `refine`（`done`） | セッションが載っている tab                               |
 | `refine`（`idle`） | **閉じない。**`retired-refine-<番号>` へ rename するだけ |
 
+**例外は計画枠の逼迫の上限到達**。実行器を止めてから tab を閉じる。`working` / `blocked` でも止めてから閉じる。rename し**ない**。
+
 **branch を作る述語は 1 つ —— 在れば checkout、無ければ統合先から作る**（`protocols.md` が SSOT）。契機では分かれ**ない**。
 
 **起こし直しで `-b` を使わない**。`-B` や「消して作り直す」へ倒すと、その面に積んだ commit ごと捨てる。
@@ -155,6 +157,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 片付ける（`refine`・生値）                   | 先に `herdr agent get <名前>`。返った `agent_status` で契約の `refine` 行を引く                                                                                                                                                                                                           |
 | 片付ける（`refine`・`idle`）                 | `herdr agent rename <名前> retired-refine-<番号>`（閉じ**ない**）                                                                                                                                                                                                                         |
 | 片付ける（`refine`・`done`）                 | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                                 |
+| 計画枠の逼迫の上限到達                       | 「実行器だけ止める」のあと `herdr tab close <id>`。rename し**ない**                                                                                                                                                                                                                      |
 | 片付ける（`resolve`。退避〜branch）          | checkout があるとき `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`。非 0 で閉じる段を止め**ない**                                                                                                                                                                    |
 | 片付ける（`resolve`。閉じる）                | `herdr workspace close <id>`。直前に `herdr agent list` でその workspace を見、`name` が `resolve-<番号>` でない実行器が居れば閉じない                                                                                                                                                    |
 | 退避〜branch の workspace ID                 | checkout があるとき `herdr worktree list --cwd <面の checkout>` の `open_workspace_id`                                                                                                                                                                                                    |

@@ -111,6 +111,8 @@ export type ObservePort = {
     readonly blocksEntry: boolean;
     /** claim の記録が書かれた時刻。**merge の枠の順序キー**（PR 作成の早さでは選ばない） */
     readonly claimedAt: Observed<number>;
+    /** 人待ちコメントの `createdAt`。**`updatedAt` で代用しない** */
+    readonly waitRecordCreatedAt: Observed<number>;
     /**
      * 紐づく制御面 PR（open または merged）の `report` / `halt` コメント。
      * **PR 一覧が読めなければ unobservable** —— `present([])` に倒すと提出証跡が「無い」になる。
@@ -425,6 +427,7 @@ export const observeTick = async (
       ),
 
       waitRecord: waitRecord(commentText, pause),
+      waitRecordCreatedAt: extra.waitRecordCreatedAt,
       pauseRecordExists: pause,
       yieldRecord: parsedYield,
       intentRecord: intentRecord(commentText),

@@ -112,6 +112,7 @@ const facts = (
   latestPrClosedUnmerged: present(false),
   blocksEntry: false,
   claimedAt: present(100),
+  waitRecordCreatedAt: absent(),
   linkedPrReportComments: present([]),
   ...over,
 });
@@ -162,6 +163,17 @@ describe("snapshot から導くもの", () => {
     expect(twelve.session).toEqual({ kind: "running" });
     expect(twelve.claimBranchExists).toEqual(present(true));
     expect(find(rows, 34).claimBranchExists).toEqual(present(false));
+  });
+
+  test("人待ちコメントの createdAt を観測する", async () => {
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ waitRecordCreatedAt: present(1_700_000_000_000) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).waitRecordCreatedAt).toEqual(present(1_700_000_000_000));
   });
 
   test("渡しの記録が 2 つあるコメントを 0 件に畳まない", async () => {

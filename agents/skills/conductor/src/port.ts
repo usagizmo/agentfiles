@@ -139,6 +139,8 @@ export const createPort = (options: PortOptions): ObservePort => {
   const comments = new Map<number, readonly string[]>();
   /** claim の記録が書かれた時刻。**merge の枠の順序キー**なので、固定値へ倒さない */
   const claimTimes = new Map<number, Observed<number>>();
+  /** 人待ちコメントの `createdAt`。**`updatedAt` で代用しない** */
+  const waitTimes = new Map<number, Observed<number>>();
 
   /**
    * 面ごとの `base..統合先` で変わった path。**`plan` と `ready` で同じ手順を 2 度書かない** ——
@@ -221,6 +223,7 @@ export const createPort = (options: PortOptions): ObservePort => {
           const miss: Observed<readonly string[]> = unobservable("コメント一覧を読めない");
           comments.set(n, []);
           claimTimes.set(n, unobservable("コメントを読めない"));
+          waitTimes.set(n, unobservable("コメントを読めない"));
           map.set(n, miss);
         }
         return map;
@@ -253,6 +256,8 @@ export const createPort = (options: PortOptions): ObservePort => {
         map.set(n, present(bodiesOfIssue));
         const claim = list.find((c) => hasStandaloneLine(c.body ?? "", "<!-- claim -->"));
         claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
+        const wait = list.find((c) => hasStandaloneLine(c.body ?? "", "<!-- wait -->"));
+        waitTimes.set(n, wait === undefined ? absent() : present(Date.parse(wait.created_at)));
       }
       return map;
     },
@@ -440,6 +445,7 @@ export const createPort = (options: PortOptions): ObservePort => {
         // **壊れている宣言を「無い」と読まない** —— 読むと、止めているつもりの横で claim が進む。
         blocksEntry: entryBlockRecord(commentText).kind !== "absent",
         claimedAt: claimTimes.get(issue) ?? absent(),
+        waitRecordCreatedAt: waitTimes.get(issue) ?? absent(),
         linkedPrReportComments:
           prs.kind !== "present"
             ? unobservable("PR 一覧を読めない")

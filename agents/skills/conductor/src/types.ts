@@ -101,6 +101,7 @@ export const ACTION_LADDER = [
   "checks を引き直させる",
   "意図の確認を促す",
   "枠を渡す",
+  "計画枠の逼迫を伝える",
   "計画を起こす",
   "claim する",
 ] as const;

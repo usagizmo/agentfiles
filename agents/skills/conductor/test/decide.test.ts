@@ -2264,3 +2264,92 @@ describe("容量と供給", () => {
     expect(d.usage.supplyTarget).toBe(8);
   });
 });
+
+describe("計画枠の逼迫", () => {
+  const waitingRefine = (issue: number, over: Partial<IssueObservation> = {}): IssueObservation =>
+    observation({
+      issue,
+      ledger: present("未計画"),
+      refineSession: session.running,
+      waitRecord: wait.waiting,
+      waitRecordCreatedAt: present(1_000 * issue),
+      ...over,
+    });
+
+  const backlog = (issue: number): IssueObservation =>
+    observation({ issue, ledger: present("未計画") });
+
+  test("20: 人待ちだけで計画枠が飽和し、計画候補がある", () => {
+    const d = tick([
+      waitingRefine(11, { waitRecordCreatedAt: present(300) }),
+      waitingRefine(12, { waitRecordCreatedAt: present(100) }),
+      waitingRefine(13, { waitRecordCreatedAt: present(200) }),
+      backlog(1),
+    ]);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "計画枠の逼迫を伝える",
+    );
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : d.outcome.kind).toBe(12);
+  });
+
+  test("20b: 飽和していないときは伝えない", () => {
+    expectAction([waitingRefine(11), waitingRefine(12), backlog(1)], "計画を起こす");
+  });
+
+  test("20c: 計画候補が無ければ伝えない", () => {
+    expectIdle([waitingRefine(11), waitingRefine(12), waitingRefine(13)]);
+  });
+
+  test("20d: createdAt が同じなら番号が小さい方", () => {
+    const d = tick([
+      waitingRefine(13, { waitRecordCreatedAt: present(100) }),
+      waitingRefine(11, { waitRecordCreatedAt: present(100) }),
+      waitingRefine(12, { waitRecordCreatedAt: present(200) }),
+      backlog(1),
+    ]);
+    expect(d.outcome.kind === "action" ? d.outcome.target.representative : d.outcome.kind).toBe(11);
+  });
+
+  test("20e: 上限到達を差し戻すへ接続しない", () => {
+    const d = tick([
+      waitingRefine(11, {
+        failureRecord: present({ count: 3, lastAction: "計画枠の逼迫を伝える" }),
+      }),
+      waitingRefine(12),
+      waitingRefine(13),
+      backlog(1),
+    ]);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "計画枠の逼迫を伝える",
+    );
+    expect(d.outcome.kind === "action" ? d.outcome.params : d.outcome.kind).not.toMatchObject({
+      action: "差し戻す",
+    });
+  });
+
+  test("20f: 三拍子が揃う前は退避先でも count を消さない", () => {
+    const d = tick([
+      waitingRefine(11, {
+        ledger: present("退避先"),
+        failureRecord: present({ count: 2, lastAction: "計画枠の逼迫を伝える" }),
+      }),
+    ]);
+    expect(d.outcome.kind).toBe("action");
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "計画枠の逼迫を伝える",
+    );
+  });
+
+  test("20g: 三拍子が揃ったら count を 0 に揃える", () => {
+    const d = tick([
+      observation({
+        issue: 11,
+        ledger: present("退避先"),
+        waitRecord: wait.cleared,
+        refineSession: session.none,
+        failureRecord: present({ count: 2, lastAction: "計画枠の逼迫を伝える" }),
+      }),
+    ]);
+    expect(d.outcome.kind).toBe("settle-record");
+  });
+});
