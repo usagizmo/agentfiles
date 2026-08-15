@@ -121,8 +121,7 @@ export const createPort = (options: PortOptions): ObservePort => {
 
   /**
    * repo の全 PR。**tick に 1 回しか取らない。**`issueFacts` は Issue ごとに呼ばれるので、
-   * ここで都度 `--paginate` すると `O(Issue 数 × 全 PR)` になり、Issue が数百ある repo では
-   * 1 周で secondary rate limit に達して観測そのものが落ちる（実測）。
+   * 都度 `--paginate` しない。
    */
   let prsOnce:
     | Promise<
@@ -173,8 +172,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       return result.stdout;
     },
 
-    // **Issue ごとに引かない。**board の件数ぶん REST を投げると `O(items)` になり、
-    // 289 件の board で secondary rate limit に達する（実測）。repo 単位の bulk 1 系統にする。
+    // **Issue ごとに引かない。**repo 単位の bulk 1 系統にする。
     //
     // **打ち切りは fail-closed。**`--paginate` が途中で落ちたら、欠けた分を「無い」と
     // 読むことになる —— 記録が無い課題として claim や差し戻しが走る。
@@ -321,6 +319,7 @@ export const createPort = (options: PortOptions): ObservePort => {
           return;
         }
         const path = `${tmpdir()}/conductor-${input.issue}-${flag.replace(/^--/, "")}-${randomUUID()}`;
+        // bytes は `protocols.md` の「file の bytes」。
         await Bun.write(path, body);
         files.push(path);
         args.push(flag, path);
@@ -329,6 +328,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       if (input.ledger === "未計画") {
         for (const b of input.issueBodies) {
           const path = `${tmpdir()}/conductor-body-${b.issue}-${randomUUID()}`;
+          // bytes は `protocols.md` の「file の bytes」。
           await Bun.write(path, b.body);
           files.push(path);
           args.push("--issue-body", `${b.issue}:${path}`);

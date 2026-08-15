@@ -84,9 +84,19 @@ count: <成果ゼロで回った周の数>
 | `--host <host>`                                      | 解決の周のみ。全着地面の remote が在るべき host（制御面の origin から取る）   |
 | `--branch <repo>:<名前>` \| `--no-branch <repo>`     | 解決の周のみ。**着地面ごとにどちらかを 1 回**（ローカル branch も解決する）   |
 | `--worktree <repo>:<path>` \| `--no-worktree <repo>` | 解決の周のみ。**着地面ごとにどちらかを 1 回**（省いた面は成果が指紋に出ない） |
-| `--plan-comment <file>` \| `--no-plan-comment`       | 解決の周のみ。計画コメントの本文                                              |
+| `--plan-comment <file>` \| `--no-plan-comment`       | 解決の周のみ。file の bytes は下表                                            |
 | `--wait-record <file>` \| `--no-wait-record`         | **有効なときだけ file を渡す**（有効の判定は `wait-record.md`）               |
 | `--issue-body <番号>:<file>`                         | 計画の周のみ。対象集合の全件（並べ替えは実装が行う）                          |
+
+**file の bytes**は次の値そのもの。足しも落としもしない。
+
+| 引数             | bytes                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `--issue-body`   | Issues API の JSON `body` を parse した文字列の UTF-8。取り方は `body-digest.md`          |
+| `--plan-comment` | `extractMarker` へ `plan` を渡して `present` のときその値。それ以外は `--no-plan-comment` |
+| `--wait-record`  | 有効なときだけ `extractMarker` へ `wait` を渡して得た値。それ以外は `--no-wait-record`    |
+
+抽出の手順は写さない。`--issue-body` に digest は書かない。
 
 - 式を `ledger` で決めるのは、action 名では切れないから（照合は action を選ぶ前に走る）
 - **着地面を 1 つでも落とさない**（落とした面の成果は指紋に出ない）

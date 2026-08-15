@@ -5,8 +5,9 @@
 
 import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
-import type { ObservePort, StatusMap } from "../src/observe.ts";
+import type { CycleMarkInput, ObservePort, StatusMap } from "../src/observe.ts";
 import { observeTick, worktreeBusy } from "../src/observe.ts";
+import { extractMarker } from "../src/records.ts";
 import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
 import type { Ledger, Observed } from "../src/types.ts";
@@ -244,6 +245,86 @@ keys: [skills]
     expect(find(rows, 34).ledger.kind).toBe("invalid");
   });
 
+  test("指紋へ渡す計画コメントと人待ちは extractMarker の戻り値で、コメント全体ではない", async () => {
+    const planYaml = "baseSha: abc\nsize: 中規模\n";
+    const waitYaml = "state: waiting\nissues: [12]\nphase: 実装\nreason: 確認\n";
+    const planComment = `前文\n<!-- plan -->\n\n\`\`\`yaml\n${planYaml}\`\`\`\n\n<!-- /plan -->\n後文`;
+    const waitComment = `<!-- wait -->\n\n\`\`\`yaml\n${waitYaml}\`\`\`\n\n<!-- /wait -->\n`;
+    const seen: CycleMarkInput[] = [];
+    await observe(
+      port({
+        issueComments: async () =>
+          new Map([[12, present([claimComment, planComment, waitComment])]]),
+        cycleMark: async (input) => {
+          seen.push(input);
+          return present("mark-1");
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    const resolve = seen.find((s) => s.issue === 12);
+    const plan = extractMarker(planComment, "plan");
+    const wait = extractMarker(waitComment, "wait");
+    expect(plan.kind).toBe("present");
+    expect(wait.kind).toBe("present");
+    if (plan.kind !== "present" || wait.kind !== "present") return;
+    expect(resolve?.planComment).toBe(plan.value);
+    expect(resolve?.waitRecord).toBe(wait.value);
+    expect(resolve?.planComment).not.toContain("<!-- plan -->");
+    expect(resolve?.waitRecord).not.toContain("<!-- wait -->");
+  });
+
+  test("計画の周で本文を読めない番号を空へ畳まない", async () => {
+    const seen: number[] = [];
+    const rows = await observe(
+      port({
+        issueBodies: async () =>
+          new Map([
+            [12, present("本文")],
+            [34, unobservable("読めない")],
+          ]),
+        cycleMark: async (input) => {
+          seen.push(input.issue);
+          return present("mark-1");
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "進行中"],
+        ["計画済み", "未計画"],
+      ]),
+      SURFACES,
+    );
+    expect(seen).not.toContain(34);
+    expect(find(rows, 34).currentMark.kind).toBe("unobservable");
+  });
+
+  test("計画の周の Issue 本文は API の body そのもの", async () => {
+    const body = "Lands in o/other\n\n本文が改行で終わる\n";
+    const seen: CycleMarkInput[] = [];
+    await observe(
+      port({
+        issueBodies: async () =>
+          new Map([
+            [12, present("本文")],
+            [34, present(body)],
+          ]),
+        cycleMark: async (input) => {
+          seen.push(input);
+          return present("mark-1");
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "進行中"],
+        ["計画済み", "未計画"],
+      ]),
+      SURFACES,
+    );
+    const plan = seen.find((s) => s.issue === 34);
+    expect(plan?.ledger).toBe("未計画");
+    expect(plan?.issueBodies).toEqual([{ issue: 34, body }]);
+  });
+
   test("指紋には ledger と progress と面ごとの worktree を渡す", async () => {
     const seen: unknown[] = [];
     await observe(
@@ -465,7 +546,7 @@ keys: [skills]
   test("worktree を持たない課題の面は dirty を false で確定する", async () => {
     // **checkout が無い面には未コミットの変更が存在しえない**ので、`present(false)`。
     // `absent` にすると `value(dirty) !== false` が真になり、**claim もされていない課題が
-    // 全部「成果物あり」に読まれる**（実測で 289 件中 117 件が `実装中`、172 件が `取り下げ`）。
+    // 全部「成果物あり」に読まれる**。
     const rows = await observe(port(), STATUS, SURFACES);
     expect(find(rows, 34).surfaces[0]?.dirty).toEqual(present(false));
     expect(find(rows, 34).surfaces[0]?.hasCheckout).toEqual(present(false));
