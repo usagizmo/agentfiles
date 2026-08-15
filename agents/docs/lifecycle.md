@@ -183,38 +183,43 @@ sequenceDiagram
     C->>C: ledger が未計画 かつ progress が未着手
     Note over C: 供給と計画枠を見る。<br/>揃っていない group は<br/>完了すれば selectable になるときだけ供給に入る
     C->>F: /refine #N
-    F->>GH: Issue と関連コードを読む
-    F->>F: consult で方針を確定
-    F-->>U: 課題の譜面を引き当てて計画を書く（無ければ作る）
-    Note over F,U: 聞くことが無くても必ず作る。<br/>Issue / PR にパスは書かない
-
-    alt 製品判断が要る項目が埋まらない
-        F->>GH: 埋まった項目を先に本文へ書ききる
-        Note over F,GH: ここで落ちても埋めた判断が消えない。<br/>それでも Status は動かさない
-        F->>GH: 人待ちの記録（waiting）
-        F-->>U: 譜面に判断待ちを書き、記録を指す短い問いだけ出す
-        F-->>C: 待機
-        U->>F: 答える
-        F->>GH: 記録を cleared に
-    else 記録が waiting のまま起こし直された
+    alt 同じ質問の記録が waiting のまま起こし直された（人の入力が無い）
         F->>GH: Status を退避先へ、記録を cleared に
         Note over F,GH: 待たずに終えて計画枠を空ける。<br/>人が未計画へ戻すまで拾われない
-    end
+    else 通常
+        F->>GH: Issue と関連コードを読む
+        F->>F: 同居候補を探す
+        F->>F: consult で方針を確定
+        F-->>U: 課題の譜面を引き当てて計画を書く（無ければ作る）
+        Note over F,U: 聞くことが無くても必ず作る。<br/>Issue / PR にパスは書かない
 
-    F->>GH: 契約の 6 項目を 1 回の本文更新で書く
-    F->>GH: 同じブランチで直るものに Same branch as を相互に書く
-    F->>GH: 更新後の本文を取り直して digest を計算
-    F->>GH: 在庫の鮮度（ready）を upsert
-    Note over F,GH: 本文更新 → 本文再取得 → digest → ready → Status。<br/>順序を崩すと自分の更新で即座に不一致になる
-    F->>GH: 相互記載で本文を触った相手が計画済みなら、相手の ready も upsert
-    F->>GH: Status を計画済みへ
-    Note over F,GH: これが着手承認そのもの。<br/>conductor は自分で積めない
-    C->>C: 観測 → 計画セッションが終わっている
+        alt 製品判断が要る項目が埋まらない
+            F->>GH: 埋まった項目を先に本文へ書ききる
+            Note over F,GH: ここで落ちても埋めた判断が消えない。<br/>それでも Status は動かさない
+            F->>GH: 人待ちの記録（waiting）
+            F-->>U: 譜面に判断待ちを書き、記録を指す短い問いだけ出す
+            F-->>C: 待機
+            U->>F: 答える
+            F->>GH: 記録を cleared に
+        end
 
-    alt done（未 seen のまま終わった）
-        C->>C: pane を閉じる（計画枠を空ける）
-    else idle（人が入力を書いている最中かもしれない）
-        C->>C: retired-refine-#N へ rename する
-        Note over C: 枠は返るが、その Issue の再計画は塞いだまま。<br/>解けるのは人が pane を閉じたときだけ
+        F->>GH: 契約項目と Same branch as を 1 回の本文更新で書く
+        F->>GH: 更新後の本文を取り直して digest を計算
+        F->>GH: 在庫の鮮度（ready）を upsert
+        Note over F,GH: 本文更新 → 本文再取得 → digest → ready → Status。<br/>順序を崩すと自分の更新で即座に不一致になる
+        F->>GH: 相互記載で本文を触った相手が計画済みなら、相手の ready も upsert
+        F->>GH: Status を計画済みへ
+        Note over F,GH: これが着手承認そのもの。<br/>conductor は自分で積めない
+        opt 宣言を書いた相手が未計画で計画セッションが無い
+            F->>F: 同じセッションでその相手を手順の先頭から流す
+        end
+        C->>C: 観測 → 計画セッションが終わっている
+
+        alt done（未 seen のまま終わった）
+            C->>C: pane を閉じる（計画枠を空ける）
+        else idle（人が入力を書いている最中かもしれない）
+            C->>C: retired-refine-#N へ rename する
+            Note over C: 枠は返るが、その Issue の再計画は塞いだまま。<br/>解けるのは人が pane を閉じたときだけ
+        end
     end
 ```
