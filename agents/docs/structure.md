@@ -16,7 +16,11 @@
 
 ## skill 間の参照
 
-層の規則と例外は `docs` skill の品質基準、機械可読な層の定義は `../skills/docs/scripts/layers.tsv`。**参照関係のあるものだけを描く**（leaf の全一覧は [`README.md`](README.md) の「層構造」）。
+| 何        | 正                                                                       | 含むもの           |
+| --------- | ------------------------------------------------------------------------ | ------------------ |
+| 層の rank | [`../skills/docs/scripts/layers.tsv`](../skills/docs/scripts/layers.tsv) | leaf 以外          |
+| 層表の名  | 所有集合（述語は `../skills/docs/scripts/audit-skills.sh`）              | 所有する skill     |
+| この図    | 参照があるもの                                                           | 所有しなくても残す |
 
 ```mermaid
 flowchart LR
