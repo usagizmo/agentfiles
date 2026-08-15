@@ -49,10 +49,17 @@ const allSurfacesLandableOrTransparent = (surfaces: readonly SurfaceObservation[
     (s) => isTransparent(s) || value(s.terminal) === true || value(s.landable) === true,
   );
 
-/** 終端した面と終端していない面が混在しているか（`取り下げ` の除外条件）。 */
+/**
+ * `取り下げ` の除外。着地した面があり、かつ書いたきり着地していない面が残っている。
+ * 終端していない面のうち、ahead が false かつ dirty でない面はどちらにも数えない。
+ * 読めなかった観測は未着地側。
+ */
 const terminalMixed = (surfaces: readonly SurfaceObservation[]): boolean => {
-  const terminal = surfaces.filter((s) => value(s.terminal) === true).length;
-  return terminal > 0 && terminal < surfaces.length;
+  const landed = (s: SurfaceObservation): boolean => value(s.terminal) === true;
+  const idle = (s: SurfaceObservation): boolean =>
+    value(s.aheadOfIntegration) === false && value(s.dirty) === false;
+  const unfinished = (s: SurfaceObservation): boolean => !landed(s) && !idle(s);
+  return surfaces.some(landed) && surfaces.some(unfinished);
 };
 
 /**
@@ -127,7 +134,7 @@ const markWithoutWait = (s: SessionObservation, wait: WaitRecord): boolean =>
  * ラダーで解決できないものだけを集める。**「2 つの行に当たった」は含まない。**
  * `ledger` と期待値のずれは、5 事象の入力が要るので `decide` が見る。
  */
-const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] => {
+const collectConflicts = (o: IssueObservation): Conflict[] => {
   const found: Conflict[] = [];
   const n = o.issue;
   // **記録の整合の Conflict は、その記録がこれから読まれる課題にだけ当てる。**
@@ -317,11 +324,6 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
     found.push(conflict("渡しの記録が複数", n, "渡しの記録を読めない"));
   }
 
-  // `取り下げ` は人が置いた状態を尊重するので、終端の混在だけは別に見る。
-  if (progress === "着地済み" && terminalMixed(o.surfaces)) {
-    found.push(conflict("group の終端が混在", n, "終端した面と終端していない面が混在している"));
-  }
-
   return found;
 };
 
@@ -380,6 +382,6 @@ export const normalize = (o: IssueObservation): NormalizedIssue => {
     runtime: normalizeRuntime(o),
     capacity: normalizeCapacity(o),
     ledger,
-    conflicts: collectConflicts(o, progress),
+    conflicts: collectConflicts(o),
   };
 };

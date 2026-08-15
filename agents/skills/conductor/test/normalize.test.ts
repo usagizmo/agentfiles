@@ -441,6 +441,18 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  test("17c6: 1 面が終端、1 面が透過（clean）。提出の証跡がある", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [control({ terminal: present(true) }), secondary({ hasCheckout: present(true) })],
+      submissionEvidence: present(true),
+    });
+    expectFields(o, { progress: "着地済み", runtime: "無し", capacity: "あり", ledger: "進行中" });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("group の終端が混在");
+  });
+
   test("17c3: 全着地面が透過で、提出の証跡が無く、open PR がある", () => {
     expectFields(
       observation({
@@ -749,6 +761,68 @@ describe("着地面が制御面と違う", () => {
       }),
       { progress: "取り下げ", runtime: "無し", capacity: "無し", ledger: "完了" },
     );
+  });
+
+  test("17o: 1 面が終端、1 面が透過（clean）。closed で提出の証跡は無い", () => {
+    expectFields(
+      observation({
+        open: present(false),
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [control({ terminal: present(true) }), secondary({ hasCheckout: present(true) })],
+      }),
+      { progress: "取り下げ", runtime: "無し", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
+  // dirty / ahead が false でない / 読めない ahead は unfinished のまま。
+  test("17o2: 1 面が終端、1 面が dirty な透過。closed", () => {
+    const o = observation({
+      open: present(false),
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [
+        control({ terminal: present(true) }),
+        secondary({ dirty: present(true), hasCheckout: present(true) }),
+      ],
+    });
+    expectFields(o, { progress: "実装中", runtime: "無し", capacity: "あり", ledger: "進行中" });
+    expect(normalizeProgress(o)).not.toBe("取り下げ");
+  });
+
+  test("17o3: 1 面が終端、1 面の ahead が true。closed", () => {
+    const o = observation({
+      open: present(false),
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [
+        control({ terminal: present(true) }),
+        secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+      ],
+    });
+    expectFields(o, { progress: "実装中", runtime: "無し", capacity: "あり", ledger: "進行中" });
+    expect(normalizeProgress(o)).not.toBe("取り下げ");
+  });
+
+  test("17o4: 1 面が終端、1 面の ahead が読めない。closed", () => {
+    const o = observation({
+      open: present(false),
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [
+        control({ terminal: present(true) }),
+        secondary({
+          aheadOfIntegration: unobservable("面の git を読めない"),
+          hasCheckout: present(true),
+        }),
+      ],
+    });
+    expectFields(o, { progress: "準備済み", runtime: "無し", capacity: "あり", ledger: "進行中" });
+    expect(normalizeProgress(o)).not.toBe("取り下げ");
   });
 });
 
