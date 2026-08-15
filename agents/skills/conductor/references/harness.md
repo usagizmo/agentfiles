@@ -83,11 +83,11 @@ close 直前に引き直して述語を外れていたら、閉じずその tick
 
 ### 観測する
 
-| 見たいもの                    | 使い道                                                     |
-| ----------------------------- | ---------------------------------------------------------- |
-| 稼働中セッションの名前と状態  | `runtime` の判定・多重起動の検知                           |
-| **全着地面の** worktree 一覧  | `capacity` が `あり` かの判定                              |
-| 所有している workspace の一覧 | `capacity` が `prunable` かの判定（checkout が消えた残骸） |
+| 見たいもの                    | 使い道                                                            |
+| ----------------------------- | ----------------------------------------------------------------- |
+| 稼働中セッションの名前と状態  | `runtime` の判定・多重起動の検知                                  |
+| **全着地面の** worktree 一覧  | `capacity` が `あり` かの判定                                     |
+| 所有している workspace の一覧 | `capacity` が `prunable` かの判定。孤児の述語は下の「3 つの経路」 |
 
 - **worktree 一覧は repo を明示して取る**（「今いる場所」に依存する手段を使わない）
 - 引く repo の集合は「制御面 + project 差分の座標表が持つ全着地面」。**「いま使われている面だけ」にも制御面だけにも絞らない**
@@ -97,16 +97,29 @@ close 直前に引き直して述語を外れていたら、閉じずその tick
 
 ### 片付ける
 
-**起こしたものによって片付ける対象が違う。**
+確認と所有と成否は `protocols.md`「片付ける」。消す段はここ。`--force` で通さない。履歴と `capacity` の畳みでは手段を引か**ない**。
 
-| 終わったもの                    | 片付けるもの                                                          |
-| ------------------------------- | --------------------------------------------------------------------- |
-| `refine`（`done`）              | セッションが載っている tab                                            |
-| `refine`（`idle`）              | **閉じない。**`retired-refine-<番号>` へ rename するだけ              |
-| `resolve`（セッションを置く面） | 下記の 3 つ（workspace ごと消す）                                     |
-| `resolve`（二次面）             | 下記の 3 つを **git だけで**行う（`remove-worktree.py` は当たらない） |
+| 段     | 残っているときだけ行う                                                                        |
+| ------ | --------------------------------------------------------------------------------------------- |
+| 確認   | dirty は checkout がある面だけ。stash は面の live checkout。中身は `protocols.md`             |
+| 退避   | 重いディレクトリ（`node_modules` / `target` / `dist` / `.turbo`）を退避して background で消す |
+| 削除   | checkout を消す                                                                               |
+| branch | merge 済みの branch を消す。未マージなら残す                                                  |
+| 閉じる | 入れ物を閉じる。直前に、所有していない実行器が居ないことを確かめる。居れば閉じない            |
 
-`refine` は実行直前に生値を取り直して上表を引く。`working` / `blocked` では実行しない。`unknown` は `Conflict`。コマンドは「herdr での実現」。
+- 計画が借りた入れ物はこの手順に載せ**ない**。借りた 1 枚だけを閉じる
+- 二次面は git 側の段だけで終わる。`remove-worktree.py` は当たら**ない**
+- `remove-worktree.py` は改名・本文変更をしない。`--force` を付けない。checkout が既に無いことによる非 0 と、未マージ branch を残した非 0 で後続の段を止め**ない**。dirty による停止は後続へ進まない
+- `tab close` を孤児の手段にしない
+- 生きている checkout の workspace 対応は `open_workspace_id`。孤児は閉じる段で `workspace list` を引き直し、下の「3 つの経路」の述語で照合する。path や label から ID を復元しない
+- 未マージの branch だけが残っている状態は片付ける対象では**ない**
+
+`refine` は実行直前に生値を取り直して下表を引く。`working` / `blocked` では実行しない。`unknown` は `Conflict`。コマンドは「herdr での実現」。
+
+| 終わったもの       | 片付けるもの                                             |
+| ------------------ | -------------------------------------------------------- |
+| `refine`（`done`） | セッションが載っている tab                               |
+| `refine`（`idle`） | **閉じない。**`retired-refine-<番号>` へ rename するだけ |
 
 **branch を作る述語は 1 つ —— 在れば checkout、無ければ統合先から作る**（`protocols.md` が SSOT）。契機では分かれ**ない**。
 
@@ -119,17 +132,9 @@ close 直前に引き直して述語を外れていたら、閉じずその tick
 - `<slug>` は branch 名の `/` を `-` に置き換えたもの
 - **式を 2 通り持たない。その場で決めない**（作る側と消す側が同じ式を使う。容量の帰属も path で引く）
 
-**二次面に `worktree create` を使わない**（worktree・workspace・root pane を一度に作るので pane が増える）。素の `git worktree add` で作り、片付けも git 側の 3 手で行う。**作る手段と消す手段を面ごとに一致させる。**
+**二次面に `worktree create` を使わない**（worktree・workspace・root pane を一度に作るので pane が増える）。素の `git worktree add` で作り、片付けも git 側の段で行う。**作る手段と消す手段を面ごとに一致させる。**
 
 既存の worktree でセッションだけを起こし直すときは pane を作るだけ（`worktree create` は checkout 済みの branch には使えない）。
-
-着地した worktree は放置すると容量の判定を狂わせる。**checkout を消すだけでは足りない**ので、次の 3 つを 1 手で行う。
-
-消す前の確認は `protocols.md`「片付ける前に成果を確認する」。`--force` で通さない。
-
-1. 重いディレクトリ（`node_modules` / `target` / `dist` / `.turbo`）を退避して background で消す
-2. worktree の checkout を消す
-3. branch を消す（**merge 済みのときだけ**。未マージなら残す）
 
 **例外は「計画が無効」の差し戻し**。claim を解くのが目的なので claim branch も消す。差し戻してよいかの述語は `../SKILL.md`。ここは消し方だけを持つ。
 
@@ -154,9 +159,10 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 片付ける（`refine`・生値）                   | 先に `herdr agent get <名前>`。返った `agent_status` で契約の `refine` 行を引く                                                                                                                                                                                                           |
 | 片付ける（`refine`・`idle`）                 | `herdr agent rename <名前> retired-refine-<番号>`（閉じ**ない**）                                                                                                                                                                                                                         |
 | 片付ける（`refine`・`done`）                 | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                                 |
-| 片付ける（`resolve`）                        | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`                                                                                                                                                                                                                       |
-| 片付けに要る workspace ID                    | **`herdr worktree list --cwd <面の checkout>`** の `open_workspace_id`                                                                                                                                                                                                                    |
-| 孤児 workspace を洗う                        | **`herdr workspace list`**（repo 非依存）                                                                                                                                                                                                                                                 |
+| 片付ける（`resolve`。退避〜branch）          | checkout があるとき `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`。非 0 で閉じる段を止め**ない**                                                                                                                                                                    |
+| 片付ける（`resolve`。閉じる）                | `herdr workspace close <id>`。直前に `herdr agent list` でその workspace を見、`name` が `resolve-<番号>` でない実行器が居れば閉じない                                                                                                                                                    |
+| 退避〜branch の workspace ID                 | checkout があるとき `herdr worktree list --cwd <面の checkout>` の `open_workspace_id`                                                                                                                                                                                                    |
+| 閉じる段の workspace ID                      | **`herdr workspace list`** を引き直した行の `workspace_id`。`open_workspace_id` からは取ら**ない**                                                                                                                                                                                        |
 
 **`--kind` は project の `config.json` の `executors`**（工程ごと。検証は `src/config.ts` の `parseConfig`）。**モデルは渡さ**ない —— 既定は harness の設定側が持つ。
 
@@ -168,8 +174,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | worktree と workspace の対応            | herdr の `open_workspace_id`。**パスで join しない** |
 | 孤児 workspace（checkout が消えた残骸） | `workspace list`（repo 非依存）                      |
 
-- `open_workspace_id` が null なら開いている workspace が無いので、その経路だけ落として git で 3 手を行う（checkout を消すだけで済ませ**ない**）
-- 孤児の判定は **`worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ**。`worktree` キーが無い workspace は repo の本体 checkout であって孤児ではない
+- `open_workspace_id` が null なら開いている workspace が無いので、その経路だけ落として git 側の段を行う（checkout を消すだけで済ませ**ない**）
+- 孤児の判定は **`worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ**。帰属は `checkout_path` 末尾要素が `(^|[^0-9])<番号>-` に当たる行がちょうど 1。`worktree` キーが無い workspace は repo の本体 checkout であって孤児ではない
 
 コマンドの使い方:
 
@@ -298,7 +304,16 @@ herdr agent list | jq -S -r '.result.agents[]? | select(.name != null)
     else empty end' | sort | grep .
 
 # --workspaces-cmd
-herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.worktree.checkout_path // "-")"' | sort | grep .
+herdr workspace list | jq -S -c '.result.workspaces[]?' | while IFS= read -r row; do
+  id=$(printf '%s' "$row" | jq -r '.workspace_id')
+  linked=$(printf '%s' "$row" | jq -r 'if .worktree.is_linked_worktree == true then "1" elif .worktree == null then "-" else "0" end')
+  path=$(printf '%s' "$row" | jq -r '.worktree.checkout_path // "-"')
+  if [ "$path" = "-" ]; then exists="-"
+  elif [ -e "$path" ]; then exists="1"
+  else exists="0"
+  fi
+  printf '%s %s %s %s\n' "$id" "$linked" "$exists" "$path"
+done | sort | grep .
 ```
 
 **何を入れて何に畳むかは `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない**。ここは herdr での写し方だけ。

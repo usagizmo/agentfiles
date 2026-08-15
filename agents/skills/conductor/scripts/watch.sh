@@ -566,7 +566,7 @@ snapshot() {
   # baseline との比較は全文の digest なので、定数行が 1 本増えても差分の意味は変わらない。
   cat <<SNAP
 --- schema ---
-2
+3
 --- default ---
 $default
 --- landing tips ---

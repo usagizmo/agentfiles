@@ -12,6 +12,7 @@ import {
   parseSnapshot,
   projectStatus,
   pullRequests,
+  workspaceRows,
   worktrees,
 } from "../src/decode.ts";
 
@@ -35,7 +36,7 @@ skills - abcdef /tmp/wt/skills  1-x
 --- sessions ---
 resolve-1 working
 --- workspaces ---
-ws-1 /tmp/wt/feat-1-x
+ws-1 1 1 /tmp/wt/feat-1-x
 --- project status (board order) ---
 1 12 進行中
 2 34 計画済み
@@ -56,7 +57,7 @@ describe("節の切り分け", () => {
   });
 
   test("節が欠けていたら投げる（「値が無い」と読まない）", () => {
-    const without = SNAP.replace(/--- workspaces ---\nws-1 \/tmp\/wt\/feat-1-x\n/, "");
+    const without = SNAP.replace(/--- workspaces ---\nws-1 1 1 \/tmp\/wt\/feat-1-x\n/, "");
     expect(() => parseSnapshot(without)).toThrow(SnapshotDecodeError);
   });
 
@@ -166,5 +167,17 @@ describe("行の decode", () => {
   test("面が読めない `- -` を branch として残さない", () => {
     const unknown = SNAP.replace("control feat/1-x abcdef", "control - -");
     expect(localBranches(parseSnapshot(unknown))).toEqual([]);
+  });
+
+  test("workspaces は linked / exists を 3 値のまま残し、path の空白を詰め直さない", () => {
+    const withSpace = SNAP.replace("ws-1 1 1 /tmp/wt/feat-1-x", "ws-1 1 0 /tmp/wt/skills  1-x");
+    expect(workspaceRows(parseSnapshot(withSpace))).toEqual([
+      { id: "ws-1", linked: true, exists: false, path: "/tmp/wt/skills  1-x" },
+    ]);
+  });
+
+  test("linked / exists が 0 / 1 / - でない行は投げる", () => {
+    const legacy = SNAP.replace("ws-1 1 1 /tmp/wt/feat-1-x", "ws-1 /tmp/wt/feat-1-x");
+    expect(() => workspaceRows(parseSnapshot(legacy))).toThrow(SnapshotDecodeError);
   });
 });

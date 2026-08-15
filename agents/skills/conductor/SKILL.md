@@ -63,28 +63,28 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 読む先はここからのみ。
 
-| 観測材料                 | SSOT                                                                                                                                                                    |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 自動実行の承認・課題仕様 | Issue 本文 + Status                                                                                                                                                     |
-| 課題どうしの関係         | Issue 本文の先頭区画・行頭の宣言行（`Depends on` / `Same branch as`。定義は `references/same-branch.md`。本文全体の文字列一致では辿らない）                             |
-| 着地面                   | claim 後は claim の記録の `landing`（**欠落は `Conflict`**）。claim 前は Issue 本文の `Lands in`（宣言が無ければ制御面 1 面）。意味論は `references/landing-surface.md` |
-| 二重着手防止             | 制御面の remote branch                                                                                                                                                  |
-| 計画                     | 固定 marker 付きの Issue コメント（`resolve` が書く。本文との突き合わせ方は `references/body-digest.md`）                                                               |
-| 在庫の鮮度               | 固定 marker 付きの Issue コメント（`references/ready-record.md`）                                                                                                       |
-| claim                    | 固定 marker 付きの Issue コメント（`references/same-branch.md`）                                                                                                        |
-| 人待ち                   | 固定 marker 付きの Issue コメント（`references/wait-record.md`）                                                                                                        |
-| 休止                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                          |
-| 成果ゼロの周             | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                          |
-| 渡した merge の枠        | 固定 marker 付きの Issue コメント（`references/integration-record.md`）                                                                                                 |
-| 意図の確認               | 固定 marker 付きの Issue コメント（`references/intent-record.md`）                                                                                                      |
-| 入場を止める宣言         | 固定 marker `entry-block` のコメント（形は `references/issue-contract.md`）                                                                                             |
-| 失敗                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                          |
-| 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                       |
-| 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                            |
-| 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                    |
-| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査は `merge` skill の fail-closed（`references/landing-surface.md`）            |
-| 容量                     | 着地面ごとの worktree。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）                                                   |
-| 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                            |
+| 観測材料                 | SSOT                                                                                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 自動実行の承認・課題仕様 | Issue 本文 + Status                                                                                                                                                                                         |
+| 課題どうしの関係         | Issue 本文の先頭区画・行頭の宣言行（`Depends on` / `Same branch as`。定義は `references/same-branch.md`。本文全体の文字列一致では辿らない）                                                                 |
+| 着地面                   | claim 後は claim の記録の `landing`（**欠落は `Conflict`**）。claim 前は Issue 本文の `Lands in`（宣言が無ければ制御面 1 面）。意味論は `references/landing-surface.md`                                     |
+| 二重着手防止             | 制御面の remote branch                                                                                                                                                                                      |
+| 計画                     | 固定 marker 付きの Issue コメント（`resolve` が書く。本文との突き合わせ方は `references/body-digest.md`）                                                                                                   |
+| 在庫の鮮度               | 固定 marker 付きの Issue コメント（`references/ready-record.md`）                                                                                                                                           |
+| claim                    | 固定 marker 付きの Issue コメント（`references/same-branch.md`）                                                                                                                                            |
+| 人待ち                   | 固定 marker 付きの Issue コメント（`references/wait-record.md`）                                                                                                                                            |
+| 休止                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                                                              |
+| 成果ゼロの周             | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                                                              |
+| 渡した merge の枠        | 固定 marker 付きの Issue コメント（`references/integration-record.md`）                                                                                                                                     |
+| 意図の確認               | 固定 marker 付きの Issue コメント（`references/intent-record.md`）                                                                                                                                          |
+| 入場を止める宣言         | 固定 marker `entry-block` のコメント（形は `references/issue-contract.md`）                                                                                                                                 |
+| 失敗                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                                                              |
+| 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                                                           |
+| 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                                                                |
+| 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                                                        |
+| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査は `merge` skill の fail-closed（`references/landing-surface.md`）                                                |
+| 容量                     | 着地面ごとの worktree と、repo 非依存の workspace 一覧（1 回）。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）。`prunable` の述語は `references/harness.md` |
+| 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                                                                |
 
 ### 正規化
 

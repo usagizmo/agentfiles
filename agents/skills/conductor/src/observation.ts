@@ -129,7 +129,7 @@ export type IssueObservation = {
   /** merge の枠の渡しの記録。2 件以上は `Conflict` */
   readonly integrationRecordCount: Observed<number>;
 
-  /** checkout は無いが所有している workspace が残っている */
+  /** linked worktree で checkout_path が実在しない所有残骸 */
   readonly prunableWorkspace: Observed<boolean>;
 
   // -------------------------------------------------------------------------
