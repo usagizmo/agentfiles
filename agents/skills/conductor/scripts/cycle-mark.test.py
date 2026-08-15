@@ -10,7 +10,8 @@
 #
 #   1. **独立に組み立てた期待値**（下の `ref_digest`）。レコードの名前・順序・framing を
 #      仕様から書き直して突き合わせる。材料はこちらが書いた中身と `git rev-parse` だけなので、
-#      期待値は `cycle-mark.py` の出力を写していない
+#      期待値は `cycle-mark.py` の出力を写していない。stash の oid も `rev-parse refs/stash@{n}`
+#      から取る（`--walk-reflogs` は実装側）
 #   2. **凍結した定数**（`FROZEN_*`）。1 の参照実装ごと書き換える変更を止める
 #   3. **分離**。成果に当たる成分を 1 つ変えた観測が、必ず別の指紋になること
 #   4. **不変性**。locale・カレントディレクトリ・利用者の git 設定・index の鮮度・filter を
@@ -41,7 +42,7 @@
 #     あるが、stale な hook・cache や system の attributes file を検査から作れない
 #     （後者には root が要る）
 #
-# **仕組みとして塞いでいないものが 3 つある。**
+# **仕組みとして塞いでいないものが 4 つある。**
 #
 #   - `skip-worktree` / `assume-unchanged` —— **git 自身が見ない**ので `status` にも出ない。
 #     塞ぐには全 tracked を毎周読むしかなく、費用が釣り合わない。実装と規約に既知の穴として
@@ -50,6 +51,7 @@
 #     判断（理由は下の `test_special_kinds`）で、規約の「見えないもの」にも書いてある
 #   - **観測の途中で書かれた成果** —— commit だけは前後の HEAD で閉じてあるが、index と
 #     worktree の残りは開いたまま。撮り直しても窓は縮むだけで消えない（規約に明記）
+#   - `git stash create` —— `refs/stash` を更新しない。指紋は動かない（規約に明記）
 
 import hashlib
 import importlib.util
@@ -63,7 +65,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "cycle-mark.py")
 
-SCHEMA = "cycle-mark/2"
+SCHEMA = "cycle-mark/3"
 
 # 検査の既定の面名。**path とは別の値にする** —— 同じ文字列だと、名前を落とす変異が通る。
 # **実在の repo 名を書かない**（この repo は public。規約は `AGENTS.md`）。
@@ -71,8 +73,8 @@ PLANE = "example/control"
 
 # **参照実装ごと書き換える変更を止めるための凍結値。**どちらも git を見ない周なので、
 # 環境が変わっても動かない。**符号化を意図して変えたときだけ更新する。**
-FROZEN_NO_ENTITY = "21146d7b47d7f821671732848c8c21ffc8b9a12f06fbde71be57d83455cfe12e"
-FROZEN_PLAN = "8befecefc81557f6d0ef5c69768c12eb0a229784135b832473d180d2a1665cba"
+FROZEN_NO_ENTITY = "08f524660fd2a5c97aacd559b2851b0bda5b140ad3258b71c02820e5cc35a67b"
+FROZEN_PLAN = "503031b59bd83bdcf140612cc37887631680d08797f83d2c026ec9d8ca534172"
 
 FAILURES = []
 CHECKS = [0]
@@ -120,8 +122,9 @@ def utf8(value):
 def ref_resolve(progress, planes, plan_comment, wait_record):
     """解決の周の期待レコード列。
 
-    `planes` は `(repo, head_source, head, tracked, untracked)` の並び。`tracked` / `untracked`
-    は `None`（worktree 無し）か `(path, kind, body)` の並び。**並びはこちらで面の名前の昇順・
+    `planes` は `(repo, head_source, head, tracked, untracked[, stash])` の並び。
+    `tracked` / `untracked` は `None`（worktree 無し）か entry の並び。`stash` は
+    `None`（`refs/stash` 無し）か oid の並び。**並びはこちらで面の名前の昇順・
     生バイト昇順に揃えて渡す**（実装の並べ替えを写さない）。
     """
     records = [
@@ -129,20 +132,51 @@ def ref_resolve(progress, planes, plan_comment, wait_record):
         ("cycle-kind", utf8("resolve")),
         ("progress", utf8(progress)),
     ]
-    for repo, head_source, head, tracked, untracked in planes:
+    for plane in planes:
+        repo, head_source, head, tracked, untracked = plane[:5]
+        stash = plane[5] if len(plane) > 5 else None
         records.append(("landing", utf8(repo)))
         records.append(("head-source", utf8(head_source)))
         records.append(("head", utf8(head)))
         records += ref_entries("tracked", tracked)
         records += ref_entries("untracked", untracked)
+        records += ref_stash(stash)
     records += ref_optional("plan-comment", plan_comment)
     records += ref_optional("wait-record", wait_record)
     return ref_digest(records)
 
 
-def ref_one(progress, head_source, head, tracked, untracked, plan_comment, wait_record):
+def ref_one(progress, head_source, head, tracked, untracked, plan_comment, wait_record, stash=None):
     """1 面だけの解決の周（既定の面名を使う）。"""
-    return ref_resolve(progress, [(PLANE, head_source, head, tracked, untracked)], plan_comment, wait_record)
+    return ref_resolve(
+        progress, [(PLANE, head_source, head, tracked, untracked, stash)], plan_comment, wait_record
+    )
+
+
+def ref_stash(oids):
+    if oids is None:
+        return [("stash-source", utf8("absent"))]
+    records = [("stash-source", utf8("present"))]
+    for oid in oids:
+        records.append(("stash-oid", oid))
+    return records
+
+
+def listed_stash_oids(repo):
+    """`refs/stash` の oid。`rev-parse refs/stash@{n}` で独立に引く。"""
+    oids = []
+    n = 0
+    while True:
+        try:
+            oid = git(repo, "rev-parse", "--verify", "--quiet", "refs/stash@{{{}}}".format(n))
+        except SystemExit:
+            break
+        oid = oid.strip()
+        if not oid:
+            break
+        oids.append(oid)
+        n += 1
+    return sorted(set(oids))
 
 
 def ref_entries(prefix, entries):
@@ -1022,6 +1056,91 @@ def test_clean_filter(tmp):
     )
 
 
+def test_stash_is_progress(tmp):
+    """stash へ退避した周が、stash 前の clean と一致しないこと。
+
+    既定の `git stash` も `-m` も、subject の形で分岐しない。同じ repo の別 branch に
+    置いた stash でも、この面の指紋が動く。`refs/stash` が無いときは失敗にしない。
+    """
+    repo = os.path.join(tmp, "stash-default")
+    head = make_repo(repo)
+    clean = mark(resolve_argv(repo, worktree=repo))
+    check("stash が無い周", clean, ref_one("実装中", "worktree", head, [], [], None, None))
+
+    write(os.path.join(repo, "tracked.txt"), b"base\nwip\n")
+    git(repo, "stash", "push", "--quiet")
+    after_default = mark(resolve_argv(repo, worktree=repo))
+    default_oids = listed_stash_oids(repo)
+    check(
+        "既定の stash 後",
+        after_default,
+        ref_one("実装中", "worktree", head, [], [], None, None, default_oids),
+    )
+    check_distinct(
+        "既定の stash が指紋に出ない",
+        [("clean", clean), ("stash", after_default)],
+    )
+
+    git(repo, "stash", "drop", "--quiet")
+    write(os.path.join(repo, "tracked.txt"), b"base\nwip\n")
+    git(repo, "stash", "push", "-m", "wip", "--quiet")
+    after_message = mark(resolve_argv(repo, worktree=repo))
+    message_oids = listed_stash_oids(repo)
+    check(
+        "stash -m 後",
+        after_message,
+        ref_one("実装中", "worktree", head, [], [], None, None, message_oids),
+    )
+    check_distinct(
+        "stash -m が指紋に出ない",
+        [("clean", clean), ("stash -m", after_message)],
+    )
+
+    other = os.path.join(tmp, "stash-other-branch")
+    other_head = make_repo(other)
+    other_clean = mark(resolve_argv(other, worktree=other))
+    git(other, "checkout", "--quiet", "-b", "other")
+    write(os.path.join(other, "tracked.txt"), b"base\nother\n")
+    git(other, "stash", "push", "--quiet")
+    git(other, "checkout", "--quiet", "main")
+    after_other = mark(resolve_argv(other, worktree=other))
+    check(
+        "別 branch の stash 後",
+        after_other,
+        ref_one("実装中", "worktree", other_head, [], [], None, None, listed_stash_oids(other)),
+    )
+    check_distinct(
+        "別 branch の stash が指紋に出ない",
+        [("clean", other_clean), ("other-branch stash", after_other)],
+    )
+
+    absent = os.path.join(tmp, "stash-absent")
+    absent_head = make_repo(absent)
+    check(
+        "refs/stash が無い周",
+        mark(resolve_argv(absent, worktree=absent)),
+        ref_one("実装中", "worktree", absent_head, [], [], None, None),
+    )
+
+    no_wt = mark(resolve_argv(repo))
+    check(
+        "worktree が無くても stash を取る",
+        no_wt,
+        ref_one("実装中", "absent", "", None, None, None, None, message_oids),
+    )
+
+    decoy = os.path.join(tmp, "stash-decoy")
+    make_repo(decoy)
+    argv = resolve_argv(repo, worktree=repo)
+    baseline = after_message
+    for label, env_extra, cwd in (
+        ("locale", {"LC_ALL": "tr_TR.UTF-8", "LANG": "tr_TR.UTF-8"}, None),
+        ("GIT_DIR の漏れ", {"GIT_DIR": os.path.join(decoy, ".git"), "GIT_WORK_TREE": decoy}, None),
+        ("cwd", None, repo),
+    ):
+        check("stash の不変性: " + label, mark(argv, env_extra=env_extra, cwd=cwd), baseline)
+
+
 def test_index_only(tmp):
     """index だけが HEAD と違う周が、clean と分かれること。"""
     repo = os.path.join(tmp, "index-only")
@@ -1316,6 +1435,7 @@ def main():
             test_binary_tracked,
             test_ignored_not_counted,
             test_clean_filter,
+            test_stash_is_progress,
             test_index_only,
             test_gitlink,
             test_fixture_env_isolation,

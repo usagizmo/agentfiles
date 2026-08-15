@@ -68,7 +68,7 @@ import sys
 # **符号化を変えたらここを上げる。**指紋の先頭に入るので、新旧が静かに同じ値へ化けない。
 # 互換は持たない（旧 `mark` の変換も新旧併用もしない）。上げた周は全件が不一致になり、
 # `count` が 1 度だけ 0 に戻る（退避が最大 1 周遅れる安全側）。
-SCHEMA = "cycle-mark/2"
+SCHEMA = "cycle-mark/3"
 
 # **レコード名は固定の ASCII 定数だけ。**可変長のものはすべて中身側へ置いて長さ前置きにする。
 # path を名前に埋めると（`untracked:<path>`）、改行を含む path で framing が曖昧になり、
@@ -597,15 +597,41 @@ def encode_landing(enc, repo, checkout, worktree, branch, expected_host):
         for path in untracked:
             enc.record("untracked-path", path)
             emit_entity(enc, "untracked", worktree, path, allow_absent=False)
+    else:
+        enc.text("tracked-source", "absent")
+        enc.text("untracked-source", "absent")
+
+    emit_stash(enc, checkout)
+    if worktree:
         # **HEAD が動いていないことを最後に確かめる。**成分は別々の時点で撮るので、commit が
         # 途中に入ると「古い HEAD ＋ commit 後の clean な worktree」という実在しない状態が
         # 出る。それが前の周の指紋と一致すると、**commit した周が成果ゼロとして数えられる** ——
         # 混成が成果ありの側へ倒れるという一般則の唯一の例外なので、ここだけ閉じる。
         if git(worktree, "rev-parse", "HEAD").decode("utf-8").strip() != head_before:
             raise ObservationError("観測の最中に HEAD が動いた")
-    else:
-        enc.text("tracked-source", "absent")
-        enc.text("untracked-source", "absent")
+
+
+def emit_stash(enc, checkout):
+    """着地面の checkout から `refs/stash` のリストを符号化する。
+
+    **worktree の有無で分けない。**stash は repo 共通 dir にあり、同じ repo の全
+    worktree がリストを共有する。課題への帰属を subject から推論しない —— リスト
+    全体を入れる。別課題の stash で指紋が動くのは、退避が遅れる側。
+
+    **無いときは失敗にしない。**`refs/stash` が無いのは未使用の正常な状態。
+    `git stash create` は `refs/stash` を更新しないので指紋は動かない（既知の穴）。
+    """
+    if git(checkout, "rev-parse", "--verify", "--quiet", "refs/stash", allow_fail=True) is None:
+        enc.text("stash-source", "absent")
+        return
+    raw = git(checkout, "rev-list", "--walk-reflogs", "refs/stash")
+    # 集合の生バイト昇順。reflog の出現順と同一 oid の重複は指紋に出さない。
+    oids = sorted(set(line for line in raw.split(b"\n") if line))
+    if not oids:
+        raise ObservationError("refs/stash はあるが reflog が空")
+    enc.text("stash-source", "present")
+    for oid in oids:
+        enc.record("stash-oid", oid)
 
 
 def encode_resolve(enc, args):
@@ -632,7 +658,7 @@ def encode_resolve(enc, args):
 
 def encode_plan(enc, args):
     """計画の周。"""
-    # `ledger` はこの周では常に `未計画` なので値としては冗長だが、成分の集合は現行の表が
+    # `ledger` はこの周では常に `未計画` なので値としては冗長だが、成分の集合はここが
     # SSOT なので落とさない。
     enc.text("ledger", args.ledger)
     for number, path in sorted(args.issue_body, key=lambda pair: pair[0]):
