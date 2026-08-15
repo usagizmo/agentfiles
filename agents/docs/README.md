@@ -66,12 +66,12 @@ flowchart TB
 
 ## 層構造
 
-| 層             | skills                                                                                                                              | 契約                                                       |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| orchestrator   | `conductor`                                                                                                                         | キューを回す。1 件の解決は work-item flow に委譲する       |
-| work-item flow | `refine` `resolve`                                                                                                                  | 課題 1 件を扱う。`refine` は計画まで、`resolve` は着地まで |
-| subflow        | `finish`                                                                                                                            | 工程の一部を束ねる                                         |
-| leaf           | `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` `agent-browser` `herdr` `skill-creator` | それ自体で完結し、単体で invoke できる                     |
+| 層             | skills                                                                                      | 契約                                                       |
+| -------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| orchestrator   | `conductor`                                                                                 | キューを回す。1 件の解決は work-item flow に委譲する       |
+| work-item flow | `refine` `resolve`                                                                          | 課題 1 件を扱う。`refine` は計画まで、`resolve` は着地まで |
+| subflow        | `finish`                                                                                    | 工程の一部を束ねる                                         |
+| leaf           | `consult` `zero-base-loop` `tidy` `docs` `commit` `pr` `ship` `issue` `merge` `rabi-design` | それ自体で完結し、単体で invoke できる                     |
 
 参照は上の層から下の層への一方通行。
 
@@ -79,7 +79,8 @@ flowchart TB
 
 - **禁止するのは下位から上位への逆参照と循環**。`resolve` は `conductor` を知らないし、leaf は flow を知らない
 - 同じ層どうしの依存・言及も作らない（leaf 同士は特に）。例外はデータ資産の共有だけで、張り方は [`../../AGENTS.md`](../../AGENTS.md)（何が張られているかは [`structure.md`](structure.md)）
-- 検出手順は `docs` skill の品質パス。**層の割り当ての正は `agents/skills/docs/scripts/layers.tsv`**（leaf は既定なので書かれない）。この節はその導出で、ずれると品質パスの `derived` 検査が落ちる
+- 検出手順は `docs` skill の品質パス。**層の割り当ての正は `agents/skills/docs/scripts/layers.tsv`**（leaf は既定なので書かれない）
+- この節は層表の導出。所有の述語は `../skills/docs/scripts/audit-skills.sh`。ずれると `derived` が落ちる
 
 ## 上位層の役割分担
 
