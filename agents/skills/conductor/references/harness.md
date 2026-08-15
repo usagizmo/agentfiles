@@ -125,6 +125,8 @@ close 直前に引き直して述語を外れていたら、閉じずその tick
 
 着地した worktree は放置すると容量の判定を狂わせる。**checkout を消すだけでは足りない**ので、次の 3 つを 1 手で行う。
 
+消す前の確認は `protocols.md`「片付ける前に成果を確認する」。`--force` で通さない。
+
 1. 重いディレクトリ（`node_modules` / `target` / `dist` / `.turbo`）を退避して background で消す
 2. worktree の checkout を消す
 3. branch を消す（**merge 済みのときだけ**。未マージなら残す）
