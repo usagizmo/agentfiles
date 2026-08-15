@@ -21,8 +21,8 @@ const raw = {
     Shelved: "退避先",
   },
   surfaces: [
-    { name: "acme/control", usesPr: true, integrationRef: "origin/main" },
-    { name: "acme/skills", usesPr: false, integrationRef: "main" },
+    { name: "acme/control", usesPr: true, countsCapacity: true, integrationRef: "origin/main" },
+    { name: "acme/skills", usesPr: false, countsCapacity: false, integrationRef: "main" },
   ],
   sessionsCmd: "list-sessions",
   workspacesCmd: "list-workspaces",

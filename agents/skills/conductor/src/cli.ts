@@ -75,9 +75,11 @@ const runTick = async (): Promise<void> => {
   })();
 
   const port = createPort({ config, surfaces, scriptsDir, snapshotPath: snapshotOut });
-  const surfaceUsesPr = new Map(config.surfaces.map((s) => [s.name, s.usesPr]));
+  const surfaceAttrs = new Map(
+    config.surfaces.map((s) => [s.name, { usesPr: s.usesPr, countsCapacity: s.countsCapacity }]),
+  );
 
-  const observations = await observeTick(port, config.statusMap, surfaceUsesPr).catch(
+  const observations = await observeTick(port, config.statusMap, surfaceAttrs).catch(
     (error: unknown) =>
       // **観測できなかった tick も watcher は張る**（張らないと起こし手が消え、一時的な障害が永久停止に化ける）。
       // 張るのは呼び出し側の仕事なので、ここは失敗を伝えるだけにする。

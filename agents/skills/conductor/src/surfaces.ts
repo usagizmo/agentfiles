@@ -18,6 +18,7 @@ const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.va
 export type SurfaceFacts = {
   readonly name: string;
   readonly usesPr: boolean;
+  readonly countsCapacity: boolean;
   /** `統合先..branch` が非空か */
   readonly aheadOfIntegration: Observed<boolean>;
   /** その面の branch の head。提出の証跡の照合に使う */
@@ -61,6 +62,7 @@ export const deriveSurface = (
   const base = {
     name: f.name,
     usesPr: f.usesPr,
+    countsCapacity: f.countsCapacity,
     aheadOfIntegration: f.aheadOfIntegration,
     dirty: f.dirty,
     hasCheckout: f.hasCheckout,

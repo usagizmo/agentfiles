@@ -57,8 +57,8 @@ const STATUS: StatusMap = new Map<string, Ledger>([
 
 // **2 面にしておく。**1 面だと「その課題の着地面だけを渡す」が「全面を渡す」と区別できない。
 const SURFACES = new Map([
-  ["o/control", true],
-  ["o/other", false],
+  ["o/control", { usesPr: true, countsCapacity: true }],
+  ["o/other", { usesPr: false, countsCapacity: true }],
 ]);
 
 const claimComment = `<!-- claim -->

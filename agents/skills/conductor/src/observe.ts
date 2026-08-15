@@ -160,6 +160,7 @@ const unknownSurface = (name: string): SurfaceObservation => {
   return {
     name,
     usesPr: true,
+    countsCapacity: true,
     aheadOfIntegration: unobservable(reason),
     dirty: unobservable(reason),
     hasCheckout: unobservable(reason),
@@ -237,11 +238,17 @@ export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly strin
 /** 全コメントを 1 本に連ねる。marker は本文をまたがないので、重複検知はそのまま効く。 */
 const joinComments = (comments: readonly string[]): string => comments.join("\n\n");
 
+/** 座標表から観測へ写す面の属性。**欠けたらその面は座標表に無い。** */
+export type SurfaceAttrs = {
+  readonly usesPr: boolean;
+  readonly countsCapacity: boolean;
+};
+
 export const observeTick = async (
   port: ObservePort,
   statusMap: StatusMap,
-  /** 座標表。面の名前 → PR で着地するか */
-  surfaceUsesPr: ReadonlyMap<string, boolean>,
+  /** 座標表。面の名前 → 属性 */
+  surfaceAttrs: ReadonlyMap<string, SurfaceAttrs>,
 ): Promise<readonly IssueObservation[]> => {
   const snapshot = parseSnapshot(await port.snapshot());
   const statuses = projectStatus(snapshot);
@@ -314,7 +321,7 @@ export const observeTick = async (
         ? claim.value.landing
         : declared.length > 0
           ? declared
-          : [...surfaceUsesPr.keys()].slice(0, 1);
+          : [...surfaceAttrs.keys()].slice(0, 1);
 
     const ledger = statusMap.get(status.status);
 
@@ -343,8 +350,9 @@ export const observeTick = async (
         // **座標表に無い面を「PR で着地する面」へ倒さない。**倒すと、着地の条件も
         // live checkout の検査も観測していない面の型で決まり、座標表の欠けが
         // `着地面が解決できない` として出てこない。
-        const usesPr = surfaceUsesPr.get(name);
-        if (usesPr === undefined) return unknownSurface(name);
+        const attrs = surfaceAttrs.get(name);
+        if (attrs === undefined) return unknownSurface(name);
+        const { usesPr, countsCapacity } = attrs;
 
         // **帰属は面の名前だけでは引けない。**同じ面に複数の課題の worktree が並ぶので、
         // path に自分の claim branch（`{prefix}/{番号}-`）が入っているものだけを自分のものとする。
@@ -358,6 +366,7 @@ export const observeTick = async (
         const facts: SurfaceFacts = {
           name,
           usesPr,
+          countsCapacity,
           aheadOfIntegration: git.ahead,
           head: git.head,
           // **worktree が無いことは「読めなかった」ではない。**checkout が無い面には

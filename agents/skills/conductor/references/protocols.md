@@ -170,7 +170,7 @@ keys: [<交差した資源キー>]
 | `取り下げ` | worktree・セッション・記録                                                                                  | **branch と claim の記録**    |
 
 - **merge されていない branch を消さない**。PR を使わない面の着地は commit までなので、統合先への merge がまだでも `着地済み` になる。人が merge するまで branch を置き、worktree だけ返す
-- **1 面でも残したら片付いていない**（容量は worktree の本数で数える。`progress` は終端なので二度と拾われない）
+- **1 面でも残したら片付いていない**（実 checkout が残る。`progress` は終端なので二度と拾われない）
 - **あわせて制御面の claim branch を消す**（着地面に制御面が含まれるかに依らず）。claim の防壁は常に制御面の remote branch
 - **live checkout は片付けの対象ではない**（`landing-surface.md`）
 

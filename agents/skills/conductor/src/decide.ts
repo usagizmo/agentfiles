@@ -9,11 +9,12 @@ import type { IssueObservation } from "./observation.ts";
 import { sessionActive } from "./observation.ts";
 import {
   blocks,
+  checkoutCount,
   holdsIntegration,
   holdsWrite,
   intersect,
   planSlotUsage,
-  worktreeCount,
+  surfaceCountsTowardCapacity,
 } from "./resources.ts";
 import {
   allSurfacesClean,
@@ -37,6 +38,7 @@ import type {
   Progress,
   Target,
   TargetRecords,
+  Usage,
 } from "./types.ts";
 
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
@@ -49,17 +51,14 @@ export type TickConfig = {
   /** 容量は**目安**であって停止条件ではない（超えても既存の課題は進める） */
   readonly capacityTarget: number;
   readonly planSlots: number;
-  /** 計画済みの在庫の上限。既定は容量の目安 + 先読み 1 */
-  readonly readyStockLimit: number;
 };
 
 export const DEFAULT_CONFIG: TickConfig = {
   maxActionsPerTick: 5,
   retryBudget: 3,
   emptyCycleBudget: 3,
-  capacityTarget: 4,
+  capacityTarget: 6,
   planSlots: 3,
-  readyStockLimit: 5,
 };
 
 export type TickInput = {
@@ -385,20 +384,84 @@ const alreadyClaimed = (g: Group): boolean =>
     (o) => o.claimRecord.kind === "present" || value(o.claimBranchExists) === true,
   );
 
-/** 選出が使う数え方。容量・計画枠・在庫の上限判定が同じ式を引く。 */
-export const usageOf = (
+/** 代表の、数える面の checkout 本数。成員では増やさない。 */
+const countedCapacityOf = (g: Group): number =>
+  g.leadObservation.surfaces.filter((s) => surfaceCountsTowardCapacity(g.lead, s)).length;
+
+/** claim したときに増える数える本数。checkout の有無では引かない。 */
+const capacityIncrement = (g: Group): number =>
+  g.leadObservation.surfaces.filter((s) => s.countsCapacity).length;
+
+/** 着地面が解決できる。読めた面だけを含める。 */
+const landingResolved = (g: Group): boolean =>
+  g.observations.every(
+    (o) => o.surfaces.length > 0 && o.surfaces.every((s) => s.terminal.kind === "present"),
+  );
+
+/** claim の前提のうち、台帳と claim 痕跡以外。 */
+const claimPreconditions = (
+  g: Group,
+  all: readonly NormalizedIssue[],
+  byIssue: Map<number, IssueObservation>,
+  opts: { readonly contract: "all" | "planned" } = { contract: "all" },
+): boolean => {
+  if (!g.observations.every((o) => value(o.open) === true)) return false;
+  if (!dependenciesResolved(g, all, byIssue)) return false;
+  if (!landingResolved(g)) return false;
+  return g.records.every((r, i) => {
+    if (opts.contract === "planned" && r.ledger !== "計画済み") return true;
+    const complete = g.observations[i]?.issueContractComplete;
+    return complete !== undefined && value(complete) === true;
+  });
+};
+
+const usageOf = (
+  groups: readonly Group[],
+  all: readonly NormalizedIssue[],
+  byIssue: Map<number, IssueObservation>,
   observations: readonly IssueObservation[],
-): { readonly worktrees: number; readonly planSlotsUsed: number; readonly readyStock: number } => {
-  const groups = buildGroups(observations);
-  const planSlotsUsed = planSlotUsage(observations);
+  config: TickConfig,
+  excluded: ReadonlySet<number>,
+): Usage => {
+  const counted = groups.reduce((total, g) => total + countedCapacityOf(g), 0);
   return {
-    worktrees: worktreeCount(observations),
-    planSlotsUsed,
-    // **在庫 = 計画済みの group 数 + 生存している `refine` セッション数。**
-    readyStock:
-      groups.filter((g) => g.records.every((r) => r.ledger === "計画済み") && !alreadyClaimed(g))
-        .length + planSlotsUsed,
+    counted,
+    checkouts: checkoutCount(observations),
+    supply: groups.filter((g) => countsAsSupply(g, all, byIssue, excluded)).length,
+    supplyTarget: Math.max(0, config.capacityTarget - counted) + config.planSlots,
   };
+};
+
+/**
+ * 完了すれば claim できるようになる group か。
+ * 自分側の欠けは落とす。入場停止・容量待ち・write 交差では落とさない。
+ */
+const countsAsSupply = (
+  g: Group,
+  all: readonly NormalizedIssue[],
+  byIssue: Map<number, IssueObservation>,
+  excluded: ReadonlySet<number>,
+): boolean => {
+  if (g.members.some((n) => excluded.has(n))) return false;
+  if (g.lead.ledger === "退避先") return false;
+  if (g.observations.some((o) => o.retiredRefineExists)) return false;
+  if (
+    g.observations.some(
+      (o) =>
+        o.refineSession.kind !== "none" &&
+        o.waitRecord.kind === "waiting" &&
+        o.waitRecord.validity.kind === "valid",
+    )
+  ) {
+    return false;
+  }
+  if (alreadyClaimed(g)) return false;
+  const remainingCovered = g.records.every((r, i) => {
+    if (r.ledger === "計画済み") return true;
+    return g.observations[i]?.refineSession.kind !== "none";
+  });
+  if (!remainingCovered) return false;
+  return claimPreconditions(g, all, byIssue, { contract: "planned" });
 };
 
 const dependenciesResolved = (
@@ -423,15 +486,9 @@ const selectable = (
   all: readonly NormalizedIssue[],
   byIssue: Map<number, IssueObservation>,
 ): boolean => {
-  // **読めなかった `open` を選出の側へ倒さない**（claim は worktree を作る不可逆操作）。
-  if (!g.observations.every((o) => value(o.open) === true)) return false;
   if (!g.records.every((r) => r.ledger === "計画済み")) return false;
   if (alreadyClaimed(g)) return false;
-  if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return false;
-  if (!dependenciesResolved(g, all, byIssue)) return false;
-  // **着地面が解決できる**。読めない面があれば正規化が `Conflict` を立てている。
-  if (g.observations.some((o) => o.surfaces.length === 0)) return false;
-  return true;
+  return claimPreconditions(g, all, byIssue);
 };
 
 /**
@@ -440,10 +497,7 @@ const selectable = (
  * そこは在庫の鮮度が守っている対象そのもの。
  */
 const claimStructurallyBlocked = (g: Group, ctx: Context): boolean => {
-  if (!g.observations.every((o) => value(o.open) === true)) return true;
-  if (!g.records.every((r) => r.ledger === "計画済み")) return true;
-  if (alreadyClaimed(g)) return true;
-  if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return true;
+  if (!selectable(g, ctx.all, ctx.byIssue)) return true;
   return claimCrossesWriteHolders(g, ctx);
 };
 
@@ -491,9 +545,10 @@ type Context = {
   readonly all: readonly NormalizedIssue[];
   readonly byIssue: Map<number, IssueObservation>;
   readonly config: TickConfig;
-  readonly worktrees: number;
+  readonly counted: number;
   readonly planSlotsUsed: number;
-  readonly readyStock: number;
+  readonly supply: number;
+  readonly supplyTarget: number;
   readonly entryBlocked: boolean;
   readonly input: TickInput;
 };
@@ -520,7 +575,7 @@ const claimCrossesWriteHolders = (g: Group, ctx: Context): boolean => {
 const canClaim = (g: Group, ctx: Context): boolean => {
   if (isShelved(g)) return false;
   if (!selectable(g, ctx.all, ctx.byIssue)) return false;
-  if (ctx.worktrees + g.leadObservation.surfaces.length > ctx.config.capacityTarget) return false;
+  if (ctx.counted >= ctx.config.capacityTarget && capacityIncrement(g) > 0) return false;
   if (claimCrossesWriteHolders(g, ctx)) return false;
   return !ctx.entryBlocked;
 };
@@ -724,11 +779,12 @@ const LADDER: readonly Rung[] = [
       if (sessionAlive(g)) return false;
       if (r.runtime !== "無し" && r.runtime !== "人待ち" && r.runtime !== "休止") return false;
       if (g.records.some(ledgerBehind)) return false;
-      // **checkout が無く、作ると容量が目安を超えるなら選ばない** ——
+      // **checkout が無く、作ると数える本数が目安以上になるなら選ばない** ——
       // ただし論理 lease を保持しているなら、目安を超えても起こす（回収なので）。
       if (r.capacity === "あり") return true;
       if (holdsWrite(r) || holdsIntegration(g.leadObservation)) return true;
-      return ctx.worktrees < ctx.config.capacityTarget;
+      if (capacityIncrement(g) === 0) return true;
+      return ctx.counted < ctx.config.capacityTarget;
     },
   },
   {
@@ -837,7 +893,7 @@ const LADDER: readonly Rung[] = [
         return false;
       if (g.leadObservation.waitRecord.kind === "waiting") return false;
       if (ctx.planSlotsUsed >= ctx.config.planSlots) return false;
-      return ctx.readyStock < ctx.config.readyStockLimit;
+      return ctx.supply < ctx.supplyTarget;
     },
   },
   {
@@ -890,9 +946,11 @@ export const decide = (input: TickInput): Decision => {
     conflicts.push(...found);
     for (const n of g.members) excluded.add(n);
   }
+  const usage = usageOf(groups, all, byIssue, input.observations, input.config, excluded);
   const decision = (outcome: Outcome): Decision => ({
     conflicts: foldConflicts(conflicts),
     outcome,
+    usage,
   });
 
   // **計画 block の invalid は 1 件ずつの扱いに落とさない。**精算より前にセッションを止める。
@@ -930,15 +988,15 @@ export const decide = (input: TickInput): Decision => {
     });
   }
 
-  const usage = usageOf(input.observations);
   const ctx: Context = {
     groups,
     all,
     byIssue,
     config: input.config,
-    worktrees: usage.worktrees,
-    planSlotsUsed: usage.planSlotsUsed,
-    readyStock: usage.readyStock,
+    counted: usage.counted,
+    planSlotsUsed: planSlotUsage(input.observations),
+    supply: usage.supply,
+    supplyTarget: usage.supplyTarget,
     // **効くのは終端に達するまで。**外すのは `人待ち` と、止まったことを確かめた `退避先` だけ。
     entryBlocked: groups.some(
       (g) =>

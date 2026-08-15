@@ -181,7 +181,7 @@ sequenceDiagram
     participant GH as GitHub
 
     C->>C: ledger が未計画 かつ progress が未着手
-    Note over C: 在庫の上限と計画枠を見る。<br/>揃っていない group の残りは<br/>在庫の上限を超えて起こす
+    Note over C: 供給と計画枠を見る。<br/>揃っていない group は<br/>完了すれば selectable になるときだけ供給に入る
     C->>F: /refine #N
     F->>GH: Issue と関連コードを読む
     F->>F: consult で方針を確定

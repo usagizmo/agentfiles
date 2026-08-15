@@ -10,6 +10,7 @@ import { absent, present, unobservable } from "../src/types.ts";
 const facts = (over: Partial<SurfaceFacts> = {}): SurfaceFacts => ({
   name: "o/r",
   usesPr: true,
+  countsCapacity: true,
   aheadOfIntegration: present(true),
   head: present("aaa"),
   dirty: present(false),

@@ -193,6 +193,14 @@ export type TargetRecords = {
   readonly failure: Observed<{ readonly count: number; readonly lastAction: string | null }>;
 };
 
+/** 人への出口に載せる 4 数。**実 checkout に上限の数値は置かない。** */
+export type Usage = {
+  readonly counted: number;
+  readonly checkouts: number;
+  readonly supply: number;
+  readonly supplyTarget: number;
+};
+
 /**
  * tick が 1 周で出す結論。
  *
@@ -206,6 +214,7 @@ export type Decision = {
   /** 当たった課題を選出対象外にする。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
   readonly conflicts: readonly Conflict[];
   readonly outcome: Outcome;
+  readonly usage: Usage;
 };
 
 /**

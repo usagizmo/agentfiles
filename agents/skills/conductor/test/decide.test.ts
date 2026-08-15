@@ -497,7 +497,7 @@ describe("外から状態が動く", () => {
   });
 
   test("8b3: 容量が目安を超えているだけの在庫が交差した", () => {
-    const busy = Array.from({ length: 4 }, (_, i) =>
+    const busy = Array.from({ length: 6 }, (_, i) =>
       implementing({
         issue: 10 + i,
         claimRecord: present({ representative: 10, members: [10 + i], landing: ["control"] }),
@@ -1498,7 +1498,7 @@ describe("順序", () => {
 
 describe("硬い上限", () => {
   test("10: 人が直接 resolve を走らせ、worktree が目安を超えた", () => {
-    const busy = Array.from({ length: 4 }, (_, i) =>
+    const busy = Array.from({ length: 6 }, (_, i) =>
       implementing({
         issue: 10 + i,
         claimRecord: present({ representative: 10, members: [10 + i], landing: ["control"] }),
@@ -1917,5 +1917,222 @@ describe("着地面が制御面と違う（action）", () => {
     ]);
     expect(d.conflicts.map((c) => c.reason)).not.toContain("着地済みだが提出の証跡が無い");
     expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe("片付ける");
+  });
+});
+
+describe("容量と供給", () => {
+  const busy = (n: number, over: Partial<IssueObservation> = {}) =>
+    implementing({
+      issue: n,
+      claimRecord: present({ representative: n, members: [n], landing: ["control"] }),
+      session: session.running,
+      ...over,
+    });
+
+  const planned = (n: number, over: Partial<IssueObservation> = {}) =>
+    observation({ issue: n, ledger: present("計画済み"), ...over });
+
+  test("19: 人待ちの checkout は数えない", () => {
+    const waiting = Array.from({ length: 6 }, (_, i) =>
+      busy(10 + i, { waitRecord: wait.waiting, session: session.running }),
+    );
+    const d = tick([...waiting, planned(1)]);
+    expect(d.usage.counted).toBe(0);
+    expect(d.usage.checkouts).toBe(6);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "claim する",
+    );
+  });
+
+  test("19b: 退避先の checkout は数えない", () => {
+    const shelved = Array.from({ length: 6 }, (_, i) =>
+      busy(10 + i, { ledger: present("退避先"), session: session.none }),
+    );
+    const d = tick([...shelved, planned(1)]);
+    expect(d.usage.counted).toBe(0);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "claim する",
+    );
+  });
+
+  test("19c: 休止の checkout は数える", () => {
+    const yielded = Array.from({ length: 6 }, (_, i) =>
+      busy(10 + i, {
+        pauseRecordExists: true,
+        session: session.idle,
+      }),
+    );
+    const d = tick([...yielded, planned(1)]);
+    expect(d.usage.counted).toBe(6);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).not.toBe(
+      "claim する",
+    );
+  });
+
+  test("19d: 数える本数 5 + 増分 2 は claim する", () => {
+    const holders = Array.from({ length: 5 }, (_, i) => busy(10 + i));
+    const candidate = planned(1, {
+      surfaces: [
+        surface({ name: "control", countsCapacity: true }),
+        surface({ name: "other", countsCapacity: true }),
+      ],
+    });
+    expectAction([...holders, candidate], "claim する");
+  });
+
+  test("19e: 数える本数 6 + 増分 2 は claim しない", () => {
+    const holders = Array.from({ length: 6 }, (_, i) => busy(10 + i));
+    const candidate = planned(1, {
+      surfaces: [
+        surface({ name: "control", countsCapacity: true }),
+        surface({ name: "other", countsCapacity: true }),
+      ],
+    });
+    expectIdle([...holders, candidate]);
+  });
+
+  test("19f: 数える本数 6 + 増分 0 は claim する", () => {
+    const holders = Array.from({ length: 6 }, (_, i) => busy(10 + i));
+    const candidate = planned(1, {
+      surfaces: [surface({ name: "skills", countsCapacity: false })],
+    });
+    expectAction([...holders, candidate], "claim する");
+  });
+
+  test("19g: countsCapacity が偽の面は数えない", () => {
+    const uncounted = Array.from({ length: 6 }, (_, i) =>
+      busy(10 + i, {
+        surfaces: [
+          surface({
+            name: "skills",
+            countsCapacity: false,
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+          }),
+        ],
+      }),
+    );
+    const d = tick([...uncounted, planned(1)]);
+    expect(d.usage.counted).toBe(0);
+    expect(d.usage.checkouts).toBe(6);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "claim する",
+    );
+  });
+
+  test("19h: 数える本数は代表の面だけを見る", () => {
+    const lead = busy(1, {
+      sameBranchAs: [2],
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const member = busy(2, {
+      sameBranchAs: [1],
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    expect(tick([lead, member]).usage.counted).toBe(1);
+  });
+
+  test("19i: 供給目標は max(0, 容量目標 − 数える本数) + 計画枠", () => {
+    const holders = Array.from({ length: DEFAULT_CONFIG.capacityTarget }, (_, i) => busy(10 + i));
+    expect(tick(holders).usage.supplyTarget).toBe(DEFAULT_CONFIG.planSlots);
+    expect(tick([busy(10)]).usage.supplyTarget).toBe(
+      DEFAULT_CONFIG.capacityTarget - 1 + DEFAULT_CONFIG.planSlots,
+    );
+  });
+
+  test("19j: 人待ちの refine は供給に数えない", () => {
+    const refining = observation({
+      issue: 1,
+      ledger: present("未計画"),
+      refineSession: session.running,
+      waitRecord: wait.waiting,
+    });
+    expect(tick([refining]).usage.supply).toBe(0);
+  });
+
+  test("19k: 退避先の計画済みは供給に数えない", () => {
+    const shelved = planned(1, { ledger: present("退避先") });
+    expect(tick([shelved]).usage.supply).toBe(0);
+  });
+
+  test("19l: retired-refine が残っているものは供給に数えない", () => {
+    const retired = planned(1, { retiredRefineExists: true });
+    expect(tick([retired]).usage.supply).toBe(0);
+  });
+
+  test("19m: 依存が未解決の group は供給に数えない", () => {
+    const dep = observation({ issue: 1, ledger: present("進行中") });
+    const blocked = planned(2, { dependsOn: [1] });
+    expect(tick([dep, blocked]).usage.supply).toBe(0);
+  });
+
+  test("19n: write 交差だけでは供給から落とさない", () => {
+    const holder = busy(1, { resourceKeys: present(["skills"]) });
+    const crossing = planned(2, { resourceKeys: present(["skills"]) });
+    expect(tick([holder, crossing]).usage.supply).toBe(1);
+  });
+
+  test("19o: 揃っていない group は、残りを計画すれば selectable になるときだけ 1", () => {
+    const ready = planned(1, { sameBranchAs: [2] });
+    const rest = observation({
+      issue: 2,
+      ledger: present("未計画"),
+      sameBranchAs: [1],
+      refineSession: session.running,
+      issueContractComplete: present(false),
+    });
+    expect(tick([ready, rest]).usage.supply).toBe(1);
+    const uncovered = observation({
+      issue: 5,
+      ledger: present("計画済み"),
+      sameBranchAs: [6, 7],
+    });
+    const refining = observation({
+      issue: 6,
+      ledger: present("未計画"),
+      sameBranchAs: [5, 7],
+      refineSession: session.running,
+    });
+    const idle = observation({
+      issue: 7,
+      ledger: present("未計画"),
+      sameBranchAs: [5, 6],
+    });
+    expect(tick([uncovered, refining, idle]).usage.supply).toBe(0);
+    const blocked = observation({
+      issue: 3,
+      ledger: present("計画済み"),
+      sameBranchAs: [4],
+      dependsOn: [9],
+    });
+    const restBlocked = observation({
+      issue: 4,
+      ledger: present("未計画"),
+      sameBranchAs: [3],
+      refineSession: session.running,
+      dependsOn: [9],
+    });
+    const dep = observation({ issue: 9, ledger: present("進行中") });
+    expect(tick([blocked, restBlocked, dep]).usage.supply).toBe(0);
+  });
+
+  test("19p: 着地面が解決できない group は供給に数えない", () => {
+    const broken = planned(1, {
+      surfaces: [
+        surface({
+          name: "missing",
+          terminal: unobservable("座標表に無い"),
+        }),
+      ],
+    });
+    expect(tick([broken]).usage.supply).toBe(0);
+  });
+
+  test("19r: Decision.usage に数える本数・実 checkout・供給が載る", () => {
+    const d = tick([busy(1), planned(2)]);
+    expect(d.usage.counted).toBe(1);
+    expect(d.usage.checkouts).toBe(1);
+    expect(d.usage.supply).toBe(1);
+    expect(d.usage.supplyTarget).toBe(8);
   });
 });

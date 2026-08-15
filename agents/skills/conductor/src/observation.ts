@@ -53,6 +53,8 @@ export type SurfaceObservation = {
   readonly name: string;
   /** その面が PR で着地するか。`着地待ち` は面が 1 つも該当しない側の条件を真として扱う */
   readonly usesPr: boolean;
+  /** 枠を消費するか。**変更の中身では決めない。**座標表の属性 */
+  readonly countsCapacity: boolean;
   /** `統合先..branch` が非空か。**branch 上の commit の存在で読まない** */
   readonly aheadOfIntegration: Observed<boolean>;
   /** worktree の dirty。**読めなかった `-` を clean へ畳まない** */
