@@ -107,7 +107,7 @@ export type ObservePort = {
     readonly prMerged: Observed<boolean>;
     /** open PR が無く、head に紐づく最新 PR が unmerged で closed */
     readonly latestPrClosedUnmerged: Observed<boolean>;
-    /** 入場を止める宣言。**置き場は project 差分が定める** */
+    /** 入場を止める宣言。**運び方は `issue-contract.md`。いつ置くかは project の領分** */
     readonly blocksEntry: boolean;
     /** claim の記録が書かれた時刻。**merge の枠の順序キー**（PR 作成の早さでは選ばない） */
     readonly claimedAt: Observed<number>;
