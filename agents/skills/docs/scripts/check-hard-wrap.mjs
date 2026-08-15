@@ -11,7 +11,10 @@ const NESTED_LIST = /^[ \t]+(?:[-*+]|\d+\.)[ \t]/u;
 const FENCE_LINE = /^[ \t]*(?:```|~~~)/u;
 
 export function isSentenceEnd(line) {
-  const trimmed = line.replace(/[ \t]+$/u, "").replace(/\\$/u, "");
+  const trimmed = line
+    .replace(/^[ \t]*>[ \t]?/u, "")
+    .replace(/[ \t]+$/u, "")
+    .replace(/\\$/u, "");
   if (trimmed.trim() === "") return true;
   return SENTENCE_END.test(trimmed) || COLON_END.test(trimmed);
 }
