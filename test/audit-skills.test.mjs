@@ -21,15 +21,27 @@ function withoutGitEnv(base = process.env) {
   return env;
 }
 
-async function audit(root, env = {}) {
-  const p = Bun.spawn(["sh", AUDIT, root], {
+function isolatedGitEnv(base = process.env) {
+  return {
+    ...withoutGitEnv(base),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+  };
+}
+
+async function audit(root, env = {}, args = []) {
+  const p = Bun.spawn(["sh", AUDIT, root, ...args], {
     cwd: ROOT,
-    env: withoutGitEnv({ ...process.env, ...env }),
+    env: isolatedGitEnv({ ...process.env, ...env }),
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, exitCode] = await Promise.all([new Response(p.stdout).text(), p.exited]);
-  return { stdout, exitCode };
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(p.stdout).text(),
+    new Response(p.stderr).text(),
+    p.exited,
+  ]);
+  return { stdout, stderr, exitCode };
 }
 
 test("壊れた強調を VIOLATION emphasis として出す", async () => {
@@ -55,7 +67,7 @@ test("bun が無ければ黙らず SKIP を出す", async () => {
   // PATH を絞って bun だけ落とす（sh / awk / grep は残す）
   const { stdout } = await audit(fixture("emphasis-broken"), { PATH: "/usr/bin:/bin" });
   expect(stdout).toContain("SKIP\temphasis");
-  expect(stdout).toContain("skips=1");
+  expect(stdout).toMatch(/skips=[1-9]/);
 });
 
 test("skills root が無ければ検査せずに落ちる（緑に見せない）", async () => {
@@ -130,7 +142,7 @@ test("契約に無い exit code でも audit ごと落ちる", async () => {
 test("依存が無い（exit 2）は SKIP として通す", async () => {
   const { stdout } = await audit(fixture("emphasis-clean"), checker("no-dep"));
   expect(stdout).toContain("SKIP\temphasis");
-  expect(stdout).toContain("skips=1");
+  expect(stdout).toMatch(/skips=[1-9]/);
 });
 
 // --- owned: gitignore された skill を棚卸しから外す ----------------------
@@ -145,7 +157,7 @@ const derivedViolations = (stdout) =>
 async function git(args, cwd) {
   const p = Bun.spawn(["git", ...args], {
     cwd,
-    env: withoutGitEnv(),
+    env: isolatedGitEnv(),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -269,5 +281,186 @@ test("repo が無いときは所有判定を SKIP する", async () => {
     expect(stdout).toMatch(/skips=[1-9]/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("repo が無いときは所有判定不能として成功終了しない", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "audit-norepo-fail-"));
+  try {
+    writeSkill(dir, "owned");
+    mkdirSync(join(dir, "agents/docs"), { recursive: true });
+    writeLayerReadme(dir, ["owned"]);
+    const { stdout, exitCode } = await audit(join(dir, "agents/skills"));
+    expect(stdout).toContain("SKIP\towned");
+    expect(exitCode).toBe(2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const refLines = (stdout) =>
+  stdout
+    .split("\n")
+    .filter((l) => l.startsWith("VIOLATION\tref\t") || l.startsWith("REVIEW\tref\t"))
+    .sort();
+
+test("所有外 skill を先頭にする参照はディスク有無で色が変わらない", async () => {
+  const absent = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
+  const present = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
+  try {
+    writeFileSync(join(absent, "agents/skills/owned/SKILL.md"), "# owned\n\n`ghost/gone.md`\n");
+    writeFileSync(join(present, "agents/skills/owned/SKILL.md"), "# owned\n\n`ghost/gone.md`\n");
+    writeFileSync(join(present, "agents/skills/ghost/gone.md"), "# gone\n");
+    const a = await audit(join(absent, "agents/skills"));
+    const b = await audit(join(present, "agents/skills"));
+    expect(refLines(a.stdout)).toEqual(refLines(b.stdout));
+  } finally {
+    rmSync(absent, { recursive: true, force: true });
+    rmSync(present, { recursive: true, force: true });
+  }
+});
+
+async function skillRepo(skills) {
+  const dir = mkdtempSync(join(tmpdir(), "audit-skills-"));
+  mkdirSync(join(dir, "agents/docs"), { recursive: true });
+  writeFileSync(join(dir, ".gitignore"), "\n");
+  for (const [name, body] of Object.entries(skills)) {
+    mkdirSync(join(dir, "agents/skills", name), { recursive: true });
+    writeFileSync(join(dir, "agents/skills", name, "SKILL.md"), body);
+  }
+  writeLayerReadme(dir, Object.keys(skills));
+  await git(["init"], dir);
+  await git(["config", "user.email", "test@example.com"], dir);
+  await git(["config", "user.name", "test"], dir);
+  await git(["add", "."], dir);
+  await git(["commit", "-m", "init"], dir);
+  return dir;
+}
+
+test("peer の所有名を同じ層以下へ名指ししたら layer が赤", async () => {
+  const inspect = await skillRepo({ local: "# local\n\n`resolve`\n" });
+  const peer = await skillRepo({ resolve: "# resolve\n" });
+  try {
+    const { stdout, exitCode } = await audit(join(inspect, "agents/skills"), {}, [
+      "--peer",
+      join(peer, "agents/skills"),
+    ]);
+    expect(stdout).toContain("VIOLATION\tlayer\tlocal/SKILL.md:");
+    expect(stdout).toContain("names=resolve");
+    expect(exitCode).toBe(1);
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+    rmSync(peer, { recursive: true, force: true });
+  }
+});
+
+test("invocation 形は先頭 / を剥がした skill 名と同じ語", async () => {
+  const inspect = await skillRepo({ local: "# local\n\n`/pr`\n" });
+  const peer = await skillRepo({ pr: "# pr\n" });
+  try {
+    const { stdout, exitCode } = await audit(join(inspect, "agents/skills"), {}, [
+      "--peer",
+      join(peer, "agents/skills"),
+    ]);
+    expect(stdout).toContain("VIOLATION\tlayer\tlocal/SKILL.md:");
+    expect(stdout).toContain("names=pr");
+    expect(exitCode).toBe(1);
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+    rmSync(peer, { recursive: true, force: true });
+  }
+});
+
+test("skill-project が本体より上を名指ししたら layer が赤", async () => {
+  const inspect = await skillRepo({ "resolve-project": "# resolve-project\n\n`conductor`\n" });
+  const peer = await skillRepo({ conductor: "# conductor\n" });
+  try {
+    const { stdout, exitCode } = await audit(join(inspect, "agents/skills"), {}, [
+      "--peer",
+      join(peer, "agents/skills"),
+    ]);
+    expect(stdout).toContain("VIOLATION\tlayer\tresolve-project/SKILL.md:");
+    expect(stdout).toContain("names=conductor");
+    expect(exitCode).toBe(1);
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+    rmSync(peer, { recursive: true, force: true });
+  }
+});
+
+test("検査 root と peer で同じ skill 名があるときは検査ごと落ちる", async () => {
+  const inspect = await skillRepo({ foo: "# foo\n" });
+  const peer = await skillRepo({ foo: "# foo\n" });
+  try {
+    const { stdout, stderr, exitCode } = await audit(join(inspect, "agents/skills"), {}, [
+      "--peer",
+      join(peer, "agents/skills"),
+    ]);
+    expect(exitCode).toBe(2);
+    expect(stdout).not.toContain("SUMMARY");
+    expect(stderr).toContain("同じ skill 名");
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+    rmSync(peer, { recursive: true, force: true });
+  }
+});
+
+test("peer root が無いときは検査ごと落ちる", async () => {
+  const inspect = await skillRepo({ local: "# local\n" });
+  try {
+    const { stdout, stderr, exitCode } = await audit(join(inspect, "agents/skills"), {}, [
+      "--peer",
+      join(inspect, "missing-peer"),
+    ]);
+    expect(exitCode).toBe(2);
+    expect(stdout).not.toContain("SUMMARY");
+    expect(stderr).toContain("--peer が実在しない");
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+  }
+});
+
+test("検査 root がスクリプトと異なり peer が無いとき layer は SKIP で成功終了しない", async () => {
+  const inspect = await skillRepo({ local: "# local\n" });
+  try {
+    const { stdout, exitCode } = await audit(join(inspect, "agents/skills"));
+    expect(stdout).toContain("SKIP\tlayer");
+    expect(exitCode).toBe(2);
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+  }
+});
+
+test("docs-project は本体の免除を引き継ぐ", async () => {
+  const inspect = await skillRepo({
+    "docs-project": "# docs-project\n\n`docs`\n\n`resolve`\n",
+  });
+  const peer = await skillRepo({ resolve: "# resolve\n" });
+  try {
+    const { stdout } = await audit(join(inspect, "agents/skills"), {}, [
+      "--peer",
+      join(peer, "agents/skills"),
+    ]);
+    expect(stdout).not.toContain("VIOLATION\tlayer");
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+    rmSync(peer, { recursive: true, force: true });
+  }
+});
+
+test("peer の本文は検査対象に入らない", async () => {
+  const inspect = await skillRepo({ local: "# local\n" });
+  const peer = await skillRepo({ resolve: "# resolve\n\n**壊れた強調\n" });
+  try {
+    const { stdout, exitCode } = await audit(join(inspect, "agents/skills"), {}, [
+      "--peer",
+      join(peer, "agents/skills"),
+    ]);
+    expect(stdout).not.toContain("VIOLATION\temphasis");
+    expect(stdout).not.toContain("resolve/SKILL.md");
+    expect(exitCode).toBe(0);
+  } finally {
+    rmSync(inspect, { recursive: true, force: true });
+    rmSync(peer, { recursive: true, force: true });
   }
 });

@@ -70,11 +70,10 @@ description: >-
 
 手順:
 
-1. `sh <skills root>/docs/scripts/audit-skills.sh <skills root>` を実行する。
-   **スクリプトも root も、編集している checkout のものを使う** — `~/.agents/skills` は別 checkout への symlink なので、worktree で既定に頼ると別のツリーを古いスクリプトで検査して通る。`SUMMARY` 行が出なければ検査は走っていない（root 不在等）ので、root を直して実行し直す。
+1. 実行した `audit-skills.sh` を引数なしで走らせる。既定の検査 root はスクリプト自身の skills root。別の root を見るときだけ引数で渡す。`SUMMARY` 行が出なければ検査は走っていないので、root を直して実行し直す。
    見るのは skills root 配下と、その隣の `shared/` `docs/`。どれにも触れていない編集（project の AGENTS.md だけ等）では飛ばし、**飛ばしたことをレビュアーに伝える**（黙ると検査済みと誤認される）。
-   `derived` の層表は所有する skill と突き合わせる。述語は `scripts/audit-skills.sh`。判定不能なら層表の突き合わせは走らない。
-   **project の root を検査するときは、その project が定める `--anchor` / `--layers` も渡す**（何を渡すかは `<skill>-project` が持つ）。参照の基準点と層の定義が足りないと、repo 固有の置き場を指す参照と project 固有の skill の名指しがまとめて誤検知になり、gate が常時赤になって新しい違反が埋もれる。
+   `derived` の層表は所有する skill と突き合わせる。述語は `scripts/audit-skills.sh`。判定不能なら層表の突き合わせは走らない。所有に依存する検査が判定不能のままなら成功終了しない。
+   project の root を検査するとき、渡すフラグは `<skill>-project` が持つ。`--anchor` は skills root と repo root 以外の置き場があるときだけ。`--peer` は層の既知名に足す skills root があるときだけ。`--layers` は project 側の層定義を足すときだけ。検査 root がスクリプト自身の skills root と異なり peer が無いとき、layer は `SKIP` であり成功終了しない。
    | 出力 | 扱い | | --- | --- | | `VIOLATION` | 次へ進む前に直す。ただし層違反は層定義の更新漏れでも出る。**そのときの直す先はデータ側で、文書ではない** | | `REVIEW` | 機械では意味を判定できない候補。**棄却せずレビュアーへ渡す** | | `SKIP` | 検査が飛んだ印。**その分をレビュアーに伝える**（強調は JS runtime。判定不能なら層表の突き合わせも止まる） | **取れるのは実在・形・重複・強調記法だけで、しかも skill 名はバッククォート付きしか拾えない**。出力が空でも基準を満たした証明にはならない
 
 2. 節単位で書き直して基準へ適合させる。太字剥がし・言い換え削除だけの diff は不合格
