@@ -6,15 +6,18 @@
 
 import {
   issues as decodeIssues,
+  landingTips,
+  liveCheckouts,
+  localBranches,
   parseSnapshot,
   projectStatus,
   pullRequests,
-  liveCheckouts,
+  remoteBranches,
   sessions as decodeSessions,
   workspaces,
   worktrees as decodeWorktrees,
 } from "./decode.ts";
-import type { Tri } from "./decode.ts";
+import type { LocalBranchRow, Tri } from "./decode.ts";
 import type { IssueObservation, SessionObservation, SurfaceObservation } from "./observation.ts";
 import {
   claimRecord,
@@ -235,6 +238,8 @@ export const observeTick = async (
   const sessionRows = decodeSessions(snapshot);
   const worktreeRows = decodeWorktrees(snapshot);
   const prRows = pullRequests(snapshot);
+  const tips = landingTips(snapshot);
+  const locals = localBranches(snapshot);
 
   // **dirty か、統合先より behind なら異常**。upstream より先行しているのは異常ではない
   // （push が人の領分の面では常態）。**読めなかったものを clean 側へ倒さない。**
@@ -300,12 +305,25 @@ export const observeTick = async (
           ? declared
           : [...surfaceUsesPr.keys()].slice(0, 1);
 
+    const ledger = statusMap.get(status.status);
+
     // **着地面を決めてから計画を照らす。**失効は面ごとの base から測るので、
     // その課題の着地面が決まっていないと問い合わせられない。
+    // **完了 は計画の照合も在庫の鮮度も読まない rung しか当たらない。**
+    // 飛ばした値は unobservable のまま残す（`present(false)` にも `absent` にも倒さない）。
+    const skipPlanReady = ledger === "完了";
     const [plan, extra, stale] = await Promise.all([
-      port.planFacts(issue, surfaceNames),
+      skipPlanReady
+        ? Promise.resolve({
+            bodyMatchesPlan: unobservable<boolean>("完了の課題は計画の照合をしない"),
+            planInvalidated: unobservable<boolean>("完了の課題は計画の照合をしない"),
+            resourceKeys: absent<readonly string[]>(),
+          })
+        : port.planFacts(issue, surfaceNames),
       port.issueFacts(issue),
-      port.readyFacts(issue, surfaceNames),
+      skipPlanReady
+        ? Promise.resolve(unobservable<boolean>("完了の課題は在庫の鮮度を見ない"))
+        : port.readyFacts(issue, surfaceNames),
     ]);
     const report = reportFromSources(commentText, extra.linkedPrReportComments);
 
@@ -323,7 +341,7 @@ export const observeTick = async (
         const worktree = worktreeRows.find(
           (w) => w.surface === name && ownsWorktreePath(w.path, issue),
         );
-        const git = await port.surfaceGit(issue, name);
+        const git = await surfaceGitOf(port, issue, name, locals, tips);
         const blind = blindSurfaces.has(name);
         const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
         const facts: SurfaceFacts = {
@@ -357,7 +375,6 @@ export const observeTick = async (
     );
 
     const row = issueRows.get(issue);
-    const ledger = statusMap.get(status.status);
 
     return {
       issue,
@@ -482,6 +499,34 @@ export const observeTick = async (
 };
 
 /**
+ * branch の有無と head は snapshot に在る。**無い / tip と同じなら git を引き直さない。**
+ * SHA が tip と違うときだけ `統合先..branch` を測る（behind だけの非空はここでは分からない）。
+ *
+ * **tip が `-` なら ahead を false へ畳まない。**畳むと読めない面が透過し、終端へ上がる。
+ */
+const surfaceGitOf = async (
+  port: ObservePort,
+  issue: number,
+  surface: string,
+  locals: readonly LocalBranchRow[],
+  tips: ReadonlyMap<string, string>,
+): Promise<SurfaceGit> => {
+  const tip = tips.get(surface);
+  if (tip === undefined || tip === "-") {
+    return {
+      ahead: unobservable("統合先の tip を読めない"),
+      head: unobservable("統合先の tip を読めない"),
+    };
+  }
+  const branch = locals.find(
+    (b) => b.surface === surface && new RegExp(`^[^/]+/${issue}-`).test(b.branch),
+  );
+  if (branch === undefined) return { ahead: present(false), head: absent() };
+  if (branch.sha === tip) return { ahead: present(false), head: present(branch.sha) };
+  return port.surfaceGit(issue, surface);
+};
+
+/**
  * その worktree path がこの課題のものか。branch 名は `{prefix}/{Issue 番号}-{slug}` に固定
  * されていて、path の末尾要素がそれを写した形になる。**prefix の集合は project が変えてよい**
  * ので、`feat|fix|chore` のような allowlist を焼き込まない。
@@ -495,10 +540,7 @@ const ownsWorktreePath = (path: string, issue: number): boolean => {
 const snapshotHasClaimBranch = (
   snapshot: ReturnType<typeof parseSnapshot>,
   issue: number,
-): boolean =>
-  (snapshot.sections.get("remote branches") ?? []).some((b) =>
-    new RegExp(`^origin/[^/]+/${issue}-`).test(b),
-  );
+): boolean => remoteBranches(snapshot).some((b) => new RegExp(`^origin/[^/]+/${issue}-`).test(b));
 
 const checksOf = (
   prs: ReturnType<typeof pullRequests>,

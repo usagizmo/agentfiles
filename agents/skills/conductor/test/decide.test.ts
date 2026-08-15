@@ -8,7 +8,7 @@ import { DEFAULT_CONFIG, buildGroups, decide } from "../src/decide.ts";
 import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
-import { present } from "../src/types.ts";
+import { present, unobservable } from "../src/types.ts";
 import { intent, observation, session, surface, wait } from "./fixtures.ts";
 
 const tick = (observations: readonly IssueObservation[], over: Partial<TickInput> = {}) =>
@@ -1475,6 +1475,66 @@ describe("硬い上限", () => {
       action: "差し戻す",
       to: "退避先",
     });
+  });
+});
+
+describe("精算に要る記録", () => {
+  test("action に対象の currentMark / cycle / failure が載る", () => {
+    const d = tick([
+      implementing({
+        currentMark: present("mark-now"),
+        cycleRecord: present({ count: 1, mark: "mark-now" }),
+        failureRecord: present({ count: 2, lastAction: "解決を起こし直す" }),
+      }),
+    ]).outcome;
+    expect(d.kind).toBe("action");
+    if (d.kind !== "action") return;
+    expect(d.records.currentMark).toEqual(present("mark-now"));
+    expect(d.records.markMatch).toBe("same");
+    expect(d.records.cycle).toEqual(present({ count: 1, mark: "mark-now" }));
+    expect(d.records.failure).toEqual(present({ count: 2, lastAction: "解決を起こし直す" }));
+  });
+
+  test("mark が違えば markMatch は changed", () => {
+    const d = tick([
+      implementing({
+        currentMark: present("mark-now"),
+        cycleRecord: present({ count: 3, mark: "mark-prev" }),
+      }),
+    ]).outcome;
+    expect(d.kind === "action" ? d.records.markMatch : d.kind).toBe("changed");
+  });
+
+  test("currentMark を作れない周の markMatch は unknown（changed に畳まない）", () => {
+    const d = tick([
+      implementing({
+        currentMark: unobservable("指紋を作れない"),
+        cycleRecord: present({ count: 3, mark: "mark-0" }),
+      }),
+    ]).outcome;
+    expect(d.kind === "action" ? d.records.markMatch : d.kind).toBe("unknown");
+  });
+
+  test("mark が無い記録は changed（初回の書き込み）", () => {
+    const d = tick([implementing({ currentMark: present("mark-0") })]).outcome;
+    expect(d.kind === "action" ? d.records.markMatch : d.kind).toBe("changed");
+  });
+
+  test("settle-record にも records が載る", () => {
+    const d = tick([
+      observation({
+        ledger: present("退避先"),
+        failureRecord: present({ count: 3, lastAction: "解決を起こし直す" }),
+        cycleRecord: present({ count: 1, mark: "mark-0" }),
+        currentMark: present("mark-0"),
+      }),
+    ]).outcome;
+    expect(d.kind).toBe("settle-record");
+    if (d.kind !== "settle-record") return;
+    expect(d.records.failure).toEqual(present({ count: 3, lastAction: "解決を起こし直す" }));
+    expect(d.records.cycle).toEqual(present({ count: 1, mark: "mark-0" }));
+    expect(d.records.currentMark).toEqual(present("mark-0"));
+    expect(d.records.markMatch).toBe("same");
   });
 });
 

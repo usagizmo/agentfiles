@@ -129,7 +129,7 @@ export type WorktreeRow = {
 
 export const worktrees = (s: Snapshot): WorktreeRow[] =>
   rows(s, "worktrees")
-    // 面ごとの空は `-` 1 列で来る。**その面を落とさず、読めなかったこととして残す。**
+    // `plane_unknown` は `面 - - -`（4 列）。列が足りない行は捨てる。
     .filter((line) => fields(line, 2, "worktrees").length >= 4)
     // path は空白を含みうるので、末尾は残余として取る。
     .map((line) => fieldsWithRest(line, 4, "worktrees"))
@@ -247,3 +247,16 @@ export const landingTips = (s: Snapshot): ReadonlyMap<string, string> =>
       .map((line) => fields(line, 3, "landing tips"))
       .map((p) => [p[0] ?? "", p[2] ?? ""]),
   );
+
+/** `--- landing local branches ---` は `面 branch SHA`。面が読めない行は `面 - -`。 */
+export type LocalBranchRow = {
+  readonly surface: string;
+  readonly branch: string;
+  readonly sha: string;
+};
+
+export const localBranches = (s: Snapshot): LocalBranchRow[] =>
+  rows(s, "landing local branches")
+    .map((line) => fields(line, 3, "landing local branches"))
+    .filter((p) => (p[1] ?? "") !== "-" && (p[2] ?? "") !== "-")
+    .map((p) => ({ surface: p[0] ?? "", branch: p[1] ?? "", sha: p[2] ?? "" }));

@@ -25,13 +25,13 @@ description: >-
 
 触る関数の周りだけを読ま**ない**。規則の理由は doc comment にあり、述語の理由は関数の直上、順序と単位の理由は `LADDER` と `Rung` の定義側にある。
 
-| 変えるもの          | 全文を読むファイル                                                                               |
-| ------------------- | ------------------------------------------------------------------------------------------------ |
-| 正規化              | `src/normalize.ts` + `references/tick.md`                                                        |
-| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                           |
-| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                   |
-| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` |
-| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                            |
+| 変えるもの          | 全文を読むファイル                                                                                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                       |
+| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                          |
+| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                  |
+| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
+| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                           |
 
 自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` は `cli.ts` が出す。
 
@@ -153,12 +153,14 @@ flowchart TD
 **`conflicts` は `outcome` と直交する**。当たった課題を選出対象外にするだけで、他の課題は回る。
 1 件を止める / 全体を止めるの切り分けは「硬い上限」。
 
-| `Decision`      | 何をするか                                                                                                                                                                                                                            |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `conflicts`     | 触らずに応答へ出す。1 手を選べた周でも出す。出し方は下の「応答に出すもの」                                                                                                                                                            |
-| `action`        | `params` の action を `target.representative` に対して実行する（手順は `references/protocols.md` と `references/harness.md`）。**`evidence` は実行の直前に前提を引き直すため**に持たされている。成功後の周回加算は `countsEmptyCycle` |
-| `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                                                                   |
-| `idle`          | watcher を張って終える                                                                                                                                                                                                                |
+| `Decision`      | 何をするか                                                                                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `conflicts`     | 触らずに応答へ出す。1 手を選べた周でも出す。出し方は下の「応答に出すもの」                                                                                                                     |
+| `action`        | `params` の action を `target.representative` に対して実行する（手順は `references/protocols.md` と `references/harness.md`）。**`evidence` は実行の直前に前提を引き直すため**に持たされている |
+| `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                            |
+| `idle`          | watcher を張って終える                                                                                                                                                                         |
+
+`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。
 
 ### 応答に出すもの
 
@@ -219,7 +221,7 @@ retry の `count` を 0 に戻すのは 2 つ（形式は `references/protocols.
 
 2 時点の比較に**しない**。禁じているのは観測できない過去を使うことで、比較の相手を記録に持つなら当たら**ない**。
 
-実行器を 1 周回して何も出なかった周は、周回の記録が数える（形式と更新の順序は `references/protocols.md`）。失敗の記録とは別。加算するかは Decision の `countsEmptyCycle`。**ここに写さない。**
+実行器を 1 周回して何も出なかった周は、周回の記録が数える（形式と更新の順序は `references/protocols.md`）。失敗の記録とは別。**加算条件をここに写さない。**
 
 ### action の優先順
 
@@ -278,7 +280,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 
 - worktree が prepare を抜けたかは 0 か 1 に丸める。読めなかったときの `-` は 3 つ目の値で、clean へ**畳まない**
 - 正規化で同じ値になるものは、指紋でも同じ文字列に畳む。**意味が違うものは畳まない**（`稼働中` と人待ちの手掛かり、セッションの `done` と `idle`）
-- 同じ項目を、遷移を駆動しうる部分集合へ絞る（追跡していない PR の checks）。判定を branch 名の形だけで行うこと・判定できないものは残す側（fail-open）へ倒すことは `scripts/pr-list.jq` が持つ
+- 同じ項目を、遷移を駆動しうる部分集合へ絞る。追跡していない PR の checks は `scripts/pr-list.jq`。snapshot の issues は board 上の番号で、`scripts/restrict-to-board.awk`
 - 先発判定の 2 段目（作業量）は入れ**ない**。値は action が読む
 - 自分の状態は落とし、**存在は残す**（多重起動の判定に要る）
 

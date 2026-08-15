@@ -289,8 +289,10 @@ done
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 QUERY_FILE="$DIR/project-status.graphql"
+RESTRICT="$DIR/restrict-to-board.awk"
 [ -f "$QUERY_FILE" ] || { echo "not found: $QUERY_FILE" >&2; exit 2; }
 [ -f "$DIR/pr-list.jq" ] || { echo "not found: $DIR/pr-list.jq" >&2; exit 2; }
+[ -f "$RESTRICT" ] || { echo "not found: $RESTRICT" >&2; exit 2; }
 
 # 起動のたびに使い捨てる。**外へ残すのは `--snapshot` で明示的に指定された path だけ**
 # （呼び出し側がその file の寿命を持ち、次の起動で baseline として渡す）。
@@ -339,6 +341,10 @@ snapshot() {
       .[] | select(.pull_request == null)
       | "\(.number) \(.state) \(.updated_at) \([.assignees[].login] | sort | join(","))"') || return 1
   issues=$(printf '%s\n' "$issues" | sort -n)
+  # **board 上の番号だけ残す。**board 外の updated_at が動いても起きない。
+  # ページは最後まで取る。絞るのは出力であって打ち切りではない。
+  board_nums=$(printf '%s\n' "$proj" | awk '{print $2}')
+  issues=$(printf '%s\n' "$issues" | awk -f "$RESTRICT" <(printf '%s\n' "$board_nums") -) || return 1
 
   # marker コメントの変化で起床する。upsert は必ず `updated_at` を更新するので、
   # `sort=updated` の窓に必ず入る。marker 名まで指紋に入れる（新設・消滅がそのまま digest に出る）。

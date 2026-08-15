@@ -83,6 +83,8 @@ export const snapshotArgs = (
   snapshotPath: string,
 ): string[] => {
   const control = surfaces[0];
+  const origin = control?.integrationRef ?? "";
+  const defaultBranch = origin.startsWith("origin/") ? origin.slice("origin/".length) : "";
   return [
     "sh",
     `${scriptsDir}/watch.sh`,
@@ -105,6 +107,7 @@ export const snapshotArgs = (
     config.sessionsCmd,
     "--workspaces-cmd",
     config.workspacesCmd,
+    ...(defaultBranch !== "" ? ["--default-branch", defaultBranch] : []),
   ];
 };
 

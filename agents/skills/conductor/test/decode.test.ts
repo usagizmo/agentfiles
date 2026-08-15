@@ -8,6 +8,7 @@ import {
   issues,
   landingTips,
   liveCheckouts,
+  localBranches,
   parseSnapshot,
   projectStatus,
   pullRequests,
@@ -154,5 +155,16 @@ describe("行の decode", () => {
 
   test("統合先の tip を面ごとに引ける", () => {
     expect(landingTips(snap).get("skills")).toBe("789abc");
+  });
+
+  test("ローカル branch の tip を面ごとに引ける", () => {
+    expect(localBranches(snap)).toEqual([
+      { surface: "control", branch: "feat/1-x", sha: "abcdef" },
+    ]);
+  });
+
+  test("面が読めない `- -` を branch として残さない", () => {
+    const unknown = SNAP.replace("control feat/1-x abcdef", "control - -");
+    expect(localBranches(parseSnapshot(unknown))).toEqual([]);
   });
 });

@@ -30,11 +30,13 @@ import type {
   Decision,
   LeaseKind,
   Ledger,
+  MarkMatch,
   NormalizedIssue,
   Observed,
   Outcome,
   Progress,
   Target,
+  TargetRecords,
 } from "./types.ts";
 
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
@@ -276,6 +278,22 @@ const markUnchanged = (g: Group): boolean => {
   const recorded = cycle(g).mark;
   return current !== undefined && recorded !== null && current === recorded;
 };
+
+/** 指紋を作れない周と、記録が壊れている周を `changed` へ畳まない。 */
+export const markMatchOf = (o: IssueObservation): MarkMatch => {
+  if (o.currentMark.kind !== "present") return "unknown";
+  if (o.cycleRecord.kind === "unobservable" || o.cycleRecord.kind === "invalid") return "unknown";
+  const recorded = o.cycleRecord.kind === "present" ? o.cycleRecord.value.mark : null;
+  if (recorded === null) return "changed";
+  return o.currentMark.value === recorded ? "same" : "changed";
+};
+
+const recordsOf = (g: Group): TargetRecords => ({
+  currentMark: g.leadObservation.currentMark,
+  markMatch: markMatchOf(g.leadObservation),
+  cycle: g.leadObservation.cycleRecord,
+  failure: g.leadObservation.failureRecord,
+});
 
 // ---------------------------------------------------------------------------
 // 差し戻し
@@ -881,6 +899,7 @@ export const decide = (input: TickInput): Decision => {
         kind: "退避先の count を 0 に揃える",
         detail: `失敗 ${failure(shelved).count} / 周回 ${cycle(shelved).count} を 0 へ`,
       },
+      records: recordsOf(shelved),
     });
   }
 
@@ -956,6 +975,7 @@ export const decide = (input: TickInput): Decision => {
           progress: g.lead.progress,
           checks: g.leadObservation.checks,
         }),
+        records: recordsOf(g),
         evidence: {
           progress: g.lead.progress,
           runtime: g.lead.runtime,

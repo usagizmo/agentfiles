@@ -66,6 +66,10 @@ describe("watch.sh の引数", () => {
     expect(valuesOf("--landing")).toEqual(["acme/skills:main:/w/skills"]);
   });
 
+  test("制御面の origin/<branch> を --default-branch に渡す", () => {
+    expect(valuesOf("--default-branch")).toEqual(["main"]);
+  });
+
   test("制御面以外の着地面を 1 つも落とさない", () => {
     const declared = parseConfig(raw).surfaces.slice(1);
     expect(valuesOf("--landing")).toHaveLength(declared.length);

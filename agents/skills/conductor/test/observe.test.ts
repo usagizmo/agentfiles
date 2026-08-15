@@ -261,6 +261,80 @@ keys: [skills]
     expect((seen[0] as { surfaces: unknown[] }).surfaces.length).toBeGreaterThan(0);
   });
 
+  test("該当するローカル branch が無い面は surfaceGit を呼ばない", async () => {
+    const seen: number[] = [];
+    const rows = await observe(
+      port({
+        surfaceGit: async (issue) => {
+          seen.push(issue);
+          return { ahead: present(true), head: present("aaa") };
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen).toEqual([12]);
+    expect(find(rows, 34).surfaces.map((s) => s.aheadOfIntegration)).toEqual([present(false)]);
+  });
+
+  test("branch の SHA が統合先の tip と同じなら surfaceGit を呼ばない", async () => {
+    const same = SNAP.replace("o/control feat/12-x aaa", "o/control feat/12-x def456").replace(
+      "o/other feat/12-x bbb",
+      "o/other feat/12-x 111222",
+    );
+    const seen: number[] = [];
+    const rows = await observe(
+      port({
+        snapshot: async () => same,
+        surfaceGit: async (issue) => {
+          seen.push(issue);
+          return { ahead: present(true), head: present("should-not") };
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen).toEqual([]);
+    expect(find(rows, 12).surfaces.map((s) => s.aheadOfIntegration)).toEqual([present(false)]);
+    expect(find(rows, 12).surfaces[0]?.hasCheckout).toEqual(present(true));
+  });
+
+  test("統合先の tip が `-` なら ahead を false へ畳まない", async () => {
+    const blind = SNAP.replace("o/control origin/main def456", "o/control origin/main -");
+    const rows = await observe(port({ snapshot: async () => blind }), STATUS, SURFACES);
+    expect(
+      find(rows, 12).surfaces.find((s) => s.name === "o/control")?.aheadOfIntegration.kind,
+    ).toBe("unobservable");
+  });
+
+  test("完了 の課題には計画と鮮度を問い合わせない", async () => {
+    const planSeen: number[] = [];
+    const readySeen: number[] = [];
+    await observe(
+      port({
+        planFacts: async (issue) => {
+          planSeen.push(issue);
+          return {
+            bodyMatchesPlan: present(true),
+            planInvalidated: present(false),
+            resourceKeys: present([]),
+          };
+        },
+        readyFacts: async (issue) => {
+          readySeen.push(issue);
+          return present(false);
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "完了"],
+        ["計画済み", "計画済み"],
+      ]) as StatusMap,
+      SURFACES,
+    );
+    expect(planSeen).toEqual([34]);
+    expect(readySeen).toEqual([34]);
+  });
+
   test("完了 で周回の記録も無い課題には指紋を作らない", async () => {
     const seen: number[] = [];
     await observe(

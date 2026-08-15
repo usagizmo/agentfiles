@@ -56,13 +56,13 @@ count: <成果ゼロで回った周の数>
 <!-- /cycle -->
 ````
 
-同じコメントを書き換える（増やさない）。帰属は `same-branch.md`。当たる action と上限は本文「1 tick」が SSOT。
+同じコメントを書き換える（増やさない）。帰属は `same-branch.md`。当たる action は Decision の `countsEmptyCycle`。上限は本文「硬い上限」。
 
-**更新の順序を守る。**
+**返った Decision に対して書く**。値は `records` が持つ。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。
 
-1. **action を選ぶ前に**（回す action かどうかに関わらず）`runtime` を撮り、現在の指紋と `mark` を突き合わせる。違えば `count` を 0 にして `mark` を更新する
-2. action を選ぶ
-3. **1 で指紋が一致していて、回すことに成功し、かつ Decision の `countsEmptyCycle` が真の周の後でだけ** `count` を +1 する
+1. `markMatch` が `changed` なら、実行の前に `count` を 0 にして `mark` を `currentMark` へ更新する。`unknown` では照合を飛ばす
+2. action を実行する
+3. **`same` で、回すことに成功し、かつ `countsEmptyCycle` が真の周の後でだけ** `count` を +1 する
 
 - **`mark` を新しく書いた周は加算しない**（前の周に成果があった、または初回という意味）
 - **3 を回す前に置かない**（更新してから dispatch までに落ちると tick が冪等でなくなる）

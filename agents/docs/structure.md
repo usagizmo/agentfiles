@@ -163,12 +163,12 @@ skill 固有の `references/`:
 
 skill 固有の `scripts/`:
 
-| skill       | 実体                                                                               | 何をするか                                                                     |
-| ----------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `conductor` | `watch.sh` / `pr-list.jq` / `cycle-mark.py`（各 + test）/ `project-status.graphql` | 起床監視・checks の抽出・台帳・成果の指紋。**手順書ではなくここが観測の SSOT** |
-| `docs`      | `audit-skills.sh` / `check-emphasis.mjs`                                           | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                               |
-| `pr`        | `sync-and-push.sh`                                                                 | base への追随と push（素の `git push` を使わせない）                           |
-| 共有        | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink）                  | アドバイザーの起動と回収                                                       |
+| skill       | 実体                                                                                                                                      | 何をするか                                                                                                 |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk` | 起床監視・checks 抽出・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
+| `docs`      | `audit-skills.sh` / `check-emphasis.mjs`                                                                                                  | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
+| `pr`        | `sync-and-push.sh`                                                                                                                        | base への追随と push（素の `git push` を使わせない）                                                       |
+| 共有        | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink）                                                                         | アドバイザーの起動と回収                                                                                   |
 
 skill 固有の `assets/`:
 

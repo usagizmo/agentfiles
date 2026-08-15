@@ -159,11 +159,33 @@ export type Outcome =
       readonly evidence: Evidence;
       /** 回すことに成功し、指紋が一致していたら周回の `count` を +1 するか */
       readonly countsEmptyCycle: boolean;
+      readonly records: TargetRecords;
     }
-  | { readonly kind: "settle-record"; readonly settlement: Settlement }
+  | {
+      readonly kind: "settle-record";
+      readonly settlement: Settlement;
+      readonly records: TargetRecords;
+    }
   | { readonly kind: "constraint"; readonly constraint: ConstraintKind; readonly detail: string }
   | { readonly kind: "non-action"; readonly nonAction: NonActionKind; readonly detail: string }
   | { readonly kind: "idle" };
+
+/**
+ * 選んだ対象の記録。**精算は Decision から書く。**`observeTick` を再実行せず、
+ * `cycle-mark.py` を手で組まない。
+ *
+ * `markMatch` を boolean にしない。指紋を作れない周を「違った」へ畳むと、
+ * 照合できないのに `count` を 0 にして budget を潰す。
+ */
+export const MARK_MATCH = ["same", "changed", "unknown"] as const;
+export type MarkMatch = (typeof MARK_MATCH)[number];
+
+export type TargetRecords = {
+  readonly currentMark: Observed<string>;
+  readonly markMatch: MarkMatch;
+  readonly cycle: Observed<{ readonly count: number; readonly mark: string | null }>;
+  readonly failure: Observed<{ readonly count: number; readonly lastAction: string | null }>;
+};
 
 /**
  * tick が 1 周で出す結論。
