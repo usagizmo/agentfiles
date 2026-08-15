@@ -98,15 +98,32 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
     planInvalidated: present(false),
     resourceKeys: present([]),
   }),
-  issueFacts: async () => ({
-    issueContractComplete: present(true),
-    prMerged: present(false),
-    latestPrClosedUnmerged: present(false),
-    blocksEntry: false,
-    claimedAt: present(100),
-  }),
+  issueFacts: async () => facts(),
   ...over,
 });
+
+const facts = (
+  over: Partial<Awaited<ReturnType<ObservePort["issueFacts"]>>> = {},
+): Awaited<ReturnType<ObservePort["issueFacts"]>> => ({
+  issueContractComplete: present(true),
+  prMerged: present(false),
+  latestPrClosedUnmerged: present(false),
+  blocksEntry: false,
+  claimedAt: present(100),
+  linkedPrReportComments: present([]),
+  ...over,
+});
+
+const reportComment = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/control: aaa
+bases:
+  o/control: bbb
+\`\`\`
+
+<!-- /report -->`;
 
 const find = (rows: readonly IssueObservation[], n: number): IssueObservation => {
   const row = rows.find((r) => r.issue === n);
@@ -436,13 +453,13 @@ describe("port から来るもの", () => {
   test("Issue 契約・merged・claim 時刻・入場を止める宣言をそのまま持つ", async () => {
     const rows = await observe(
       port({
-        issueFacts: async () => ({
-          issueContractComplete: present(false),
-          prMerged: present(true),
-          latestPrClosedUnmerged: present(false),
-          blocksEntry: true,
-          claimedAt: absent(),
-        }),
+        issueFacts: async () =>
+          facts({
+            issueContractComplete: present(false),
+            prMerged: present(true),
+            blocksEntry: true,
+            claimedAt: absent(),
+          }),
       }),
       STATUS,
       SURFACES,
@@ -507,5 +524,56 @@ describe("記録の読み取りを繋ぐ", () => {
     expect(surface?.name).toBe("o/elsewhere");
     expect(surface?.terminal.kind).toBe("unobservable");
     expect(surface?.landable.kind).toBe("unobservable");
+  });
+});
+
+describe("PR コメントの report を提出証跡として読む", () => {
+  test("紐づく PR の有効な report は親の提出証跡である", async () => {
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([reportComment]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(true));
+  });
+
+  test("Issue と PR に report が 1 つずつあれば提出証跡は無効", async () => {
+    const rows = await observe(
+      port({
+        issueComments: async () => new Map([[12, comment(claimComment + "\n" + reportComment)]]),
+        issueFacts: async () => facts({ linkedPrReportComments: present([reportComment]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(false));
+  });
+
+  test("PR 一覧が読めないときは提出証跡を無いへ倒さない", async () => {
+    const rows = await observe(
+      port({
+        issueFacts: async () =>
+          facts({ linkedPrReportComments: unobservable("PR 一覧を読めない") }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence.kind).toBe("unobservable");
+  });
+
+  test("PR 上の claim は Issue 側の記録にならない", async () => {
+    const rows = await observe(
+      port({
+        issueComments: async () => new Map([[12, present([])]]),
+        issueFacts: async () => facts({ linkedPrReportComments: present([claimComment]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    const twelve = find(rows, 12);
+    expect(twelve.claimRecord.kind).toBe("absent");
+    expect(twelve.planCommentExists).toEqual(present(false));
   });
 });

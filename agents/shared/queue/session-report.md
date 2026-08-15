@@ -42,6 +42,10 @@ bases: # 同じ面ごとに、提出した時点の統合先の tip
 
 **記録が妥当かを課題単位で見てから、面ごとに状態を引く。**`bases` は読む側でも確かめられるようにするためにある。
 
+読み対象は Issue コメントと、紐づく制御面 PR（open または merged）の Issue コメント。closed-unmerged の PR は読み対象にしない。PR 一覧が読めないときは提出証跡を「無い」に倒さない。
+
+`report` と `halt` だけを PR コメントから読む。claim / plan / wait / ready / intent / yield / integration / entry-block は PR コメントからは読まない。`halt` は提出証跡にしない。
+
 記録が妥当（これを満たさない `report` は何にも使えない）:
 
 - `heads` と `bases` のキーが**着地面の集合と完全に一致**する

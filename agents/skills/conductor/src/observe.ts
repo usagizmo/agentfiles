@@ -22,7 +22,7 @@ import {
   extractMarker,
   intentRecord,
   integrationRecordCount,
-  reportRecord,
+  reportFromSources,
   retryRecord,
   waitRecord,
   yieldRecord,
@@ -97,6 +97,11 @@ export type ObservePort = {
     readonly blocksEntry: boolean;
     /** claim の記録が書かれた時刻。**merge の枠の順序キー**（PR 作成の早さでは選ばない） */
     readonly claimedAt: Observed<number>;
+    /**
+     * 紐づく制御面 PR（open または merged）の `report` / `halt` コメント。
+     * **PR 一覧が読めなければ unobservable** —— `present([])` に倒すと提出証跡が「無い」になる。
+     */
+    readonly linkedPrReportComments: Observed<readonly string[]>;
   }>;
 };
 
@@ -283,7 +288,6 @@ export const observeTick = async (
     const parsedYield = yieldRecord(commentText);
     const pause = extractMarker(commentText, "yield").kind === "present";
     const claim = claimRecord(commentText);
-    const report = reportRecord(commentText);
 
     // **claim 後は claim の記録の `landing` が着地面の SSOT。**
     // **claim 前は本文の `Lands in`**（宣言が無ければ制御面 1 面）。本文を見ずに既定へ倒すと、
@@ -303,6 +307,7 @@ export const observeTick = async (
       port.issueFacts(issue),
       port.readyFacts(issue, surfaceNames),
     ]);
+    const report = reportFromSources(commentText, extra.linkedPrReportComments);
 
     const surfaces: SurfaceObservation[] = await Promise.all(
       surfaceNames.map(async (name) => {
@@ -382,7 +387,10 @@ export const observeTick = async (
       latestPrClosedUnmerged: extra.latestPrClosedUnmerged,
       prMerged: extra.prMerged,
 
-      submissionEvidence: present(report.kind === "present"),
+      submissionEvidence:
+        report.kind === "unobservable"
+          ? unobservable(report.reason)
+          : present(report.kind === "present"),
 
       session: classifySession(sessionRows, `resolve-${issue}`),
       retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),

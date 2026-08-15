@@ -48,6 +48,10 @@ const standaloneLines = (body: string, tag: string): { start: number; end: numbe
   return found;
 };
 
+/** 単独行として `tag` が立っているか。散文の字面は拾わない。 */
+export const hasStandaloneLine = (body: string, tag: string): boolean =>
+  standaloneLines(body, tag).length > 0;
+
 /**
  * コメント本文から marker の中身（YAML）を取り出す。
  * **同じ marker が 2 つある本文は `invalid`** —— どちらを拾うか決まらない。
@@ -239,6 +243,40 @@ const isReport = (v: unknown): v is ReportRecord =>
 
 export const reportRecord = (body: string): Observed<ReportRecord> =>
   parseYaml(extractMarker(body, "report"), isReport);
+
+/** 単独行の `report` / `halt` を持つコメントか。散文の字面は拾わない。 */
+export const carriesReportOrHalt = (body: string): boolean =>
+  hasStandaloneLine(body, "<!-- report -->") || hasStandaloneLine(body, "<!-- halt -->");
+
+export type LinkedPull = {
+  readonly number: number;
+  readonly state: string;
+  readonly mergedAt: string | null;
+  readonly headRef: string;
+};
+
+/** head が `{prefix}/{番号}-` の open / merged。closed-unmerged は入れない。 */
+export const liveOwnedPrs = (issue: number, prs: readonly LinkedPull[]): readonly LinkedPull[] => {
+  const owned = new RegExp(`^[^/]+/${issue}-`);
+  return prs.filter((p) => owned.test(p.headRef) && (p.state === "open" || p.mergedAt !== null));
+};
+
+/**
+ * Issue コメントと、紐づく PR の `report` / `halt` コメントから提出の記録を読む。
+ * **PR 一覧が読めなければ unobservable** —— `absent` に倒すと提出証跡が「無い」になる。
+ */
+export const reportFromSources = (
+  issueCommentText: string,
+  linkedPrComments: Observed<readonly string[]>,
+): Observed<ReportRecord> => {
+  if (linkedPrComments.kind !== "present") {
+    return unobservable(
+      linkedPrComments.kind === "unobservable" ? linkedPrComments.reason : "PR 一覧を読めない",
+    );
+  }
+  const text = [issueCommentText, ...linkedPrComments.value].filter((s) => s !== "").join("\n\n");
+  return reportRecord(text);
+};
 
 export type ReadyRecord = {
   /** **制御面の** base。他の面は `landingReadyShas` */

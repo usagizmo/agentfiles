@@ -79,7 +79,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 | 意図の確認               | 固定 marker 付きの Issue コメント（`references/intent-record.md`）                                                                                                      |
 | 入場を止める宣言         | 固定 marker `entry-block` のコメント（形は `references/issue-contract.md`）                                                                                             |
 | 失敗                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                          |
-| 提出                     | PR、および PR を持たない着地面では有効な提出のまとめの記録（有効の判定は `references/session-report.md` が SSOT。**述語をここへ再掲しない**）                           |
+| 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                       |
 | 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                            |
 | 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                    |
 | live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。判定に使うのは live へ merge する面**だけ**（`references/landing-surface.md`）                              |

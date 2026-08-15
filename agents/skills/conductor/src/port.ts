@@ -8,7 +8,14 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import type { ObservePort } from "./observe.ts";
-import { entryBlockRecord, planRecord, readyRecord } from "./records.ts";
+import {
+  carriesReportOrHalt,
+  entryBlockRecord,
+  hasStandaloneLine,
+  liveOwnedPrs,
+  planRecord,
+  readyRecord,
+} from "./records.ts";
 import { bodyMatchesPlan, planBases, planInvalidated, readyBases, readyStale } from "./plan.ts";
 import type { ChangedPath, PlanBase } from "./plan.ts";
 import { issueContractComplete } from "./contract.ts";
@@ -112,15 +119,16 @@ export const createPort = (options: PortOptions): ObservePort => {
    * 1 周で secondary rate limit に達して観測そのものが落ちる（実測）。
    */
   let prsOnce:
-    | Promise<Observed<{ merged_at: string | null; state: string; head: { ref: string } }[]>>
+    | Promise<
+        Observed<
+          { number: number; merged_at: string | null; state: string; head: { ref: string } }[]
+        >
+      >
     | undefined;
   const allPrs = () =>
-    (prsOnce ??= json<{ merged_at: string | null; state: string; head: { ref: string } }[]>([
-      "gh",
-      "api",
-      `repos/${config.ghRepo}/pulls?state=all&per_page=100`,
-      "--paginate",
-    ]));
+    (prsOnce ??= json<
+      { number: number; merged_at: string | null; state: string; head: { ref: string } }[]
+    >(["gh", "api", `repos/${config.ghRepo}/pulls?state=all&per_page=100`, "--paginate"]));
 
   const bodies = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
@@ -223,16 +231,23 @@ export const createPort = (options: PortOptions): ObservePort => {
         list.push(c);
         byIssue.set(n, list);
       }
+      const sorted = (raw: typeof marked) =>
+        [...raw].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id);
+      // **PR 番号のコメントも残す。**提出のまとめは制御面 PR へ書くので、Issue 番号だけ
+      // 残すと親の提出証跡から落ちる。返す map は渡された番号のまま（他 marker を混ぜない）。
+      for (const [n, raw] of byIssue) {
+        comments.set(
+          n,
+          sorted(raw).map((c) => c.body ?? ""),
+        );
+      }
       for (const n of numbers) {
         // **Issue ごとに作成順で整列する。**repo 全体の endpoint は Issue をまたいで並ぶので、
         // そのまま連ねると `claimedAt`（merge の枠の順序キー）が別の意味になる。
-        const list = [...(byIssue.get(n) ?? [])].sort(
-          (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id,
-        );
-        const bodiesOfIssue = list.map((c) => c.body ?? "");
-        comments.set(n, bodiesOfIssue);
+        const list = sorted(byIssue.get(n) ?? []);
+        const bodiesOfIssue = comments.get(n) ?? list.map((c) => c.body ?? "");
         map.set(n, present(bodiesOfIssue));
-        const claim = list.find((c) => (c.body ?? "").includes("<!-- claim -->"));
+        const claim = list.find((c) => hasStandaloneLine(c.body ?? "", "<!-- claim -->"));
         claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
       }
       return map;
@@ -398,6 +413,20 @@ export const createPort = (options: PortOptions): ObservePort => {
         // **壊れている宣言を「無い」と読まない** —— 読むと、止めているつもりの横で claim が進む。
         blocksEntry: entryBlockRecord(commentText).kind !== "absent",
         claimedAt: claimTimes.get(issue) ?? absent(),
+        linkedPrReportComments:
+          prs.kind !== "present"
+            ? unobservable("PR 一覧を読めない")
+            : present(
+                liveOwnedPrs(
+                  issue,
+                  prs.value.map((p) => ({
+                    number: p.number,
+                    state: p.state,
+                    mergedAt: p.merged_at,
+                    headRef: p.head.ref,
+                  })),
+                ).flatMap((p) => (comments.get(p.number) ?? []).filter(carriesReportOrHalt)),
+              ),
       };
     },
   };

@@ -5,18 +5,22 @@ import { describe, expect, test } from "bun:test";
 import {
   claimRecord,
   planRecord,
+  carriesReportOrHalt,
   cycleRecord,
   extractMarker,
+  hasStandaloneLine,
   intentRecord,
   integrationRecord,
   integrationRecordCount,
+  liveOwnedPrs,
   readyRecord,
+  reportFromSources,
   reportRecord,
   retryRecord,
   waitRecord,
   yieldRecord,
 } from "../src/records.ts";
-import { present } from "../src/types.ts";
+import { present, unobservable } from "../src/types.ts";
 
 const wrap = (marker: string, yaml: string) =>
   `本文\n\n<!-- ${marker} -->\n\n\`\`\`yaml\n${yaml}\n\`\`\`\n\n<!-- /${marker} -->\n`;
@@ -189,6 +193,32 @@ describe("提出と在庫と枠", () => {
     expect(
       integrationRecordCount("<!-- integration -->\nただの文\n<!-- /integration -->").kind,
     ).toBe("invalid");
+  });
+
+  test("散文の report 字面は PR 側の読み対象にしない", () => {
+    expect(carriesReportOrHalt("まとめは `<!-- report -->` を付ける")).toBe(false);
+    expect(carriesReportOrHalt(wrap("report", "heads:\n  o/r: a\nbases:\n  o/r: b"))).toBe(true);
+    expect(carriesReportOrHalt("<!-- halt -->\n止まった")).toBe(true);
+    expect(carriesReportOrHalt(wrap("claim", "representative: 1"))).toBe(false);
+    expect(hasStandaloneLine("記録は `<!-- claim -->` を付ける", "<!-- claim -->")).toBe(false);
+    expect(hasStandaloneLine(wrap("claim", "representative: 1"), "<!-- claim -->")).toBe(true);
+  });
+
+  test("closed-unmerged と他人の PR は生きた PR に入れない", () => {
+    const prs = [
+      { number: 10, state: "open", mergedAt: null, headRef: "feat/12-x" },
+      { number: 11, state: "closed", mergedAt: "2026-08-01T00:00:00Z", headRef: "feat/12-y" },
+      { number: 12, state: "closed", mergedAt: null, headRef: "feat/12-z" },
+      { number: 13, state: "open", mergedAt: null, headRef: "feat/99-x" },
+    ];
+    expect(liveOwnedPrs(12, prs).map((p) => p.number)).toEqual([10, 11]);
+  });
+
+  test("PR 一覧が読めない reportFromSources は unobservable", () => {
+    const ok = wrap("report", "heads:\n  o/r: aaa\nbases:\n  o/r: bbb");
+    expect(reportFromSources(ok, unobservable("PR 一覧を読めない")).kind).toBe("unobservable");
+    expect(reportFromSources("", present([ok])).kind).toBe("present");
+    expect(reportFromSources(ok, present([ok])).kind).toBe("invalid");
   });
 });
 
