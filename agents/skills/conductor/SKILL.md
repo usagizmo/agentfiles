@@ -35,6 +35,12 @@ description: >-
 
 自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` は `cli.ts` が出す。
 
+実行器へ渡す prompt 本文は、選んだ action のすることから一意に決まる。することの所在は `references/protocols.md`。**表に無い伝達をその場で組み立てない**。
+
+掛かるのは **本文を conductor が作る伝達**だけ。対象セッションは `refine-*` / `resolve-*`。人の答えの転記、振り先への材料渡し、交代の引き継ぎは対象外。
+
+他の工程が所有する記録について、書くか / marker / state / 中身を指定しない。事実を渡し、受け手が自分の述語で再評価することは残る。書き手は各記録の既存記述から引く。所有の一覧は作らない。
+
 project 差分が無くても動く。**例外は Status の対応**で、これだけは project 必須（無ければ fail-closed で止まる）。推測が外れても待ちが伸びるだけの項目には既定値を置き、間違ったものを掴む項目には置か**ない**。
 
 ## 受け取らない
@@ -69,7 +75,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 | 課題どうしの関係         | Issue 本文の先頭区画・行頭の宣言行（`Depends on` / `Same branch as`。定義は `references/same-branch.md`。本文全体の文字列一致では辿らない）                                                                 |
 | 着地面                   | claim 後は claim の記録の `landing`（**欠落は `Conflict`**）。claim 前は Issue 本文の `Lands in`（宣言が無ければ制御面 1 面）。意味論は `references/landing-surface.md`                                     |
 | 二重着手防止             | 制御面の remote branch                                                                                                                                                                                      |
-| 計画                     | 固定 marker 付きの Issue コメント（`resolve` が書く。本文との突き合わせ方は `references/body-digest.md`）                                                                                                   |
+| 計画                     | 固定 marker 付きの Issue コメント（形は解決工程の計画。突き合わせは `references/body-digest.md`）                                                                                                           |
 | 在庫の鮮度               | 固定 marker 付きの Issue コメント（`references/ready-record.md`）                                                                                                                                           |
 | claim                    | 固定 marker 付きの Issue コメント（`references/same-branch.md`）                                                                                                                                            |
 | 人待ち                   | 固定 marker 付きの Issue コメント（`references/wait-record.md`）                                                                                                                                            |

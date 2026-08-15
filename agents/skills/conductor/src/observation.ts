@@ -154,7 +154,7 @@ export type IssueObservation = {
    * 読めなければ `unknown` = 全交差（`incompatible` として扱う）。
    */
   readonly resourceKeys: Observed<readonly string[]>;
-  /** 入場を止める宣言を持っているか（宣言の形は project の領分） */
+  /** 入場を止める宣言を持っているか（運び方は `issue-contract.md`。いつ置くかは project の領分） */
   readonly blocksEntry: boolean;
 
   /** `Depends on #N` */
