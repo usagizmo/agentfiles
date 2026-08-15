@@ -22,8 +22,10 @@ const facts = (over: Partial<SurfaceFacts> = {}): SurfaceFacts => ({
   ...over,
 });
 
-const report = (heads: Record<string, string>): Observed<ReportRecord> =>
-  present({ heads, bases: {}, written: {} });
+const report = (
+  heads: Record<string, string>,
+  bases: Record<string, string> = {},
+): Observed<ReportRecord> => present({ heads, bases, written: {} });
 
 describe("PR を使う面", () => {
   test("17n: PR がまだ無い面は、着地してよくないことが確定している", () => {
@@ -67,10 +69,31 @@ describe("PR を使う面", () => {
 describe("PR を使わない面", () => {
   const noPr = (over: Partial<SurfaceFacts> = {}) => facts({ usesPr: false, ...over });
 
-  test("commit があり提出済みなら終端。着地してよいと一致する", () => {
-    const s = deriveSurface(noPr(), report({ "o/r": "aaa" }));
+  test("提出済みで未統合なら着地してよい。終端ではない", () => {
+    const s = deriveSurface(
+      noPr({ aheadOfIntegration: present(true), head: present("aaa") }),
+      report({ "o/r": "aaa" }, { "o/r": "bbb" }),
+    );
+    expect(s.landable).toEqual(present(true));
+    expect(s.terminal).toEqual(present(false));
+  });
+
+  test("提出済みの成果が統合先に入ったら終端", () => {
+    const s = deriveSurface(
+      noPr({ aheadOfIntegration: present(false), head: present("aaa") }),
+      report({ "o/r": "aaa" }, { "o/r": "bbb" }),
+    );
     expect(s.terminal).toEqual(present(true));
     expect(s.landable).toEqual(present(true));
+  });
+
+  test("透過は終端でも着地してよくもない", () => {
+    const s = deriveSurface(
+      noPr({ aheadOfIntegration: present(false), head: present("aaa") }),
+      report({ "o/r": "aaa" }, { "o/r": "aaa" }),
+    );
+    expect(s.terminal).toEqual(present(false));
+    expect(s.landable).toEqual(present(false));
   });
 
   test("commit があっても提出の証跡が無ければ終端にしない", () => {
@@ -81,16 +104,24 @@ describe("PR を使わない面", () => {
   test("提出のあとに書き足したら（head がずれたら）終端から落ちる", () => {
     const s = deriveSurface(noPr({ head: present("bbb") }), report({ "o/r": "aaa" }));
     expect(s.terminal).toEqual(present(false));
+    expect(s.landable).toEqual(present(false));
   });
 
-  test("まとめがあっても commit が 0 なら終端にしない（成果ゼロを弾く）", () => {
-    const s = deriveSurface(noPr({ aheadOfIntegration: present(false) }), report({ "o/r": "aaa" }));
+  test("branch が無くても heads ≠ bases だけでは終端にしない", () => {
+    const s = deriveSurface(
+      noPr({ aheadOfIntegration: present(false), head: absent() }),
+      report({ "o/r": "aaa" }, { "o/r": "bbb" }),
+    );
     expect(s.terminal).toEqual(present(false));
+    expect(s.landable).toEqual(present(false));
   });
 
-  test("統合先への merge を条件にしない（統合先を渡していなくても終端になる）", () => {
-    const s = deriveSurface(noPr(), report({ "o/r": "aaa" }));
-    expect(s.terminal).toEqual(present(true));
+  test("まとめがあっても heads = bases なら終端にしない", () => {
+    const s = deriveSurface(
+      noPr({ aheadOfIntegration: present(false) }),
+      report({ "o/r": "aaa" }, { "o/r": "aaa" }),
+    );
+    expect(s.terminal).toEqual(present(false));
   });
 
   test("まとめを読めなければ終端にしない", () => {

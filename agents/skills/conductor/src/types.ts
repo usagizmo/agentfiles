@@ -62,7 +62,6 @@ export const CONFLICT_REASONS = [
   "group の終端が混在",
   "着地面が解決できない",
   "着地済みだが提出の証跡が無い",
-  "live checkout が異常",
   "Issue 契約が欠けたまま成果物がある",
   "計画コメントが無いまま実装の証跡がある",
   "意図の確認が pending なのに人待ちが無い",

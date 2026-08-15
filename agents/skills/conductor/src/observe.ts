@@ -152,7 +152,7 @@ const fromTri = (t: Tri | undefined): Observed<boolean> => {
  * `着地面が解決できない` を立てるので、座標表の欠けがそのまま人へ出る。
  *
  * `usesPr` だけは真偽で持つ型なので `true` を置く。**この値では何も決まらない** ——
- * `terminal` が `unobservable` である限り、着地の判定も live checkout の検査も先へ進まない。
+ * `terminal` が `unobservable` である限り、着地の判定は先へ進まない。live の検査は `merge` skill。
  */
 const unknownSurface = (name: string): SurfaceObservation => {
   // 面の名前は報告する側が添えるので、理由には入れない。
