@@ -842,7 +842,7 @@ const LADDER: readonly Rung[] = [
     why: "意図の確認の記録が観測できない",
     match: (g) => {
       if (isShelved(g) || !alreadyClaimed(g)) return false;
-      if (g.lead.progress !== "提出中" && g.lead.progress !== "着地待ち") return false;
+      if (g.lead.progress !== "着地待ち") return false;
       if (g.lead.runtime !== "待機") return false;
       const record = g.leadObservation.intentRecord;
       // **`pending` には当たらない** —— そちらは確認が始まっている。
