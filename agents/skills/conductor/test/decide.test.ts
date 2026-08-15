@@ -814,7 +814,7 @@ describe("外から状態が動く", () => {
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
   });
 
-  test("10b: 実行環境が DELETE を拒否し、枠を渡すが休止の記録を消せない", () => {
+  test("10b: 実行環境が DELETE を拒否し（応答が無い）、枠を渡すが休止の記録を消せない", () => {
     // 消せないこと自体は decide の外。選び続けることだけを固定する。
     expectLease([implementing({ pauseRecordExists: true, session: session.idle })], "write");
   });
