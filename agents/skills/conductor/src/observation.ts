@@ -53,6 +53,8 @@ export type SurfaceObservation = {
   readonly name: string;
   /** その面が PR で着地するか。`着地待ち` は面が 1 つも該当しない側の条件を真として扱う */
   readonly usesPr: boolean;
+  /** 枠を消費するか。**変更の中身では決めない。**座標表の属性 */
+  readonly countsCapacity: boolean;
   /** `統合先..branch` が非空か。**branch 上の commit の存在で読まない** */
   readonly aheadOfIntegration: Observed<boolean>;
   /** worktree の dirty。**読めなかった `-` を clean へ畳まない** */
@@ -98,7 +100,7 @@ export type IssueObservation = {
 
   /** open PR があるか */
   readonly openPr: Observed<boolean>;
-  /** `gh pr checks` の判定。**`mergeStateStatus` で代用しない** */
+  /** `classifyChecks` の判定。**`mergeStateStatus` で代用しない** */
   readonly checks: Observed<{ readonly running: number; readonly green: boolean }>;
   /** open PR が無く、head に紐づく最新 PR が unmerged で closed */
   readonly latestPrClosedUnmerged: Observed<boolean>;
@@ -164,4 +166,9 @@ export type IssueObservation = {
   readonly boardOrder: number;
   /** claim の順序キー。**PR 作成の早さで選ばない**（PR を持たない課題が選外へ落ちる） */
   readonly claimedAt: Observed<number>;
+  /**
+   * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が `working` か。
+   * **親が `done` でも consult の子が走っているあいだは write を渡さない。**
+   */
+  readonly worktreeBusy: boolean;
 };

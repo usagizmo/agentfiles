@@ -18,6 +18,8 @@ export type SurfaceConfig = {
   readonly name: string;
   /** その面が PR で着地するか */
   readonly usesPr: boolean;
+  /** 枠を消費するか。**変更の中身では決めない。**欠けたら止まる */
+  readonly countsCapacity: boolean;
   /** 統合先の ref（base と追随の基準。**終端の判定には使わない**） */
   readonly integrationRef: string;
 };
@@ -116,9 +118,12 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     }
     if (typeof e["usesPr"] !== "boolean")
       throw new ConfigError("surfaces の usesPr が boolean ではない");
+    if (typeof e["countsCapacity"] !== "boolean")
+      throw new ConfigError("surfaces の countsCapacity が boolean ではない");
     return {
       name: e["name"] as string,
       usesPr: e["usesPr"],
+      countsCapacity: e["countsCapacity"],
       integrationRef: e["integrationRef"] as string,
     };
   });
@@ -143,9 +148,19 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     workspacesCmd: String(required("workspacesCmd")),
     executors: { refine: executor("refine"), resolve: executor("resolve") },
     // 硬い上限は既定を持つ（推測が外れても待ちが伸びるだけ）。
-    tick: {
-      ...DEFAULT_CONFIG,
-      ...(typeof o["tick"] === "object" && o["tick"] !== null ? o["tick"] : {}),
-    },
+    tick: (() => {
+      const rawTick = o["tick"];
+      if (rawTick === undefined) return { ...DEFAULT_CONFIG };
+      if (typeof rawTick !== "object" || rawTick === null)
+        throw new ConfigError("tick が object ではない");
+      const allowed = new Set(Object.keys(DEFAULT_CONFIG));
+      const parsed: Partial<TickConfig> = {};
+      for (const [key, val] of Object.entries(rawTick)) {
+        if (!allowed.has(key)) throw new ConfigError(`tick の ${key} は未知`);
+        if (typeof val !== "number") throw new ConfigError(`tick.${key} が number ではない`);
+        (parsed as Record<string, number>)[key] = val;
+      }
+      return { ...DEFAULT_CONFIG, ...parsed };
+    })(),
   };
 };

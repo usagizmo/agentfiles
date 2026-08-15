@@ -16,7 +16,11 @@
 
 ## skill 間の参照
 
-層の規則と例外は `docs` skill の品質基準、機械可読な層の定義は `../skills/docs/scripts/layers.tsv`。**参照関係のあるものだけを描く**（leaf の全一覧は [`README.md`](README.md) の「層構造」）。
+| 何        | 正                                                                       | 含むもの           |
+| --------- | ------------------------------------------------------------------------ | ------------------ |
+| 層の rank | [`../skills/docs/scripts/layers.tsv`](../skills/docs/scripts/layers.tsv) | leaf 以外          |
+| 層表の名  | 所有集合（述語は `../skills/docs/scripts/audit-skills.sh`）              | 所有する skill     |
+| この図    | 参照があるもの                                                           | 所有しなくても残す |
 
 ```mermaid
 flowchart LR
@@ -95,7 +99,6 @@ flowchart LR
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
-        RB["rabi.css<br/><small>ブランドのトークンと部品</small>"]
     end
     subgraph sharedq["agents/shared/queue/ — キュー機構専用"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
@@ -149,7 +152,6 @@ flowchart LR
     IS --> GM
     PR --> GM
     SH --> GM
-    RD --> RB
 ```
 
 vendored な skill（一覧は `../.skill-lock.json`）は載せない。`*.test.*` は本体の行へ畳む。
@@ -159,24 +161,25 @@ skill 固有の `references/`:
 | skill       | 実体                                                                                      | 何を持つか                                                                                                                                   |
 | ----------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `conductor` | `harness.md` / `protocols.md` / `intake.md` / `tick.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 正規化と action の論証 / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
-| `resolve`   | `replan.md` / `intent.md` / `judgment.md` / `scope.md`                                    | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
+| `resolve`   | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `written-record.md`              | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
 | `ship`      | `sync-default.md`                                                                         | 着地後にローカル default を最新化する手順                                                                                                    |
 | `docs`      | `review-prompt.md`                                                                        | 更新判定用                                                                                                                                   |
 
 skill 固有の `scripts/`:
 
-| skill       | 実体                                                                | 何をするか                                                |
-| ----------- | ------------------------------------------------------------------- | --------------------------------------------------------- |
-| `conductor` | `watch.sh` / `cycle-mark.py`（各 + test）/ `project-status.graphql` | 起床監視と成果の指紋。**手順書ではなくここが観測の SSOT** |
-| `docs`      | `audit-skills.sh` / `check-emphasis.mjs`                            | 品質パスの機械検査。層の定義 `layers.tsv` を伴う          |
-| `pr`        | `sync-and-push.sh`                                                  | base への追随と push（素の `git push` を使わせない）      |
-| 共有        | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink）   | アドバイザーの起動と回収                                  |
+| skill       | 実体                                                                                                                                      | 何をするか                                                                                                 |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk` | 起床監視・checks 抽出・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
+| `docs`      | `audit-skills.sh` / `check-emphasis.mjs`                                                                                                  | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
+| `resolve`   | `serialize-plan.ts`                                                                                                                       | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                   |
+| `pr`        | `sync-and-push.sh`                                                                                                                        | base への追随と push（素の `git push` を使わせない）                                                       |
+| 共有        | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink）                                                                         | アドバイザーの起動と回収                                                                                   |
 
 skill 固有の `assets/`:
 
-| skill | 実体                                            | 何を持つか                       |
-| ----- | ----------------------------------------------- | -------------------------------- |
-| 共有  | `shared/rabi.css`（`rabi-design` から symlink） | ブランドの値と、文書の部品クラス |
+| skill         | 実体       | 何を持つか                       |
+| ------------- | ---------- | -------------------------------- |
+| `rabi-design` | `rabi.css` | ブランドの値と、文書の部品クラス |
 
 ## 追加・変更するとき
 

@@ -161,7 +161,7 @@ for p in panes:
 			sleep 1
 		done
 		if [ "$started_one" -eq 1 ] && herdr agent prompt "$name" \
-			"次のファイルを読め。コードは変更するな。判断だけを応答に出せ。
+			"次のファイルを読む。コードは変更しない。判断だけを応答に出す。consult を起動しない。agent を start しない。
 
 $run/prompt" >>"$run/$a/log" 2>&1; then
 			# working への遷移は観測できれば十分。15 秒で見えなくても prompt は届いている

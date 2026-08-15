@@ -9,7 +9,7 @@
 import { parse } from "yaml";
 import type { IntentRecord, WaitRecord } from "./observation.ts";
 import type { Observed } from "./types.ts";
-import { absent, invalid, present } from "./types.ts";
+import { absent, invalid, present, unobservable } from "./types.ts";
 
 /** marker 名。**allowlist を増やしたらここだけ直す。** */
 export const MARKERS = [
@@ -47,6 +47,10 @@ const standaloneLines = (body: string, tag: string): { start: number; end: numbe
   }
   return found;
 };
+
+/** 単独行として `tag` が立っているか。散文の字面は拾わない。 */
+export const hasStandaloneLine = (body: string, tag: string): boolean =>
+  standaloneLines(body, tag).length > 0;
 
 /**
  * コメント本文から marker の中身（YAML）を取り出す。
@@ -163,6 +167,16 @@ export const integrationRecord = (body: string): Observed<IntegrationRecord> => 
   return present({ issues: parsed.value.issues, pr: typeof pr === "number" ? pr : null });
 };
 
+/** 渡しの記録の件数。**2 件を 0 に畳まない**（畳むと Conflict も保持も消える）。 */
+export const integrationRecordCount = (body: string): Observed<number> => {
+  const n = standaloneLines(body, "<!-- integration -->").length;
+  if (n >= 2) return present(n);
+  const rec = integrationRecord(body);
+  if (rec.kind === "present") return present(1);
+  if (rec.kind === "absent") return present(0);
+  return rec.kind === "invalid" ? invalid(rec.raw, rec.reason) : unobservable(rec.reason);
+};
+
 /**
  * 人待ちの記録。**有効かどうかの判定は呼ぶ側**（休止の記録の有無が要る）。
  * ここは `state` と質問の本文の有無までを返す。
@@ -219,16 +233,75 @@ export const intentRecord = (body: string): IntentRecord => {
 export type ReportRecord = {
   readonly heads: Readonly<Record<string, string>>;
   readonly bases: Readonly<Record<string, string>>;
+  /** この claim が書いた SHA。無い面は空。 */
+  readonly written: Readonly<Record<string, readonly string[]>>;
 };
 
 const isStringMap = (v: unknown): v is Record<string, string> =>
   isRecord(v) && Object.values(v).every((x) => typeof x === "string");
 
-const isReport = (v: unknown): v is ReportRecord =>
-  isRecord(v) && isStringMap(v["heads"]) && isStringMap(v["bases"]);
+const isStringArrayMap = (v: unknown): v is Record<string, readonly string[]> => {
+  if (!isRecord(v)) return false;
+  return Object.values(v).every((x) => Array.isArray(x) && x.every((s) => typeof s === "string"));
+};
 
-export const reportRecord = (body: string): Observed<ReportRecord> =>
-  parseYaml(extractMarker(body, "report"), isReport);
+const isReportYaml = (
+  v: unknown,
+): v is {
+  heads: Record<string, string>;
+  bases: Record<string, string>;
+  written?: WrittenRecord;
+} => {
+  if (!isRecord(v) || !isStringMap(v["heads"]) || !isStringMap(v["bases"])) return false;
+  if (v["written"] !== undefined && !isStringArrayMap(v["written"])) return false;
+  return true;
+};
+
+export const reportRecord = (body: string): Observed<ReportRecord> => {
+  const parsed = parseYaml(extractMarker(body, "report"), isReportYaml);
+  if (parsed.kind !== "present") return parsed;
+  return present({
+    heads: parsed.value.heads,
+    bases: parsed.value.bases,
+    written: parsed.value.written ?? {},
+  });
+};
+
+type WrittenRecord = Readonly<Record<string, readonly string[]>>;
+
+/** 単独行の `report` / `halt` を持つコメントか。散文の字面は拾わない。 */
+export const carriesReportOrHalt = (body: string): boolean =>
+  hasStandaloneLine(body, "<!-- report -->") || hasStandaloneLine(body, "<!-- halt -->");
+
+export type LinkedPull = {
+  readonly number: number;
+  readonly state: string;
+  readonly mergedAt: string | null;
+  readonly headRef: string;
+};
+
+/** head が `{prefix}/{番号}-` の open / merged。closed-unmerged は入れない。 */
+export const liveOwnedPrs = (issue: number, prs: readonly LinkedPull[]): readonly LinkedPull[] => {
+  const owned = new RegExp(`^[^/]+/${issue}-`);
+  return prs.filter((p) => owned.test(p.headRef) && (p.state === "open" || p.mergedAt !== null));
+};
+
+/**
+ * Issue コメントと、紐づく PR の `report` / `halt` コメントから提出の記録を読む。
+ * **PR 一覧が読めなければ unobservable** —— `absent` に倒すと提出証跡が「無い」になる。
+ */
+export const reportFromSources = (
+  issueCommentText: string,
+  linkedPrComments: Observed<readonly string[]>,
+): Observed<ReportRecord> => {
+  if (linkedPrComments.kind !== "present") {
+    return unobservable(
+      linkedPrComments.kind === "unobservable" ? linkedPrComments.reason : "PR 一覧を読めない",
+    );
+  }
+  const text = [issueCommentText, ...linkedPrComments.value].filter((s) => s !== "").join("\n\n");
+  return reportRecord(text);
+};
 
 export type ReadyRecord = {
   /** **制御面の** base。他の面は `landingReadyShas` */
@@ -294,6 +367,13 @@ const isPlan = (v: unknown): v is PlanRecord =>
   isStringMap(v["issueDigests"]) &&
   (scopeList(v["invalidationScope"])?.length ?? 0) > 0 &&
   isStringArray(v["resourceKeys"]);
+
+/**
+ * 計画コメントから資源キーを取り出す。**`invalid` / `unobservable` を `absent` へ畳まない。**
+ * 畳むと全体停止と一時失敗が同じ観測になり、倒す先が選べない。
+ */
+export const keysOfPlan = (plan: Observed<PlanRecord>): Observed<readonly string[]> =>
+  plan.kind === "present" ? present(plan.value.resourceKeys) : plan;
 
 export const planRecord = (body: string): Observed<PlanRecord> => {
   const parsed = parseYaml(extractMarker(body, "plan"), isPlan);

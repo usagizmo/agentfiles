@@ -1,1 +1,117 @@
-../../../shared/rabi.css
+/* Rabi コーポレートスタイル — HTML / 譜面 / UI 用デザイントークン */
+
+/* 明暗は `light-dark()` の 1 行で持つ。値の重複を作らず、OS の設定と
+ * `data-theme` の両方で切り替わる。 */
+:root {
+  color-scheme: light dark; /* ネイティブ部品とスクロールバーを地に合わせる */
+  accent-color: var(--rabi-accent);
+
+  /* 面の 3 段 */
+  --rabi-ground: light-dark(#f6f6f7, #101011); /* 地。面を敷く下 */
+  --rabi-paper: light-dark(#ffffff, #1b1b1d); /* 面。カード・パネル・帯 */
+  --rabi-paper-2: light-dark(#f7f7f8, #232325); /* 沈んだ面。hover・無効・グループ行 */
+
+  /* 罫線の 2 段 */
+  --rabi-line: light-dark(#e4e4e6, #2f2f32); /* 面の上 */
+  --rabi-divider: light-dark(#d9d9db, #272729); /* 地の上 */
+  --rabi-edge: light-dark(#87888b, #8a8b8e); /* 操作部品の輪郭 */
+
+  /* 文字 */
+  --rabi-ink: light-dark(#17181a, #f0f0f1); /* 本文・見出し */
+  --rabi-soft: light-dark(#515255, #a9aaad); /* 補足 */
+  --rabi-faint: light-dark(#707174, #8a8b8f); /* ラベル */
+
+  /* 赤 */
+  --rabi-accent: #dc143c; /* ベタ・枠・点・下罫。両モードで固定 */
+  --rabi-accent-text: light-dark(#dc143c, #ff5c7a); /* 面に載せる赤い文字・リンク */
+  --rabi-on-accent: #ffffff; /* 赤ベタの上に載る文字 */
+  --rabi-wash: light-dark(#fdf3f5, #2d1219); /* 警告の面・合計行 */
+  --rabi-wash-line: light-dark(#f4d3db, #4a2029); /* 赤の面の上の罫 */
+  --rabi-shade: #000000; /* 混色の入力。地・文字に直接使わない */
+  --rabi-accent-hover: color-mix(in oklab, var(--rabi-accent) 88%, var(--rabi-shade));
+  --rabi-accent-active: color-mix(in oklab, var(--rabi-accent) 76%, var(--rabi-shade));
+
+  /* 影の 3 段。1 置いてある / 2 掴んでいる / 3 浮く */
+  --rabi-e1: 0 1px 3px light-dark(rgba(18, 22, 26, 0.1), rgba(0, 0, 0, 0.7));
+  --rabi-e2: 0 5px 14px light-dark(rgba(18, 22, 26, 0.14), rgba(0, 0, 0, 0.8));
+  --rabi-e3: 0 20px 44px light-dark(rgba(18, 22, 26, 0.18), rgba(0, 0, 0, 0.9));
+
+  --rabi-r-round: 999px; /* 角丸を持つ部品の半径 */
+  --rabi-font:
+    "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", YuGothic, Meiryo,
+    system-ui, sans-serif;
+  --rabi-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; /* 番号・時刻・件数 */
+}
+
+/* 閲覧側のトグル。無ければ OS の設定に従う */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* 印刷は常にライト値。dark の地は印刷されず文字だけが薄く残る。
+ * トグルの `[data-theme]` に負けないよう、同じ詳細度で後に置く。 */
+@media print {
+  :root,
+  :root[data-theme="dark"] {
+    color-scheme: light;
+  }
+}
+
+body {
+  background: var(--rabi-ground);
+  color: var(--rabi-ink);
+  font-family: var(--rabi-font);
+}
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+a {
+  color: var(--rabi-accent-text);
+  text-decoration: underline;
+}
+
+.rabi-heading {
+  color: var(--rabi-ink);
+  font-weight: 800;
+  border-bottom: 2px solid var(--rabi-accent);
+  padding-bottom: 6px;
+}
+
+.rabi-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--rabi-paper);
+}
+.rabi-table th,
+.rabi-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rabi-line);
+  text-align: left;
+}
+.rabi-table th.num,
+.rabi-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rabi-table thead th {
+  border-bottom: 1px solid var(--rabi-edge);
+  font-weight: 700;
+}
+.rabi-table tr.group td {
+  background: var(--rabi-paper-2);
+  font-weight: 700;
+}
+.rabi-table tr.total td {
+  background: var(--rabi-wash);
+  border-top: 2px solid var(--rabi-accent);
+  border-bottom-color: var(--rabi-wash-line);
+  color: var(--rabi-ink);
+  font-weight: 800;
+}

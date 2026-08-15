@@ -7,8 +7,10 @@
 // **fail-closed。**節が欠けている・版数が違う・行の形が違うときは投げる ——
 // 「値が無い」と読むと、その観測だけで進む遷移が永久に起きない。
 
+import type { Check } from "./checks.ts";
+
 /** `watch.sh` が先頭に書く版数。**節を足す・消す・名前を変えたら両方を上げる。** */
-export const SNAPSHOT_SCHEMA = 1;
+export const SNAPSHOT_SCHEMA = 2;
 
 /** 節の名前。`--- <name> (補足) ---` の `(` より前だけを見る。 */
 export const SECTIONS = [
@@ -127,7 +129,7 @@ export type WorktreeRow = {
 
 export const worktrees = (s: Snapshot): WorktreeRow[] =>
   rows(s, "worktrees")
-    // 面ごとの空は `-` 1 列で来る。**その面を落とさず、読めなかったこととして残す。**
+    // `plane_unknown` は `面 - - -`（4 列）。列が足りない行は捨てる。
     .filter((line) => fields(line, 2, "worktrees").length >= 4)
     // path は空白を含みうるので、末尾は残余として取る。
     .map((line) => fieldsWithRest(line, 4, "worktrees"))
@@ -138,12 +140,10 @@ export const worktrees = (s: Snapshot): WorktreeRow[] =>
       path: p[3] ?? "",
     }));
 
-/** `--- live checkout (面 branch dirty(0/1/-) ahead behind) ---` */
+/** `--- live checkout (面 branch dirty(0/1/-) ahead behind) ---`。決定は dirty と behind だけ読む。 */
 export type LiveCheckoutRow = {
   readonly surface: string;
-  readonly branch: string;
   readonly dirty: Tri;
-  readonly ahead: number;
   readonly behind: number;
 };
 
@@ -153,9 +153,7 @@ export const liveCheckouts = (s: Snapshot): LiveCheckoutRow[] =>
     .filter((p) => p.length >= 5)
     .map((p) => ({
       surface: p[0] ?? "",
-      branch: p[1] ?? "",
       dirty: tri(p[2] ?? "", "live checkout.dirty"),
-      ahead: Number(p[3]),
       behind: Number(p[4]),
     }));
 
@@ -205,19 +203,36 @@ export type PullRequestRow = {
   readonly headRef: string;
   readonly draft: boolean;
   /** **`untracked` を「checks が無い」と読まない** —— 追跡していないことは値の 1 つ */
-  readonly checks: readonly string[] | "untracked";
+  readonly checks: readonly Check[] | "untracked";
+};
+
+const parseChecksField = (raw: string): PullRequestRow["checks"] => {
+  if (raw === "untracked") return "untracked";
+  if (raw === "none" || raw === "") return [];
+  return raw.split("|").map((part) => {
+    const first = part.indexOf("@");
+    const second = first < 0 ? -1 : part.indexOf("@", first + 1);
+    if (first < 0 || second < 0 || part.slice(0, first) === "") {
+      throw new SnapshotDecodeError(`checks の形が STATUS@at@name でない: ${part}`);
+    }
+    return {
+      status: part.slice(0, first),
+      at: part.slice(first + 1, second),
+      name: part.slice(second + 1),
+    };
+  });
 };
 
 export const pullRequests = (s: Snapshot): PullRequestRow[] =>
   rows(s, "PRs").map((line) => {
-    const p = fields(line, 5, "PRs");
+    // name は空白を含みうるので、checks は末尾残余として取る。
+    const p = fieldsWithRest(line, 5, "PRs");
     const checksRaw = (p[4] ?? "").replace(/^checks=/, "");
     return {
       number: Number(p[0]),
       headRef: p[1] ?? "",
       draft: (p[3] ?? "") === "draft=true",
-      checks:
-        checksRaw === "untracked" ? "untracked" : checksRaw.split(",").filter((c) => c !== ""),
+      checks: parseChecksField(checksRaw),
     };
   });
 
@@ -225,10 +240,23 @@ export const remoteBranches = (s: Snapshot): readonly string[] => rows(s, "remot
 export const sessions = (s: Snapshot): readonly string[] => rows(s, "sessions");
 export const workspaces = (s: Snapshot): readonly string[] => rows(s, "workspaces");
 
-/** `--- landing tips ---` は `面 SHA`。統合先の tip。 */
+/** `--- landing tips ---` は `面 ref SHA`。統合先の tip。 */
 export const landingTips = (s: Snapshot): ReadonlyMap<string, string> =>
   new Map(
     rows(s, "landing tips")
-      .map((line) => fields(line, 2, "landing tips"))
-      .map((p) => [p[0] ?? "", p[1] ?? ""]),
+      .map((line) => fields(line, 3, "landing tips"))
+      .map((p) => [p[0] ?? "", p[2] ?? ""]),
   );
+
+/** `--- landing local branches ---` は `面 branch SHA`。面が読めない行は `面 - -`。 */
+export type LocalBranchRow = {
+  readonly surface: string;
+  readonly branch: string;
+  readonly sha: string;
+};
+
+export const localBranches = (s: Snapshot): LocalBranchRow[] =>
+  rows(s, "landing local branches")
+    .map((line) => fields(line, 3, "landing local branches"))
+    .filter((p) => (p[1] ?? "") !== "-" && (p[2] ?? "") !== "-")
+    .map((p) => ({ surface: p[0] ?? "", branch: p[1] ?? "", sha: p[2] ?? "" }));

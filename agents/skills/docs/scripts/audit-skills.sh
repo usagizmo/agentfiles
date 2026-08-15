@@ -203,6 +203,48 @@ trap 'rm -rf "$WORK"; exit 130' HUP INT TERM
 FINDINGS=$WORK/findings
 : >"$FINDINGS"
 
+# --- 所有判定 ------------------------------------------------------------
+# 棚卸しの入力。3 値は所有 / 所有しない / 判定不能。
+# 追跡済みは所有。未追跡かつ追跡中 `.gitignore` の除外対象外も所有。
+# 追跡中の `.gitignore` が除外する skill は所有しない。
+# `.git/info/exclude` と `core.excludesFile` は見ない（端末ごとに出力が変わる）。
+# 判定不能は repo が無いときと git が無いときだけ。空の所有集合へ畳まない。
+# 親の GIT_DIR を無視する。pre-commit 配下では GIT_DIR が検査対象を上書きする。
+git_in_repo() {
+	env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE \
+		-u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+		-u GIT_PREFIX \
+		git -C "$REPO_ROOT" "$@"
+}
+
+OWNERSHIP=ok
+TRACKED_GITIGNORE=$WORK/tracked_gitignore
+: >"$TRACKED_GITIGNORE"
+if [ -z "$REPO_ROOT" ]; then
+	OWNERSHIP=unknown
+	emit SKIP owned "-" "note=repo が無いので所有判定をしていない"
+elif ! command -v git >/dev/null 2>&1; then
+	OWNERSHIP=unknown
+	emit SKIP owned "-" "note=git が無いので所有判定をしていない"
+elif git_in_repo cat-file -e HEAD:.gitignore 2>/dev/null; then
+	git_in_repo show HEAD:.gitignore >"$TRACKED_GITIGNORE" ||
+		fatal "追跡中の .gitignore を読めない"
+fi
+
+# $1 = repo 相対の skill dir。追跡済みなら所有。SKILL.md が
+# 追跡中 gitignore に除外されていれば所有しない。git の失敗は無視されていない
+# に畳まない。
+is_owned() {
+	o_rel=$1
+	o_tracked=$(git_in_repo ls-files -- "$o_rel") ||
+		fatal "git ls-files が失敗した: $o_rel"
+	[ -n "$o_tracked" ] && return 0
+	o_ignored=$(git_in_repo ls-files --others --ignored --exclude-from="$TRACKED_GITIGNORE" -- "$o_rel/SKILL.md") ||
+		fatal "git ls-files --ignored が失敗した: $o_rel"
+	[ -n "$o_ignored" ] && return 1
+	return 0
+}
+
 # --- 対象ファイルの棚卸し ------------------------------------------------
 # files: <display>\t<physical>  display は root 相対（両 root で同じ形になる）
 INVENTORY=$WORK/files
@@ -215,6 +257,14 @@ for d in "$ROOT"/*/; do
 	name=${d%/}
 	name=${name##*/}
 	[ -f "$d/SKILL.md" ] || continue
+	if [ "$OWNERSHIP" = ok ]; then
+		skill_abs=$(CDPATH= cd -P -- "$d" && pwd -P) || fatal "skill dir を解決できない: $d"
+		case "$skill_abs" in
+		"$REPO_ROOT"/*) rel=${skill_abs#"$REPO_ROOT"/} ;;
+		*) fatal "skill が repo の外にある: $skill_abs" ;;
+		esac
+		is_owned "$rel" || continue
+	fi
 	echo "$name" >>"$SKILLS"
 	if p=$(canon "$d/SKILL.md"); then
 		printf '%s\t%s\n' "$name/SKILL.md" "$p" >>"$INVENTORY"
@@ -426,6 +476,7 @@ for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets; do
 	[ -d "$d" ] || continue
 	skill=${d%/*}
 	skill=${skill##*/}
+	grep -qx "$skill" "$SKILLS" || continue
 	kind=${d##*/}
 	for f in "$d"/*; do
 		[ -L "$f" ] || continue
@@ -495,6 +546,7 @@ if [ -n "$SHARED_DIR" ]; then
 		[ -d "$d" ] || continue
 		skill=${d%/*}
 		skill=${skill##*/}
+		grep -qx "$skill" "$SKILLS" || continue
 		kind=${d##*/}
 		for f in "$d"/*; do
 			[ -f "$f" ] || continue
@@ -561,15 +613,16 @@ else
 			emit REVIEW derived "docs/$want" "note=無いので対応する導出物検査を実行していない"
 	done
 
-	# 層構造の節に載る skill 名 ↔ 実ツリー。節を切り出して双方向に突き合わせる。
-	if [ -f "$DOCS_DIR/README.md" ]; then
+	# 層構造の節に載る skill 名 ↔ 所有している実ツリー。節を切り出して双方向に突き合わせる。
+	# 判定不能のときは突き合わせない（空の所有集合として緑にしない）。
+	if [ -f "$DOCS_DIR/README.md" ] && [ "$OWNERSHIP" = ok ]; then
 		# 表の行だけを見る。散文のバッククォート語まで skill 名と見なすと誤検知が出る。
 		awk '/^## 層構造/ { on = 1; next } on && /^## / { exit } on && /^\|/' "$DOCS_DIR/README.md" >"$WORK/layers_sec"
 		awk '{ while (match($0, /`[a-z][a-z0-9-]*`/)) { print substr($0, RSTART + 1, RLENGTH - 2); $0 = substr($0, RSTART + RLENGTH) } }' \
 			"$WORK/layers_sec" | sort -u >"$WORK/doc_skills"
 		while read -r w; do
 			grep -qx "$w" "$SKILLS" ||
-				emit VIOLATION derived "docs/README.md" "note=層構造の $w が skills root に無い"
+				emit VIOLATION derived "docs/README.md" "note=層構造の $w を所有していない"
 		done <"$WORK/doc_skills"
 		while read -r s; do
 			grep -qx "$s" "$WORK/doc_skills" ||

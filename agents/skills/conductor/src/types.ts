@@ -117,7 +117,11 @@ export type LeaseKind = "write" | "integration";
 export type ActionParams =
   | { readonly action: Exclude<ActionName, "差し戻す" | "枠を渡す"> }
   | { readonly action: "差し戻す"; readonly to: RevertTarget }
-  | { readonly action: "枠を渡す"; readonly lease: LeaseKind };
+  | {
+      readonly action: "枠を渡す";
+      readonly lease: LeaseKind;
+      readonly missing?: "report";
+    };
 
 // ---------------------------------------------------------------------------
 // Decision
@@ -153,11 +157,49 @@ export type Outcome =
       readonly params: ActionParams;
       readonly target: Target;
       readonly evidence: Evidence;
+      /** 回すことに成功し、指紋が一致していたら周回の `count` を +1 するか */
+      readonly countsEmptyCycle: boolean;
+      readonly records: TargetRecords;
     }
-  | { readonly kind: "settle-record"; readonly settlement: Settlement }
+  | {
+      readonly kind: "settle-record";
+      readonly settlement: Settlement;
+      readonly records: TargetRecords;
+    }
   | { readonly kind: "constraint"; readonly constraint: ConstraintKind; readonly detail: string }
   | { readonly kind: "non-action"; readonly nonAction: NonActionKind; readonly detail: string }
-  | { readonly kind: "idle" };
+  | { readonly kind: "idle" }
+  | {
+      readonly kind: "halt";
+      readonly reason: "計画 schema 不明";
+      readonly evidence: readonly string[];
+      readonly issues: readonly number[];
+    };
+
+/**
+ * 選んだ対象の記録。**精算は Decision から書く。**`observeTick` を再実行せず、
+ * `cycle-mark.py` を手で組まない。
+ *
+ * `markMatch` を boolean にしない。指紋を作れない周を「違った」へ畳むと、
+ * 照合できないのに `count` を 0 にして budget を潰す。
+ */
+export const MARK_MATCH = ["same", "changed", "unknown"] as const;
+export type MarkMatch = (typeof MARK_MATCH)[number];
+
+export type TargetRecords = {
+  readonly currentMark: Observed<string>;
+  readonly markMatch: MarkMatch;
+  readonly cycle: Observed<{ readonly count: number; readonly mark: string | null }>;
+  readonly failure: Observed<{ readonly count: number; readonly lastAction: string | null }>;
+};
+
+/** 人への出口に載せる 4 数。**実 checkout に上限の数値は置かない。** */
+export type Usage = {
+  readonly counted: number;
+  readonly checkouts: number;
+  readonly supply: number;
+  readonly supplyTarget: number;
+};
 
 /**
  * tick が 1 周で出す結論。
@@ -172,6 +214,7 @@ export type Decision = {
   /** 当たった課題を選出対象外にする。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
   readonly conflicts: readonly Conflict[];
   readonly outcome: Outcome;
+  readonly usage: Usage;
 };
 
 /**
@@ -205,7 +248,7 @@ export type Evidence = {
   readonly runtime: Runtime;
   readonly capacity: Capacity;
   readonly ledger: Ledger;
-  /** その action を選んだ理由。状況ボードの「この tick の action」がそのまま読む */
+  /** その action を選んだ理由。実行の直前に前提を引き直すため */
   readonly why: string;
 };
 
@@ -220,6 +263,6 @@ export type NormalizedIssue = {
   readonly runtime: Runtime;
   readonly capacity: Capacity;
   readonly ledger: Ledger;
-  /** ラダーで解決できなかったもの。空でなければ `報告して止める` が最上位で当たる */
+  /** ラダーで解決できなかったもの。空なら選出対象外にはしない。`報告して止める` は `ledgerAhead` だけ */
   readonly conflicts: readonly Conflict[];
 };

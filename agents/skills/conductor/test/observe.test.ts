@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ObservePort, StatusMap } from "../src/observe.ts";
-import { observe } from "../src/observe.ts";
+import { observeTick, worktreeBusy } from "../src/observe.ts";
 import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
 import type { Ledger, Observed } from "../src/types.ts";
@@ -18,8 +18,8 @@ ${SNAPSHOT_SCHEMA}
 --- default ---
 abc123
 --- landing tips ---
-o/control def456
-o/other 111222
+o/control origin/main def456
+o/other refs/heads/main 111222
 --- landing local branches ---
 o/control feat/12-x aaa
 o/other feat/12-x bbb
@@ -46,7 +46,7 @@ ws-old /tmp/wt/feat-34-y
 --- recent issue comments ---
 900 2026-08-12T00:00:00Z claim
 --- PRs ---
-7 feat/12-x OPEN draft=false checks=SUCCESS
+7 feat/12-x OPEN draft=false checks=SUCCESS@2026-08-12T00:00:00Z@lint
 `;
 
 const STATUS: StatusMap = new Map<string, Ledger>([
@@ -57,8 +57,8 @@ const STATUS: StatusMap = new Map<string, Ledger>([
 
 // **2 面にしておく。**1 面だと「その課題の着地面だけを渡す」が「全面を渡す」と区別できない。
 const SURFACES = new Map([
-  ["o/control", true],
-  ["o/other", false],
+  ["o/control", { usesPr: true, countsCapacity: true }],
+  ["o/other", { usesPr: false, countsCapacity: true }],
 ]);
 
 const claimComment = `<!-- claim -->
@@ -71,6 +71,12 @@ landing: [o/control]
 
 <!-- /claim -->`;
 
+const comment = (body: string) => present([body]);
+
+const observe = async (
+  ...args: Parameters<typeof observeTick>
+): Promise<readonly IssueObservation[]> => observeTick(...args);
+
 const port = (over: Partial<ObservePort> = {}): ObservePort => ({
   snapshot: async () => SNAP,
   issueBodies: async () =>
@@ -80,10 +86,11 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
     ]),
   issueComments: async () =>
     new Map([
-      [12, present([claimComment])],
+      [12, comment(claimComment)],
       [34, present([])],
     ]),
   surfaceGit: async () => ({ ahead: present(true), head: present("aaa") }),
+  isAncestor: async () => present(true),
   readyFacts: async () => present(false),
   cycleMark: async () => present("mark-1"),
   // 実引数の組み立ては port の責務。ここは「何を渡すか」だけを見る。
@@ -92,15 +99,32 @@ const port = (over: Partial<ObservePort> = {}): ObservePort => ({
     planInvalidated: present(false),
     resourceKeys: present([]),
   }),
-  issueFacts: async () => ({
-    issueContractComplete: present(true),
-    prMerged: present(false),
-    latestPrClosedUnmerged: present(false),
-    blocksEntry: false,
-    claimedAt: present(100),
-  }),
+  issueFacts: async () => facts(),
   ...over,
 });
+
+const facts = (
+  over: Partial<Awaited<ReturnType<ObservePort["issueFacts"]>>> = {},
+): Awaited<ReturnType<ObservePort["issueFacts"]>> => ({
+  issueContractComplete: present(true),
+  prMerged: present(false),
+  latestPrClosedUnmerged: present(false),
+  blocksEntry: false,
+  claimedAt: present(100),
+  linkedPrReportComments: present([]),
+  ...over,
+});
+
+const reportComment = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/control: aaa
+bases:
+  o/control: bbb
+\`\`\`
+
+<!-- /report -->`;
 
 const find = (rows: readonly IssueObservation[], n: number): IssueObservation => {
   const row = rows.find((r) => r.issue === n);
@@ -109,6 +133,26 @@ const find = (rows: readonly IssueObservation[], n: number): IssueObservation =>
 };
 
 describe("snapshot から導くもの", () => {
+  test("SUCCESS と NEUTRAL だけの checks は緑", async () => {
+    const snap = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=NEUTRAL@2026-08-12T00:00:00Z@audit|SUCCESS@2026-08-12T00:00:00Z@lint",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).checks).toEqual(present({ running: 0, green: true }));
+  });
+
+  test("CANCELLED を含む checks は緑にしない", async () => {
+    const snap = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint|CANCELLED@2026-08-12T00:00:00Z@Preview DB",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).checks).toEqual(present({ running: 0, green: false }));
+    const prSurface = find(rows, 12).surfaces.find((s) => s.usesPr);
+    expect(prSurface?.landable).toEqual(present(false));
+  });
+
   test("ボード順・open / closed・セッション・claim branch を引く", async () => {
     const rows = await observe(port(), STATUS, SURFACES);
     const twelve = find(rows, 12);
@@ -117,6 +161,22 @@ describe("snapshot から導くもの", () => {
     expect(twelve.session).toEqual({ kind: "running" });
     expect(twelve.claimBranchExists).toEqual(present(true));
     expect(find(rows, 34).claimBranchExists).toEqual(present(false));
+  });
+
+  test("渡しの記録が 2 つあるコメントを 0 件に畳まない", async () => {
+    const one = `<!-- integration -->
+
+\`\`\`yaml
+issues: [12]
+\`\`\`
+
+<!-- /integration -->`;
+    const rows = await observe(
+      port({ issueComments: async () => new Map([[12, comment(one + "\n" + one)]]) }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).integrationRecordCount).toEqual(present(2));
   });
 
   test("休止の記録の to / keys を本体として残す", async () => {
@@ -130,7 +190,7 @@ keys: [skills]
 
 <!-- /yield -->`;
     const rows = await observe(
-      port({ issueComments: async () => new Map([[12, present([yieldComment])]]) }),
+      port({ issueComments: async () => new Map([[12, comment(yieldComment)]]) }),
       STATUS,
       SURFACES,
     );
@@ -149,6 +209,26 @@ keys: [skills]
     const unknown = SNAP.replace("resolve-12 working", "resolve-12 unknown");
     const rows = await observe(port({ snapshot: async () => unknown }), STATUS, SURFACES);
     expect(find(rows, 12).session).toEqual({ kind: "unclassifiable", raw: "unknown" });
+  });
+
+  test("同じ worktree の consult 子が working なら worktreeBusy", async () => {
+    const snap = SNAP.replace(
+      "resolve-12 working",
+      "resolve-12 done\na-grok-1 working /tmp/wt/feat-12-x",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).worktreeBusy).toBe(true);
+    expect(find(rows, 34).worktreeBusy).toBe(false);
+  });
+
+  test("worktreeBusy: 同じ path かその配下だけを同じ worktree と読む", () => {
+    const owned = ["/tmp/wt/feat-12-x"];
+    expect(worktreeBusy(["a-grok-1 working /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeBusy(["a-grok-1 working /tmp/wt/feat-12-x/src"], owned)).toBe(true);
+    expect(worktreeBusy(["a-grok-1 working /tmp/other"], owned)).toBe(false);
+    expect(worktreeBusy(["a-grok-1 working"], owned)).toBe(false);
+    expect(worktreeBusy(["resolve-12 working /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeBusy(["conductor working /tmp/wt/feat-12-x"], owned)).toBe(false);
   });
 
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {
@@ -180,6 +260,81 @@ keys: [skills]
     expect(seen.length).toBeGreaterThan(0);
     expect(seen[0]).toMatchObject({ ledger: expect.any(String), progress: expect.any(String) });
     expect((seen[0] as { surfaces: unknown[] }).surfaces.length).toBeGreaterThan(0);
+  });
+
+  test("該当するローカル branch が無い面は surfaceGit を呼ばない", async () => {
+    const seen: number[] = [];
+    const rows = await observe(
+      port({
+        surfaceGit: async (issue) => {
+          seen.push(issue);
+          return { ahead: present(true), head: present("aaa") };
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen).toEqual([12]);
+    expect(find(rows, 34).surfaces.map((s) => s.aheadOfIntegration)).toEqual([present(false)]);
+  });
+
+  test("branch の SHA が統合先の tip と同じなら surfaceGit を呼ばない", async () => {
+    const same = SNAP.replace("o/control feat/12-x aaa", "o/control feat/12-x def456").replace(
+      "o/other feat/12-x bbb",
+      "o/other feat/12-x 111222",
+    );
+    const seen: number[] = [];
+    const rows = await observe(
+      port({
+        snapshot: async () => same,
+        surfaceGit: async (issue) => {
+          seen.push(issue);
+          return { ahead: present(true), head: present("should-not") };
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen).toEqual([]);
+    expect(find(rows, 12).surfaces.map((s) => s.aheadOfIntegration)).toEqual([present(false)]);
+    expect(find(rows, 12).surfaces[0]?.hasCheckout).toEqual(present(true));
+  });
+
+  test("統合先の tip が `-` なら ahead を false へ畳まない", async () => {
+    const blind = SNAP.replace("o/control origin/main def456", "o/control origin/main -");
+    const rows = await observe(port({ snapshot: async () => blind }), STATUS, SURFACES);
+    expect(
+      find(rows, 12).surfaces.find((s) => s.name === "o/control")?.aheadOfIntegration.kind,
+    ).toBe("unobservable");
+  });
+
+  test("完了 の課題には計画と鮮度を問い合わせない", async () => {
+    const planSeen: number[] = [];
+    const readySeen: number[] = [];
+    const rows = await observe(
+      port({
+        planFacts: async (issue) => {
+          planSeen.push(issue);
+          return {
+            bodyMatchesPlan: present(true),
+            planInvalidated: present(false),
+            resourceKeys: present([]),
+          };
+        },
+        readyFacts: async (issue) => {
+          readySeen.push(issue);
+          return present(false);
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "完了"],
+        ["計画済み", "計画済み"],
+      ]) as StatusMap,
+      SURFACES,
+    );
+    expect(planSeen).toEqual([34]);
+    expect(readySeen).toEqual([34]);
+    expect(find(rows, 12).resourceKeys.kind).toBe("absent");
   });
 
   test("完了 で周回の記録も無い課題には指紋を作らない", async () => {
@@ -347,19 +502,40 @@ keys: [skills]
     const rows = await observe(port({ snapshot: async () => dirty }), STATUS, SURFACES);
     expect(find(rows, 12).surfaces[0]?.liveCheckoutHealthy).toEqual(present(false));
   });
+
+  test("SKIPPED を含む checks は緑で、面の着地してよいと同じ値を読む", async () => {
+    const mixed = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint|SKIPPED@2026-08-12T00:00:00Z@Preview DB",
+    );
+    const rows = await observe(port({ snapshot: async () => mixed }), STATUS, SURFACES);
+    const twelve = find(rows, 12);
+    expect(twelve.checks).toEqual(present({ running: 0, green: true }));
+    const control = twelve.surfaces.find((s) => s.name === "o/control");
+    expect(control?.landable).toEqual(present(true));
+  });
+
+  test("IN_PROGRESS だけでも実行中として残る", async () => {
+    const pending = SNAP.replace(
+      "checks=SUCCESS@2026-08-12T00:00:00Z@lint",
+      "checks=IN_PROGRESS@2026-08-12T01:00:00Z@Root gate (drift)",
+    );
+    const rows = await observe(port({ snapshot: async () => pending }), STATUS, SURFACES);
+    expect(find(rows, 12).checks).toEqual(present({ running: 1, green: false }));
+  });
 });
 
 describe("port から来るもの", () => {
   test("Issue 契約・merged・claim 時刻・入場を止める宣言をそのまま持つ", async () => {
     const rows = await observe(
       port({
-        issueFacts: async () => ({
-          issueContractComplete: present(false),
-          prMerged: present(true),
-          latestPrClosedUnmerged: present(false),
-          blocksEntry: true,
-          claimedAt: absent(),
-        }),
+        issueFacts: async () =>
+          facts({
+            issueContractComplete: present(false),
+            prMerged: present(true),
+            blocksEntry: true,
+            claimedAt: absent(),
+          }),
       }),
       STATUS,
       SURFACES,
@@ -416,7 +592,7 @@ describe("記録の読み取りを繋ぐ", () => {
     // 観測していない面の型で決まり、座標表の欠けが `着地面が解決できない` として出てこない。
     const unknown = claimComment.replace("landing: [o/control]", "landing: [o/elsewhere]");
     const rows = await observe(
-      port({ issueComments: async () => new Map([[12, present([unknown])]]) }),
+      port({ issueComments: async () => new Map([[12, comment(unknown)]]) }),
       STATUS,
       SURFACES,
     );
@@ -424,5 +600,124 @@ describe("記録の読み取りを繋ぐ", () => {
     expect(surface?.name).toBe("o/elsewhere");
     expect(surface?.terminal.kind).toBe("unobservable");
     expect(surface?.landable.kind).toBe("unobservable");
+  });
+});
+
+describe("PR コメントの report を提出証跡として読む", () => {
+  test("紐づく PR の有効な report は親の提出証跡である", async () => {
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([reportComment]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(true));
+  });
+
+  test("Issue と PR に report が 1 つずつあれば提出証跡は無効", async () => {
+    const rows = await observe(
+      port({
+        issueComments: async () => new Map([[12, comment(claimComment + "\n" + reportComment)]]),
+        issueFacts: async () => facts({ linkedPrReportComments: present([reportComment]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(false));
+  });
+
+  test("PR 一覧が読めないときは提出証跡を無いへ倒さない", async () => {
+    const rows = await observe(
+      port({
+        issueFacts: async () =>
+          facts({ linkedPrReportComments: unobservable("PR 一覧を読めない") }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence.kind).toBe("unobservable");
+  });
+
+  test("written の SHA がいまの統合先 tip の祖先なら、heads = bases でも提出証跡である", async () => {
+    const landed = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/control: aaa
+bases:
+  o/control: aaa
+written:
+  o/control:
+    - ccc
+\`\`\`
+
+<!-- /report -->`;
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([landed]) }),
+        isAncestor: async (_surface, ancestor, descendant) =>
+          present(ancestor === "ccc" && descendant === "def456"),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(true));
+  });
+
+  test("キーが着地面と一致しない report は提出証跡ではない", async () => {
+    const mismatch = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/other: aaa
+bases:
+  o/other: bbb
+\`\`\`
+
+<!-- /report -->`;
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([mismatch]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(false));
+  });
+
+  test("heads と bases が同一で written が無い report は提出証跡ではない", async () => {
+    const zero = `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/control: aaa
+bases:
+  o/control: aaa
+\`\`\`
+
+<!-- /report -->`;
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ linkedPrReportComments: present([zero]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).submissionEvidence).toEqual(present(false));
+  });
+
+  test("PR 上の claim は Issue 側の記録にならない", async () => {
+    const rows = await observe(
+      port({
+        issueComments: async () => new Map([[12, present([])]]),
+        issueFacts: async () => facts({ linkedPrReportComments: present([claimComment]) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    const twelve = find(rows, 12);
+    expect(twelve.claimRecord.kind).toBe("absent");
+    expect(twelve.planCommentExists).toEqual(present(false));
   });
 });

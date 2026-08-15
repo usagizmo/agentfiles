@@ -6,33 +6,49 @@
 
 import {
   issues as decodeIssues,
+  landingTips,
+  liveCheckouts,
+  localBranches,
   parseSnapshot,
   projectStatus,
   pullRequests,
-  liveCheckouts,
+  remoteBranches,
   sessions as decodeSessions,
   workspaces,
   worktrees as decodeWorktrees,
 } from "./decode.ts";
-import type { Tri } from "./decode.ts";
+import type { LocalBranchRow, Tri } from "./decode.ts";
 import type { IssueObservation, SessionObservation, SurfaceObservation } from "./observation.ts";
 import {
   claimRecord,
   cycleRecord,
   extractMarker,
   intentRecord,
-  integrationRecord,
-  reportRecord,
+  integrationRecordCount,
+  reportFromSources,
   retryRecord,
   waitRecord,
   yieldRecord,
+  type ReportRecord,
 } from "./records.ts";
 import { CONCURRENCY, mapLimit } from "./limit.ts";
 import { normalizeProgress } from "./normalize.ts";
+import { classifyChecks } from "./checks.ts";
 import { deriveSurface } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
+import { reportValid } from "./report.ts";
 import type { Ledger, Observed, Progress } from "./types.ts";
 import { absent, invalid, present, unobservable } from "./types.ts";
+
+/**
+ * 面ごとの git。
+ * **`統合先..branch` で測る** —— branch 上の commit の存在で読むと、追随しただけの空 branch が
+ * `実装中` に化ける。
+ */
+export type SurfaceGit = {
+  readonly ahead: Observed<boolean>;
+  readonly head: Observed<string>;
+};
 
 /** snapshot に無い材料を取る口。**実装は 1 つで、テストは fake を渡す。** */
 export type ObservePort = {
@@ -46,15 +62,17 @@ export type ObservePort = {
   readonly issueComments: (
     issues: readonly number[],
   ) => Promise<ReadonlyMap<number, Observed<readonly string[]>>>;
+  /** 面ごとの git。`統合先..branch` が非空かと、その面の branch head。 */
+  readonly surfaceGit: (issue: number, surface: string) => Promise<SurfaceGit>;
   /**
-   * 面ごとの git。`統合先..branch` が非空かと、その面の branch head。
-   * **`統合先..branch` で測る** —— branch 上の commit の存在で読むと、追随しただけの空 branch が
-   * `実装中` に化ける。
+   * `git merge-base --is-ancestor`。解決できない SHA は `present(false)`。
+   * git 自体が落ちたときだけ `unobservable`。
    */
-  readonly surfaceGit: (
-    issue: number,
+  readonly isAncestor: (
     surface: string,
-  ) => Promise<{ readonly ahead: Observed<boolean>; readonly head: Observed<string> }>;
+    ancestor: string,
+    descendant: string,
+  ) => Promise<Observed<boolean>>;
   /**
    * 成果の指紋（`scripts/cycle-mark.py`）。**渡すのは正規化済みの値だけ** ——
    * 成分の名前と符号化はスクリプトが専任する（引数表は `references/protocols.md`）。
@@ -93,6 +111,11 @@ export type ObservePort = {
     readonly blocksEntry: boolean;
     /** claim の記録が書かれた時刻。**merge の枠の順序キー**（PR 作成の早さでは選ばない） */
     readonly claimedAt: Observed<number>;
+    /**
+     * 紐づく制御面 PR（open または merged）の `report` / `halt` コメント。
+     * **PR 一覧が読めなければ unobservable** —— `present([])` に倒すと提出証跡が「無い」になる。
+     */
+    readonly linkedPrReportComments: Observed<readonly string[]>;
   }>;
 };
 
@@ -137,6 +160,7 @@ const unknownSurface = (name: string): SurfaceObservation => {
   return {
     name,
     usesPr: true,
+    countsCapacity: true,
     aheadOfIntegration: unobservable(reason),
     dirty: unobservable(reason),
     hasCheckout: unobservable(reason),
@@ -183,7 +207,7 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
   return found;
 };
 
-/** `sessions` の行は `<名前> <状態>`。**分類できない値を丸めない。** */
+/** `sessions` の行は `<名前> <状態>`。任意で後ろに cwd。**分類できない値を丸めない。** */
 const classifySession = (rows: readonly string[], name: string): SessionObservation => {
   const row = rows.find((r) => r.split(" ")[0] === name);
   if (row === undefined) return { kind: "none" };
@@ -194,14 +218,37 @@ const classifySession = (rows: readonly string[], name: string): SessionObservat
   return { kind: "unclassifiable", raw };
 };
 
+const OWNED_SESSION = /^(retired-)?(refine|resolve)-\d+$/;
+
+/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が working か。 */
+export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
+  rows.some((row) => {
+    const [name, status, ...cwdParts] = row.split(" ");
+    if (name === undefined || name === "conductor" || OWNED_SESSION.test(name)) return false;
+    if (status !== "working") return false;
+    const cwd = cwdParts.join(" ");
+    // **cwd が無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
+    // 帰属できない 1 本が全課題の write を止める。
+    if (cwd === "") return false;
+    return ownedPaths.some(
+      (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
+    );
+  });
+
 /** 全コメントを 1 本に連ねる。marker は本文をまたがないので、重複検知はそのまま効く。 */
 const joinComments = (comments: readonly string[]): string => comments.join("\n\n");
 
-export const observe = async (
+/** 座標表から観測へ写す面の属性。**欠けたらその面は座標表に無い。** */
+export type SurfaceAttrs = {
+  readonly usesPr: boolean;
+  readonly countsCapacity: boolean;
+};
+
+export const observeTick = async (
   port: ObservePort,
   statusMap: StatusMap,
-  /** 座標表。面の名前 → PR で着地するか */
-  surfaceUsesPr: ReadonlyMap<string, boolean>,
+  /** 座標表。面の名前 → 属性 */
+  surfaceAttrs: ReadonlyMap<string, SurfaceAttrs>,
 ): Promise<readonly IssueObservation[]> => {
   const snapshot = parseSnapshot(await port.snapshot());
   const statuses = projectStatus(snapshot);
@@ -209,9 +256,11 @@ export const observe = async (
   const sessionRows = decodeSessions(snapshot);
   const worktreeRows = decodeWorktrees(snapshot);
   const prRows = pullRequests(snapshot);
+  const tips = landingTips(snapshot);
+  const locals = localBranches(snapshot);
 
-  // **dirty か、HEAD が統合先の branch でない状態は異常**。upstream より先行しているのは
-  // 異常ではない（push が人の領分の面では常態）。**読めなかったものを clean 側へ倒さない。**
+  // **dirty か、統合先より behind なら異常**。upstream より先行しているのは異常ではない
+  // （push が人の領分の面では常態）。**読めなかったものを clean 側へ倒さない。**
   const liveHealth = new Map<string, Observed<boolean>>(
     liveCheckouts(snapshot).map((row) => [
       row.surface,
@@ -262,7 +311,6 @@ export const observe = async (
     const parsedYield = yieldRecord(commentText);
     const pause = extractMarker(commentText, "yield").kind === "present";
     const claim = claimRecord(commentText);
-    const report = reportRecord(commentText);
 
     // **claim 後は claim の記録の `landing` が着地面の SSOT。**
     // **claim 前は本文の `Lands in`**（宣言が無ければ制御面 1 面）。本文を見ずに既定へ倒すと、
@@ -273,36 +321,52 @@ export const observe = async (
         ? claim.value.landing
         : declared.length > 0
           ? declared
-          : [...surfaceUsesPr.keys()].slice(0, 1);
+          : [...surfaceAttrs.keys()].slice(0, 1);
+
+    const ledger = statusMap.get(status.status);
 
     // **着地面を決めてから計画を照らす。**失効は面ごとの base から測るので、
     // その課題の着地面が決まっていないと問い合わせられない。
+    // **完了 は計画の照合も在庫の鮮度も読まない rung しか当たらない。**
+    // 飛ばした値は unobservable のまま残す（`present(false)` にも `absent` にも倒さない）。
+    const skipPlanReady = ledger === "完了";
     const [plan, extra, stale] = await Promise.all([
-      port.planFacts(issue, surfaceNames),
+      skipPlanReady
+        ? Promise.resolve({
+            bodyMatchesPlan: unobservable<boolean>("完了の課題は計画の照合をしない"),
+            planInvalidated: unobservable<boolean>("完了の課題は計画の照合をしない"),
+            resourceKeys: absent<readonly string[]>(),
+          })
+        : port.planFacts(issue, surfaceNames),
       port.issueFacts(issue),
-      port.readyFacts(issue, surfaceNames),
+      skipPlanReady
+        ? Promise.resolve(unobservable<boolean>("完了の課題は在庫の鮮度を見ない"))
+        : port.readyFacts(issue, surfaceNames),
     ]);
+    const report = reportFromSources(commentText, extra.linkedPrReportComments);
 
     const surfaces: SurfaceObservation[] = await Promise.all(
       surfaceNames.map(async (name) => {
         // **座標表に無い面を「PR で着地する面」へ倒さない。**倒すと、着地の条件も
         // live checkout の検査も観測していない面の型で決まり、座標表の欠けが
         // `着地面が解決できない` として出てこない。
-        const usesPr = surfaceUsesPr.get(name);
-        if (usesPr === undefined) return unknownSurface(name);
+        const attrs = surfaceAttrs.get(name);
+        if (attrs === undefined) return unknownSurface(name);
+        const { usesPr, countsCapacity } = attrs;
 
-        const git = await port.surfaceGit(issue, name);
         // **帰属は面の名前だけでは引けない。**同じ面に複数の課題の worktree が並ぶので、
         // path に自分の claim branch（`{prefix}/{番号}-`）が入っているものだけを自分のものとする。
         // 面だけで引くと、隣の課題の worktree を自分の容量として数え、片付けの対象にもする。
         const worktree = worktreeRows.find(
           (w) => w.surface === name && ownsWorktreePath(w.path, issue),
         );
+        const git = await surfaceGitOf(port, issue, name, locals, tips);
         const blind = blindSurfaces.has(name);
         const pr = prRows.find((p) => new RegExp(`^[^/]+/${issue}-`).test(p.headRef));
         const facts: SurfaceFacts = {
           name,
           usesPr,
+          countsCapacity,
           aheadOfIntegration: git.ahead,
           head: git.head,
           // **worktree が無いことは「読めなかった」ではない。**checkout が無い面には
@@ -324,14 +388,13 @@ export const observe = async (
           checksGreen:
             pr === undefined || pr.checks === "untracked"
               ? absent()
-              : present(pr.checks.length > 0 && pr.checks.every((c) => c === "SUCCESS")),
+              : present(classifyChecks(pr.checks).green),
         };
         return deriveSurface(facts, report);
       }),
     );
 
     const row = issueRows.get(issue);
-    const ledger = statusMap.get(status.status);
 
     return {
       issue,
@@ -361,17 +424,21 @@ export const observe = async (
       latestPrClosedUnmerged: extra.latestPrClosedUnmerged,
       prMerged: extra.prMerged,
 
-      submissionEvidence: present(report.kind === "present"),
+      submissionEvidence: await submissionEvidenceOf(report, surfaceNames, tips, port),
 
       session: classifySession(sessionRows, `resolve-${issue}`),
       retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
       refineSession: classifySession(sessionRows, `refine-${issue}`),
+      worktreeBusy: worktreeBusy(
+        sessionRows,
+        worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
+      ),
 
       waitRecord: waitRecord(commentText, pause),
       pauseRecordExists: pause,
       yieldRecord: parsedYield,
       intentRecord: intentRecord(commentText),
-      integrationRecordCount: present(integrationRecord(commentText).kind === "present" ? 1 : 0),
+      integrationRecordCount: integrationRecordCount(commentText),
 
       // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
       prunableWorkspace: present(
@@ -449,6 +516,49 @@ export const observe = async (
 };
 
 /**
+ * YAML の存在は提出ではない。妥当なら `present(true)`、YAML があるが妥当でないなら
+ * `present(false)`。PR 一覧が読めないときだけ `unobservable`。
+ */
+const submissionEvidenceOf = async (
+  report: Observed<ReportRecord>,
+  landing: readonly string[],
+  tips: ReadonlyMap<string, string>,
+  port: ObservePort,
+): Promise<Observed<boolean>> => {
+  if (report.kind === "unobservable") return unobservable(report.reason);
+  if (report.kind !== "present") return present(false);
+  return reportValid(report.value, landing, tips, port.isAncestor);
+};
+
+/**
+ * branch の有無と head は snapshot に在る。**無い / tip と同じなら git を引き直さない。**
+ * SHA が tip と違うときだけ `統合先..branch` を測る（behind だけの非空はここでは分からない）。
+ *
+ * **tip が `-` なら ahead を false へ畳まない。**畳むと読めない面が透過し、終端へ上がる。
+ */
+const surfaceGitOf = async (
+  port: ObservePort,
+  issue: number,
+  surface: string,
+  locals: readonly LocalBranchRow[],
+  tips: ReadonlyMap<string, string>,
+): Promise<SurfaceGit> => {
+  const tip = tips.get(surface);
+  if (tip === undefined || tip === "-") {
+    return {
+      ahead: unobservable("統合先の tip を読めない"),
+      head: unobservable("統合先の tip を読めない"),
+    };
+  }
+  const branch = locals.find(
+    (b) => b.surface === surface && new RegExp(`^[^/]+/${issue}-`).test(b.branch),
+  );
+  if (branch === undefined) return { ahead: present(false), head: absent() };
+  if (branch.sha === tip) return { ahead: present(false), head: present(branch.sha) };
+  return port.surfaceGit(issue, surface);
+};
+
+/**
  * その worktree path がこの課題のものか。branch 名は `{prefix}/{Issue 番号}-{slug}` に固定
  * されていて、path の末尾要素がそれを写した形になる。**prefix の集合は project が変えてよい**
  * ので、`feat|fix|chore` のような allowlist を焼き込まない。
@@ -462,10 +572,7 @@ const ownsWorktreePath = (path: string, issue: number): boolean => {
 const snapshotHasClaimBranch = (
   snapshot: ReturnType<typeof parseSnapshot>,
   issue: number,
-): boolean =>
-  (snapshot.sections.get("remote branches") ?? []).some((b) =>
-    new RegExp(`^origin/[^/]+/${issue}-`).test(b),
-  );
+): boolean => remoteBranches(snapshot).some((b) => new RegExp(`^origin/[^/]+/${issue}-`).test(b));
 
 const checksOf = (
   prs: ReturnType<typeof pullRequests>,
@@ -475,11 +582,5 @@ const checksOf = (
   if (pr === undefined) return absent();
   // **追跡していない PR の checks を「無し」と読まない。**
   if (pr.checks === "untracked") return unobservable("追跡していない PR");
-  const running = pr.checks.filter(
-    (c) => c === "PENDING" || c === "IN_PROGRESS" || c === "QUEUED",
-  ).length;
-  return present({
-    running,
-    green: pr.checks.length > 0 && pr.checks.every((c) => c === "SUCCESS"),
-  });
+  return present(classifyChecks(pr.checks));
 };

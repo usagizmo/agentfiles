@@ -10,6 +10,7 @@ import { absent, present, unobservable } from "../src/types.ts";
 const facts = (over: Partial<SurfaceFacts> = {}): SurfaceFacts => ({
   name: "o/r",
   usesPr: true,
+  countsCapacity: true,
   aheadOfIntegration: present(true),
   head: present("aaa"),
   dirty: present(false),
@@ -22,7 +23,7 @@ const facts = (over: Partial<SurfaceFacts> = {}): SurfaceFacts => ({
 });
 
 const report = (heads: Record<string, string>): Observed<ReportRecord> =>
-  present({ heads, bases: {} });
+  present({ heads, bases: {}, written: {} });
 
 describe("PR を使う面", () => {
   test("17n: PR がまだ無い面は、着地してよくないことが確定している", () => {
@@ -109,5 +110,9 @@ describe("提出の証跡", () => {
     expect(
       surfaceReported("o/r", unobservable("branch が無い"), report({ "o/r": "aaa" })).kind,
     ).toBe("unobservable");
+  });
+
+  test("head が無い（branch 削除）なら、記録にあれば提出済み", () => {
+    expect(surfaceReported("o/r", absent(), report({ "o/r": "aaa" }))).toEqual(present(true));
   });
 });

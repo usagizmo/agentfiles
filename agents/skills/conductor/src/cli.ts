@@ -4,16 +4,16 @@
 // `references/protocols.md` に従って行う。ここが返すのは「何をするか」だけ。
 //
 // 使い方:
-//   bun run src/cli.ts --config <path> --snapshot-out <path>
+//   bun run src/cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...
 //
 // 終了コード:
-//   0  Decision を返した（内容は stdout の JSON）
+//   0  Decision を返した
 //   1  観測に失敗した（**watcher は呼び出し側が直前の snapshot で張る**）
 //   2  設定が壊れている（fail-closed。何も選ばずに止まる）
 
 import { ConfigError, parseConfig, resolveSurfaces } from "./config.ts";
 import { decide } from "./decide.ts";
-import { observe } from "./observe.ts";
+import { observeTick } from "./observe.ts";
 import { createPort } from "./port.ts";
 
 const arg = (name: string): string | undefined => {
@@ -48,38 +48,46 @@ const fail: (code: 1 | 2, message: string) => never = (code, message) => {
 };
 
 const USAGE = "usage: cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...";
-const configPath = arg("config") ?? fail(2, USAGE);
-const snapshotOut = arg("snapshot-out") ?? fail(2, USAGE);
 
-const scriptsDir = new URL("../scripts", import.meta.url).pathname;
+const runTick = async (): Promise<void> => {
+  const configPath = arg("config") ?? fail(2, USAGE);
+  const snapshotOut = arg("snapshot-out") ?? fail(2, USAGE);
 
-const config = await (async () => {
-  try {
-    return parseConfig(await Bun.file(configPath).json());
-  } catch (error) {
-    return fail(
-      2,
-      error instanceof ConfigError ? error.message : `設定を読めない: ${String(error)}`,
-    );
-  }
-})();
+  const scriptsDir = new URL("../scripts", import.meta.url).pathname;
 
-const surfaces = (() => {
-  try {
-    return resolveSurfaces(config.surfaces, surfacePaths());
-  } catch (error) {
-    return fail(2, error instanceof ConfigError ? error.message : String(error));
-  }
-})();
+  const config = await (async () => {
+    try {
+      return parseConfig(await Bun.file(configPath).json());
+    } catch (error) {
+      return fail(
+        2,
+        error instanceof ConfigError ? error.message : `設定を読めない: ${String(error)}`,
+      );
+    }
+  })();
 
-const port = createPort({ config, surfaces, scriptsDir, snapshotPath: snapshotOut });
-const surfaceUsesPr = new Map(config.surfaces.map((s) => [s.name, s.usesPr]));
+  const surfaces = (() => {
+    try {
+      return resolveSurfaces(config.surfaces, surfacePaths());
+    } catch (error) {
+      return fail(2, error instanceof ConfigError ? error.message : String(error));
+    }
+  })();
 
-const observations = await observe(port, config.statusMap, surfaceUsesPr).catch((error: unknown) =>
-  // **観測できなかった tick も watcher は張る**（張らないと起こし手が消え、一時的な障害が永久停止に化ける）。
-  // 張るのは呼び出し側の仕事なので、ここは失敗を伝えるだけにする。
-  fail(1, `観測に失敗した: ${String(error)}`),
-);
+  const port = createPort({ config, surfaces, scriptsDir, snapshotPath: snapshotOut });
+  const surfaceAttrs = new Map(
+    config.surfaces.map((s) => [s.name, { usesPr: s.usesPr, countsCapacity: s.countsCapacity }]),
+  );
 
-const decision = decide({ observations, config: config.tick });
-console.log(JSON.stringify(decision, null, 2));
+  const observations = await observeTick(port, config.statusMap, surfaceAttrs).catch(
+    (error: unknown) =>
+      // **観測できなかった tick も watcher は張る**（張らないと起こし手が消え、一時的な障害が永久停止に化ける）。
+      // 張るのは呼び出し側の仕事なので、ここは失敗を伝えるだけにする。
+      fail(1, `観測に失敗した: ${String(error)}`),
+  );
+
+  const decision = decide({ observations, config: config.tick });
+  console.log(JSON.stringify(decision, null, 2));
+};
+
+await runTick();

@@ -274,7 +274,7 @@ MODE=snapshot
 if [ -n "$BASELINE_IN" ]; then
   MODE=watch
   # **読めない・空の baseline は起動を止める。**自分で取り直す側へ倒すと、tick の観測との
-  # 隙間が窓になる（mode を分けているのはこのため）。止まれば状況ボードに出る。
+  # 隙間が窓になる（mode を分けているのはこのため）。止まれば応答に出る。
   [ -f "$BASELINE_IN" ] || { echo "baseline not found: $BASELINE_IN" >&2; exit 2; }
   [ -s "$BASELINE_IN" ] || { echo "baseline is empty: $BASELINE_IN" >&2; exit 2; }
 fi
@@ -289,7 +289,10 @@ done
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 QUERY_FILE="$DIR/project-status.graphql"
+RESTRICT="$DIR/restrict-to-board.awk"
 [ -f "$QUERY_FILE" ] || { echo "not found: $QUERY_FILE" >&2; exit 2; }
+[ -f "$DIR/pr-list.jq" ] || { echo "not found: $DIR/pr-list.jq" >&2; exit 2; }
+[ -f "$RESTRICT" ] || { echo "not found: $RESTRICT" >&2; exit 2; }
 
 # 起動のたびに使い捨てる。**外へ残すのは `--snapshot` で明示的に指定された path だけ**
 # （呼び出し側がその file の寿命を持ち、次の起動で baseline として渡す）。
@@ -314,8 +317,8 @@ require_nonempty() {
 }
 
 snapshot() {
-  local proj_json proj issues comments sessions workspaces prs pr_count
-  local default branches wt_raw worktrees page_cost
+  local proj_json proj issues comments sessions workspaces prs prs_json pr_count
+  local default branches wt_raw worktrees page_cost board_nums
   local tips checkout ref name tip wt spec branches_local lb live live_branch live_dirty live_out live_ahead live_behind rest
 
   proj_json=$(gh api graphql --paginate \
@@ -338,6 +341,11 @@ snapshot() {
       .[] | select(.pull_request == null)
       | "\(.number) \(.state) \(.updated_at) \([.assignees[].login] | sort | join(","))"') || return 1
   issues=$(printf '%s\n' "$issues" | sort -n)
+  # **board 上の番号だけ残す。**board 外の updated_at が動いても起きない。
+  # ページは最後まで取る。絞るのは出力であって打ち切りではない。
+  board_nums=$(printf '%s\n' "$proj" | awk '{print $2}')
+  printf '%s\n' "$board_nums" > "$STATE_DIR/board_nums"
+  issues=$(printf '%s\n' "$issues" | awk -f "$RESTRICT" "$STATE_DIR/board_nums" -) || return 1
 
   # marker コメントの変化で起床する。upsert は必ず `updated_at` を更新するので、
   # `sort=updated` の窓に必ず入る。marker 名まで指紋に入れる（新設・消滅がそのまま digest に出る）。
@@ -366,13 +374,11 @@ snapshot() {
   # 瞬間、その課題だけ `提出中` → `着地待ち` が永久に起きなくなる。
   # **判定できないものは残す側（fail-open）へ倒す** —— `headRefName` が取れないときは追跡中として
   # 扱い、checks をそのまま指紋へ入れる。
-  prs=$(gh pr list --repo "$GH_REPO" --state open --limit "$PR_LIMIT" \
-    --json number,headRefName,state,isDraft,statusCheckRollup --jq '
-      .[] | . as $p
-      | ($p.headRefName != null and (($p.headRefName | test("^[^/]+/[0-9]+-")) | not)) as $untracked
-      | "\($p.number) \($p.headRefName) \($p.state) draft=\($p.isDraft) checks=\(
-          if $untracked then "untracked"
-          else ([$p.statusCheckRollup[]? | (.conclusion // .state)] | sort | join(",")) end)"') || return 1
+  # **畳みと分類は `src/checks.ts`。**ここは identity と status を落とさずに出す。
+  # CheckRun の実行中は `status` を読まないと空になり、pending が消える。
+  prs_json=$(gh pr list --repo "$GH_REPO" --state open --limit "$PR_LIMIT" \
+    --json number,headRefName,state,isDraft,statusCheckRollup) || return 1
+  prs=$(printf '%s' "$prs_json" | jq -r -f "$DIR/pr-list.jq") || return 1
   pr_count=$(printf '%s' "$prs" | grep -c . || true)
   if [ "$pr_count" -ge "$PR_LIMIT" ]; then
     echo "[watch] open PR が --pr-limit ${PR_LIMIT} に達した: 一覧が不完全なのでこのラウンドを捨てる" >&2
@@ -555,12 +561,12 @@ snapshot() {
   require_nonempty worktrees "$worktrees" || return 1
 
   # **節の集合と並びは実質 API。**読む側（`src/decode.ts`）が節の欠落を fail-closed で
-  # 弾けるよう版数を先頭に置く。**節を足す・消す・名前を変えたら上げる** —— 上げずに変えると、
-  # 読む側は古い形のつもりで新しい出力を解釈し、欠けた節を「値が無い」と読む。
+  # 弾けるよう版数を先頭に置く。**節を足す・消す・名前を変えたら上げる。行の形を変えたときも上げる** ——
+  # 上げずに変えると、読む側は古い形のつもりで新しい出力を解釈し、欠けた節を「値が無い」と読む。
   # baseline との比較は全文の digest なので、定数行が 1 本増えても差分の意味は変わらない。
   cat <<SNAP
 --- schema ---
-1
+2
 --- default ---
 $default
 --- landing tips ---
@@ -596,7 +602,7 @@ SNAP
 # `set -m` で background job を group leader にし、`kill -- -$pid` で group 全体へ送る。
 #
 # **deadline を `--max` の残り時間で頭打ちにしない。**そうすると境界のラウンドが健全でも殺され、
-# 「観測不能・backoff 中」と誤って報告される（状況ボードに嘘の異常が出る）。
+# 「観測不能・backoff 中」と誤って報告される（応答に嘘の異常が出る）。
 # fallback が最大 `--deadline` だけ遅れるのは許容する（1800 秒に対する 90 秒）。
 CHILD_PGID=''
 

@@ -9,23 +9,36 @@ import type { IssueObservation } from "./observation.ts";
 import { sessionActive } from "./observation.ts";
 import {
   blocks,
+  checkoutCount,
   holdsIntegration,
   holdsWrite,
   intersect,
   planSlotUsage,
-  worktreeCount,
+  surfaceCountsTowardCapacity,
 } from "./resources.ts";
-import { hasWorkInProgress, ledgerAhead, ledgerBehind, normalize } from "./normalize.ts";
+import {
+  allSurfacesClean,
+  hasWorkInProgress,
+  ledgerAhead,
+  ledgerBehind,
+  normalize,
+  settledSubmitted,
+} from "./normalize.ts";
 import type {
+  ActionName,
   ActionParams,
   Conflict,
   Decision,
+  LeaseKind,
   Ledger,
+  MarkMatch,
   NormalizedIssue,
   Observed,
   Outcome,
   Progress,
   Target,
+  TargetRecords,
+  Usage,
 } from "./types.ts";
 
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
@@ -38,17 +51,14 @@ export type TickConfig = {
   /** 容量は**目安**であって停止条件ではない（超えても既存の課題は進める） */
   readonly capacityTarget: number;
   readonly planSlots: number;
-  /** 計画済みの在庫の上限。既定は容量の目安 + 先読み 1 */
-  readonly readyStockLimit: number;
 };
 
 export const DEFAULT_CONFIG: TickConfig = {
   maxActionsPerTick: 5,
   retryBudget: 3,
   emptyCycleBudget: 3,
-  capacityTarget: 4,
+  capacityTarget: 6,
   planSlots: 3,
-  readyStockLimit: 5,
 };
 
 export type TickInput = {
@@ -113,6 +123,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         prMerged: lead.prMerged,
         submissionEvidence: lead.submissionEvidence,
         session: lead.session,
+        worktreeBusy: lead.worktreeBusy,
         waitRecord: lead.waitRecord,
         pauseRecordExists: lead.pauseRecordExists,
         yieldRecord: lead.yieldRecord,
@@ -197,6 +208,53 @@ const target = (g: Group): Target => ({ representative: g.representative, member
 
 const TERMINAL: readonly Progress[] = ["着地済み", "取り下げ"];
 const WRITE_STAGES: readonly Progress[] = ["準備済み", "実装中", "提出中"];
+/** write を渡す周。`準備中` は保持しないが周には入る（行 10q）。 */
+const WRITE_PASS_STAGES: readonly Progress[] = ["準備中", "準備済み", "実装中", "提出中"];
+const RESTART_ACTIONS: readonly ActionName[] = [
+  "claim する",
+  "解決を起こし直す",
+  "計画を起こす",
+  "計画を起こし直す",
+];
+
+export type EmptyCycleInput = {
+  readonly action: ActionName;
+  readonly lease?: LeaseKind;
+  readonly progress: Progress;
+  readonly checks: Observed<{ readonly running: number; readonly green: boolean }>;
+};
+
+const emptyCycleKind = (input: EmptyCycleInput): "write" | "restart" | undefined => {
+  if (input.action === "枠を渡す" && input.lease !== "integration") return "write";
+  if (RESTART_ACTIONS.includes(input.action)) return "restart";
+  return undefined;
+};
+
+/**
+ * `着地待ち` と、実行中の checks がある `提出中` を外す。
+ * **`提出中` を無条件では外さない** —— checks が 0 件の `提出中` は待ちではなく詰まり。
+ */
+const excludedFromEmptyCycle = (input: EmptyCycleInput): boolean => {
+  if (input.progress === "着地待ち") return true;
+  if (input.progress === "提出中") {
+    return input.checks.kind === "present" && input.checks.value.running > 0;
+  }
+  return false;
+};
+
+/**
+ * 回すことに成功したあと、周回の記録の `count` を +1 するか。
+ * 指紋の一致と成功は呼び出し側（`protocols.md` の更新順）が見る。
+ *
+ * 除外は write を渡す周と起こす周の**どちらにも**掛かる。write 側だけに縮めると
+ * 行 10f6 / 10g2 が落ちる。
+ */
+export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
+  const kind = emptyCycleKind(input);
+  if (kind === undefined) return false;
+  if (kind === "write" && !WRITE_PASS_STAGES.includes(input.progress)) return false;
+  return !excludedFromEmptyCycle(input);
+};
 
 /** group 内で終端と非終端が混在しているか。共有実体をどちらに倒しても壊れる。 */
 const terminalMixedInGroup = (g: Group): boolean => {
@@ -219,6 +277,22 @@ const markUnchanged = (g: Group): boolean => {
   const recorded = cycle(g).mark;
   return current !== undefined && recorded !== null && current === recorded;
 };
+
+/** 指紋を作れない周と、記録が壊れている周を `changed` へ畳まない。 */
+export const markMatchOf = (o: IssueObservation): MarkMatch => {
+  if (o.currentMark.kind !== "present") return "unknown";
+  if (o.cycleRecord.kind === "unobservable" || o.cycleRecord.kind === "invalid") return "unknown";
+  const recorded = o.cycleRecord.kind === "present" ? o.cycleRecord.value.mark : null;
+  if (recorded === null) return "changed";
+  return o.currentMark.value === recorded ? "same" : "changed";
+};
+
+const recordsOf = (g: Group): TargetRecords => ({
+  currentMark: g.leadObservation.currentMark,
+  markMatch: markMatchOf(g.leadObservation),
+  cycle: g.leadObservation.cycleRecord,
+  failure: g.leadObservation.failureRecord,
+});
 
 // ---------------------------------------------------------------------------
 // 差し戻し
@@ -301,11 +375,94 @@ const hasArtifacts = (g: Group): boolean =>
 // 選出
 // ---------------------------------------------------------------------------
 
-/** **claim 済みの判定は 4 通り**。branch 名には番号が 1 つしか入らないので 1 つでは漏れる。 */
+/**
+ * claim 済みか。記録か remote branch のどれか 1 つ。
+ * 成員と代表は `buildGroups` が同じ group に載せているので、ここで辿り直さない。
+ */
 const alreadyClaimed = (g: Group): boolean =>
   g.observations.some(
     (o) => o.claimRecord.kind === "present" || value(o.claimBranchExists) === true,
   );
+
+/** 代表の、数える面の checkout 本数。成員では増やさない。 */
+const countedCapacityOf = (g: Group): number =>
+  g.leadObservation.surfaces.filter((s) => surfaceCountsTowardCapacity(g.lead, s)).length;
+
+/** claim したときに増える数える本数。checkout の有無では引かない。 */
+const capacityIncrement = (g: Group): number =>
+  g.leadObservation.surfaces.filter((s) => s.countsCapacity).length;
+
+/** 着地面が解決できる。読めた面だけを含める。 */
+const landingResolved = (g: Group): boolean =>
+  g.observations.every(
+    (o) => o.surfaces.length > 0 && o.surfaces.every((s) => s.terminal.kind === "present"),
+  );
+
+/** claim の前提のうち、台帳と claim 痕跡以外。 */
+const claimPreconditions = (
+  g: Group,
+  all: readonly NormalizedIssue[],
+  byIssue: Map<number, IssueObservation>,
+  opts: { readonly contract: "all" | "planned" } = { contract: "all" },
+): boolean => {
+  if (!g.observations.every((o) => value(o.open) === true)) return false;
+  if (!dependenciesResolved(g, all, byIssue)) return false;
+  if (!landingResolved(g)) return false;
+  return g.records.every((r, i) => {
+    if (opts.contract === "planned" && r.ledger !== "計画済み") return true;
+    const complete = g.observations[i]?.issueContractComplete;
+    return complete !== undefined && value(complete) === true;
+  });
+};
+
+const usageOf = (
+  groups: readonly Group[],
+  all: readonly NormalizedIssue[],
+  byIssue: Map<number, IssueObservation>,
+  observations: readonly IssueObservation[],
+  config: TickConfig,
+  excluded: ReadonlySet<number>,
+): Usage => {
+  const counted = groups.reduce((total, g) => total + countedCapacityOf(g), 0);
+  return {
+    counted,
+    checkouts: checkoutCount(observations),
+    supply: groups.filter((g) => countsAsSupply(g, all, byIssue, excluded)).length,
+    supplyTarget: Math.max(0, config.capacityTarget - counted) + config.planSlots,
+  };
+};
+
+/**
+ * 完了すれば claim できるようになる group か。
+ * 自分側の欠けは落とす。入場停止・容量待ち・write 交差では落とさない。
+ */
+const countsAsSupply = (
+  g: Group,
+  all: readonly NormalizedIssue[],
+  byIssue: Map<number, IssueObservation>,
+  excluded: ReadonlySet<number>,
+): boolean => {
+  if (g.members.some((n) => excluded.has(n))) return false;
+  if (g.lead.ledger === "退避先") return false;
+  if (g.observations.some((o) => o.retiredRefineExists)) return false;
+  if (
+    g.observations.some(
+      (o) =>
+        o.refineSession.kind !== "none" &&
+        o.waitRecord.kind === "waiting" &&
+        o.waitRecord.validity.kind === "valid",
+    )
+  ) {
+    return false;
+  }
+  if (alreadyClaimed(g)) return false;
+  const remainingCovered = g.records.every((r, i) => {
+    if (r.ledger === "計画済み") return true;
+    return g.observations[i]?.refineSession.kind !== "none";
+  });
+  if (!remainingCovered) return false;
+  return claimPreconditions(g, all, byIssue, { contract: "planned" });
+};
 
 const dependenciesResolved = (
   g: Group,
@@ -329,15 +486,9 @@ const selectable = (
   all: readonly NormalizedIssue[],
   byIssue: Map<number, IssueObservation>,
 ): boolean => {
-  // **読めなかった `open` を選出の側へ倒さない**（claim は worktree を作る不可逆操作）。
-  if (!g.observations.every((o) => value(o.open) === true)) return false;
   if (!g.records.every((r) => r.ledger === "計画済み")) return false;
   if (alreadyClaimed(g)) return false;
-  if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return false;
-  if (!dependenciesResolved(g, all, byIssue)) return false;
-  // **着地面が解決できる**。読めない面があれば正規化が `Conflict` を立てている。
-  if (g.observations.some((o) => o.surfaces.length === 0)) return false;
-  return true;
+  return claimPreconditions(g, all, byIssue);
 };
 
 /**
@@ -346,10 +497,7 @@ const selectable = (
  * そこは在庫の鮮度が守っている対象そのもの。
  */
 const claimStructurallyBlocked = (g: Group, ctx: Context): boolean => {
-  if (!g.observations.every((o) => value(o.open) === true)) return true;
-  if (!g.records.every((r) => r.ledger === "計画済み")) return true;
-  if (alreadyClaimed(g)) return true;
-  if (!g.observations.every((o) => value(o.issueContractComplete) === true)) return true;
+  if (!selectable(g, ctx.all, ctx.byIssue)) return true;
   return claimCrossesWriteHolders(g, ctx);
 };
 
@@ -397,9 +545,10 @@ type Context = {
   readonly all: readonly NormalizedIssue[];
   readonly byIssue: Map<number, IssueObservation>;
   readonly config: TickConfig;
-  readonly worktrees: number;
+  readonly counted: number;
   readonly planSlotsUsed: number;
-  readonly readyStock: number;
+  readonly supply: number;
+  readonly supplyTarget: number;
   readonly entryBlocked: boolean;
   readonly input: TickInput;
 };
@@ -420,6 +569,27 @@ const crossingWriteHolders = (g: Group, ctx: Context): Group[] =>
 const claimCrossesWriteHolders = (g: Group, ctx: Context): boolean => {
   if (g.leadObservation.resourceKeys.kind !== "present") return false;
   return crossingWriteHolders(g, ctx).length > 0;
+};
+
+/** 「claim する」の match と同一。譲位の判定が別実装になると、譲った先が空になる。 */
+const canClaim = (g: Group, ctx: Context): boolean => {
+  if (isShelved(g)) return false;
+  if (!selectable(g, ctx.all, ctx.byIssue)) return false;
+  if (ctx.counted >= ctx.config.capacityTarget && capacityIncrement(g) > 0) return false;
+  if (claimCrossesWriteHolders(g, ctx)) return false;
+  return !ctx.entryBlocked;
+};
+
+/**
+ * `提出中` × checks 緑 × 全面 clean × 有効な `report` が無い。
+ * **`runtime` は見ない** —— 渡す本文の欠けは成果物側の事実。
+ */
+const needsSubmissionReport = (g: Group): boolean => {
+  if (g.lead.progress !== "提出中") return false;
+  const checks = value(g.leadObservation.checks);
+  if (checks === undefined || checks.running !== 0 || !checks.green) return false;
+  if (!allSurfacesClean(g.leadObservation.surfaces)) return false;
+  return value(g.leadObservation.submissionEvidence) !== true;
 };
 
 const sharedKeys = (
@@ -507,11 +677,14 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "片付ける" }),
-    why: "終端に達したものの実体と記録が残っている",
+    why: "片付ける対象が残っている",
     match: (g) => {
       const r = g.lead;
       const o = g.leadObservation;
-      const done = TERMINAL.includes(r.progress) || r.ledger === "完了";
+      const done =
+        TERMINAL.includes(r.progress) ||
+        settledSubmitted(o) ||
+        (value(o.prMerged) === true && value(o.claimBranchExists) === false);
       if (!done) return false;
       // **片付ける対象が全部消えるまで当たり続ける述語にする**（branch も入れる）。
       return (
@@ -606,11 +779,12 @@ const LADDER: readonly Rung[] = [
       if (sessionAlive(g)) return false;
       if (r.runtime !== "無し" && r.runtime !== "人待ち" && r.runtime !== "休止") return false;
       if (g.records.some(ledgerBehind)) return false;
-      // **checkout が無く、作ると容量が目安を超えるなら選ばない** ——
+      // **checkout が無く、作ると数える本数が目安以上になるなら選ばない** ——
       // ただし論理 lease を保持しているなら、目安を超えても起こす（回収なので）。
       if (r.capacity === "あり") return true;
       if (holdsWrite(r) || holdsIntegration(g.leadObservation)) return true;
-      return ctx.worktrees < ctx.config.capacityTarget;
+      if (capacityIncrement(g) === 0) return true;
+      return ctx.counted < ctx.config.capacityTarget;
     },
   },
   {
@@ -644,6 +818,10 @@ const LADDER: readonly Rung[] = [
       if (isShelved(g) || !holdsWrite(g.lead)) return false;
       const crossing = crossingWriteHolders(g, ctx);
       if (crossing.length === 0) return false;
+      // **キーが present でない相手へは休止を送らない。**記述不能な記録は解除条件に届かない。
+      // 直列化（`intersect` の `unknown`）は残す。
+      if (g.leadObservation.resourceKeys.kind !== "present") return false;
+      if (crossing.some((p) => p.leadObservation.resourceKeys.kind !== "present")) return false;
       // **記録の有無だけでは見ない。**`to` / `keys` が現況と一致しているあいだは送らない。
       return !crossingDescribed(g, crossing);
     },
@@ -675,11 +853,14 @@ const LADDER: readonly Rung[] = [
     params: (g) => ({
       action: "枠を渡す",
       lease: g.lead.progress === "着地待ち" ? "integration" : "write",
+      ...(needsSubmissionReport(g) ? { missing: "report" as const } : {}),
     }),
     why: "止まっている実行器に資源を渡せる",
     match: (g, ctx) => {
       if (isShelved(g)) return false;
       if (g.lead.runtime !== "待機" && g.lead.runtime !== "休止") return false;
+      // **consult の子が同じ worktree で working なら write を渡さない。**integration は別資源。
+      if (g.lead.progress !== "着地待ち" && g.leadObservation.worktreeBusy) return false;
       if (g.lead.progress === "着地待ち") {
         if (holdsIntegration(g.leadObservation)) return true;
         return nextIntegrationReceiver(ctx)?.representative === g.representative;
@@ -687,6 +868,16 @@ const LADDER: readonly Rung[] = [
       if (crossingWriteHolders(g, ctx).length > 0) return false;
       // **入場を止める宣言**は、まだ write を保持していない課題への貸し出しだけを止める。
       if (ctx.entryBlocked && !holdsWrite(g.lead) && !g.leadObservation.blocksEntry) return false;
+      // **`待機` に限る。**`休止` は交差の再開で、claim へ譲ると再開が後回しになる。
+      if (
+        g.lead.runtime === "待機" &&
+        needsSubmissionReport(g) &&
+        ctx.groups.some(
+          (other) => other.representative !== g.representative && canClaim(other, ctx),
+        )
+      ) {
+        return false;
+      }
       return true;
     },
   },
@@ -702,21 +893,13 @@ const LADDER: readonly Rung[] = [
         return false;
       if (g.leadObservation.waitRecord.kind === "waiting") return false;
       if (ctx.planSlotsUsed >= ctx.config.planSlots) return false;
-      return ctx.readyStock < ctx.config.readyStockLimit;
+      return ctx.supply < ctx.supplyTarget;
     },
   },
   {
     params: () => ({ action: "claim する" }),
     why: "選出の条件が揃い、容量に空きがあり、いまの write 保持者と交わらない",
-    match: (g, ctx) => {
-      if (isShelved(g)) return false;
-      if (!selectable(g, ctx.all, ctx.byIssue)) return false;
-      // **作っても容量が目安を超えない**（作ると超えるなら選ばない）。
-      if (ctx.worktrees + g.leadObservation.surfaces.length > ctx.config.capacityTarget)
-        return false;
-      if (claimCrossesWriteHolders(g, ctx)) return false;
-      return !ctx.entryBlocked;
-    },
+    match: canClaim,
   },
 ];
 
@@ -763,10 +946,35 @@ export const decide = (input: TickInput): Decision => {
     conflicts.push(...found);
     for (const n of g.members) excluded.add(n);
   }
+  const usage = usageOf(groups, all, byIssue, input.observations, input.config, excluded);
   const decision = (outcome: Outcome): Decision => ({
     conflicts: foldConflicts(conflicts),
     outcome,
+    usage,
   });
+
+  // **計画 block の invalid は 1 件ずつの扱いに落とさない。**精算より前にセッションを止める。
+  // `absent` / `unobservable` は倒さない（コメント取得の一時失敗を全体停止にしない）。
+  const schemaUnknown = groups.flatMap((g) =>
+    g.observations.flatMap((o) =>
+      o.resourceKeys.kind === "invalid"
+        ? [
+            {
+              issue: o.issue,
+              evidence: `Issue ${o.issue} の marker plan が読めない: ${o.resourceKeys.reason}`,
+            },
+          ]
+        : [],
+    ),
+  );
+  if (schemaUnknown.length > 0) {
+    return decision({
+      kind: "halt",
+      reason: "計画 schema 不明",
+      evidence: schemaUnknown.map((x) => x.evidence),
+      issues: schemaUnknown.map((x) => x.issue).sort((a, b) => a - b),
+    });
+  }
 
   if (shelved !== undefined) {
     return decision({
@@ -776,6 +984,7 @@ export const decide = (input: TickInput): Decision => {
         kind: "退避先の count を 0 に揃える",
         detail: `失敗 ${failure(shelved).count} / 周回 ${cycle(shelved).count} を 0 へ`,
       },
+      records: recordsOf(shelved),
     });
   }
 
@@ -784,12 +993,10 @@ export const decide = (input: TickInput): Decision => {
     all,
     byIssue,
     config: input.config,
-    worktrees: worktreeCount(input.observations),
+    counted: usage.counted,
     planSlotsUsed: planSlotUsage(input.observations),
-    // **在庫 = 計画済みの group 数 + 生存している `refine` セッション数。**
-    readyStock:
-      groups.filter((g) => g.records.every((r) => r.ledger === "計画済み") && !alreadyClaimed(g))
-        .length + planSlotUsage(input.observations),
+    supply: usage.supply,
+    supplyTarget: usage.supplyTarget,
     // **効くのは終端に達するまで。**外すのは `人待ち` と、止まったことを確かめた `退避先` だけ。
     entryBlocked: groups.some(
       (g) =>
@@ -842,10 +1049,18 @@ export const decide = (input: TickInput): Decision => {
         for (const n of g.members) excluded.add(n);
         continue;
       }
+      const params = rung.params(g, ctx);
       return decision({
         kind: "action",
-        params: rung.params(g, ctx),
+        params,
         target: target(g),
+        countsEmptyCycle: countsEmptyCycle({
+          action: params.action,
+          ...(params.action === "枠を渡す" ? { lease: params.lease } : {}),
+          progress: g.lead.progress,
+          checks: g.leadObservation.checks,
+        }),
+        records: recordsOf(g),
         evidence: {
           progress: g.lead.progress,
           runtime: g.lead.runtime,

@@ -32,16 +32,30 @@ const stripped = (html) =>
   html.replace(/<code[^>]*>[\s\S]*?<\/code>/g, "").replace(/<!--[\s\S]*?-->/g, "");
 
 /**
- * **リテラルで残った `**` だけを見ると足りない。**マーカーが偶数個あると全部ペアとして
- * 消費され、リテラルが残らないまま**範囲だけがずれる**（`**規則。**続き` は
- * 閉じ損ねた `**` が次の開きを拾い、文全体が強調になる）。症状は `<strong>` の入れ子。
+ * 同種の強調の入れ子は delimiter に依らず落とす。`<strong>` の正規表現 1 本だと
+ * `<em>` の入れ子が軸ごと抜ける。描画結果のタグスタックで見る。
+ * 隣り合う 2 つの強調と、種類の違う入れ子（太字の中の斜体）は通す。
+ * @param {string} html
  */
-const nested = (html) => /<strong>(?:(?!<\/strong>)[\s\S])*<strong>/.test(stripped(html));
+function violationKinds(html) {
+  const kinds = new Set();
+  const text = stripped(html);
+  if (text.replace(/<[^>]*>/g, "").includes("**")) kinds.add("literal-asterisks");
+  const open = [];
+  for (const match of text.matchAll(/<(\/?)(strong|em)\b[^>]*>/g)) {
+    const tag = match[2];
+    if (match[1] === "/") {
+      const at = open.lastIndexOf(tag);
+      if (at >= 0) open.splice(at, 1);
+      continue;
+    }
+    if (open.includes(tag)) kinds.add("nested-emphasis");
+    open.push(tag);
+  }
+  return kinds;
+}
 
-const broken = (html) =>
-  stripped(html)
-    .replace(/<[^>]*>/g, "")
-    .includes("**") || nested(html);
+const broken = (html) => violationKinds(html).size > 0;
 
 /** 壊れている行を `{ no, text }` で返す。判定の入口はここ 1 つ（test もこれを見る）。 */
 export function brokenLines(src) {
@@ -56,12 +70,58 @@ export function brokenLines(src) {
     // この block が壊れている。原因は中の `**` を持つ行。
     const base = src.slice(0, start).split("\n").length;
     token.raw.split("\n").forEach((text, i) => {
-      // コードスパンの中の `**` は原因ではない。block 全体が壊れているとき、
-      // 逐語で `**` を書いているだけの行まで挙げると指す位置がぶれる
-      if (text.replace(/`+[^`]*`+/g, "").includes("**")) out.push({ no: base + i, text });
+      // コードスパンの中の記号は原因ではない。斜体の入れ子は `*` 1 個なので `*` を見る。
+      if (text.replace(/`+[^`]*`+/g, "").includes("*")) out.push({ no: base + i, text });
     });
   }
   return out;
+}
+
+const REQUIRED_KINDS = ["literal-asterisks", "nested-emphasis"];
+
+/** @type {{ name: string, source: string, expect: string[] }[]} */
+const FIXTURES = [
+  { name: "閉じ側", source: "**これは。**続く文", expect: ["literal-asterisks"] },
+  { name: "誤ペア strong", source: "これは**前。**続き**後**です", expect: ["nested-emphasis"] },
+  { name: "誤ペア em", source: "これは*前。*続き*後*です", expect: ["nested-emphasis"] },
+  { name: "隣り合う強調", source: "**規則**。**別の規則**。", expect: [] },
+  { name: "太字の中の斜体", source: "これは**太字に *斜体* を含む**文", expect: [] },
+];
+
+/**
+ * 軸の集合と正例・負例の存在を corpus 走査の前に確かめる。
+ * 件数閾値で代用しない。判定 file からこの関数が消えたら import 側が赤くなる。
+ * @returns {string[]}
+ */
+export function validateEmphasisFixtures() {
+  const problems = [];
+  if (FIXTURES.length === 0) problems.push("FIXTURES が空です");
+  const expectations = FIXTURES.map((f) => f.expect);
+  if (!expectations.some((kinds) => kinds.length === 0)) {
+    problems.push("正しい fixture が 1 件もありません");
+  }
+  for (const kind of REQUIRED_KINDS) {
+    if (!expectations.some((kinds) => kinds.includes(kind))) {
+      problems.push(`${kind} を期待する fixture が 1 件もありません`);
+    }
+  }
+  for (const { name, source, expect } of FIXTURES) {
+    const detected = [
+      ...new Set(
+        marked
+          .lexer(source)
+          .flatMap((token) =>
+            token.type === "space" || token.type === "code"
+              ? []
+              : [...violationKinds(marked.parser([token]))],
+          ),
+      ),
+    ].sort();
+    if (detected.join() !== [...expect].sort().join()) {
+      problems.push(`fixture「${name}」: 期待 [${expect}] / 実測 [${detected}]`);
+    }
+  }
+  return problems;
 }
 
 if (import.meta.main) {

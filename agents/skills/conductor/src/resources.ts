@@ -1,7 +1,7 @@
 // 資源の保持と交差。**論理 lease（write / integration）の保持者は課題、
 // 物理枠（容量 / 計画枠）の保持者は実体**なので、1 語にまとめない。
 
-import type { IssueObservation } from "./observation.ts";
+import type { IssueObservation, SurfaceObservation } from "./observation.ts";
 import type { NormalizedIssue, Observed } from "./types.ts";
 
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
@@ -25,7 +25,7 @@ export const holdsWrite = (r: NormalizedIssue): boolean => {
  * （`着地待ち` に居なくてよい —— 追随中の `提出中` を含む）。
  */
 export const holdsIntegration = (o: IssueObservation): boolean =>
-  (value(o.integrationRecordCount) ?? 0) >= 1;
+  o.integrationRecordCount.kind !== "present" || o.integrationRecordCount.value >= 1;
 
 /** 交差の判定は 3 値。**`unknown` は `incompatible` として扱う。** */
 export type Compatibility = "compatible" | "incompatible" | "unknown";
@@ -48,14 +48,23 @@ export const intersect = (
 export const blocks = (c: Compatibility): boolean => c !== "compatible";
 
 /**
- * 容量は**課題に帰属する linked worktree の本数**。
+ * 実 checkout。属性も runtime も見ない。**上限の数値は置かない。**
  * **`あり` の数で数えない** —— 2 面持つ課題が 1 面の課題と同じ重さになる。
  */
-export const worktreeCount = (observations: readonly IssueObservation[]): number =>
+export const checkoutCount = (observations: readonly IssueObservation[]): number =>
   observations.reduce(
     (total, o) => total + o.surfaces.filter((s) => value(s.hasCheckout) === true).length,
     0,
   );
+
+/**
+ * その課題の代表について、数える本数に入れる面か。
+ * 人待ち・退避先は数えず、休止は数える。
+ */
+export const surfaceCountsTowardCapacity = (r: NormalizedIssue, s: SurfaceObservation): boolean => {
+  if (r.runtime === "人待ち" || r.ledger === "退避先") return false;
+  return s.countsCapacity && value(s.hasCheckout) === true;
+};
 
 /**
  * 計画枠は**生存している `refine-<番号>` のセッション数**（完全一致）。

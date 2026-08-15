@@ -12,6 +12,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WATCH_SHELL } from "../agents/skills/conductor/src/port.ts";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const WATCH = `${ROOT}agents/skills/conductor/scripts/watch.sh`;
@@ -27,7 +28,7 @@ function sandbox() {
 async function watch(args, { state, env = {} }) {
   const p = Bun.spawn(
     [
-      "bash",
+      WATCH_SHELL,
       WATCH,
       ...args,
       "--repo",
@@ -134,7 +135,7 @@ test("呼び出し側へ渡せなかった観測は、置いてある snapshot �
   // 観測が「直前に成功した snapshot」として baseline に渡り、そこまでの遷移が吸われる**
   writeFileSync(box.state, "resolve-1 done\n");
   const cmd =
-    `exec 1>&-; exec bash '${WATCH}' --snapshot '${box.snapshot}'` +
+    `exec 1>&-; exec ${WATCH_SHELL} '${WATCH}' --snapshot '${box.snapshot}'` +
     ` --repo /fake/repo --gh-repo o/r --project-org o --project-number 7 --status-field Status` +
     ` --sessions-cmd "cat '${box.state}'" --workspaces-cmd 'echo ws-1 /fake/wt' --deadline 20`;
   const p = Bun.spawn(["bash", "-c", cmd], {
@@ -152,7 +153,7 @@ test("呼び出し側へ渡せなかった観測は、置いてある snapshot �
 
 test("値の無い option は、観測の失敗と区別できる終了コードで落ちる", async () => {
   // `--snapshot` に値が無い。**exit 1 に落ちると「観測できなかった」と読まれる**
-  const p = Bun.spawn(["bash", WATCH, "--snapshot"], {
+  const p = Bun.spawn([WATCH_SHELL, WATCH, "--snapshot"], {
     cwd: ROOT,
     env: { ...process.env, PATH: `${SHIM}:${process.env.PATH}` },
     stdout: "pipe",

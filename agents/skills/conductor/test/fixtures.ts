@@ -19,6 +19,7 @@ import { absent, present } from "../src/types.ts";
 export const surface = (over: Partial<SurfaceObservation> = {}): SurfaceObservation => ({
   name: "control",
   usesPr: true,
+  countsCapacity: true,
   aheadOfIntegration: present(false),
   dirty: present(false),
   hasCheckout: present(false),
@@ -111,5 +112,6 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
 
   boardOrder: 0,
   claimedAt: absent(),
+  worktreeBusy: false,
   ...over,
 });
