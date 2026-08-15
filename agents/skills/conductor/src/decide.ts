@@ -22,7 +22,6 @@ import {
   ledgerAhead,
   ledgerBehind,
   normalize,
-  settledSubmitted,
 } from "./normalize.ts";
 import type {
   ActionName,
@@ -681,10 +680,7 @@ const LADDER: readonly Rung[] = [
     match: (g) => {
       const r = g.lead;
       const o = g.leadObservation;
-      const done =
-        TERMINAL.includes(r.progress) ||
-        settledSubmitted(o) ||
-        (value(o.prMerged) === true && value(o.claimBranchExists) === false);
+      const done = TERMINAL.includes(r.progress);
       if (!done) return false;
       // **片付ける対象が全部消えるまで当たり続ける述語にする**（branch も入れる）。
       return (
@@ -912,7 +908,6 @@ const nextIntegrationReceiver = (ctx: Context): Group | undefined => {
   const candidates = ctx.groups.filter((g) => {
     if (g.lead.progress !== "着地待ち") return false;
     if (!alreadyClaimed(g)) return false;
-    if (!g.observations.some((o) => o.surfaces.some((s) => s.usesPr))) return false;
     if (g.lead.runtime === "人待ち" || g.lead.ledger === "退避先") return false;
     if (g.observations.some((o) => value(o.bodyMatchesPlan) === false)) return false;
     const intent = g.leadObservation.intentRecord;

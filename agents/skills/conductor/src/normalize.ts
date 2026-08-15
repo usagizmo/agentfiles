@@ -78,8 +78,8 @@ const terminalMixed = (surfaces: readonly SurfaceObservation[]): boolean => {
 export const hasWorkInProgress = (surfaces: readonly SurfaceObservation[]): boolean =>
   surfaces.some((s) => value(s.aheadOfIntegration) === true || value(s.dirty) === true);
 
-/** `完了` かつ提出の証跡がある。片付けの再開入口と、成果物 / live Conflict の免除が同じ述語を読む。 */
-export const settledSubmitted = (o: IssueObservation): boolean =>
+/** `完了` かつ提出の証跡がある。成果物 Conflict の免除が読む。 */
+const settledSubmitted = (o: IssueObservation): boolean =>
   value(o.ledger) === "完了" && value(o.submissionEvidence) === true;
 
 export const normalizeProgress = (o: IssueObservation): Progress => {
@@ -139,11 +139,10 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   const n = o.issue;
   // **記録の整合の Conflict は、その記録がこれから読まれる課題にだけ当てる。**
   // 台帳が `完了` に達した課題の記録は二度と分岐に使われないので、当てても人が動かす先が
-  // 無く、**ラダー最上段なのでキューが恒久的に止まる**（実測で、キュー以前に着地した
-  // 40 件が全部ここへ落ち、`片付ける` にも届かなかった）。
+  // 無く、ラダー最上段なので `片付ける` にも届かない。
   //
   // **実体を守る Conflict には掛けない** —— 着地面は `片付ける` が消しにいく対象そのものを見ている。
-  // 成果物を伴う 2 つと live checkout は、`完了` かつ提出の証跡があるときにだけ立てない。
+  // 成果物を伴う 2 つは、`完了` かつ提出の証跡があるときにだけ立てない。
   const settled = value(o.ledger) === "完了";
   const submitted = settledSubmitted(o);
 
@@ -237,9 +236,7 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   // 守っているのは台帳が進んでいないことだけなので、`完了` には当てない
   // （`完了` なら依存は `closed かつ 完了` の経路で解ける）。
   // **claim の remote branch が無い着地済みには当てない**（ship の既定が branch を消す）。
-  const landedWithoutClaimBranch =
-    value(o.claimBranchExists) === false &&
-    (value(o.prMerged) === true || value(o.ledger) === "完了");
+  const landedWithoutClaimBranch = value(o.claimBranchExists) === false;
   if (
     !settled &&
     value(o.prMerged) === true &&
@@ -289,22 +286,6 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
     const why = nothingLeft ? undefined : (reasonOf(s.terminal) ?? reasonOf(s.landable));
     if (why !== undefined) {
       found.push(conflict("着地面が解決できない", n, `面 ${s.name} の観測が読めない: ${why}`));
-    }
-  }
-
-  // **当てるのは、その面を着地面に持ち、かつその面がまだ終端していない課題だけ。**
-  // **PR で着地する面は対象外** —— そちらは live へ merge しない。
-  // **`terminal` の免除は残す。**`submitted` を和で足す（置換すると、`完了` を書く前の窓が止まる）。
-  for (const s of o.surfaces) {
-    if (s.usesPr || value(s.terminal) === true || submitted) continue;
-    if (value(s.liveCheckoutHealthy) !== true) {
-      found.push(
-        conflict(
-          "live checkout が異常",
-          n,
-          `面 ${s.name} の live checkout が dirty / 分岐 / 観測不能`,
-        ),
-      );
     }
   }
 

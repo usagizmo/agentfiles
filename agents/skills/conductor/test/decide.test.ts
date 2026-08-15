@@ -176,39 +176,27 @@ describe("台帳と実体のずれ", () => {
   });
 
   test("3g: reason と evidence が同じ Conflict は 1 件に畳み、issues に番号を集める", () => {
-    const liveBroken = (n: number): IssueObservation =>
+    const unread = (n: number, name: string): IssueObservation =>
       implementing({
         issue: n,
-        claimRecord: present({ representative: n, members: [n], landing: ["control"] }),
+        claimRecord: present({ representative: n, members: [n], landing: [name] }),
         surfaces: [
           surface({
-            name: "skills",
+            name,
             usesPr: false,
             aheadOfIntegration: present(true),
             hasCheckout: present(true),
-            liveCheckoutHealthy: present(false),
+            terminal: unobservable("座標表に無い"),
+            landable: unobservable("座標表に無い"),
           }),
         ],
       });
-    const otherBroken = implementing({
-      issue: 4,
-      claimRecord: present({ representative: 4, members: [4], landing: ["control"] }),
-      surfaces: [
-        surface({
-          name: "other",
-          usesPr: false,
-          aheadOfIntegration: present(true),
-          hasCheckout: present(true),
-          liveCheckoutHealthy: present(false),
-        }),
-      ],
-    });
     const healthy = observation({ issue: 3, ledger: present("未計画") });
-    const d = tick([liveBroken(1), liveBroken(2), otherBroken, healthy]);
-    const live = d.conflicts.filter((c) => c.reason === "live checkout が異常");
-    expect(live).toHaveLength(2);
-    expect(live.find((c) => c.evidence[0]?.includes("skills"))?.issues).toEqual([1, 2]);
-    expect(live.find((c) => c.evidence[0]?.includes("other"))?.issues).toEqual([4]);
+    const d = tick([unread(1, "skills"), unread(2, "skills"), unread(4, "other"), healthy]);
+    const folded = d.conflicts.filter((c) => c.reason === "着地面が解決できない");
+    expect(folded).toHaveLength(2);
+    expect(folded.find((c) => c.evidence[0]?.includes("skills"))?.issues).toEqual([1, 2]);
+    expect(folded.find((c) => c.evidence[0]?.includes("other"))?.issues).toEqual([4]);
     expect(d.outcome.kind === "action" ? d.outcome.target.representative : null).toBe(3);
   });
 
@@ -1117,6 +1105,27 @@ describe("merge の直列化（integration）", () => {
     expectLease([awaitingLanding({ session: session.idle })], "integration");
   });
 
+  test("13j: PR を使わない面だけの課題も integration の受け手になる", () => {
+    expectLease(
+      [
+        awaitingLanding({
+          session: session.idle,
+          claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+          surfaces: [
+            surface({
+              name: "skills",
+              usesPr: false,
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              landable: present(true),
+            }),
+          ],
+        }),
+      ],
+      "integration",
+    );
+  });
+
   test("13b: 渡した相手が追随して 提出中 へ落ちた。別の課題が 着地待ち に居る", () => {
     const holder = awaitingLanding({
       issue: 1,
@@ -1729,17 +1738,115 @@ describe("着地面が制御面と違う（action）", () => {
       },
     ];
     for (const over of cases) {
-      expectAction(
-        [
-          landed({
-            ledger: present("完了"),
-            submissionEvidence: present(true),
-            ...over,
-          }),
-        ],
-        "片付ける",
-      );
+      const obs = [
+        landed({
+          ledger: present("完了"),
+          submissionEvidence: present(true),
+          ...over,
+        }),
+      ];
+      expectIdle(obs);
+      expect(tick(obs).conflicts.map((c) => c.reason)).toContain("ledger が期待より先");
     }
+  });
+
+  test("17c9: 統合済み面と未終端面が同居した Issue を close しても取り下げにしない", () => {
+    expectAction(
+      [
+        landed({
+          open: present(false),
+          surfaces: [
+            control({
+              aheadOfIntegration: present(false),
+              terminal: present(true),
+              landable: present(true),
+            }),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          session: session.none,
+        }),
+      ],
+      "解決を起こし直す",
+    );
+  });
+
+  test("17c8: 透過面と未終端面が同居した Issue を close したら片付ける", () => {
+    expectAction(
+      [
+        landed({
+          open: present(false),
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          session: session.none,
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17c7: 制御面は透過、着地面は統合済みなら片付ける", () => {
+    expectAction(
+      [
+        landed({
+          surfaces: [
+            control(),
+            secondary({
+              aheadOfIntegration: present(false),
+              hasCheckout: present(true),
+              terminal: present(true),
+              landable: present(true),
+            }),
+          ],
+          submissionEvidence: present(true),
+          session: session.none,
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17c: 着地面に commit と有効な report があり、制御面は 0 commit のまま", () => {
+    expectAction(
+      [
+        landed({
+          surfaces: [
+            control(),
+            secondary({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              landable: present(true),
+            }),
+          ],
+          submissionEvidence: present(true),
+          session: session.idle,
+        }),
+      ],
+      "意図の確認を促す",
+    );
+  });
+
+  test("17i3: 着地待ちの課題は、live が dirty でも integration の受け手になる", () => {
+    expectLease(
+      [
+        awaitingLanding({
+          session: session.idle,
+          claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+          surfaces: [
+            surface({
+              name: "skills",
+              usesPr: false,
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              landable: present(true),
+              liveCheckoutHealthy: present(false),
+            }),
+          ],
+        }),
+      ],
+      "integration",
+    );
   });
 
   test("17e: 着地面は clean で commit あり、セッションまとめの記録が無い", () => {
@@ -1918,22 +2025,7 @@ describe("着地面が制御面と違う（action）", () => {
       }),
     ]);
     expect(d.conflicts.map((c) => c.reason)).not.toContain("着地済みだが提出の証跡が無い");
-    expectAction(
-      [
-        landed({
-          prMerged: present(true),
-          claimBranchExists: present(false),
-          surfaces: [
-            control({
-              aheadOfIntegration: present(true),
-              hasCheckout: present(true),
-              terminal: present(true),
-            }),
-            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
-          ],
-          submissionEvidence: present(false),
-        }),
-      ],
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).not.toBe(
       "片付ける",
     );
   });
@@ -1950,7 +2042,9 @@ describe("着地面が制御面と違う（action）", () => {
       }),
     ]);
     expect(d.conflicts.map((c) => c.reason)).not.toContain("着地済みだが提出の証跡が無い");
-    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe("片付ける");
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).not.toBe(
+      "片付ける",
+    );
   });
 });
 

@@ -82,7 +82,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 | 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                       |
 | 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                            |
 | 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                    |
-| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。判定に使うのは live へ merge する面**だけ**（`references/landing-surface.md`）                              |
+| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査は `merge` skill の fail-closed（`references/landing-surface.md`）            |
 | 容量                     | 着地面ごとの worktree。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）                                                   |
 | 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                            |
 
@@ -334,7 +334,7 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 次の受け手は、記録がどこにも無いときだけ評価する。次をすべて満たすもののうち、**claim が最も古い 1 件**（同値なら代表の番号が小さい方）。中身は解釈せず、記録の状態と必須の欄だけを見る。**PR 作成の早さで選ばない。**
 
 1. claim 済み
-2. `progress` が `着地待ち`（`休止` は足さない）。**PR を使う面を持つ課題だけ**
+2. `progress` が `着地待ち`（`休止` は足さない）。**面の型で外さない**
 3. `runtime` が `人待ち` でなく、`ledger` が `退避先` でない
 4. 本文が計画の記録と一致している
 5. 意図の確認の記録が `confirmed` か `not-required`
