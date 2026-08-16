@@ -38,6 +38,7 @@ import type {
   Observed,
   Outcome,
   Progress,
+  Runtime,
   Target,
   TargetRecords,
   Usage,
@@ -263,6 +264,30 @@ export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
   return !excludedFromEmptyCycle(input);
 };
 
+/** 伝える 2 つ。受け手が `稼働中` の周では失敗カウントも退避も掛けない。 */
+const isTellTwo = (name: string | null): boolean =>
+  name === "本文の変更を伝える" || name === "計画の失効を伝える";
+
+/** 伝える 2 つの受け手がいま書いている。加算と退避の免除はこれを共有する。 */
+const tellRecipientWorking = (name: string | null, runtime: Runtime): boolean =>
+  isTellTwo(name) && runtime === "稼働中";
+
+export type FailureCountInput = {
+  readonly action: ActionName;
+  readonly runtime: Runtime;
+};
+
+/**
+ * この action が成功したあと、失敗の記録の `count` を +1 するか。
+ * 実行側はこれを読む。`runtime` を引き直さない。
+ *
+ * 伝える 2 つは受け手が `稼働中` なら偽。`計画枠の逼迫を伝える` は常に真。
+ */
+export const countsFailure = (input: FailureCountInput): boolean => {
+  if (isTellTwo(input.action)) return !tellRecipientWorking(input.action, input.runtime);
+  return input.action === "計画枠の逼迫を伝える";
+};
+
 /** group 内で終端と非終端が混在しているか。共有実体をどちらに倒しても壊れる。 */
 const terminalMixedInGroup = (g: Group): boolean => {
   const terminal = g.records.filter((r) => TERMINAL.includes(r.progress)).length;
@@ -324,7 +349,8 @@ const revertTarget = (
   if (
     REVERTABLE.includes(r.ledger) &&
     failure(g).count >= config.retryBudget &&
-    failure(g).lastAction !== "計画枠の逼迫を伝える"
+    failure(g).lastAction !== "計画枠の逼迫を伝える" &&
+    !tellRecipientWorking(failure(g).lastAction, r.runtime)
   ) {
     return "退避先";
   }
@@ -1196,6 +1222,10 @@ export const decide = (input: TickInput): Decision => {
           ...(params.action === "枠を渡す" ? { lease: params.lease } : {}),
           progress: g.lead.progress,
           checks: g.leadObservation.checks,
+        }),
+        countsFailure: countsFailure({
+          action: params.action,
+          runtime: g.lead.runtime,
         }),
         records: recordsOf(g),
         evidence: {

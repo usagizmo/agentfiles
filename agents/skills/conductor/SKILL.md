@@ -175,7 +175,7 @@ flowchart TD
 | `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                                                                     |
 | `idle`          | watcher を張って終える                                                                                                                                                                                                                  |
 
-`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。
+`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）と、action の `countsEmptyCycle` / `countsFailure`。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。`runtime` を引き直さない。
 
 ### 応答に出すもの
 
@@ -222,8 +222,9 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 ### 記録の精算
 
-retry の `count` を 0 に戻すのは 2 つ（形式は `references/protocols.md`）—— action が成功したときと、`ledger` が `退避先` のものを観測したとき（`lastAction` は残す）。
-**例外は** `lastAction` が `計画枠の逼迫を伝える` のときで、三拍子が揃う前には `退避先` を観測しても消さない。
+retry の `count` を 0 に戻すのは、action が成功したときと、`ledger` が `退避先` のものを観測したとき（`lastAction` は残す）。
+**例外は** 伝える 3 つで、伝達が通ったことでは戻さない。戻すのは解除表。`計画枠の逼迫を伝える` は三拍子が揃う前には `退避先` を観測しても消さない。
+伝える 3 つの加算は Decision の `countsFailure` を読む。`runtime` を引き直さない。
 
 「落とす側が一体で精算する」形に**しない**。戻す主体を人に**しない**。どちらも不変条件として書く。
 
@@ -232,7 +233,7 @@ retry の `count` を 0 に戻すのは 2 つ（形式は `references/protocols.
 | `lastAction`             | 例外の解除条件（現在の観測だけで決める）                          |
 | ------------------------ | ----------------------------------------------------------------- |
 | 計画セッションを片付ける | `ledger` が `計画済み` 以降で、`refine-<番号>` のセッションが無い |
-| 本文の変更を伝える       | その action の発火条件が偽になった                                |
+| 本文の変更を伝える       | 計画コメントが変わった、またはその action の発火条件が偽になった  |
 | 計画の失効を伝える       | 同上。**project が足した発火条件も含む**                          |
 | 計画枠の逼迫を伝える     | 三拍子が揃った、または人が答えて有効な `waiting` でなくなった     |
 | 交差を解消する           | 休止の記録が現在の交差を記述しているか、記録が無くなった          |
@@ -264,7 +265,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 - `待機` / `休止` に落ちた課題はすべて「枠を渡す」の受け手。既に write を保持しているかどうかで絞ら**ない**
 - 前進と後退を混ぜ**ない**。「台帳を進める」は期待表に向かって進めるだけ、「差し戻す」だけが戻す
 - `stale` は独立した概念では**ない**。`progress` から期待される `runtime` / `capacity` / `ledger` とのずれがそれで、別の表を持た**ない**
-- 「伝える」3 つは失敗として数える（同じ内容を送っても計画コメントが変わらなければ `count` を進める）
+- 「伝える」3 つの加算は「記録の精算」が持つ。ここには写さない。`計画セッションを片付ける` の加算は下の rename が持つ
 - 計画の人待ちが落ちたときは「計画を起こし直す」が拾う。供給を見**ない**
 
 #### 計画セッションの rename
