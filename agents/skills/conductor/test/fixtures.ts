@@ -92,6 +92,7 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   yieldRecord: absent(),
   intentRecord: intent.absent,
   integrationRecordCount: present(0),
+  integrationRecord: absent(),
 
   prunableWorkspace: present(false),
 

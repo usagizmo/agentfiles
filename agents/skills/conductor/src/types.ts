@@ -66,6 +66,7 @@ export const CONFLICT_REASONS = [
   "計画コメントが無いまま実装の証跡がある",
   "意図の確認が pending なのに人待ちが無い",
   "渡しの記録が複数",
+  "渡しの記録が壊れている",
   "退避先だがセッションが止まらない",
 ] as const;
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];

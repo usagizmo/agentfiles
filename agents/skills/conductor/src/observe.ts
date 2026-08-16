@@ -24,6 +24,7 @@ import {
   cycleRecord,
   extractMarker,
   intentRecord,
+  integrationRecord,
   integrationRecordCount,
   reportFromSources,
   retryRecord,
@@ -432,6 +433,7 @@ export const observeTick = async (
       yieldRecord: parsedYield,
       intentRecord: intentRecord(commentText),
       integrationRecordCount: integrationRecordCount(commentText),
+      integrationRecord: integrationRecord(commentText),
 
       prunableWorkspace: present(isPrunableWorkspace(workspaceList, issue)),
 

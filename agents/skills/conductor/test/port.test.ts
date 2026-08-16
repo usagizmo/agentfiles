@@ -117,6 +117,15 @@ describe("checkout path の解決", () => {
 });
 
 describe("設定の fail-closed", () => {
+  test("面の名前が重複したら止まる", () => {
+    expect(() =>
+      parseConfig({
+        ...raw,
+        surfaces: [raw.surfaces[0], { ...raw.surfaces[1], name: "acme/control" }],
+      }),
+    ).toThrow("name が重複");
+  });
+
   test("sessionsCmd が無ければ止まる", () => {
     const { sessionsCmd: _drop, ...without } = raw;
     expect(() => parseConfig(without)).toThrow("sessionsCmd");

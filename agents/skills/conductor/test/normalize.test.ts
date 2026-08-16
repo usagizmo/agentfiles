@@ -1000,6 +1000,13 @@ describe("merge の直列化（integration）", () => {
     expect(holdsIntegration(observation({ integrationRecordCount: present(0) }))).toBe(false);
     expect(holdsIntegration(observation({ integrationRecordCount: present(1) }))).toBe(true);
   });
+
+  test("13o: 渡しの記録が読めなければ壊れている", () => {
+    expectConflict(
+      observation({ ledger: present("進行中"), integrationRecordCount: unobservable("読めない") }),
+      "渡しの記録が壊れている",
+    );
+  });
 });
 
 describe("capacity", () => {

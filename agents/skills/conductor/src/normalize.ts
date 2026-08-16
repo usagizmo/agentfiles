@@ -8,6 +8,7 @@ import {
   type SurfaceObservation,
   type WaitRecord,
 } from "./observation.ts";
+
 import type {
   Capacity,
   Conflict,
@@ -302,9 +303,8 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
     found.push(conflict("渡しの記録が複数", n, `渡しの記録が ${integrationRecords} 件ある`));
   }
   if (!settled && isUnreadable(o.integrationRecordCount)) {
-    found.push(conflict("渡しの記録が複数", n, "渡しの記録を読めない"));
+    found.push(conflict("渡しの記録が壊れている", n, "渡しの記録を読めない"));
   }
-
   return found;
 };
 

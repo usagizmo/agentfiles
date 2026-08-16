@@ -11,8 +11,31 @@ import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src
 import { absent, invalid, present, unobservable } from "../src/types.ts";
 import { intent, observation, session, surface, wait } from "./fixtures.ts";
 
+const surfaceNamesOf = (observations: readonly IssueObservation[]): readonly string[] => {
+  const names: string[] = [];
+  for (const o of observations) {
+    for (const s of o.surfaces) {
+      if (!names.includes(s.name)) names.push(s.name);
+    }
+  }
+  return names.length > 0 ? names : ["control"];
+};
+
 const tick = (observations: readonly IssueObservation[], over: Partial<TickInput> = {}) =>
-  decide({ observations, config: DEFAULT_CONFIG, ...over });
+  decide({
+    observations,
+    config: DEFAULT_CONFIG,
+    surfaceNames: surfaceNamesOf(observations),
+    ...over,
+  });
+
+const heldIntegration = (
+  issue: number,
+  landing: readonly string[] = ["control"],
+): Pick<IssueObservation, "integrationRecordCount" | "integrationRecord"> => ({
+  integrationRecordCount: present(1),
+  integrationRecord: present({ issues: [issue], landing, pr: null }),
+});
 
 const expectAction = (observations: readonly IssueObservation[], action: ActionName) => {
   const o = tick(observations).outcome;
@@ -763,13 +786,13 @@ describe("外から状態が動く", () => {
   });
 
   test("10g: 着地待ち で渡しの記録を持ったまま 待機", () => {
-    const obs = [awaitingLanding({ integrationRecordCount: present(1), session: session.idle })];
+    const obs = [awaitingLanding({ ...heldIntegration(1), session: session.idle })];
     expectLease(obs, "integration");
     expectEmptyCycle(obs, false);
   });
 
   test("10g2: 着地待ち で渡しの記録を持ったままセッションが消えた", () => {
-    const obs = [awaitingLanding({ integrationRecordCount: present(1), session: session.none })];
+    const obs = [awaitingLanding({ ...heldIntegration(1), session: session.none })];
     expectAction(obs, "解決を起こし直す");
     expectEmptyCycle(obs, false);
   });
@@ -1131,7 +1154,7 @@ describe("merge の直列化（integration）", () => {
       issue: 1,
       openPr: present(true),
       submissionEvidence: present(false),
-      integrationRecordCount: present(1),
+      ...heldIntegration(1),
       session: session.running,
     });
     const other = awaitingLanding({
@@ -1147,6 +1170,181 @@ describe("merge の直列化（integration）", () => {
 
   test("13g: 渡しの記録が 2 件ある", () => {
     expectConflict([implementing({ integrationRecordCount: present(2) })], "渡しの記録が複数");
+  });
+
+  const held = (
+    issue: number,
+    landing: readonly string[] = ["control"],
+  ): Pick<IssueObservation, "integrationRecordCount" | "integrationRecord"> => ({
+    integrationRecordCount: present(1),
+    integrationRecord: present({ issues: [issue], landing, pr: null }),
+  });
+
+  const onSkills = (issue: number, claimedAt: number): IssueObservation =>
+    awaitingLanding({
+      issue,
+      claimRecord: present({ representative: issue, members: [issue], landing: ["skills"] }),
+      surfaces: [
+        surface({
+          name: "skills",
+          usesPr: false,
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          landable: present(true),
+        }),
+      ],
+      claimedAt: present(claimedAt),
+      session: session.idle,
+    });
+
+  test("13k: 着地待ちの最古が 稼働中 なら次点へ渡す", () => {
+    const oldest = awaitingLanding({
+      issue: 863,
+      claimedAt: present(10),
+      session: session.running,
+    });
+    const next = awaitingLanding({
+      issue: 986,
+      claimRecord: present({ representative: 986, members: [986], landing: ["control"] }),
+      claimedAt: present(50),
+      session: session.idle,
+    });
+    const d = tick([oldest, next]).outcome;
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(986);
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "枠を渡す",
+      lease: "integration",
+    });
+  });
+
+  test("13k2: 着地待ちの最古が 退避先 なら次点へ渡す", () => {
+    const oldest = awaitingLanding({
+      issue: 1,
+      claimedAt: present(10),
+      ledger: present("退避先"),
+      session: session.idle,
+    });
+    const next = awaitingLanding({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      claimedAt: present(50),
+      session: session.idle,
+    });
+    const d = tick([oldest, next]).outcome;
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
+  });
+
+  test("13p: 選出対象外の group は次の受け手にならない", () => {
+    const broken = awaitingLanding({
+      issue: 1,
+      claimedAt: present(10),
+      intentRecord: intent.pending,
+      session: session.idle,
+    });
+    const next = awaitingLanding({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      claimedAt: present(50),
+      session: session.idle,
+    });
+    const d = tick([broken, next]).outcome;
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
+  });
+
+  test("13m: 着地面が交わらない保持者と並んでも枠を渡す", () => {
+    const holder = awaitingLanding({
+      issue: 971,
+      ...held(971, ["control"]),
+      session: session.running,
+    });
+    const other = onSkills(986, 50);
+    const d = tick([holder, other]).outcome;
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(986);
+    expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
+      action: "枠を渡す",
+      lease: "integration",
+    });
+  });
+
+  test("13n: 着地面が交わる保持者が居るあいだは渡さない", () => {
+    const holder = awaitingLanding({
+      issue: 971,
+      ...held(971, ["control"]),
+      session: session.running,
+    });
+    const other = awaitingLanding({
+      issue: 986,
+      claimRecord: present({ representative: 986, members: [986], landing: ["control"] }),
+      claimedAt: present(50),
+      session: session.idle,
+    });
+    const d = tick([holder, other]).outcome;
+    expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("枠を渡す");
+  });
+
+  test("13o: 壊れた記録は全着地面を占める", () => {
+    const holder = awaitingLanding({
+      issue: 971,
+      integrationRecordCount: present(1),
+      integrationRecord: present({ issues: [971], landing: [], pr: null }),
+      session: session.running,
+    });
+    const other = onSkills(986, 50);
+    const d = tick([holder, other]);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).not.toBe(
+      "枠を渡す",
+    );
+    expect(d.conflicts.map((c) => c.reason)).toContain("渡しの記録が壊れている");
+  });
+
+  test("13o2: claim が無い渡しの記録も壊れている", () => {
+    expectConflict(
+      [
+        awaitingLanding({
+          integrationRecordCount: present(1),
+          integrationRecord: present({ issues: [1], landing: ["control"], pr: null }),
+          claimRecord: { kind: "absent" },
+          claimBranchExists: present(true),
+          session: session.running,
+        }),
+      ],
+      "渡しの記録が壊れている",
+    );
+  });
+
+  test("13q: 有効な記録どうしの landing が交わる状態は Conflict である", () => {
+    const a = awaitingLanding({
+      issue: 1,
+      ...held(1, ["control", "skills"]),
+      claimRecord: present({
+        representative: 1,
+        members: [1],
+        landing: ["control", "skills"],
+      }),
+      surfaces: [
+        surface({
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          landable: present(true),
+        }),
+        surface({
+          name: "skills",
+          usesPr: false,
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          landable: present(true),
+        }),
+      ],
+      session: session.running,
+    });
+    const b = awaitingLanding({
+      issue: 2,
+      ...held(2, ["control"]),
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      claimedAt: present(50),
+      session: session.idle,
+    });
+    expectConflict([a, b], "証跡が矛盾している");
   });
 });
 
@@ -1454,7 +1652,7 @@ describe("merge の直列化（続き）", () => {
   test("13c: 渡した後で、PR 作成のより早い課題が緑に戻って 着地待ち へ再入した", () => {
     const holder = awaitingLanding({
       issue: 1,
-      integrationRecordCount: present(1),
+      ...heldIntegration(1),
       session: session.running,
     });
     const reentered = awaitingLanding({
@@ -1471,7 +1669,7 @@ describe("merge の直列化（続き）", () => {
     expectAction(
       [
         awaitingLanding({
-          integrationRecordCount: present(1),
+          ...heldIntegration(1),
           bodyMatchesPlan: present(false),
           session: session.running,
         }),
@@ -1484,7 +1682,7 @@ describe("merge の直列化（続き）", () => {
     expectAction(
       [
         awaitingLanding({
-          integrationRecordCount: present(1),
+          ...heldIntegration(1),
           waitRecord: wait.waiting,
           session: session.running,
         }),
@@ -1573,6 +1771,7 @@ describe("硬い上限", () => {
         }),
       ],
       config: { ...DEFAULT_CONFIG, retryBudget: 2 },
+      surfaceNames: ["control"],
     }).outcome;
     expect(d.kind === "action" ? d.params : d.kind).toMatchObject({
       action: "差し戻す",
