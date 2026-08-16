@@ -209,10 +209,22 @@ export type Usage = {
 };
 
 /**
+ * どの rung にも当たらない in-flight。**Conflict ではない。選出対象外にしない。**
+ * 応答への出し方は `SKILL.md`。
+ */
+export type Stall = {
+  readonly issues: readonly number[];
+  readonly progress: Progress;
+  readonly runtime: Runtime;
+};
+
+/**
  * tick が 1 周で出す結論。
  *
  * **`Conflict` は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他の課題は
  * 回す。1 件を止める / 全体を止めるの切り分けは `SKILL.md`「硬い上限」。
+ *
+ * **`stalls` も 1 手の選択と直交する。**当たった課題を選出対象外にしない。
  *
  * **選出対象外にしても資源の数え上げからは外さない**（write / integration lease）ので、
  * その課題の実体は他の課題の action から守られたまま。
@@ -220,6 +232,8 @@ export type Usage = {
 export type Decision = {
   /** 当たった課題を選出対象外にする。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
   readonly conflicts: readonly Conflict[];
+  /** 当たった課題を選出対象外にしない。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
+  readonly stalls: readonly Stall[];
   readonly outcome: Outcome;
   readonly usage: Usage;
 };

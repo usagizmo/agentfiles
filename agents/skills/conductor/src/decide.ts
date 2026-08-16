@@ -39,6 +39,7 @@ import type {
   Outcome,
   Progress,
   Runtime,
+  Stall,
   Target,
   TargetRecords,
   Usage,
@@ -1086,6 +1087,41 @@ const nextIntegrationReceiver = (ctx: Context): Group | undefined => {
   })[0];
 };
 
+/** 実行器が自分で進めている。健全な周を毎 tick 出さない。 */
+const selfAdvancing = (g: Group): boolean =>
+  (g.lead.progress === "実装中" || g.lead.progress === "準備中") && g.lead.runtime === "稼働中";
+
+const matchesAnyRung = (g: Group, ctx: Context): boolean =>
+  LADDER.some((rung) =>
+    (rung.unit === "issue" ? asSolo(g) : [g]).some((candidate) => rung.match(candidate, ctx)),
+  );
+
+/**
+ * どの rung にも当たらない in-flight。**Conflict ではない。選出対象外にしない。**
+ * `人待ち` は既に応答の対象なので入れない。
+ */
+const collectStalls = (
+  groups: readonly Group[],
+  ctx: Context,
+  excluded: ReadonlySet<number>,
+): Stall[] =>
+  groups.flatMap((g) => {
+    if (g.members.some((n) => excluded.has(n))) return [];
+    if (!alreadyClaimed(g)) return [];
+    if (TERMINAL.includes(g.lead.progress)) return [];
+    if (g.lead.ledger === "退避先") return [];
+    if (g.lead.runtime === "人待ち") return [];
+    if (selfAdvancing(g)) return [];
+    if (matchesAnyRung(g, ctx)) return [];
+    return [
+      {
+        issues: [...g.members].sort((a, b) => a - b),
+        progress: g.lead.progress,
+        runtime: g.lead.runtime,
+      },
+    ];
+  });
+
 /** **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。 */
 export const decide = (input: TickInput): Decision => {
   const groups = buildGroups(input.observations);
@@ -1125,8 +1161,9 @@ export const decide = (input: TickInput): Decision => {
     for (const n of found.issues) excluded.add(n);
   }
   const usage = usageOf(groups, all, byIssue, input.observations, input.config, excluded);
-  const decision = (outcome: Outcome): Decision => ({
+  const pack = (outcome: Outcome, stalls: readonly Stall[] = []): Decision => ({
     conflicts: foldConflicts(conflicts),
+    stalls,
     outcome,
     usage,
   });
@@ -1146,7 +1183,7 @@ export const decide = (input: TickInput): Decision => {
     ),
   );
   if (schemaUnknown.length > 0) {
-    return decision({
+    return pack({
       kind: "halt",
       reason: "計画 schema 不明",
       evidence: schemaUnknown.map((x) => x.evidence),
@@ -1155,7 +1192,7 @@ export const decide = (input: TickInput): Decision => {
   }
 
   if (shelved !== undefined) {
-    return decision({
+    return pack({
       kind: "settle-record",
       settlement: {
         target: target(shelved),
@@ -1187,6 +1224,9 @@ export const decide = (input: TickInput): Decision => {
     excluded,
     surfaceNames,
   };
+
+  const stalls = collectStalls(groups, ctx, excluded);
+  const decision = (outcome: Outcome): Decision => pack(outcome, stalls);
 
   const ordered = [...groups].sort(byPriority(groups));
   const solo = ordered.flatMap(asSolo);
