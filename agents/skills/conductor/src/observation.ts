@@ -130,6 +130,12 @@ export type IssueObservation = {
   readonly intentRecord: IntentRecord;
   /** merge の枠の渡しの記録。2 件以上は `Conflict` */
   readonly integrationRecordCount: Observed<number>;
+  /** 渡しの記録の本体。`landing` の占有はここから引く */
+  readonly integrationRecord: Observed<{
+    readonly issues: readonly number[];
+    readonly landing: readonly string[];
+    readonly pr: number | null;
+  }>;
 
   /** linked worktree で checkout_path が実在しない所有残骸 */
   readonly prunableWorkspace: Observed<boolean>;

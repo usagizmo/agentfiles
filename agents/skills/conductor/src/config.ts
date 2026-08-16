@@ -127,6 +127,11 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
       integrationRef: e["integrationRef"] as string,
     };
   });
+  const seenNames = new Set<string>();
+  for (const s of surfaces) {
+    if (seenNames.has(s.name)) throw new ConfigError(`surfaces の name が重複: ${s.name}`);
+    seenNames.add(s.name);
+  }
 
   const executorsRaw = required("executors");
   if (typeof executorsRaw !== "object" || executorsRaw === null)

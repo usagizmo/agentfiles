@@ -107,7 +107,12 @@ const runTick = async (): Promise<void> => {
       fail(1, `観測に失敗した: ${String(error)}`),
   );
 
-  const decision = decide({ observations, config: config.tick, specGap: gap });
+  const decision = decide({
+    observations,
+    config: config.tick,
+    specGap: gap,
+    surfaceNames: config.surfaces.map((s) => s.name),
+  });
   console.log(JSON.stringify(decision, null, 2));
 };
 

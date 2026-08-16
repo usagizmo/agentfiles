@@ -12,6 +12,9 @@ import {
   checkoutCount,
   holdsIntegration,
   holdsWrite,
+  integrationLandingBroken,
+  integrationLandingValid,
+  integrationOccupied,
   intersect,
   planSlotUsage,
   surfaceCountsTowardCapacity,
@@ -68,6 +71,8 @@ export type TickInput = {
    * skill 側（LLM）が渡す。同じ事実の open Issue が無いことも呼ぶ側が確かめる。
    */
   readonly specGap?: { readonly issue: number; readonly fact: string } | undefined;
+  /** 座標表の面名 */
+  readonly surfaceNames: readonly string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -129,6 +134,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         yieldRecord: lead.yieldRecord,
         intentRecord: lead.intentRecord,
         integrationRecordCount: lead.integrationRecordCount,
+        integrationRecord: lead.integrationRecord,
         prunableWorkspace: lead.prunableWorkspace,
         failureRecord: lead.failureRecord,
         cycleRecord: lead.cycleRecord,
@@ -625,6 +631,8 @@ type Context = {
   readonly supplyTarget: number;
   readonly entryBlocked: boolean;
   readonly input: TickInput;
+  readonly excluded: ReadonlySet<number>;
+  readonly surfaceNames: readonly string[];
 };
 
 /** 交差する write 保持者。**対象集合自身は除く**（保持者への渡し直しがあるため）。 */
@@ -971,19 +979,77 @@ const LADDER: readonly Rung[] = [
   },
 ];
 
+const occupiedSurfaces = (ctx: Context): ReadonlySet<string> => {
+  const occupied = new Set<string>();
+  for (const g of ctx.groups) {
+    for (const name of integrationOccupied(g.leadObservation, ctx.surfaceNames)) {
+      occupied.add(name);
+    }
+  }
+  return occupied;
+};
+
+const validIntegrationLanding = (
+  g: Group,
+  surfaceNames: readonly string[],
+): readonly string[] | undefined => {
+  const rec = value(g.leadObservation.integrationRecord);
+  const claim = value(g.leadObservation.claimRecord);
+  if (rec === undefined || claim === undefined) return undefined;
+  if (!integrationLandingValid(rec.landing, claim.landing, surfaceNames)) return undefined;
+  return rec.landing;
+};
+
+/** 有効な記録どうしの `landing` が交わる。 */
+const intersectingIntegrationConflicts = (
+  groups: readonly Group[],
+  surfaceNames: readonly string[],
+): Conflict[] => {
+  const found: Conflict[] = [];
+  const valids = groups.flatMap((g) => {
+    if (TERMINAL.includes(g.lead.progress) || g.lead.ledger === "完了") return [];
+    const landing = validIntegrationLanding(g, surfaceNames);
+    return landing === undefined ? [] : [{ g, landing }];
+  });
+  for (let i = 0; i < valids.length; i++) {
+    const left = valids[i];
+    if (left === undefined) continue;
+    for (let j = i + 1; j < valids.length; j++) {
+      const right = valids[j];
+      if (right === undefined) continue;
+      if (!left.landing.some((name) => right.landing.includes(name))) continue;
+      found.push({
+        reason: "証跡が矛盾している",
+        evidence: ["有効な渡しの記録の landing が交わっている"],
+        issues: [...left.g.members, ...right.g.members],
+      });
+    }
+  }
+  return found;
+};
+
 /**
- * **次の受け手は、記録がどこにも無いときだけ評価する。**
- * **PR 作成の早さで選ばない** —— PR を持たない課題が順序キー未定義で選外へ落ちる。
+ * **次の受け手は、面が空いていていま渡せる候補のうち、claim が最も古い 1 件。**
+ * 保持者への再送は選定の外。**PR 作成の早さで選ばない。**
+ * rung の拒否条件（shelved / 渡せない runtime）を候補からも外す。外すと最古が枠を止める。
  */
 const nextIntegrationReceiver = (ctx: Context): Group | undefined => {
-  if (ctx.groups.some((g) => holdsIntegration(g.leadObservation))) return undefined;
+  const occupied = occupiedSurfaces(ctx);
   const candidates = ctx.groups.filter((g) => {
+    if (isShelved(g)) return false;
+    if (g.members.some((n) => ctx.excluded.has(n))) return false;
     if (g.lead.progress !== "着地待ち") return false;
     if (!alreadyClaimed(g)) return false;
-    if (g.lead.runtime === "人待ち" || g.lead.ledger === "退避先") return false;
+    if (g.lead.runtime !== "待機" && g.lead.runtime !== "休止") return false;
+    if (holdsIntegration(g.leadObservation)) return false;
     if (g.observations.some((o) => value(o.bodyMatchesPlan) === false)) return false;
     const intent = g.leadObservation.intentRecord;
-    return intent.kind === "confirmed" || intent.kind === "not-required";
+    if (intent.kind !== "confirmed" && intent.kind !== "not-required") return false;
+    const landing = value(g.leadObservation.claimRecord)?.landing;
+    if (landing === undefined || landing.length === 0) return false;
+    if (new Set(landing).size !== landing.length) return false;
+    if (landing.some((name) => !ctx.surfaceNames.includes(name))) return false;
+    return !landing.some((name) => occupied.has(name));
   });
   // **claim が最も古い 1 件**（同値なら代表の番号が小さい方）。
   return [...candidates].sort((a, b) => {
@@ -1008,6 +1074,7 @@ export const decide = (input: TickInput): Decision => {
       (failure(g).lastAction !== "計画枠の逼迫を伝える" || retreatComplete(g)),
   );
   // **Conflict は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他は回す。
+  const surfaceNames = input.surfaceNames;
   const conflicts: Conflict[] = [];
   const excluded = new Set<number>();
   for (const g of groups) {
@@ -1015,6 +1082,20 @@ export const decide = (input: TickInput): Decision => {
     if (found.length === 0) continue;
     conflicts.push(...found);
     for (const n of g.members) excluded.add(n);
+  }
+  for (const g of groups) {
+    if (TERMINAL.includes(g.lead.progress) || g.lead.ledger === "完了") continue;
+    if (!integrationLandingBroken(g.leadObservation, surfaceNames)) continue;
+    conflicts.push({
+      reason: "渡しの記録が壊れている",
+      evidence: ["渡しの記録の landing が壊れている"],
+      issues: g.members,
+    });
+    for (const n of g.members) excluded.add(n);
+  }
+  for (const found of intersectingIntegrationConflicts(groups, surfaceNames)) {
+    conflicts.push(found);
+    for (const n of found.issues) excluded.add(n);
   }
   const usage = usageOf(groups, all, byIssue, input.observations, input.config, excluded);
   const decision = (outcome: Outcome): Decision => ({
@@ -1076,6 +1157,8 @@ export const decide = (input: TickInput): Decision => {
         !(g.lead.ledger === "退避先" && !sessionActive(g.leadObservation.session)),
     ),
     input,
+    excluded,
+    surfaceNames,
   };
 
   const ordered = [...groups].sort(byPriority(groups));
