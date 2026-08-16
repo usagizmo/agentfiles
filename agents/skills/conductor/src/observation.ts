@@ -174,10 +174,7 @@ export type IssueObservation = {
   readonly boardOrder: number;
   /** claim の順序キー。**PR 作成の早さで選ばない**（PR を持たない課題が選外へ落ちる） */
   readonly claimedAt: Observed<number>;
-  /**
-   * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が `working` か。
-   * **親が `done` でも consult の子が走っているあいだは write を渡さない。**
-   */
+  /** 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が `working` か */
   readonly worktreeBusy: boolean;
   /**
    * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が居るか。

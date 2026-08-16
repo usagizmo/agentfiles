@@ -374,7 +374,7 @@ describe("実行器が消える / 止まる", () => {
   test("7d2: 起こした直後で、計画セッションが動いている", () => {
     // **走っているセッションを片付ける action に当てない。**`o.session` は `resolve-<番号>` を
     // 見るので計画中は常に `none` になり、`refine` の稼働で引かないと保護が一度も効かない ——
-    // 起こす → 次の tick で畳む → また起こす、の往復から出られなくなる（実物で踏んだ）。
+    // 起こす → 次の tick で畳む → また起こす、の往復から出られなくなる。
     expectIdle([observation({ ledger: present("未計画"), refineSession: session.running })]);
   });
 
@@ -471,7 +471,9 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7s: 行 7m と同じく待機だが、同じ worktree に他の agent が working", () => {
-    expectIdle([implementing({ session: session.idle, worktreeBusy: true })]);
+    const d = tick([implementing({ session: session.idle, worktreeBusy: true })]);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.stalls).toEqual([{ issues: [1], progress: "実装中", runtime: "待機" }]);
   });
 
   test("7s2: 行 7s と同じく他の agent が working だが、着地待ち", () => {
@@ -2682,5 +2684,60 @@ describe("計画枠の逼迫", () => {
       }),
     ]);
     expect(d.outcome.kind).toBe("settle-record");
+  });
+});
+
+describe("静止", () => {
+  const submitting = (over: Partial<IssueObservation> = {}): IssueObservation =>
+    implementing({
+      openPr: present(true),
+      ...heldIntegration(1),
+      ...over,
+    });
+
+  test("21: 提出中 × 待機 × worktreeBusy で integration を保持する", () => {
+    const obs = [submitting({ session: session.idle, worktreeBusy: true })];
+    const d = tick(obs);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.conflicts).toEqual([]);
+    expect(d.stalls).toEqual([{ issues: [1], progress: "提出中", runtime: "待機" }]);
+  });
+
+  test("21b: 実装中 × 稼働中 は stalls に出ない", () => {
+    const obs = [implementing({ session: session.running })];
+    const d = tick(obs);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.stalls).toEqual([]);
+  });
+
+  test("21c: 提出中 × 稼働中 は stalls に出る", () => {
+    const obs = [submitting({ session: session.running })];
+    const d = tick(obs);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.conflicts).toEqual([]);
+    expect(d.stalls).toEqual([{ issues: [1], progress: "提出中", runtime: "稼働中" }]);
+  });
+
+  test("21d: 同じ観測をもう一度でも stalls の集合は同じ", () => {
+    const obs = [submitting({ session: session.idle, worktreeBusy: true })];
+    expect(tick(obs).stalls).toEqual(tick(obs).stalls);
+  });
+
+  test("21e: 他 group が action を取る周でも、当たらない in-flight は stalls に残る", () => {
+    const stalled = submitting({ session: session.idle, worktreeBusy: true });
+    const startable = observation({ issue: 2, ledger: present("未計画") });
+    const d = tick([stalled, startable]);
+    expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
+      "計画を起こす",
+    );
+    expect(d.conflicts).toEqual([]);
+    expect(d.stalls).toEqual([{ issues: [1], progress: "提出中", runtime: "待機" }]);
+  });
+
+  test("21f: 人待ち は stalls に入れない", () => {
+    const obs = [implementing({ waitRecord: wait.waiting, session: session.idle })];
+    const d = tick(obs);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.stalls).toEqual([]);
   });
 });
