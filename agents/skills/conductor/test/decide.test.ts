@@ -534,18 +534,68 @@ describe("外から状態が動く", () => {
   });
 
   test("8: PR は緑だが、その後 default が進んで計画の資源キーに交差した", () => {
+    // **非保持 × 稼働中。**伝える対象から外す。枠も渡せない。
+    expectIdle([awaitingLanding({ planInvalidated: present(true), session: session.running })]);
+  });
+
+  test("8o: 枠を保持した着地待ちが失効している", () => {
     expectAction(
-      [awaitingLanding({ planInvalidated: present(true), session: session.running })],
+      [
+        awaitingLanding({
+          ...heldIntegration(1),
+          planInvalidated: present(true),
+          session: session.running,
+        }),
+      ],
       "計画の失効を伝える",
     );
     expectFailureCount(
-      [awaitingLanding({ planInvalidated: present(true), session: session.running })],
+      [
+        awaitingLanding({
+          ...heldIntegration(1),
+          planInvalidated: present(true),
+          session: session.running,
+        }),
+      ],
       false,
     );
     expectFailureCount(
-      [awaitingLanding({ planInvalidated: present(true), session: session.idle })],
+      [
+        awaitingLanding({
+          ...heldIntegration(1),
+          planInvalidated: present(true),
+          session: session.idle,
+        }),
+      ],
       true,
     );
+  });
+
+  test("8p: 失効した着地待ちが待機で、枠が空いている", () => {
+    expectLease(
+      [awaitingLanding({ planInvalidated: present(true), session: session.idle })],
+      "integration",
+    );
+  });
+
+  test("8q: 着地待ちが複数同時に失効し、枠が空いている", () => {
+    const older = awaitingLanding({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
+      planInvalidated: present(true),
+      claimedAt: present(100),
+      session: session.idle,
+    });
+    const newer = awaitingLanding({
+      issue: 3,
+      claimRecord: present({ representative: 3, members: [3], landing: ["control"] }),
+      planInvalidated: present(true),
+      claimedAt: present(200),
+      session: session.idle,
+    });
+    const d = tick([older, newer]).outcome;
+    expect(d.kind === "action" ? d.params.action : d.kind).toBe("枠を渡す");
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
   });
 
   test("8b: 在庫のまま default が進み、ready の invalidationScope に交差した", () => {
@@ -1305,14 +1355,6 @@ describe("merge の直列化（integration）", () => {
     expectConflict([implementing({ integrationRecordCount: present(2) })], "渡しの記録が複数");
   });
 
-  const held = (
-    issue: number,
-    landing: readonly string[] = ["control"],
-  ): Pick<IssueObservation, "integrationRecordCount" | "integrationRecord"> => ({
-    integrationRecordCount: present(1),
-    integrationRecord: present({ issues: [issue], landing, pr: null }),
-  });
-
   const onSkills = (issue: number, claimedAt: number): IssueObservation =>
     awaitingLanding({
       issue,
@@ -1387,7 +1429,7 @@ describe("merge の直列化（integration）", () => {
   test("13m: 着地面が交わらない保持者と並んでも枠を渡す", () => {
     const holder = awaitingLanding({
       issue: 971,
-      ...held(971, ["control"]),
+      ...heldIntegration(971, ["control"]),
       session: session.running,
     });
     const other = onSkills(986, 50);
@@ -1402,7 +1444,7 @@ describe("merge の直列化（integration）", () => {
   test("13n: 着地面が交わる保持者が居るあいだは渡さない", () => {
     const holder = awaitingLanding({
       issue: 971,
-      ...held(971, ["control"]),
+      ...heldIntegration(971, ["control"]),
       session: session.running,
     });
     const other = awaitingLanding({
@@ -1448,7 +1490,7 @@ describe("merge の直列化（integration）", () => {
   test("13q: 有効な記録どうしの landing が交わる状態は Conflict である", () => {
     const a = awaitingLanding({
       issue: 1,
-      ...held(1, ["control", "skills"]),
+      ...heldIntegration(1, ["control", "skills"]),
       claimRecord: present({
         representative: 1,
         members: [1],
@@ -1472,7 +1514,7 @@ describe("merge の直列化（integration）", () => {
     });
     const b = awaitingLanding({
       issue: 2,
-      ...held(2, ["control"]),
+      ...heldIntegration(2, ["control"]),
       claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       claimedAt: present(50),
       session: session.idle,

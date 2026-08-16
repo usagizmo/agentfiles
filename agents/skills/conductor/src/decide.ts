@@ -857,7 +857,11 @@ const LADDER: readonly Rung[] = [
       value(g.leadObservation.planInvalidated) === true &&
       sessionAlive(g) &&
       g.lead.runtime !== "人待ち" &&
-      g.lead.runtime !== "休止",
+      g.lead.runtime !== "休止" &&
+      // **着地待ちの非保持者には伝えない。** 枠を渡す本文が再 plan を載せる。
+      // 保持者は着地だけ止める。実装中は書いている前提が古くなるので残す。
+      // 発火条件に受け手の有無を入れない。
+      (g.lead.progress !== "着地待ち" || holdsIntegration(g.leadObservation)),
   },
   {
     params: () => ({ action: "台帳を進める" }),
