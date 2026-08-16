@@ -63,6 +63,12 @@ const expectEmptyCycle = (observations: readonly IssueObservation[], counts: boo
   expect(o.kind === "action" ? o.countsEmptyCycle : o.kind).toBe(counts);
 };
 
+/** 失敗カウントの加算は `decide()` が出した `countsFailure` で引く。 */
+const expectFailureCount = (observations: readonly IssueObservation[], counts: boolean) => {
+  const o = tick(observations).outcome;
+  expect(o.kind === "action" ? o.countsFailure : o.kind).toBe(counts);
+};
+
 /** **Conflict は action の選択と直交する。**出ていることだけを見る。 */
 const expectConflict = (observations: readonly IssueObservation[], reason: ConflictReason) => {
   expect(tick(observations).conflicts.map((c) => c.reason)).toContain(reason);
@@ -519,12 +525,24 @@ describe("外から状態が動く", () => {
       [implementing({ bodyMatchesPlan: present(false), session: session.running })],
       "本文の変更を伝える",
     );
+    expectFailureCount(
+      [implementing({ bodyMatchesPlan: present(false), session: session.running })],
+      false,
+    );
   });
 
   test("8: PR は緑だが、その後 default が進んで計画の資源キーに交差した", () => {
     expectAction(
       [awaitingLanding({ planInvalidated: present(true), session: session.running })],
       "計画の失効を伝える",
+    );
+    expectFailureCount(
+      [awaitingLanding({ planInvalidated: present(true), session: session.running })],
+      false,
+    );
+    expectFailureCount(
+      [awaitingLanding({ planInvalidated: present(true), session: session.idle })],
+      true,
     );
   });
 
@@ -580,10 +598,83 @@ describe("外から状態が動く", () => {
   });
 
   test("9b: 行 9 を伝えたが、受け手が計画の記録を更新しないまま tick が進む", () => {
-    // 再送は冪等。同じ観測が続くあいだ同じ action を返す（失敗として数えるのは実行側）。
+    // 再送は冪等。runtime は 待機。加算は Decision の countsFailure。
+    expectAction(
+      [implementing({ bodyMatchesPlan: present(false), session: session.idle })],
+      "本文の変更を伝える",
+    );
+    expectFailureCount(
+      [implementing({ bodyMatchesPlan: present(false), session: session.idle })],
+      true,
+    );
+  });
+
+  test("9b2: 行 9 を伝えたが、受け手は 稼働中 のまま計画の記録を更新しない", () => {
     expectAction(
       [implementing({ bodyMatchesPlan: present(false), session: session.running })],
       "本文の変更を伝える",
+    );
+    expectFailureCount(
+      [implementing({ bodyMatchesPlan: present(false), session: session.running })],
+      false,
+    );
+  });
+
+  test("伝える 2 つの lastAction が上限でも、受け手が 稼働中 なら退避先へ落とさない", () => {
+    expectAction(
+      [
+        implementing({
+          planInvalidated: present(true),
+          session: session.running,
+          failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
+        }),
+      ],
+      "計画の失効を伝える",
+    );
+    expectAction(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.running,
+          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
+        }),
+      ],
+      "本文の変更を伝える",
+    );
+  });
+
+  test("伝える 2 つ以外の lastAction は、受け手が 稼働中 でも上限で退避先へ落とす", () => {
+    expectRevert(
+      [
+        implementing({
+          session: session.running,
+          failureRecord: present({ count: 3, lastAction: "解決を起こし直す" }),
+        }),
+      ],
+      "退避先",
+    );
+  });
+
+  test("伝える 2 つの lastAction が上限で、受け手が 待機 なら退避先へ落とす", () => {
+    expectRevert(
+      [
+        implementing({
+          planInvalidated: present(true),
+          session: session.idle,
+          failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
+        }),
+      ],
+      "退避先",
+    );
+    expectRevert(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.idle,
+          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
+        }),
+      ],
+      "退避先",
     );
   });
 
@@ -2561,6 +2652,7 @@ describe("計画枠の逼迫", () => {
     expect(d.outcome.kind === "action" ? d.outcome.params.action : d.outcome.kind).toBe(
       "計画枠の逼迫を伝える",
     );
+    expect(d.outcome.kind === "action" ? d.outcome.countsFailure : d.outcome.kind).toBe(true);
     expect(d.outcome.kind === "action" ? d.outcome.params : d.outcome.kind).not.toMatchObject({
       action: "差し戻す",
     });

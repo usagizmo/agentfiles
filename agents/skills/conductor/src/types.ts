@@ -161,6 +161,11 @@ export type Outcome =
       readonly evidence: Evidence;
       /** 回すことに成功し、指紋が一致していたら周回の `count` を +1 するか */
       readonly countsEmptyCycle: boolean;
+      /**
+       * この action が成功したあと、失敗の記録の `count` を +1 するか。
+       * 実行側はこれを読む。`runtime` を引き直さない。
+       */
+      readonly countsFailure: boolean;
       readonly records: TargetRecords;
     }
   | {
