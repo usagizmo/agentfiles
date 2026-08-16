@@ -14,16 +14,17 @@ import {
   pullRequests,
   remoteBranches,
   sessions as decodeSessions,
-  workspaces,
+  workspaceRows,
   worktrees as decodeWorktrees,
 } from "./decode.ts";
-import type { LocalBranchRow, Tri } from "./decode.ts";
+import type { LocalBranchRow, Tri, WorkspaceRow } from "./decode.ts";
 import type { IssueObservation, SessionObservation, SurfaceObservation } from "./observation.ts";
 import {
   claimRecord,
   cycleRecord,
   extractMarker,
   intentRecord,
+  integrationRecord,
   integrationRecordCount,
   reportFromSources,
   retryRecord,
@@ -107,10 +108,12 @@ export type ObservePort = {
     readonly prMerged: Observed<boolean>;
     /** open PR が無く、head に紐づく最新 PR が unmerged で closed */
     readonly latestPrClosedUnmerged: Observed<boolean>;
-    /** 入場を止める宣言。**置き場は project 差分が定める** */
+    /** 入場を止める宣言。**運び方は `issue-contract.md`。いつ置くかは project の領分** */
     readonly blocksEntry: boolean;
     /** claim の記録が書かれた時刻。**merge の枠の順序キー**（PR 作成の早さでは選ばない） */
     readonly claimedAt: Observed<number>;
+    /** 人待ちコメントの `createdAt`。**`updatedAt` で代用しない** */
+    readonly waitRecordCreatedAt: Observed<number>;
     /**
      * 紐づく制御面 PR（open または merged）の `report` / `halt` コメント。
      * **PR 一覧が読めなければ unobservable** —— `present([])` に倒すと提出証跡が「無い」になる。
@@ -129,12 +132,17 @@ export type CycleMarkInput = {
   readonly progress: Progress;
   /** 着地面ごとの worktree。**無いことも明示して渡す**（省略は usage error） */
   readonly surfaces: readonly { readonly name: string; readonly worktree: string | null }[];
-  /** 計画コメントの本文。無ければ null */
+  /** 計画コメント。bytes は `protocols.md` の「file の bytes」。無ければ null */
   readonly planComment: string | null;
-  /** 人待ちの記録の本文。**有効なときだけ渡す**（判定は呼び出し側） */
+  /** 人待ちの記録。bytes は `protocols.md` の「file の bytes」 */
   readonly waitRecord: string | null;
-  /** 計画の周のみ。対象集合の全件 */
+  /** 計画の周のみ。対象集合の全件。bytes は `protocols.md` の「file の bytes」 */
   readonly issueBodies: readonly { readonly issue: number; readonly body: string }[];
+  /**
+   * 同じ worktree に居る所有外セッション。**name + cwd だけ。状態は入れない。**
+   * 空は `--no-occupied`。
+   */
+  readonly occupied: readonly { readonly name: string; readonly cwd: string }[];
 };
 
 /** project の Status 名 → `ledger`。**対応表は project 必須**（無ければ fail-closed）。 */
@@ -152,7 +160,7 @@ const fromTri = (t: Tri | undefined): Observed<boolean> => {
  * `着地面が解決できない` を立てるので、座標表の欠けがそのまま人へ出る。
  *
  * `usesPr` だけは真偽で持つ型なので `true` を置く。**この値では何も決まらない** ——
- * `terminal` が `unobservable` である限り、着地の判定も live checkout の検査も先へ進まない。
+ * `terminal` が `unobservable` である限り、着地の判定は先へ進まない。live の検査は `merge` skill。
  */
 const unknownSurface = (name: string): SurfaceObservation => {
   // 面の名前は報告する側が添えるので、理由には入れない。
@@ -220,20 +228,46 @@ const classifySession = (rows: readonly string[], name: string): SessionObservat
 
 const OWNED_SESSION = /^(retired-)?(refine|resolve)-\d+$/;
 
-/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が working か。 */
-export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
-  rows.some((row) => {
+const cwdOnOwned = (cwd: string, ownedPaths: readonly string[]): boolean =>
+  ownedPaths.some(
+    (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
+  );
+
+type ForeignRow = { readonly name: string; readonly status: string; readonly cwd: string };
+
+/** 所有外で、課題の worktree に cwd が載っている行。**cwd が無い行は入れない。** */
+const foreignOnOwned = (rows: readonly string[], ownedPaths: readonly string[]): ForeignRow[] => {
+  const out: ForeignRow[] = [];
+  for (const row of rows) {
     const [name, status, ...cwdParts] = row.split(" ");
-    if (name === undefined || name === "conductor" || OWNED_SESSION.test(name)) return false;
-    if (status !== "working") return false;
+    if (name === undefined || name === "conductor" || OWNED_SESSION.test(name)) continue;
+    if (status === undefined) continue;
     const cwd = cwdParts.join(" ");
     // **cwd が無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
     // 帰属できない 1 本が全課題の write を止める。
-    if (cwd === "") return false;
-    return ownedPaths.some(
-      (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
-    );
-  });
+    if (cwd === "") continue;
+    if (!cwdOnOwned(cwd, ownedPaths)) continue;
+    out.push({ name, status, cwd });
+  }
+  return out;
+};
+
+/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が working か。 */
+export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
+  foreignOnOwned(rows, ownedPaths).some((row) => row.status === "working");
+
+/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が居るか。**状態は問わない。** */
+export const worktreeOccupied = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
+  foreignOnOwned(rows, ownedPaths).length > 0;
+
+/** 指紋用。**状態は落とす。**出現・消滅・cwd だけが動く。 */
+export const occupiedSessions = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+): readonly { readonly name: string; readonly cwd: string }[] =>
+  foreignOnOwned(rows, ownedPaths)
+    .map(({ name, cwd }) => ({ name, cwd }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.cwd.localeCompare(b.cwd));
 
 /** 全コメントを 1 本に連ねる。marker は本文をまたがないので、重複検知はそのまま効く。 */
 const joinComments = (comments: readonly string[]): string => comments.join("\n\n");
@@ -270,17 +304,7 @@ export const observeTick = async (
     ]),
   );
 
-  // `--- workspaces ---` に在るが worktree の path が無いものが `prunable`。
-  const worktreePaths = new Set(worktreeRows.map((w) => w.path));
-  const prunableWorkspaces = new Set(
-    workspaces(snapshot)
-      .map((row) => row.split(" "))
-      .filter((parts) => {
-        const path = parts.slice(1).join(" ");
-        return path !== "" && !worktreePaths.has(path);
-      })
-      .map((parts) => parts.slice(1).join(" ")),
-  );
+  const workspaceList = workspaceRows(snapshot);
 
   // **面ごとの worktree 一覧を読めたか。**`watch.sh` の `plane_unknown` は面ごと `-` で潰すので、
   // 実体が 0 件なのか読めなかったのかを行の有無では区別できない。**dirty を読めない行が
@@ -433,17 +457,20 @@ export const observeTick = async (
         sessionRows,
         worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
       ),
+      worktreeOccupied: worktreeOccupied(
+        sessionRows,
+        worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
+      ),
 
       waitRecord: waitRecord(commentText, pause),
+      waitRecordCreatedAt: extra.waitRecordCreatedAt,
       pauseRecordExists: pause,
       yieldRecord: parsedYield,
       intentRecord: intentRecord(commentText),
       integrationRecordCount: integrationRecordCount(commentText),
+      integrationRecord: integrationRecord(commentText),
 
-      // checkout は無いが、所有している workspace が残っている。**snapshot の 2 節の差**で引く。
-      prunableWorkspace: present(
-        [...prunableWorkspaces].some((path) => ownsWorktreePath(path, issue)),
-      ),
+      prunableWorkspace: present(isPrunableWorkspace(workspaceList, issue)),
 
       failureRecord: retryRecord(commentText),
       cycleRecord: cycleRecord(commentText),
@@ -485,15 +512,25 @@ export const observeTick = async (
           ? waitBlock.value
           : null
         : null;
-    const bodyOf = (n: number): string => {
-      const b = bodies.get(n);
-      return b?.kind === "present" ? b.value : "";
-    };
+    const ledger = o.ledger.value;
+    const issueBodies: { issue: number; body: string }[] = [];
+    if (ledger === "未計画") {
+      // **計画の周は対象集合の全件**。claim 前なので group は本文の宣言から引く。
+      // **読めない番号を空へ畳まない。**畳むと「本文が無い」周と同じ指紋になる。
+      for (const n of [o.issue, ...o.sameBranchAs]) {
+        const b = bodies.get(n);
+        if (b?.kind !== "present") {
+          marks.set(o.issue, unobservable(`Issue ${String(n)} の本文を読めない`));
+          return;
+        }
+        issueBodies.push({ issue: n, body: b.value });
+      }
+    }
     marks.set(
       o.issue,
       await port.cycleMark({
         issue: o.issue,
-        ledger: o.ledger.value,
+        ledger,
         progress: normalizeProgress(o),
         surfaces: o.surfaces.map((s) => ({
           name: s.name,
@@ -503,11 +540,11 @@ export const observeTick = async (
         })),
         planComment: plan.kind === "present" ? plan.value : null,
         waitRecord: validWait,
-        // **計画の周は対象集合の全件**。claim 前なので group は本文の宣言から引く。
-        issueBodies:
-          o.ledger.value === "未計画"
-            ? [o.issue, ...o.sameBranchAs].map((n) => ({ issue: n, body: bodyOf(n) }))
-            : [],
+        issueBodies,
+        occupied: occupiedSessions(
+          sessionRows,
+          worktreeRows.filter((w) => ownsWorktreePath(w.path, o.issue)).map((w) => w.path),
+        ),
       }),
     );
   });
@@ -566,6 +603,19 @@ const surfaceGitOf = async (
 const ownsWorktreePath = (path: string, issue: number): boolean => {
   const leaf = path.split("/").pop() ?? "";
   return new RegExp(`(^|[^0-9])${issue}-`).test(leaf);
+};
+
+/**
+ * 孤児 workspace の帰属。候補が 0 または 2 以上、あるいは linked でないなら触らない。
+ * 述語は `is_linked_worktree` が真かつ checkout_path が実在しないこと。
+ */
+const isPrunableWorkspace = (rows: readonly WorkspaceRow[], issue: number): boolean => {
+  const candidates = rows.filter(
+    (row) => row.path !== "" && row.path !== "-" && ownsWorktreePath(row.path, issue),
+  );
+  if (candidates.length !== 1) return false;
+  const row = candidates[0];
+  return row !== undefined && row.linked === true && row.exists === false;
 };
 
 /** `--- remote branches ---` に `{prefix}/{番号}-` の branch が在るか。 */

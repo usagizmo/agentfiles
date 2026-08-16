@@ -155,16 +155,24 @@ export const cycleRecord = (body: string): Observed<CycleRecord> => {
   return present({ count: parsed.value.count, mark: parsed.value.mark ?? null });
 };
 
-export type IntegrationRecord = { readonly issues: readonly number[]; readonly pr: number | null };
+export type IntegrationRecord = {
+  readonly issues: readonly number[];
+  readonly landing: readonly string[];
+  readonly pr: number | null;
+};
 
-const isIntegration = (v: unknown): v is { issues: number[] } =>
-  isRecord(v) && isNumberArray(v["issues"]);
+const isIntegration = (v: unknown): v is { issues: number[]; landing: string[] } =>
+  isRecord(v) && isNumberArray(v["issues"]) && isStringArray(v["landing"]);
 
 export const integrationRecord = (body: string): Observed<IntegrationRecord> => {
   const parsed = parseYaml(extractMarker(body, "integration"), isIntegration);
   if (parsed.kind !== "present") return parsed;
   const pr = (parsed.value as { pr?: unknown }).pr;
-  return present({ issues: parsed.value.issues, pr: typeof pr === "number" ? pr : null });
+  return present({
+    issues: parsed.value.issues,
+    landing: parsed.value.landing,
+    pr: typeof pr === "number" ? pr : null,
+  });
 };
 
 /** 渡しの記録の件数。**2 件を 0 に畳まない**（畳むと Conflict も保持も消える）。 */

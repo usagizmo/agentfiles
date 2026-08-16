@@ -68,7 +68,7 @@ import sys
 # **符号化を変えたらここを上げる。**指紋の先頭に入るので、新旧が静かに同じ値へ化けない。
 # 互換は持たない（旧 `mark` の変換も新旧併用もしない）。上げた周は全件が不一致になり、
 # `count` が 1 度だけ 0 に戻る（退避が最大 1 周遅れる安全側）。
-SCHEMA = "cycle-mark/2"
+SCHEMA = "cycle-mark/4"
 
 # **レコード名は固定の ASCII 定数だけ。**可変長のものはすべて中身側へ置いて長さ前置きにする。
 # path を名前に埋めると（`untracked:<path>`）、改行を含む path で framing が曖昧になり、
@@ -597,22 +597,49 @@ def encode_landing(enc, repo, checkout, worktree, branch, expected_host):
         for path in untracked:
             enc.record("untracked-path", path)
             emit_entity(enc, "untracked", worktree, path, allow_absent=False)
+    else:
+        enc.text("tracked-source", "absent")
+        enc.text("untracked-source", "absent")
+
+    emit_stash(enc, checkout)
+    if worktree:
         # **HEAD が動いていないことを最後に確かめる。**成分は別々の時点で撮るので、commit が
         # 途中に入ると「古い HEAD ＋ commit 後の clean な worktree」という実在しない状態が
         # 出る。それが前の周の指紋と一致すると、**commit した周が成果ゼロとして数えられる** ——
         # 混成が成果ありの側へ倒れるという一般則の唯一の例外なので、ここだけ閉じる。
         if git(worktree, "rev-parse", "HEAD").decode("utf-8").strip() != head_before:
             raise ObservationError("観測の最中に HEAD が動いた")
-    else:
-        enc.text("tracked-source", "absent")
-        enc.text("untracked-source", "absent")
+
+
+def emit_stash(enc, checkout):
+    """着地面の checkout から `refs/stash` のリストを符号化する。
+
+    **worktree の有無で分けない。**stash は repo 共通 dir にあり、同じ repo の全
+    worktree がリストを共有する。課題への帰属を subject から推論しない —— リスト
+    全体を入れる。別課題の stash で指紋が動くのは、退避が遅れる側。
+
+    **無いときは失敗にしない。**`refs/stash` が無いのは未使用の正常な状態。
+    `git stash create` は `refs/stash` を更新しないので指紋は動かない（既知の穴）。
+    """
+    if git(checkout, "rev-parse", "--verify", "--quiet", "refs/stash", allow_fail=True) is None:
+        enc.text("stash-source", "absent")
+        return
+    raw = git(checkout, "rev-list", "--walk-reflogs", "refs/stash")
+    # 集合の生バイト昇順。reflog の出現順と同一 oid の重複は指紋に出さない。
+    oids = sorted(set(line for line in raw.split(b"\n") if line))
+    if not oids:
+        raise ObservationError("refs/stash はあるが reflog が空")
+    enc.text("stash-source", "present")
+    for oid in oids:
+        enc.record("stash-oid", oid)
 
 
 def encode_resolve(enc, args):
     """解決の周。成果物の側だけから作る。
 
     **`runtime` とセッションの状態は入れない**（回した直後に必ず変わるので、入れると常に
-    成果ありになる）。**commit 数でも引かない**（amend / squash / rebase で減る）。
+    成果ありになる）。所有外セッションは name + cwd だけ入れる（出現・消滅・cwd が成果の
+    側の変化。状態は入れない）。**commit 数でも引かない**（amend / squash / rebase で減る）。
 
     **着地面ごとに撮る。**成果物が生まれる repo は Issue の repo とは限らず（`landing-surface.md`）、
     1 面だけを見ると、別の面で書き進んでいる周と何も書けずに止まっている周が同じ値になる ——
@@ -628,11 +655,12 @@ def encode_resolve(enc, args):
         )
     encode_optional_file(enc, "plan-comment", args.plan_comment)
     encode_optional_file(enc, "wait-record", args.wait_record)
+    encode_occupied(enc, args.occupied)
 
 
 def encode_plan(enc, args):
     """計画の周。"""
-    # `ledger` はこの周では常に `未計画` なので値としては冗長だが、成分の集合は現行の表が
+    # `ledger` はこの周では常に `未計画` なので値としては冗長だが、成分の集合はここが
     # SSOT なので落とさない。
     enc.text("ledger", args.ledger)
     for number, path in sorted(args.issue_body, key=lambda pair: pair[0]):
@@ -641,6 +669,20 @@ def encode_plan(enc, args):
         # 識別力は同じ。畳まないぶん、呼び出し側が digest を撮り損なう経路が消える。
         emit_file(enc, "issue-body", os.fsencode(path), "Issue 本文")
     encode_optional_file(enc, "wait-record", args.wait_record)
+
+
+def encode_occupied(enc, occupied):
+    """所有外セッション。**name + cwd だけ。状態は入れない。**
+
+    空（`--no-occupied`）と「居る」を別の値にする。省略は usage error。
+    """
+    if occupied is None:
+        enc.text("occupied-source", "absent")
+        return
+    enc.text("occupied-source", "present")
+    for name, cwd in occupied:
+        enc.text("occupied-name", name)
+        enc.text("occupied-cwd", cwd)
 
 
 def encode_optional_file(enc, name, path):
@@ -683,7 +725,8 @@ def build_parser():
         allow_abbrev=False,
         description="周回の記録の成果の指紋を作る（conductor の tick が呼ぶ）",
         epilog=(
-            "渡すのは conductor が既に正規化している値だけ。git の観測と符号化はこの実装が"
+            "渡すのは conductor が既に正規化している値だけ。file の bytes は"
+            " references/protocols.md の「file の bytes」。git の観測と符号化はこの実装が"
             "専任する —— 呼び出し側に成分の名前を並べさせると、名前を決める自由度が境界へ"
             "移るだけになる。"
         ),
@@ -732,20 +775,36 @@ def build_parser():
         metavar="repo",
         help="worktree を持たない着地面ごとに 1 つ（面の名前だけ）",
     )
-    parser.add_argument("--plan-comment", help="計画コメントの本文を入れた file")
+    parser.add_argument(
+        "--plan-comment",
+        help="計画コメントを入れた file。bytes は references/protocols.md の「file の bytes」",
+    )
     parser.add_argument("--no-plan-comment", action="store_true", help="計画コメントが無いことの明示")
     parser.add_argument(
         "--wait-record",
-        help="人待ちの記録のコメント本文を入れた file。**有効なときだけ渡す**（判定は呼び出し側）",
+        help="人待ちの記録を入れた file。**有効なときだけ渡す**（判定は呼び出し側）。bytes は references/protocols.md の「file の bytes」",
     )
     parser.add_argument("--no-wait-record", action="store_true", help="人待ちの記録が無い / 無効であることの明示")
+    parser.add_argument(
+        "--occupied",
+        action="append",
+        default=[],
+        type=landing_arg,
+        metavar="name:cwd",
+        help="解決の周。所有外セッションごとに 1 つ（name + cwd。状態は入れない）",
+    )
+    parser.add_argument(
+        "--no-occupied",
+        action="store_true",
+        help="所有外セッションが無いことの明示",
+    )
     parser.add_argument(
         "--issue-body",
         action="append",
         default=[],
         type=issue_body_arg,
         metavar="番号:file",
-        help="計画の周で必須。対象集合の全件を渡す（並べ替えは実装が行う）",
+        help="計画の周で必須。対象集合の全件を渡す（並べ替えは実装が行う）。bytes は references/protocols.md の「file の bytes」",
     )
     return parser
 
@@ -842,11 +901,19 @@ def parse_args(argv):
         if both:
             parser.error("worktree があるのに branch が無い面: {}".format(", ".join(both)))
         require_pair(parser, "plan-comment", args.plan_comment, args.no_plan_comment)
+        if args.occupied and args.no_occupied:
+            parser.error("--occupied と --no-occupied は排他")
+        if not args.occupied and not args.no_occupied:
+            parser.error("--occupied か --no-occupied のどちらかが要る")
+        for name, cwd in args.occupied:
+            require_value(parser, "occupied", name)
+            require_value(parser, "occupied", cwd)
 
         # 並べ替えを実装が持つ（呼び出し側の順序で指紋が動かない）。
         args.landing = sorted(args.landing)
         args.worktree = dict(args.worktree)
         args.branch = dict(args.branch)
+        args.occupied = None if args.no_occupied else sorted(args.occupied)
     else:
         forbid(
             parser,
@@ -860,6 +927,8 @@ def parse_args(argv):
             no_worktree=args.no_worktree,
             plan_comment=args.plan_comment,
             no_plan_comment=args.no_plan_comment,
+            occupied=args.occupied,
+            no_occupied=args.no_occupied,
         )
         if not args.issue_body:
             parser.error("--issue-body が 1 つ以上要る")

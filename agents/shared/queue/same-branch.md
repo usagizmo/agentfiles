@@ -104,7 +104,7 @@ group は 1 セッション = 1 計画で進み、**着地面ごとに 1 branch 
 
 **対象集合は claim の記録が定める**。Status や assignee から推し量ら**ない**。
 
-branch を作った直後に、代表の Issue へ固定 marker で記録する。
+branch を作った直後に、代表の Issue へ固定 marker で記録する。**書き手はキュー管理**。
 
 ````markdown
 <!-- claim -->

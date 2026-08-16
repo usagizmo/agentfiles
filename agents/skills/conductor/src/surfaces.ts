@@ -97,7 +97,25 @@ export const deriveSurface = (
     const reason = ahead === undefined ? "面の commit を読めない" : "提出の証跡を読めない";
     return { ...base, terminal: unobservable(reason), landable: unobservable(reason) };
   }
-  // **`着地待ち` と `着地済み` が一致する型があってよい。**分けるために merge を持ち込まない。
-  const landed = present(ahead && reported.value);
-  return { ...base, terminal: landed, landable: landed };
+  if (!reported.value) {
+    return { ...base, terminal: present(false), landable: present(false) };
+  }
+  if (ahead) {
+    return { ...base, terminal: present(false), landable: present(true) };
+  }
+  // **T が無いときは統合済みと判定しない。**branch 削除は「読めなかった」ではないが、
+  // 包含の証明にもならない。片付け後の `着地済み` は透過 + 提出証跡が持つ。
+  if (f.head.kind === "absent") {
+    return { ...base, terminal: present(false), landable: present(false) };
+  }
+  if (report.kind !== "present") {
+    return { ...base, terminal: present(false), landable: present(false) };
+  }
+  // **透過と統合済みを `ahead === false` だけで同一視しない。**
+  // 透過は `heads = bases`。統合済みは提出時に差分があり、いまは包含されている。
+  const recordedHead = report.value.heads[f.name];
+  const recordedBase = report.value.bases[f.name];
+  const merged =
+    recordedHead !== undefined && recordedBase !== undefined && recordedHead !== recordedBase;
+  return { ...base, terminal: present(merged), landable: present(merged) };
 };

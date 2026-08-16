@@ -121,6 +121,8 @@ export type IssueObservation = {
   readonly refineSession: SessionObservation;
 
   readonly waitRecord: WaitRecord;
+  /** 人待ちコメントの `createdAt`。促す相手の順序キー。**`updatedAt` で代用しない** */
+  readonly waitRecordCreatedAt: Observed<number>;
   /** 休止の記録。**「記録あり」だけでは `休止` にならない**（非稼働も要る） */
   readonly pauseRecordExists: boolean;
   /** 休止の記録の本体。交差の記述（`to` / `keys`）を突き合わせるときだけ読む */
@@ -128,8 +130,14 @@ export type IssueObservation = {
   readonly intentRecord: IntentRecord;
   /** merge の枠の渡しの記録。2 件以上は `Conflict` */
   readonly integrationRecordCount: Observed<number>;
+  /** 渡しの記録の本体。`landing` の占有はここから引く */
+  readonly integrationRecord: Observed<{
+    readonly issues: readonly number[];
+    readonly landing: readonly string[];
+    readonly pr: number | null;
+  }>;
 
-  /** checkout は無いが所有している workspace が残っている */
+  /** linked worktree で checkout_path が実在しない所有残骸 */
   readonly prunableWorkspace: Observed<boolean>;
 
   // -------------------------------------------------------------------------
@@ -154,7 +162,7 @@ export type IssueObservation = {
    * 読めなければ `unknown` = 全交差（`incompatible` として扱う）。
    */
   readonly resourceKeys: Observed<readonly string[]>;
-  /** 入場を止める宣言を持っているか（宣言の形は project の領分） */
+  /** 入場を止める宣言を持っているか（運び方は `issue-contract.md`。いつ置くかは project の領分） */
   readonly blocksEntry: boolean;
 
   /** `Depends on #N` */
@@ -166,9 +174,11 @@ export type IssueObservation = {
   readonly boardOrder: number;
   /** claim の順序キー。**PR 作成の早さで選ばない**（PR を持たない課題が選外へ落ちる） */
   readonly claimedAt: Observed<number>;
-  /**
-   * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が `working` か。
-   * **親が `done` でも consult の子が走っているあいだは write を渡さない。**
-   */
+  /** 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が `working` か */
   readonly worktreeBusy: boolean;
+  /**
+   * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が居るか。
+   * **状態は問わない。**`working` だけの `worktreeBusy` とは別。
+   */
+  readonly worktreeOccupied: boolean;
 };

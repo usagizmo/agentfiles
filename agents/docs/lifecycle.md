@@ -15,7 +15,7 @@
 
 観測から一意に決まる。**worktree とセッションの「有無」は `progress` に入らない**（それぞれ `capacity` と `runtime`）ので、着地待ちの実体が消えても状態は退行しない。見るのは worktree の中身（dirty かどうか）だけ。
 
-**成果物は着地面から引く**（課題ごとに複数ありうる。既定は Issue の repo 1 面）。図は 1 面の課題を描いている —— 面が複数なら、各段は「全着地面が」と読む（`conductor/references/landing-surface.md`）。
+**成果物は着地面から引く**（課題ごとに複数ありうる。既定は Issue の repo 1 面）。図は 1 面の課題を描いている —— 終端の段は「全着地面が」と読む（`conductor/references/landing-surface.md`）。
 
 ```mermaid
 stateDiagram-v2
@@ -59,7 +59,7 @@ stateDiagram-v2
 
 **計画セッション（`refine`）は `progress` に現れない**。成果物は進んでいないので `未着手` のままで、セッションの有無は `runtime` 側の話。
 
-**複数の行に当たるのは正常**。`Conflict`（判断がつかない状態。該当条件は `conductor/SKILL.md`）はどの状態からも起こりうる。応答へ出す。当たった課題は選出対象外で、他は回る。`取り下げ` も同じくどの状態からも起こりうるが、**Issue が closed であることだけでは成立しない** —— 終端した面と終端していない面が混在していたら `取り下げ` にしない（片付けが未着地の成果ごと消すため）。図は代表的な数本だけを描いている。
+**複数の行に当たるのは正常**。`Conflict`（判断がつかない状態。該当条件は `conductor/SKILL.md`）はどの状態からも起こりうる。応答へ出す。当たった課題は選出対象外で、他は回る。`取り下げ` も同じくどの状態からも起こりうるが、**Issue が closed であることだけでは成立しない**。除外の述語は `conductor/src/normalize.ts` の `terminalMixed`（`normalizeProgress` が読む）。図は代表的な数本だけを描いている。
 
 **PR を持たない面だけの課題は、片付けたあと `取り下げ` に読まれる**（branch を消すと包含も提出の証跡も引けなくなる）。**これは正常で、成功したことは `ledger` の `完了` が持つ** —— 片付けは実体を消す前にそれを書く。`Depends on` の解消もそちらを見る（`conductor/SKILL.md` の「順序」）。
 
@@ -168,7 +168,7 @@ sequenceDiagram
     Note over C: action の優先では片付けが台帳前進より上。<br/>手順では完了を先に書いてから実体を消す。
 ```
 
-**片付けの前に必ず成果を確認する**。worktree とセッションを消すとセッションまとめが一緒に消え、git にも Issue にも残らない。PR に載っていなければ pane から回収し、どこにも無ければ片付けずに報告する。
+**片付けの前に必ず成果を確認する**。worktree とセッションを消すとセッションまとめが一緒に消え、git にも Issue にも残らない。PR に載っていなければ pane から回収し、どこにも無ければ片付けずに報告する。**例外は** PR が `merged` で claim の remote branch が無いとき。手順は `conductor/references/protocols.md`。
 
 ## 計画済みになるまで
 
@@ -183,38 +183,43 @@ sequenceDiagram
     C->>C: ledger が未計画 かつ progress が未着手
     Note over C: 供給と計画枠を見る。<br/>揃っていない group は<br/>完了すれば selectable になるときだけ供給に入る
     C->>F: /refine #N
-    F->>GH: Issue と関連コードを読む
-    F->>F: consult で方針を確定
-    F-->>U: 課題の譜面を引き当てて計画を書く（無ければ作る）
-    Note over F,U: 聞くことが無くても必ず作る。<br/>Issue / PR にパスは書かない
-
-    alt 製品判断が要る項目が埋まらない
-        F->>GH: 埋まった項目を先に本文へ書ききる
-        Note over F,GH: ここで落ちても埋めた判断が消えない。<br/>それでも Status は動かさない
-        F->>GH: 人待ちの記録（waiting）
-        F-->>U: 譜面に判断待ちを書き、記録を指す短い問いだけ出す
-        F-->>C: 待機
-        U->>F: 答える
-        F->>GH: 記録を cleared に
-    else 記録が waiting のまま起こし直された
+    alt 同じ質問の記録が waiting のまま起こし直された（人の入力が無い）
         F->>GH: Status を退避先へ、記録を cleared に
         Note over F,GH: 待たずに終えて計画枠を空ける。<br/>人が未計画へ戻すまで拾われない
-    end
+    else 通常
+        F->>GH: Issue と関連コードを読む
+        F->>F: 同居候補を探す
+        F->>F: consult で方針を確定
+        F-->>U: 課題の譜面を引き当てて計画を書く（無ければ作る）
+        Note over F,U: 聞くことが無くても必ず作る。<br/>Issue / PR にパスは書かない
 
-    F->>GH: 契約の 6 項目を 1 回の本文更新で書く
-    F->>GH: 同じブランチで直るものに Same branch as を相互に書く
-    F->>GH: 更新後の本文を取り直して digest を計算
-    F->>GH: 在庫の鮮度（ready）を upsert
-    Note over F,GH: 本文更新 → 本文再取得 → digest → ready → Status。<br/>順序を崩すと自分の更新で即座に不一致になる
-    F->>GH: 相互記載で本文を触った相手が計画済みなら、相手の ready も upsert
-    F->>GH: Status を計画済みへ
-    Note over F,GH: これが着手承認そのもの。<br/>conductor は自分で積めない
-    C->>C: 観測 → 計画セッションが終わっている
+        alt 製品判断が要る項目が埋まらない
+            F->>GH: 埋まった項目を先に本文へ書ききる
+            Note over F,GH: ここで落ちても埋めた判断が消えない。<br/>それでも Status は動かさない
+            F->>GH: 人待ちの記録（waiting）
+            F-->>U: 譜面に判断待ちを書き、記録を指す短い問いだけ出す
+            F-->>C: 待機
+            U->>F: 答える
+            F->>GH: 記録を cleared に
+        end
 
-    alt done（未 seen のまま終わった）
-        C->>C: pane を閉じる（計画枠を空ける）
-    else idle（人が入力を書いている最中かもしれない）
-        C->>C: retired-refine-#N へ rename する
-        Note over C: 枠は返るが、その Issue の再計画は塞いだまま。<br/>解けるのは人が pane を閉じたときだけ
+        F->>GH: 契約項目と Same branch as を 1 回の本文更新で書く
+        F->>GH: 更新後の本文を取り直して digest を計算
+        F->>GH: 在庫の鮮度（ready）を upsert
+        Note over F,GH: 本文更新 → 本文再取得 → digest → ready → Status。<br/>順序を崩すと自分の更新で即座に不一致になる
+        F->>GH: 相互記載で本文を触った相手が計画済みなら、相手の ready も upsert
+        F->>GH: Status を計画済みへ
+        Note over F,GH: これが着手承認そのもの。<br/>conductor は自分で積めない
+        opt 宣言を書いた相手が未計画で計画セッションが無い
+            F->>F: 同じセッションでその相手を手順の先頭から流す
+        end
+        C->>C: 観測 → 計画セッションが終わっている
+
+        alt done（未 seen のまま終わった）
+            C->>C: pane を閉じる（計画枠を空ける）
+        else idle（人が入力を書いている最中かもしれない）
+            C->>C: retired-refine-#N へ rename する
+            Note over C: 枠は返るが、その Issue の再計画は塞いだまま。<br/>解けるのは人が pane を閉じたときだけ
+        end
     end
 ```

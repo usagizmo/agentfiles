@@ -5,8 +5,9 @@
 
 import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
-import type { ObservePort, StatusMap } from "../src/observe.ts";
-import { observeTick, worktreeBusy } from "../src/observe.ts";
+import type { CycleMarkInput, ObservePort, StatusMap } from "../src/observe.ts";
+import { observeTick, worktreeBusy, worktreeOccupied } from "../src/observe.ts";
+import { extractMarker } from "../src/records.ts";
 import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
 import type { Ledger, Observed } from "../src/types.ts";
@@ -35,8 +36,8 @@ o/other 0 bbb /tmp/wt2/feat-12-x
 --- sessions ---
 resolve-12 working
 --- workspaces ---
-ws-12 /tmp/wt/feat-12-x
-ws-old /tmp/wt/feat-34-y
+ws-12 1 1 /tmp/wt/feat-12-x
+ws-old 1 0 /tmp/wt/feat-34-y
 --- project status (board order) ---
 1 12 進行中
 2 34 計画済み
@@ -111,6 +112,7 @@ const facts = (
   latestPrClosedUnmerged: present(false),
   blocksEntry: false,
   claimedAt: present(100),
+  waitRecordCreatedAt: absent(),
   linkedPrReportComments: present([]),
   ...over,
 });
@@ -161,6 +163,17 @@ describe("snapshot から導くもの", () => {
     expect(twelve.session).toEqual({ kind: "running" });
     expect(twelve.claimBranchExists).toEqual(present(true));
     expect(find(rows, 34).claimBranchExists).toEqual(present(false));
+  });
+
+  test("人待ちコメントの createdAt を観測する", async () => {
+    const rows = await observe(
+      port({
+        issueFacts: async () => facts({ waitRecordCreatedAt: present(1_700_000_000_000) }),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).waitRecordCreatedAt).toEqual(present(1_700_000_000_000));
   });
 
   test("渡しの記録が 2 つあるコメントを 0 件に畳まない", async () => {
@@ -231,6 +244,52 @@ keys: [skills]
     expect(worktreeBusy(["conductor working /tmp/wt/feat-12-x"], owned)).toBe(false);
   });
 
+  test("所有外が idle でも worktreeOccupied。worktreeBusy は working のまま", async () => {
+    const snap = SNAP.replace(
+      "resolve-12 working",
+      "resolve-12 done\ntheme-polish-12 idle /tmp/wt/feat-12-x",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).worktreeOccupied).toBe(true);
+    expect(find(rows, 12).worktreeBusy).toBe(false);
+    expect(find(rows, 34).worktreeOccupied).toBe(false);
+  });
+
+  test("指紋へ渡す所有外は name + cwd だけで、状態を落とす", async () => {
+    const seen: CycleMarkInput[] = [];
+    const snap = SNAP.replace(
+      "resolve-12 working",
+      "resolve-12 done\ntheme-polish-12 idle /tmp/wt/feat-12-x",
+    );
+    await observe(
+      port({
+        snapshot: async () => snap,
+        cycleMark: async (input) => {
+          seen.push(input);
+          return present("mark-1");
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen.find((s) => s.issue === 12)?.occupied).toEqual([
+      { name: "theme-polish-12", cwd: "/tmp/wt/feat-12-x" },
+    ]);
+  });
+
+  test("worktreeOccupied: 状態を問わず、所有セッションは除外する", () => {
+    const owned = ["/tmp/wt/feat-12-x"];
+    expect(worktreeOccupied(["theme-polish-12 idle /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 blocked /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 done /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 working /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["theme-polish-12 idle /tmp/other"], owned)).toBe(false);
+    expect(worktreeOccupied(["theme-polish-12 idle"], owned)).toBe(false);
+    expect(worktreeOccupied(["resolve-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeOccupied(["retired-resolve-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeOccupied(["conductor idle /tmp/wt/feat-12-x"], owned)).toBe(false);
+  });
+
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {
     // **代用すると計画中は必ず `none` になり**、走っているものを畳まない保護が一度も効かない。
     const planning = SNAP.replace("resolve-12 working", "refine-12 working");
@@ -242,6 +301,86 @@ keys: [skills]
   test("対応表に無い Status を既定へ倒さない", async () => {
     const rows = await observe(port(), new Map<string, Ledger>([["進行中", "進行中"]]), SURFACES);
     expect(find(rows, 34).ledger.kind).toBe("invalid");
+  });
+
+  test("指紋へ渡す計画コメントと人待ちは extractMarker の戻り値で、コメント全体ではない", async () => {
+    const planYaml = "baseSha: abc\nsize: 中規模\n";
+    const waitYaml = "state: waiting\nissues: [12]\nphase: 実装\nreason: 確認\n";
+    const planComment = `前文\n<!-- plan -->\n\n\`\`\`yaml\n${planYaml}\`\`\`\n\n<!-- /plan -->\n後文`;
+    const waitComment = `<!-- wait -->\n\n\`\`\`yaml\n${waitYaml}\`\`\`\n\n<!-- /wait -->\n`;
+    const seen: CycleMarkInput[] = [];
+    await observe(
+      port({
+        issueComments: async () =>
+          new Map([[12, present([claimComment, planComment, waitComment])]]),
+        cycleMark: async (input) => {
+          seen.push(input);
+          return present("mark-1");
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    const resolve = seen.find((s) => s.issue === 12);
+    const plan = extractMarker(planComment, "plan");
+    const wait = extractMarker(waitComment, "wait");
+    expect(plan.kind).toBe("present");
+    expect(wait.kind).toBe("present");
+    if (plan.kind !== "present" || wait.kind !== "present") return;
+    expect(resolve?.planComment).toBe(plan.value);
+    expect(resolve?.waitRecord).toBe(wait.value);
+    expect(resolve?.planComment).not.toContain("<!-- plan -->");
+    expect(resolve?.waitRecord).not.toContain("<!-- wait -->");
+  });
+
+  test("計画の周で本文を読めない番号を空へ畳まない", async () => {
+    const seen: number[] = [];
+    const rows = await observe(
+      port({
+        issueBodies: async () =>
+          new Map([
+            [12, present("本文")],
+            [34, unobservable("読めない")],
+          ]),
+        cycleMark: async (input) => {
+          seen.push(input.issue);
+          return present("mark-1");
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "進行中"],
+        ["計画済み", "未計画"],
+      ]),
+      SURFACES,
+    );
+    expect(seen).not.toContain(34);
+    expect(find(rows, 34).currentMark.kind).toBe("unobservable");
+  });
+
+  test("計画の周の Issue 本文は API の body そのもの", async () => {
+    const body = "Lands in o/other\n\n本文が改行で終わる\n";
+    const seen: CycleMarkInput[] = [];
+    await observe(
+      port({
+        issueBodies: async () =>
+          new Map([
+            [12, present("本文")],
+            [34, present(body)],
+          ]),
+        cycleMark: async (input) => {
+          seen.push(input);
+          return present("mark-1");
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "進行中"],
+        ["計画済み", "未計画"],
+      ]),
+      SURFACES,
+    );
+    const plan = seen.find((s) => s.issue === 34);
+    expect(plan?.ledger).toBe("未計画");
+    expect(plan?.issueBodies).toEqual([{ issue: 34, body }]);
   });
 
   test("指紋には ledger と progress と面ごとの worktree を渡す", async () => {
@@ -462,10 +601,31 @@ keys: [skills]
     expect(find(rows, 12).prunableWorkspace).toEqual(present(false));
   });
 
+  test("linked worktree でなく path が worktree 一覧に無くても prunable にしない", async () => {
+    const snap = SNAP.replace("ws-old 1 0 /tmp/wt/feat-34-y", "ws-old 0 1 /tmp/wt/feat-34-y");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 34).prunableWorkspace).toEqual(present(false));
+  });
+
+  test("帰属候補が 2 件ならどちらも触らず prunable にしない", async () => {
+    const snap = SNAP.replace(
+      "ws-old 1 0 /tmp/wt/feat-34-y",
+      "ws-a 1 0 /tmp/wt/feat-34-y\nws-b 1 0 /tmp/other/feat-34-z",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 34).prunableWorkspace).toEqual(present(false));
+  });
+
+  test("linked かつ path が実在しないなら、git の worktree 一覧に残っていても prunable", async () => {
+    const snap = SNAP.replace("ws-12 1 1 /tmp/wt/feat-12-x", "ws-12 1 0 /tmp/wt/feat-12-x");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).prunableWorkspace).toEqual(present(true));
+  });
+
   test("worktree を持たない課題の面は dirty を false で確定する", async () => {
     // **checkout が無い面には未コミットの変更が存在しえない**ので、`present(false)`。
     // `absent` にすると `value(dirty) !== false` が真になり、**claim もされていない課題が
-    // 全部「成果物あり」に読まれる**（実測で 289 件中 117 件が `実装中`、172 件が `取り下げ`）。
+    // 全部「成果物あり」に読まれる**。
     const rows = await observe(port(), STATUS, SURFACES);
     expect(find(rows, 34).surfaces[0]?.dirty).toEqual(present(false));
     expect(find(rows, 34).surfaces[0]?.hasCheckout).toEqual(present(false));

@@ -195,12 +195,19 @@ describe("提出と在庫と枠", () => {
   });
 
   test("integration は pr が無くても読める（PR を使う面が無い課題）", () => {
-    const r = integrationRecord(wrap("integration", "issues: [1]"));
-    expect(r).toEqual({ kind: "present", value: { issues: [1], pr: null } });
+    const r = integrationRecord(wrap("integration", "issues: [1]\nlanding:\n  - control"));
+    expect(r).toEqual({
+      kind: "present",
+      value: { issues: [1], landing: ["control"], pr: null },
+    });
+  });
+
+  test("integration の landing が無ければ読めない", () => {
+    expect(integrationRecord(wrap("integration", "issues: [1]")).kind).toBe("invalid");
   });
 
   test("integration の件数は 2 つを 0 に畳まない", () => {
-    const one = wrap("integration", "issues: [1]");
+    const one = wrap("integration", "issues: [1]\nlanding:\n  - control");
     expect(integrationRecordCount("")).toEqual(present(0));
     expect(integrationRecordCount(one)).toEqual(present(1));
     expect(integrationRecordCount(one + one)).toEqual(present(2));

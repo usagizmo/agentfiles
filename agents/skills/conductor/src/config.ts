@@ -3,6 +3,7 @@
 // **既定値を置くのは、推測が外れても待ちが伸びるだけの項目まで。**
 // 間違ったものを掴む項目（Status の対応・着地面の座標表）には置かず、欠けたら止まる。
 
+import { readFileSync } from "node:fs";
 import type { TickConfig } from "./decide.ts";
 import { DEFAULT_CONFIG } from "./decide.ts";
 import { LEDGER_VALUES } from "./types.ts";
@@ -35,8 +36,8 @@ export type ProjectConfig = {
   readonly surfaces: readonly SurfaceConfig[];
   /**
    * `watch.sh` へ注入するセッション / workspace の一覧コマンド。
-   * **どちらも必須**（`watch.sh` が要求する）。既定を持たせると multiplexer を
-   * 共通側が知ることになり、adapter の境界が崩れる。
+   * **省略できる。**省略時は `references/harness.md` のコマンド。
+   * project へ手で写さない（写すと SSOT が 2 つになり、観測が黙ってずれる）。
    */
   readonly sessionsCmd: string;
   readonly workspacesCmd: string;
@@ -72,6 +73,33 @@ export const resolveSurfaces = (
 
 export class ConfigError extends Error {}
 
+const HARNESS_MD = `${import.meta.dir}/../references/harness.md`;
+
+/** `references/harness.md` の `--sessions-cmd` / `--workspaces-cmd` code block を切る。 */
+export const extractHarnessCmd = (md: string, heading: string): string => {
+  const start = md.indexOf(`# --${heading}\n`);
+  if (start < 0) throw new ConfigError(`harness.md に # --${heading} が無い`);
+  const after = md.slice(start + `# --${heading}\n`.length);
+  const end = after.search(/\n# --|\n```/);
+  if (end < 0) throw new ConfigError(`harness.md の # --${heading} が閉じていない`);
+  const body = after.slice(0, end).trimEnd();
+  if (body === "") throw new ConfigError(`harness.md の # --${heading} が空`);
+  return body;
+};
+
+const readHarnessCmds = (): { readonly sessionsCmd: string; readonly workspacesCmd: string } => {
+  let md: string;
+  try {
+    md = readFileSync(HARNESS_MD, "utf8");
+  } catch {
+    throw new ConfigError(`harness.md を読めない: ${HARNESS_MD}`);
+  }
+  return {
+    sessionsCmd: extractHarnessCmd(md, "sessions-cmd"),
+    workspacesCmd: extractHarnessCmd(md, "workspaces-cmd"),
+  };
+};
+
 const isLedger = (v: unknown): v is Ledger => LEDGER_VALUES.includes(v as Ledger);
 
 /**
@@ -85,6 +113,13 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
   const required = (key: string): unknown => {
     const v = o[key];
     if (v === undefined) throw new ConfigError(`設定に ${key} が無い`);
+    return v;
+  };
+
+  const optionalCmd = (key: string, fallback: () => string): string => {
+    const v = o[key];
+    if (v === undefined) return fallback();
+    if (typeof v !== "string" || v === "") throw new ConfigError(`設定の ${key} が空`);
     return v;
   };
 
@@ -127,6 +162,11 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
       integrationRef: e["integrationRef"] as string,
     };
   });
+  const seenNames = new Set<string>();
+  for (const s of surfaces) {
+    if (seenNames.has(s.name)) throw new ConfigError(`surfaces の name が重複: ${s.name}`);
+    seenNames.add(s.name);
+  }
 
   const executorsRaw = required("executors");
   if (typeof executorsRaw !== "object" || executorsRaw === null)
@@ -144,8 +184,8 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     statusField: String(required("statusField")),
     statusMap,
     surfaces,
-    sessionsCmd: String(required("sessionsCmd")),
-    workspacesCmd: String(required("workspacesCmd")),
+    sessionsCmd: optionalCmd("sessionsCmd", () => readHarnessCmds().sessionsCmd),
+    workspacesCmd: optionalCmd("workspacesCmd", () => readHarnessCmds().workspacesCmd),
     executors: { refine: executor("refine"), resolve: executor("resolve") },
     // 硬い上限は既定を持つ（推測が外れても待ちが伸びるだけ）。
     tick: (() => {

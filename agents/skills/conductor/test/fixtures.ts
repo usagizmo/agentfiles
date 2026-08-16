@@ -87,10 +87,12 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   refineSession: { kind: "none" },
 
   waitRecord: wait.absent,
+  waitRecordCreatedAt: absent(),
   pauseRecordExists: false,
   yieldRecord: absent(),
   intentRecord: intent.absent,
   integrationRecordCount: present(0),
+  integrationRecord: absent(),
 
   prunableWorkspace: present(false),
 
@@ -113,5 +115,6 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   boardOrder: 0,
   claimedAt: absent(),
   worktreeBusy: false,
+  worktreeOccupied: false,
   ...over,
 });

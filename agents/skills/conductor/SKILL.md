@@ -18,6 +18,7 @@ description: >-
 | いつ                                 | どれ                                                                           |
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | action を実行するとき                | `references/protocols.md`（手順）・`references/harness.md`（multiplexer 操作） |
+| 規約の穴を起票するとき               | `references/intake.md`                                                         |
 | 人が tick の外から何か渡してきたとき | `references/intake.md`                                                         |
 | tick の意味論を書き換えるとき        | 下記                                                                           |
 
@@ -33,7 +34,13 @@ description: >-
 | 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
 | 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                           |
 
-自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` は `cli.ts` が出す。
+自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` と `stalls[]` は `cli.ts` が出す。
+
+実行器へ渡す prompt 本文は、選んだ action のすることから一意に決まる。することの所在は `references/protocols.md`。**表に無い伝達をその場で組み立てない**。
+
+掛かるのは **本文を conductor が作る伝達**だけ。対象セッションは `refine-*` / `resolve-*`。人の答えの転記、振り先への材料渡し、交代の引き継ぎは対象外。
+
+他の工程が所有する記録について、書くか / marker / state / 中身を指定しない。事実を渡し、受け手が自分の述語で再評価することは残る。書き手は各記録の既存記述から引く。所有の一覧は作らない。
 
 project 差分が無くても動く。**例外は Status の対応**で、これだけは project 必須（無ければ fail-closed で止まる）。推測が外れても待ちが伸びるだけの項目には既定値を置き、間違ったものを掴む項目には置か**ない**。
 
@@ -47,7 +54,7 @@ project 差分が無くても動く。**例外は Status の対応**で、これ
 
 人から渡されたものの処理は action では**ない**（転記・指示された Issue の作成・宣言行の記入・指示されたボードの並べ替え・振る）。`1 tick 1 action` にも上限にも数えない。転記のやり方は `references/harness.md`。
 
-自分の観測から出たものの起票は、action として数える（発火条件は「action の優先順」の「規約の穴を起票する」）。
+自分の観測から出たものの起票は、action として数える（発火は `src/decide.ts` の LADDER）。
 
 Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs #N`）。作ってよいのは人が指示したときと、自分の規約の穴だけ。書き方と歯止めは `references/intake.md`。
 
@@ -63,28 +70,28 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 読む先はここからのみ。
 
-| 観測材料                 | SSOT                                                                                                                                                                    |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 自動実行の承認・課題仕様 | Issue 本文 + Status                                                                                                                                                     |
-| 課題どうしの関係         | Issue 本文の先頭区画・行頭の宣言行（`Depends on` / `Same branch as`。定義は `references/same-branch.md`。本文全体の文字列一致では辿らない）                             |
-| 着地面                   | claim 後は claim の記録の `landing`（**欠落は `Conflict`**）。claim 前は Issue 本文の `Lands in`（宣言が無ければ制御面 1 面）。意味論は `references/landing-surface.md` |
-| 二重着手防止             | 制御面の remote branch                                                                                                                                                  |
-| 計画                     | 固定 marker 付きの Issue コメント（`resolve` が書く。本文との突き合わせ方は `references/body-digest.md`）                                                               |
-| 在庫の鮮度               | 固定 marker 付きの Issue コメント（`references/ready-record.md`）                                                                                                       |
-| claim                    | 固定 marker 付きの Issue コメント（`references/same-branch.md`）                                                                                                        |
-| 人待ち                   | 固定 marker 付きの Issue コメント（`references/wait-record.md`）                                                                                                        |
-| 休止                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                          |
-| 成果ゼロの周             | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                          |
-| 渡した merge の枠        | 固定 marker 付きの Issue コメント（`references/integration-record.md`）                                                                                                 |
-| 意図の確認               | 固定 marker 付きの Issue コメント（`references/intent-record.md`）                                                                                                      |
-| 入場を止める宣言         | 固定 marker `entry-block` のコメント（形は `references/issue-contract.md`）                                                                                             |
-| 失敗                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                          |
-| 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                       |
-| 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                            |
-| 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                    |
-| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。判定に使うのは live へ merge する面**だけ**（`references/landing-surface.md`）                              |
-| 容量                     | 着地面ごとの worktree。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）                                                   |
-| 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                            |
+| 観測材料                 | SSOT                                                                                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 自動実行の承認・課題仕様 | Issue 本文 + Status                                                                                                                                                                                         |
+| 課題どうしの関係         | Issue 本文の先頭区画・行頭の宣言行（`Depends on` / `Same branch as`。定義は `references/same-branch.md`。本文全体の文字列一致では辿らない）                                                                 |
+| 着地面                   | claim 後は claim の記録の `landing`（**欠落は `Conflict`**）。claim 前は Issue 本文の `Lands in`（宣言が無ければ制御面 1 面）。意味論は `references/landing-surface.md`                                     |
+| 二重着手防止             | 制御面の remote branch                                                                                                                                                                                      |
+| 計画                     | 固定 marker 付きの Issue コメント（形は解決工程の計画。突き合わせは `references/body-digest.md`）                                                                                                           |
+| 在庫の鮮度               | 固定 marker 付きの Issue コメント（`references/ready-record.md`）                                                                                                                                           |
+| claim                    | 固定 marker 付きの Issue コメント（`references/same-branch.md`）                                                                                                                                            |
+| 人待ち                   | 固定 marker 付きの Issue コメント（`references/wait-record.md`）                                                                                                                                            |
+| 休止                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                                                              |
+| 成果ゼロの周             | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                                                              |
+| 渡した merge の枠        | 固定 marker 付きの Issue コメント（`references/integration-record.md`）                                                                                                                                     |
+| 意図の確認               | 固定 marker 付きの Issue コメント（`references/intent-record.md`）                                                                                                                                          |
+| 入場を止める宣言         | 固定 marker `entry-block` のコメント（形は `references/issue-contract.md`）                                                                                                                                 |
+| 失敗                     | 固定 marker 付きの Issue コメント（`references/protocols.md`）                                                                                                                                              |
+| 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                                                           |
+| 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                                                                |
+| 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                                                        |
+| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査は `merge` skill の fail-closed（`references/landing-surface.md`）                                                |
+| 容量                     | 着地面ごとの worktree と、repo 非依存の workspace 一覧（1 回）。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）。`prunable` の述語は `references/harness.md` |
+| 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                                                                |
 
 ### 正規化
 
@@ -119,32 +126,40 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 **判断は自分でしない。`src/cli.ts` が返す `Decision` を実行する**。観測・正規化・action の選択は決定的な純関数で、同じ観測からは必ず同じ結論が出る。**その結論を読み替えない** —— 読み替えると、 `test/decide.test.ts` が守っている意味論と、実際に走るものが別になる。
 
-**例外は 1 つだけ。実行の直前に引き直した前提が `evidence` と食い違ったときは、実行せず規約の穴として起票する。** 観測の欠陥は純関数からは見えないので、**気づけるのは実行する側だけ**。
+**例外は 1 つだけ。実行の直前に引き直した前提が `evidence` と食い違ったときは、その action を実行しない。** 観測の欠陥は純関数からは見えないので、**気づけるのは実行する側だけ**。
 
 - **食い違いを実測で示せるときに限る**（観測した値と、それを作っている `file:line`）。示せないなら実行する
-- 起票は `specGap` として次の tick へ渡す（発火条件は「action の優先順」の「規約の穴を起票する」）
+- 同じ周で `cli.ts` を `--spec-gap-issue <代表>` `--spec-gap-fact <事実>` 付きで呼び直す。実行しなかった action は上限に数えない。返ってきた `規約の穴を起票する` を `references/intake.md` で実行する。発火は `src/decide.ts` の LADDER
+- 同じ事実の open Issue が既にあるなら渡さず、元の action を実行する。起票が終わったら次の呼び出しから外す
 - **「この action は良くないと思う」では止めない**。止めてよいのは前提が観測と割れているときだけ
 
 ```bash
 bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
-  --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>...
+  --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>... \
+  [--spec-gap-issue <代表> --spec-gap-fact <事実>]
 ```
 
-設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` に入れる中身は `references/harness.md`。
+対で渡す。`<代表>` は実行しなかった action の代表。壊れた渡しは `src/cli.ts` の `specGap` が止める。
+
+設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
 
 **checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**宣言された面を 1 つでも渡さなければ exit 2**。
 
 ```mermaid
 flowchart TD
     S[tick 開始] --> D[cli.ts を呼ぶ<br/>観測 → 正規化 → Decision]
-    D --> C[conflicts を応答へ出す]
+    D --> C[応答に出すものは表]
     C --> K{outcome の種類}
     K -->|halt| STOP[evidence を出してセッションを止める]
     K -->|settle-record| W[記録を精算して書く]
     W --> D
     K -->|idle| END[最後の観測を baseline に<br/>watcher を張って終わる]
-    K -->|action| DO[実行する]
-    DO --> A{action 上限に達したか}
+    K -->|action| DO[実行の直前に前提を引き直す]
+    DO --> PREM{evidence と割れたか}
+    PREM -->|割れた| GAP[対を付けて呼び直す]
+    GAP --> D
+    PREM -->|割れていない| RUN[実行する]
+    RUN --> A{action 上限に達したか}
     A -->|達した| END
     A -->|余裕あり| D
 ```
@@ -152,25 +167,32 @@ flowchart TD
 **`conflicts` は `outcome` と直交する**。当たった課題を選出対象外にするだけで、他の課題は回る。
 1 件を止める / 全体を止めるの切り分けは「硬い上限」。
 
-| `Decision`      | 何をするか                                                                                                                                                                                     |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `conflicts`     | 触らずに応答へ出す。1 手を選べた周でも出す。出し方は下の「応答に出すもの」                                                                                                                     |
-| `halt`          | 計画 schema 不明（scenarios のセッション停止）。evidence（Issue 番号・marker・読めない理由）を応答へ出し、**セッションを止める**。action / 精算は走らない                                      |
-| `action`        | `params` の action を `target.representative` に対して実行する（手順は `references/protocols.md` と `references/harness.md`）。**`evidence` は実行の直前に前提を引き直すため**に持たされている |
-| `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                            |
-| `idle`          | watcher を張って終える                                                                                                                                                                         |
+**`stalls` も `outcome` と直交する**。当たった課題を選出対象外にしない。
 
-`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。
+| 付帯        | 何をするか                                                                                                        |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `conflicts` | Decision から落とさない。1 手を選べた周でも載せる。選出対象外にする。セッションへ書くかは下の「応答に出すもの」   |
+| `stalls`    | Decision から落とさない。1 手を選べた周でも載せる。選出対象外にしない。セッションへ書くかは下の「応答に出すもの」 |
+
+| `outcome`       | 何をするか                                                                                                                                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `halt`          | 計画 schema 不明（scenarios のセッション停止）。evidence（Issue 番号・marker・読めない理由）を応答へ出し、**セッションを止める**。action / 精算は走らない                                                                               |
+| `action`        | `params` の action を `target.representative` に対して実行する（手順は `references/protocols.md` と `references/harness.md`。規約の穴の起票は `references/intake.md`）。**`evidence` は実行の直前に前提を引き直すため**に持たされている |
+| `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                                                                     |
+| `idle`          | watcher を張って終える                                                                                                                                                                                                                  |
+
+`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）と、action の `countsEmptyCycle` / `countsFailure`。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。`runtime` を引き直さない。
 
 ### 応答に出すもの
 
-| 条件                                         | 応答へ出すもの                                                                                    |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `idle` かつ `conflicts` が直前の tick と同じ | 出さない                                                                                          |
-| それ以外                                     | outcome の行。`usage` の 4 数（数える本数 / 実 checkout / 供給 / 供給目標）。`conflicts` があれば |
+| 条件                                                                             | 応答へ出すもの                                                                                                       |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `idle` かつ `conflicts` が直前の tick と同じ、かつ `stalls` が直前の tick と同じ | 出さない                                                                                                             |
+| それ以外                                                                         | outcome の行。`usage` の 4 数（数える本数 / 実 checkout / 供給 / 供給目標）。`conflicts` があれば。`stalls` があれば |
 
-- 比較の相手は、このセッションで直前に `cli.ts` が返した JSON の `conflicts`
-- 相等は畳み後の reason + evidence + issues（順不同）
+- 比較の相手は、このセッションで直前に `cli.ts` が返した JSON の `conflicts` と `stalls`
+- `conflicts` の相等は畳み後の reason + evidence + issues（順不同）
+- `stalls` の相等は各要素の `issues`（順不同）
 - action の選択には使わない
 - 起動直後の最初の tick は「直前」が無いので、下の段へ倒す
 
@@ -199,24 +221,34 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 - 次の tick でも同じ action を選び続ける
 - 応答へ出す。**時間切れで解除しない**
 
+失われたセッションへの渡しが観測上の変化を生まなかった失敗は、通常の失敗として 1 回数える。
+
+- 張り直しは同じ周の回復である（手順は `references/harness.md`）
+- 張り直し成功をその action の成功にしない
+- 張り直し失敗と初回の渡し停滞を二重に数え**ない**
+
 ### 記録の精算
 
-retry の `count` を 0 に戻すのは 2 つ（形式は `references/protocols.md`）—— action が成功したときと、`ledger` が `退避先` のものを観測したとき（`lastAction` は残す）。
+retry の `count` を 0 に戻すのは、action が成功したときと、`ledger` が `退避先` のものを観測したとき（`lastAction` は残す）。
+**例外は** 伝える 3 つで、伝達が通ったことでは戻さない。戻すのは解除表。`計画枠の逼迫を伝える` は三拍子が揃う前には `退避先` を観測しても消さない。
+伝える 3 つの加算は Decision の `countsFailure` を読む。`runtime` を引き直さない。
 
 「落とす側が一体で精算する」形に**しない**。戻す主体を人に**しない**。どちらも不変条件として書く。
 
-解除条件を発火条件の否定に**しない**。**例外は「伝える」2 つだけ**。
+解除条件を発火条件の否定に**しない**。**例外は「伝える」のうち本文変更と計画失効の 2 つだけ**。
 
 | `lastAction`             | 例外の解除条件（現在の観測だけで決める）                          |
 | ------------------------ | ----------------------------------------------------------------- |
 | 計画セッションを片付ける | `ledger` が `計画済み` 以降で、`refine-<番号>` のセッションが無い |
-| 本文の変更を伝える       | その action の発火条件が偽になった                                |
+| 本文の変更を伝える       | 計画コメントが変わった、またはその action の発火条件が偽になった  |
 | 計画の失効を伝える       | 同上。**project が足した発火条件も含む**                          |
+| 計画枠の逼迫を伝える     | 三拍子が揃った、または人が答えて有効な `waiting` でなくなった     |
 | 交差を解消する           | 休止の記録が現在の交差を記述しているか、記録が無くなった          |
 | checks を引き直させる    | `progress` が `着地待ち` になった                                 |
 | 意図の確認を促す         | 意図の確認の記録が観測できるようになった（3 状態のどれでもよい）  |
 
-伝える 2 つの解除条件を述語の実体で書か**ない**。`refine` セッションの不在で共用し**ない**。
+本文変更と計画失効の解除条件を述語の実体で書か**ない**。`refine` セッションの不在で共用し**ない**。
+計画枠の逼迫の精算は三拍子だけ。人が答えた解除は失敗の `count` 側。枠が一時的に空いただけでは戻さない。
 
 2 時点の比較に**しない**。禁じているのは観測できない過去を使うことで、比較の相手を記録に持つなら当たら**ない**。
 
@@ -237,10 +269,10 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 コードに無い規約:
 
 - 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）
-- `待機` / `休止` に落ちた課題はすべて「枠を渡す」の受け手。既に write を保持しているかどうかで絞ら**ない**
+- 「枠を渡す」の受け手を、既に write を保持しているかどうかで絞ら**ない**
 - 前進と後退を混ぜ**ない**。「台帳を進める」は期待表に向かって進めるだけ、「差し戻す」だけが戻す
 - `stale` は独立した概念では**ない**。`progress` から期待される `runtime` / `capacity` / `ledger` とのずれがそれで、別の表を持た**ない**
-- 「伝える」2 つは失敗として数える（同じ内容を送っても計画コメントが変わらなければ `count` を進める）
+- 「伝える」3 つの加算は「記録の精算」が持つ。ここには写さない。`計画セッションを片付ける` の加算は下の rename が持つ
 - 計画の人待ちが落ちたときは「計画を起こし直す」が拾う。供給を見**ない**
 
 #### 計画セッションの rename
@@ -325,13 +357,7 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 
 記録が権限の実体。**先に書き、書けたことを取得して確かめてから伝える**（手順は `references/integration-record.md`）。確かめられなければ伝えない。
 
-次の受け手は、記録がどこにも無いときだけ評価する。次をすべて満たすもののうち、**claim が最も古い 1 件**（同値なら代表の番号が小さい方）。中身は解釈せず、記録の状態と必須の欄だけを見る。**PR 作成の早さで選ばない。**
-
-1. claim 済み
-2. `progress` が `着地待ち`（`休止` は足さない）。**PR を使う面を持つ課題だけ**
-3. `runtime` が `人待ち` でなく、`ledger` が `退避先` でない
-4. 本文が計画の記録と一致している
-5. 意図の確認の記録が `confirmed` か `not-required`
+次の受け手は claim が最も古い 1 件（同値なら代表の番号が小さい方）。保持者への再送は選定の外。PR 作成の早さで選ば**ない**。占有と壊れ判定は `src/resources.ts` の `integrationOccupied`。
 
 | 事象                             | 扱い                                                                                     |
 | -------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -342,7 +368,7 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 | `runtime` が `人待ち`            | 回収する                                                                                 |
 | `ledger` が `退避先`             | **セッションを止めてから**回収する。Status だけでは足りない。止められないなら `Conflict` |
 | `着地済み` / `取り下げ`          | 片付けるが回収する（実体を消す手順に含める）                                             |
-| 記録が 2 件以上ある・壊れている  | `Conflict`                                                                               |
+| 記録が 2 件以上ある・壊れている  | `Conflict`。壊れた記録は全着地面を占める                                                 |
 
 どの回収も、「枠を渡す」より上位の action が旧保持者を止めてから起きる。
 
@@ -394,7 +420,7 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 - worktree を作るのは着地面の linked worktree**だけ**
 - Issue の close は「片付ける」の一部。条件は `references/protocols.md` の片付け手順が SSOT。**述語をここに写さない**
 - tick の中で Issue を作ら**ない**・Status を計画済みへ進め**ない**。台帳を期待値へ寄せることと差し戻しは行う
-- **例外は、ユーザーが直接指示したときと、自分の規約の穴を起票するとき**（後者の発火条件は「action の優先順」の「規約の穴を起票する」）
+- **例外は、ユーザーが直接指示したときと、自分の規約の穴を起票するとき**（後者の発火は `src/decide.ts` の LADDER）
 - **1 件を止めるのは「差し戻し」、全体を止めるのは conductor セッション自体の停止**。認証不明・conductor の多重起動・計画 schema 不明・整合失敗の連続は全体 pause に倒す
 
 **人待ちの数に上限を置かない**。縛るのは物理枠（数える本数と計画枠）と供給。
