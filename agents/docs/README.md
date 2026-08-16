@@ -33,7 +33,7 @@ flowchart TB
         TICK["tick<br/>観測 → 正規化 → action を 1 つ"]
     end
 
-    TICK -->|応答<br/>outcome・conflicts| U
+    TICK -->|応答<br/>outcome・conflicts・stalls| U
     TICK -.自分でやらない依頼は pane を割って振る.-> DEL[["振った先"]]
 
     TICK -->|未計画を起こす| G["refine<br/>consult → 計画を Issue へ<br/>→ Status を計画済みへ"]
@@ -59,7 +59,7 @@ flowchart TB
 
 読み方は 4 つ。
 
-- **人が返すのは製品判断だけ** — 計画中（`refine`）と実装中（`resolve`）で聞かれ、`conductor` は outcome と `conflicts` を応答に出す。それ以外はエージェントが決めきる
+- **人が返すのは製品判断だけ** — 計画中（`refine`）と実装中（`resolve`）で聞かれ、`conductor` は outcome と `conflicts` と `stalls` を応答に出す。それ以外はエージェントが決めきる
 - **`refine` / `resolve` は単体でも起動できる** — 常時運転では conductor が起こすが、人が直接渡す経路も等価に存在する。違いは「枠が空くのを待つかどうか」だけ（claim 済みとして渡されたときだけ待つ。`resolve` の variant → [`glossary.md`](glossary.md)）
 - **並列できるかは資源が決める** — `#B` が待っているのは人の判断待ちではなく枠の空き待ち。貸出を記録した台帳は持たず、今ある実体を数えれば貸出状況が分かる（→ [`glossary.md`](glossary.md) の「資源」）
 - **着地は必ず 1 本ずつ** — 実装が何本並んでも default に入るのは直列。ここが本当のボトルネック

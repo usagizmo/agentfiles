@@ -57,25 +57,33 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 
 止まっているセッションにも動いているセッションにも、**新しいセッションを作らず同じセッションに渡す**。
 
-| 渡す理由                   | 渡す内容                                                                                 |
-| -------------------------- | ---------------------------------------------------------------------------------------- |
-| write lease が空いた       | `params.missing` が `report` なら、足りないのは `report`。それ以外は実装を始めてよいこと |
-| integration lease が空いた | 各着地面の統合先へ追随してから着地してよいこと                                           |
-| API エラー等での中断       | 中断した事実と、続きから進めること                                                       |
-| 計画が失効した             | 交差した変更範囲と、再 plan が要ること                                                   |
-| 先行と資源が交差した       | 後発なので安全なチェックポイントで休止すること                                           |
+**送る本文は選んだ action のすること**。中身は `protocols.md` のその action。組み立てない規則は `../SKILL.md`「表に無い伝達をその場で組み立てない」。
+
+action でない中断（API エラー等）だけ、ここで決める —— 中断した事実と、続きから進めること。
 
 **稼働に移ったことを観測できる手段が要る**（使い道は `../SKILL.md`）。
 
-セッションが失われていたら新規に起こす。文脈は Issue コメントの計画と人待ちの記録から**復元させる**（セッション文脈はキャッシュ、外部化した記録が復旧契約）。conductor が中身を解釈して渡す必要は**ない**。
+セッションが一覧に無いなら新規に起こす（既にある worktree なら pane だけ。起こす表）。
+一覧に `idle` / `done` で載っていて下の述語に当たるなら、張り直してから起こす表の本文を送る。worktree は作り直さ**ない**。
+文脈は Issue コメントの計画と人待ちの記録から**復元させる**（セッション文脈はキャッシュ、外部化した記録が復旧契約）。conductor が中身を解釈して渡す必要は**ない**。
+
+一覧に `idle` / `done` で載っていても、渡す操作が観測上の変化を生まず、停止手順を 1 巡しても変化が無いなら、そのセッションは失われている。
+当たるのは conductor が所有する `resolve-*` へ渡すすべての実行である。
+`refine-*` / `retired-refine-*` / 人待ち / 退避先 / 所有不明には当たら**ない**。
+
+張り直しは 1 action につき 1 回。新しい入れ物は対象と同じ workspace・同じ linked worktree・同じ cwd。自分の現在 pane から割ら**ない**。
+close 直前に引き直して述語を外れていたら、閉じずその tick を終える。
+`交差を解消する` では旧入れ物を閉じ、同じ名前で起こしたあと「起こす」表の本文は送ら**ない**。元の渡す内容を送る。
+作業ツリーの porcelain 空は張り直しの条件では**ない**。
+新しい Decision action では**ない**。
 
 ### 観測する
 
-| 見たいもの                    | 使い道                                                     |
-| ----------------------------- | ---------------------------------------------------------- |
-| 稼働中セッションの名前と状態  | `runtime` の判定・多重起動の検知                           |
-| **全着地面の** worktree 一覧  | `capacity` が `あり` かの判定                              |
-| 所有している workspace の一覧 | `capacity` が `prunable` かの判定（checkout が消えた残骸） |
+| 見たいもの                    | 使い道                                                            |
+| ----------------------------- | ----------------------------------------------------------------- |
+| 稼働中セッションの名前と状態  | `runtime` の判定・多重起動の検知                                  |
+| **全着地面の** worktree 一覧  | `capacity` が `あり` かの判定                                     |
+| 所有している workspace の一覧 | `capacity` が `prunable` かの判定。孤児の述語は下の「3 つの経路」 |
 
 - **worktree 一覧は repo を明示して取る**（「今いる場所」に依存する手段を使わない）
 - 引く repo の集合は「制御面 + project 差分の座標表が持つ全着地面」。**「いま使われている面だけ」にも制御面だけにも絞らない**
@@ -85,16 +93,31 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 
 ### 片付ける
 
-**起こしたものによって片付ける対象が違う。**
+確認と所有と成否は `protocols.md`「片付ける」。消す段はここ。`--force` で通さない。履歴と `capacity` の畳みでは手段を引か**ない**。
 
-| 終わったもの                    | 片付けるもの                                                          |
-| ------------------------------- | --------------------------------------------------------------------- |
-| `refine`（`done`）              | セッションが載っている tab                                            |
-| `refine`（`idle`）              | **閉じない。**`retired-refine-<番号>` へ rename するだけ              |
-| `resolve`（セッションを置く面） | 下記の 3 つ（workspace ごと消す）                                     |
-| `resolve`（二次面）             | 下記の 3 つを **git だけで**行う（`remove-worktree.py` は当たらない） |
+| 段     | 残っているときだけ行う                                                                        |
+| ------ | --------------------------------------------------------------------------------------------- |
+| 確認   | dirty は checkout がある面だけ。stash は面の live checkout。中身は `protocols.md`             |
+| 退避   | 重いディレクトリ（`node_modules` / `target` / `dist` / `.turbo`）を退避して background で消す |
+| 削除   | checkout を消す                                                                               |
+| branch | merge 済みの branch を消す。未マージなら残す                                                  |
+| 閉じる | 入れ物を閉じる。直前に、所有していない実行器が居ないことを確かめる。居れば閉じない            |
 
-`refine` は実行直前に生値を取り直して上表を引く。`working` / `blocked` では実行しない。`unknown` は `Conflict`。コマンドは「herdr での実現」。
+- 計画が借りた入れ物はこの手順に載せ**ない**。借りた 1 枚だけを閉じる
+- 二次面は git 側の段だけで終わる。`remove-worktree.py` は当たら**ない**
+- `remove-worktree.py` は改名・本文変更をしない。`--force` を付けない。checkout が既に無いことによる非 0 と、未マージ branch を残した非 0 で後続の段を止め**ない**。dirty による停止は後続へ進まない
+- `tab close` を孤児の手段にしない
+- 生きている checkout の workspace 対応は `open_workspace_id`。孤児は閉じる段で `workspace list` を引き直し、下の「3 つの経路」の述語で照合する。path や label から ID を復元しない
+- 未マージの branch だけが残っている状態は片付ける対象では**ない**
+
+`refine` は実行直前に生値を取り直して下表を引く。`working` / `blocked` では実行しない。`unknown` は `Conflict`。コマンドは「herdr での実現」。
+
+| 終わったもの       | 片付けるもの                                             |
+| ------------------ | -------------------------------------------------------- |
+| `refine`（`done`） | セッションが載っている tab                               |
+| `refine`（`idle`） | **閉じない。**`retired-refine-<番号>` へ rename するだけ |
+
+**例外は計画枠の逼迫の上限到達**。実行器を止めてから tab を閉じる。`working` / `blocked` でも止めてから閉じる。rename し**ない**。
 
 **branch を作る述語は 1 つ —— 在れば checkout、無ければ統合先から作る**（`protocols.md` が SSOT）。契機では分かれ**ない**。
 
@@ -107,15 +130,9 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 - `<slug>` は branch 名の `/` を `-` に置き換えたもの
 - **式を 2 通り持たない。その場で決めない**（作る側と消す側が同じ式を使う。容量の帰属も path で引く）
 
-**二次面に `worktree create` を使わない**（worktree・workspace・root pane を一度に作るので pane が増える）。素の `git worktree add` で作り、片付けも git 側の 3 手で行う。**作る手段と消す手段を面ごとに一致させる。**
+**二次面に `worktree create` を使わない**（worktree・workspace・root pane を一度に作るので pane が増える）。素の `git worktree add` で作り、片付けも git 側の段で行う。**作る手段と消す手段を面ごとに一致させる。**
 
 既存の worktree でセッションだけを起こし直すときは pane を作るだけ（`worktree create` は checkout 済みの branch には使えない）。
-
-着地した worktree は放置すると容量の判定を狂わせる。**checkout を消すだけでは足りない**ので、次の 3 つを 1 手で行う。
-
-1. 重いディレクトリ（`node_modules` / `target` / `dist` / `.turbo`）を退避して background で消す
-2. worktree の checkout を消す
-3. branch を消す（**merge 済みのときだけ**。未マージなら残す）
 
 **例外は「計画が無効」の差し戻し**。claim を解くのが目的なので claim branch も消す。差し戻してよいかの述語は `../SKILL.md`。ここは消し方だけを持つ。
 
@@ -123,26 +140,28 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 
 CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製しない。
 
-| 契約                                         | herdr                                                                                                                                                                                                                                                                         |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 名乗る                                       | `herdr pane current --current` の `agent` が無ければ `herdr pane report-agent --source <kind> --agent <kind> --state working "$HERDR_PANE_ID"`。続けて `herdr agent rename "$HERDR_PANE_ID" conductor`                                                                        |
-| worktree を作る（claim。セッションを置く面） | `herdr worktree create --cwd <その面の checkout> --branch <名> --base <その面の統合先> --label "#<番号>" --no-focus`（**1 課題に 1 回**）                                                                                                                                     |
-| tab を作る（refine）                         | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                           |
-| pane を作る（振られた作業）                  | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                        |
-| pane_id を得る                               | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                     |
-| セッションを起こす                           | `herdr agent start <名前> --kind <工程の実行器> --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い）                                                                                                                                                                   |
-| 課題を渡す・再開する                         | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                  |
-| セッションを観測する                         | `herdr agent list`（`name` / `agent_status` / `cwd`）                                                                                                                                                                                                                         |
-| worktree を作る（claim。二次面）             | **`git -C <その面の checkout> worktree add -b <名> <path> <その面の統合先>`**（**pane を作らない**。`<path>` の決め方は下記）                                                                                                                                                 |
-| worktree を作り直す（起こし直し。二次面）    | **`git -C <その面の checkout> worktree add <path> <名>`**（**`-b` を付けない。base も渡さない** —— 既存の branch を出すだけ）                                                                                                                                                 |
-| worktree を観測する                          | **`git -C <面の checkout> worktree list --porcelain`**（**面ごとに 1 回**）                                                                                                                                                                                                   |
-| 実行器だけ止める                             | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。送っても `agent_status` が変わらないときだけ `Conflict` |
-| 片付ける（`refine`・生値）                   | 先に `herdr agent get <名前>`。返った `agent_status` で契約の `refine` 行を引く                                                                                                                                                                                               |
-| 片付ける（`refine`・`idle`）                 | `herdr agent rename <名前> retired-refine-<番号>`（閉じ**ない**）                                                                                                                                                                                                             |
-| 片付ける（`refine`・`done`）                 | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                     |
-| 片付ける（`resolve`）                        | `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`                                                                                                                                                                                                           |
-| 片付けに要る workspace ID                    | **`herdr worktree list --cwd <面の checkout>`** の `open_workspace_id`                                                                                                                                                                                                        |
-| 孤児 workspace を洗う                        | **`herdr workspace list`**（repo 非依存）                                                                                                                                                                                                                                     |
+| 契約                                         | herdr                                                                                                                                                                                                                                                                                     |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 名乗る                                       | `herdr pane current --current` の `agent` が無ければ `herdr pane report-agent --source <kind> --agent <kind> --state working "$HERDR_PANE_ID"`。続けて `herdr agent rename "$HERDR_PANE_ID" conductor`                                                                                    |
+| worktree を作る（claim。セッションを置く面） | `herdr worktree create --cwd <その面の checkout> --branch <名> --base <その面の統合先> --label "#<番号>" --no-focus`（**1 課題に 1 回**）                                                                                                                                                 |
+| tab を作る（refine）                         | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                                       |
+| pane を作る（振られた作業）                  | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                                    |
+| pane_id を得る                               | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                                 |
+| セッションを起こす                           | `herdr agent start <名前> --kind <工程の実行器> --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い）                                                                                                                                                                               |
+| 課題を渡す・再開する                         | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                              |
+| セッションを観測する                         | `herdr agent list`（`name` / `agent_status` / `cwd`）                                                                                                                                                                                                                                     |
+| worktree を作る（claim。二次面）             | **`git -C <その面の checkout> worktree add -b <名> <path> <その面の統合先>`**（**pane を作らない**。`<path>` の決め方は下記）                                                                                                                                                             |
+| worktree を作り直す（起こし直し。二次面）    | **`git -C <その面の checkout> worktree add <path> <名>`**（**`-b` を付けない。base も渡さない** —— 既存の branch を出すだけ）                                                                                                                                                             |
+| worktree を観測する                          | **`git -C <面の checkout> worktree list --porcelain`**（**面ごとに 1 回**）                                                                                                                                                                                                               |
+| 実行器だけ止める                             | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` を読む。**pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い**（割り込みは `send-keys`）。`working` を止めても `agent_status` が変わらないときだけ `Conflict` |
+| 片付ける（`refine`・生値）                   | 先に `herdr agent get <名前>`。返った `agent_status` で契約の `refine` 行を引く                                                                                                                                                                                                           |
+| 片付ける（`refine`・`idle`）                 | `herdr agent rename <名前> retired-refine-<番号>`（閉じ**ない**）                                                                                                                                                                                                                         |
+| 片付ける（`refine`・`done`）                 | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                                 |
+| 計画枠の逼迫の上限到達                       | 「実行器だけ止める」のあと `herdr tab close <id>`。rename し**ない**                                                                                                                                                                                                                      |
+| 片付ける（`resolve`。退避〜branch）          | checkout があるとき `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`。非 0 で閉じる段を止め**ない**                                                                                                                                                                    |
+| 片付ける（`resolve`。閉じる）                | `herdr workspace close <id>`。直前に `herdr agent list` でその workspace を見、`name` が `resolve-<番号>` でない実行器が居れば閉じない                                                                                                                                                    |
+| 退避〜branch の workspace ID                 | checkout があるとき `herdr worktree list --cwd <面の checkout>` の `open_workspace_id`                                                                                                                                                                                                    |
+| 閉じる段の workspace ID                      | **`herdr workspace list`** を引き直した行の `workspace_id`。`open_workspace_id` からは取ら**ない**                                                                                                                                                                                        |
 
 **`--kind` は project の `config.json` の `executors`**（工程ごと。検証は `src/config.ts` の `parseConfig`）。**モデルは渡さ**ない —— 既定は harness の設定側が持つ。
 
@@ -154,8 +173,8 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | worktree と workspace の対応            | herdr の `open_workspace_id`。**パスで join しない** |
 | 孤児 workspace（checkout が消えた残骸） | `workspace list`（repo 非依存）                      |
 
-- `open_workspace_id` が null なら開いている workspace が無いので、その経路だけ落として git で 3 手を行う（checkout を消すだけで済ませ**ない**）
-- 孤児の判定は **`worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ**。`worktree` キーが無い workspace は repo の本体 checkout であって孤児ではない
+- `open_workspace_id` が null なら開いている workspace が無いので、その経路だけ落として git 側の段を行う（checkout を消すだけで済ませ**ない**）
+- 孤児の判定は **`worktree.is_linked_worktree` が真かつ `checkout_path` が実在しないものだけ**。帰属は `checkout_path` 末尾要素が `(^|[^0-9])<番号>-` に当たる行がちょうど 1。`worktree` キーが無い workspace は repo の本体 checkout であって孤児ではない
 
 コマンドの使い方:
 
@@ -166,6 +185,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は `agent prompt` には無い
 - 稼働の確認は `agent prompt <名前> <本文> --wait --until working`。**既に `working` のセッションに使うと返らず timeout する**ので、**その timeout を失敗として数えない**
 - `agent prompt` / `agent rename` は認識済み agent が要る。`pane current` に `agent` が無ければ `agent_not_found` か `agent_not_ready`。未認識の指定 pane には prompt せず、pane を割って `agent start` する
+- 張り直しの `pane split` は `--pane <対象の pane_id>`。`--current` は使わ**ない**
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わ**ない**
 
 `agent_status` の意味は `herdr` skill が SSOT。conductor が足すのは次だけ。
@@ -195,6 +215,27 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **remote branch の消滅だけで確認しない**（二次面の branch はローカルにしか無い）
 
 `HERDR_ENV` が 1 でなければ herdr の外なので、conductor は起動できない。その旨を報告して止まる。
+
+### 失われた resolve を張り直す
+
+`agent prompt` が次をすべて満たすとき、その `resolve-*` は失われている。
+
+| 観測                | 値                            |
+| ------------------- | ----------------------------- |
+| `agent prompt`      | `agent_prompt_stalled`        |
+| `agent_status`      | `idle` または `done`          |
+| `state_change_seq`  | 動かない                      |
+| 停止手順 1 巡のあと | `state_change_seq` が動かない |
+
+停止手順は「実行器だけ止める」と同じ（`esc`、だめなら `ctrl+c`）。見るのは `state_change_seq`。
+
+1. `herdr agent get <名前>` で `pane_id` / `workspace_id` / `cwd` / `agent_status` / `state_change_seq` を取る
+2. `herdr pane split --pane <pane_id> --direction right --cwd <cwd> --no-focus`。応答の `.result.pane.pane_id` が新 pane。`--current` は使わ**ない**
+3. close 直前に `herdr agent get <名前>` で `agent_status` と `state_change_seq` を引き直す
+4. `agent_status` が `idle` / `done` のまま、かつ `state_change_seq` が 1 で取った値と同じなら `herdr pane close <pane_id>`。外れていたら閉じずその tick を終える
+5. `herdr pane list --workspace <workspace_id>` と `herdr agent list` で旧 pane と旧 agent の消滅を観測する
+6. `herdr agent start <名前> --kind <工程の実行器> --pane <新 pane> --timeout 90000`
+7. 「起こす」表の本文を `herdr agent prompt` で送る。`交差を解消する` では送らず、元の渡す内容を送る
 
 ### 起こされる仕組み
 
@@ -258,11 +299,19 @@ herdr なら:
 herdr agent list | jq -S -r '.result.agents[]? | select(.name != null)
   | if .name == "conductor" then "conductor present"
     elif (.name | test("^(retired-)?(refine|resolve)-[0-9]+$")) then "\(.name) \(.agent_status)"
-    elif .agent_status == "working" then "\(.name) working \(.cwd // "")"
-    else empty end' | sort | grep .
+    else "\(.name) \(.agent_status) \(.cwd // "")" end' | sort | grep .
 
 # --workspaces-cmd
-herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.worktree.checkout_path // "-")"' | sort | grep .
+herdr workspace list | jq -S -c '.result.workspaces[]?' | while IFS= read -r row; do
+  id=$(printf '%s' "$row" | jq -r '.workspace_id')
+  linked=$(printf '%s' "$row" | jq -r 'if .worktree.is_linked_worktree == true then "1" elif .worktree == null then "-" else "0" end')
+  path=$(printf '%s' "$row" | jq -r '.worktree.checkout_path // "-"')
+  if [ "$path" = "-" ]; then exists="-"
+  elif [ -e "$path" ]; then exists="1"
+  else exists="0"
+  fi
+  printf '%s %s %s %s\n' "$id" "$linked" "$exists" "$path"
+done | sort | grep .
 ```
 
 **何を入れて何に畳むかは `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない**。ここは herdr での写し方だけ。
@@ -273,7 +322,7 @@ herdr workspace list | jq -S -r '.result.workspaces[]? | "\(.workspace_id) \(.wo
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
 - **`done` と `idle` を畳まない**（片付け方が違う）
 - **`retired-refine-<番号>` も拾う**（rename しても対象 Issue の再計画は塞ぐ）
-- **`refine` / `resolve` / `conductor` 以外の `working` も出す**（cwd つき）
+- **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（cwd つき）
 
 worktree 一覧は面ごとの checkout から取る（スクリプトが `--repo` と `--landing` から行う）。
 

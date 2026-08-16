@@ -10,7 +10,7 @@
 import type { Check } from "./checks.ts";
 
 /** `watch.sh` が先頭に書く版数。**節を足す・消す・名前を変えたら両方を上げる。** */
-export const SNAPSHOT_SCHEMA = 2;
+export const SNAPSHOT_SCHEMA = 3;
 
 /** 節の名前。`--- <name> (補足) ---` の `(` より前だけを見る。 */
 export const SECTIONS = [
@@ -238,7 +238,30 @@ export const pullRequests = (s: Snapshot): PullRequestRow[] =>
 
 export const remoteBranches = (s: Snapshot): readonly string[] => rows(s, "remote branches");
 export const sessions = (s: Snapshot): readonly string[] => rows(s, "sessions");
-export const workspaces = (s: Snapshot): readonly string[] => rows(s, "workspaces");
+
+/**
+ * `--- workspaces (id linked(0/1/-) exists(0/1/-) path) ---`
+ *
+ * **linked / exists が 0 / 1 / - で無い行は投げる。**他節と同じ。形が違う行を通すと
+ * 公式の孤児述語と別の読み方が並ぶ。
+ */
+export type WorkspaceRow = {
+  readonly id: string;
+  readonly linked: Tri;
+  readonly exists: Tri;
+  readonly path: string;
+};
+
+export const workspaceRows = (s: Snapshot): WorkspaceRow[] =>
+  rows(s, "workspaces").map((line) => {
+    const p = fieldsWithRest(line, 4, "workspaces");
+    return {
+      id: p[0] ?? "",
+      linked: tri(p[1] ?? "", "workspaces.linked"),
+      exists: tri(p[2] ?? "", "workspaces.exists"),
+      path: p[3] ?? "",
+    };
+  });
 
 /** `--- landing tips ---` は `面 ref SHA`。統合先の tip。 */
 export const landingTips = (s: Snapshot): ReadonlyMap<string, string> =>

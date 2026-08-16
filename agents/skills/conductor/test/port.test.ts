@@ -1,12 +1,16 @@
 // `watch.sh` へ渡す引数を固定する。
 //
 // **渡し漏れは観測の穴になる。**面を 1 つ落とすとそこで書き進んでいる課題が成果ゼロの周として
-// 数えられ、`--sessions-cmd` / `--workspaces-cmd` を落とすと usage error で 1 度も観測できない
-// （実際にその形で、kernel が一度も end-to-end で動いていなかった）。
+// 数えられ、`--sessions-cmd` / `--workspaces-cmd` を落とすと usage error で 1 度も観測できない。
 
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { ConfigError, parseConfig, resolveSurfaces } from "../src/config.ts";
-import { snapshotArgs } from "../src/port.ts";
+import { ConfigError, extractHarnessCmd, parseConfig, resolveSurfaces } from "../src/config.ts";
+import { readFileSync } from "node:fs";
+import { createPort, snapshotArgs } from "../src/port.ts";
+import { present } from "../src/types.ts";
 
 const raw = {
   ghRepo: "acme/control",
@@ -113,15 +117,36 @@ describe("checkout path の解決", () => {
   });
 });
 
+const harnessMd = () => readFileSync(join(import.meta.dir, "../references/harness.md"), "utf8");
+
 describe("設定の fail-closed", () => {
-  test("sessionsCmd が無ければ止まる", () => {
-    const { sessionsCmd: _drop, ...without } = raw;
-    expect(() => parseConfig(without)).toThrow("sessionsCmd");
+  test("面の名前が重複したら止まる", () => {
+    expect(() =>
+      parseConfig({
+        ...raw,
+        surfaces: [raw.surfaces[0], { ...raw.surfaces[1], name: "acme/control" }],
+      }),
+    ).toThrow("name が重複");
   });
 
-  test("workspacesCmd が無ければ止まる", () => {
+  test("sessionsCmd を省略したら harness.md の code block を使う", () => {
+    const { sessionsCmd: _drop, ...without } = raw;
+    expect(parseConfig(without).sessionsCmd).toBe(extractHarnessCmd(harnessMd(), "sessions-cmd"));
+  });
+
+  test("workspacesCmd を省略したら harness.md の code block を使う", () => {
     const { workspacesCmd: _drop, ...without } = raw;
-    expect(() => parseConfig(without)).toThrow("workspacesCmd");
+    expect(parseConfig(without).workspacesCmd).toBe(
+      extractHarnessCmd(harnessMd(), "workspaces-cmd"),
+    );
+  });
+
+  test("sessionsCmd が空文字なら止まる", () => {
+    expect(() => parseConfig({ ...raw, sessionsCmd: "" })).toThrow("sessionsCmd");
+  });
+
+  test("workspacesCmd が空文字なら止まる", () => {
+    expect(() => parseConfig({ ...raw, workspacesCmd: "" })).toThrow("workspacesCmd");
   });
 });
 
@@ -147,5 +172,89 @@ describe("実行器の起動", () => {
     expect(() => parseConfig({ ...raw, executors: { ...raw.executors, resolve: "" } })).toThrow(
       ConfigError,
     );
+  });
+});
+
+const markFromExactFiles = async (
+  scriptsDir: string,
+  issueBody: string,
+  waitRecord: string | null,
+): Promise<string> => {
+  const dir = await mkdtemp(join(tmpdir(), "cycle-mark-exact-"));
+  try {
+    const bodyPath = join(dir, "body");
+    await writeFile(bodyPath, issueBody);
+    const argv = [
+      "python3",
+      `${scriptsDir}/cycle-mark.py`,
+      "--ledger",
+      "未計画",
+      "--issue-body",
+      `1:${bodyPath}`,
+    ];
+    if (waitRecord === null) {
+      argv.push("--no-wait-record");
+    } else {
+      const waitPath = join(dir, "wait");
+      await writeFile(waitPath, waitRecord);
+      argv.push("--wait-record", waitPath);
+    }
+    const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+    const [code, out, err] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    if (code !== 0) throw new Error(`cycle-mark.py が ${String(code)}: ${err}`);
+    return out.trim();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+};
+
+describe("cycleMark の入力 file", () => {
+  const scriptsDir = join(import.meta.dir, "../scripts");
+  const portOf = () => {
+    const config = parseConfig(raw);
+    return createPort({
+      config,
+      surfaces: resolveSurfaces(config.surfaces, PATHS),
+      scriptsDir,
+      snapshotPath: "/tmp/snap",
+    });
+  };
+
+  test("受け取った文字列を足しも落としもせず file に書く", async () => {
+    // **本文が改行で終わる**のが本物の Issues API の形。末尾に 1 byte 足すと指紋が変わる。
+    const body = "本文が改行で終わる\n";
+    const wait = "state: waiting\nreason: 確認\n";
+    const got = await portOf().cycleMark({
+      issue: 1,
+      ledger: "未計画",
+      progress: "未着手",
+      surfaces: [],
+      planComment: null,
+      waitRecord: wait,
+      issueBodies: [{ issue: 1, body }],
+      occupied: [],
+    });
+    const want = await markFromExactFiles(scriptsDir, body, wait);
+    expect(got).toEqual(present(want));
+  });
+
+  test("正規化した値と違う bytes を書くと指紋が一致しない", async () => {
+    const body = "本文が改行で終わる\n";
+    const got = await portOf().cycleMark({
+      issue: 1,
+      ledger: "未計画",
+      progress: "未着手",
+      surfaces: [],
+      planComment: null,
+      waitRecord: null,
+      issueBodies: [{ issue: 1, body }],
+      occupied: [],
+    });
+    const extraNl = await markFromExactFiles(scriptsDir, `${body}\n`, null);
+    expect(got).not.toEqual(present(extraNl));
   });
 });

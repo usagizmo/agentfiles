@@ -27,6 +27,59 @@ export const holdsWrite = (r: NormalizedIssue): boolean => {
 export const holdsIntegration = (o: IssueObservation): boolean =>
   o.integrationRecordCount.kind !== "present" || o.integrationRecordCount.value >= 1;
 
+/** 順序に依らない集合一致。どちらかに重複があれば偽。 */
+export const sameLandingSet = (a: readonly string[], b: readonly string[]): boolean => {
+  const left = new Set(a);
+  const right = new Set(b);
+  if (left.size !== a.length || right.size !== b.length) return false;
+  if (left.size !== right.size) return false;
+  for (const name of left) if (!right.has(name)) return false;
+  return true;
+};
+
+/** 渡しの記録の `landing` が、claim の集合と一致し、座標表の面だけを重複なく指すか。 */
+export const integrationLandingValid = (
+  landing: readonly string[],
+  claimLanding: readonly string[],
+  surfaceNames: readonly string[],
+): boolean => {
+  if (landing.length === 0) return false;
+  if (landing.some((name) => !surfaceNames.includes(name))) return false;
+  return sameLandingSet(landing, claimLanding);
+};
+
+/**
+ * 件数 1 の渡しの記録が、claim と座標表に対して壊れているか。
+ * 件数 0 / 2+ / 読めないはここでは見ない。
+ */
+export const integrationLandingBroken = (
+  o: IssueObservation,
+  surfaceNames: readonly string[],
+): boolean => {
+  if (o.integrationRecordCount.kind !== "present" || o.integrationRecordCount.value !== 1) {
+    return false;
+  }
+  const rec = value(o.integrationRecord);
+  const claim = value(o.claimRecord);
+  if (rec === undefined || claim === undefined) return true;
+  return !integrationLandingValid(rec.landing, claim.landing, surfaceNames);
+};
+
+/**
+ * その課題が占めている面。壊れた記録は座標表の全面。
+ * **保持していないなら空。**
+ */
+export const integrationOccupied = (
+  o: IssueObservation,
+  surfaceNames: readonly string[],
+): ReadonlySet<string> => {
+  if (!holdsIntegration(o)) return new Set();
+  if (integrationLandingBroken(o, surfaceNames)) return new Set(surfaceNames);
+  const rec = value(o.integrationRecord);
+  if (rec === undefined) return new Set(surfaceNames);
+  return new Set(rec.landing);
+};
+
 /** 交差の判定は 3 値。**`unknown` は `incompatible` として扱う。** */
 export type Compatibility = "compatible" | "incompatible" | "unknown";
 

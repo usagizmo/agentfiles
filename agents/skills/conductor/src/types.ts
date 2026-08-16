@@ -62,12 +62,13 @@ export const CONFLICT_REASONS = [
   "group の終端が混在",
   "着地面が解決できない",
   "着地済みだが提出の証跡が無い",
-  "live checkout が異常",
   "Issue 契約が欠けたまま成果物がある",
   "計画コメントが無いまま実装の証跡がある",
   "意図の確認が pending なのに人待ちが無い",
   "渡しの記録が複数",
+  "渡しの記録が壊れている",
   "退避先だがセッションが止まらない",
+  "同じ worktree に所有外セッションがある",
 ] as const;
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 
@@ -102,6 +103,7 @@ export const ACTION_LADDER = [
   "checks を引き直させる",
   "意図の確認を促す",
   "枠を渡す",
+  "計画枠の逼迫を伝える",
   "計画を起こす",
   "claim する",
 ] as const;
@@ -159,6 +161,11 @@ export type Outcome =
       readonly evidence: Evidence;
       /** 回すことに成功し、指紋が一致していたら周回の `count` を +1 するか */
       readonly countsEmptyCycle: boolean;
+      /**
+       * この action が成功したあと、失敗の記録の `count` を +1 するか。
+       * 実行側はこれを読む。`runtime` を引き直さない。
+       */
+      readonly countsFailure: boolean;
       readonly records: TargetRecords;
     }
   | {
@@ -202,10 +209,22 @@ export type Usage = {
 };
 
 /**
+ * どの rung にも当たらない in-flight。**Conflict ではない。選出対象外にしない。**
+ * 応答への出し方は `SKILL.md`。
+ */
+export type Stall = {
+  readonly issues: readonly number[];
+  readonly progress: Progress;
+  readonly runtime: Runtime;
+};
+
+/**
  * tick が 1 周で出す結論。
  *
  * **`Conflict` は 1 手の選択と直交する。**当たった課題を選出対象外にするだけで、他の課題は
  * 回す。1 件を止める / 全体を止めるの切り分けは `SKILL.md`「硬い上限」。
+ *
+ * **`stalls` も 1 手の選択と直交する。**当たった課題を選出対象外にしない。
  *
  * **選出対象外にしても資源の数え上げからは外さない**（write / integration lease）ので、
  * その課題の実体は他の課題の action から守られたまま。
@@ -213,6 +232,8 @@ export type Usage = {
 export type Decision = {
   /** 当たった課題を選出対象外にする。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
   readonly conflicts: readonly Conflict[];
+  /** 当たった課題を選出対象外にしない。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
+  readonly stalls: readonly Stall[];
   readonly outcome: Outcome;
   readonly usage: Usage;
 };

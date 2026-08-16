@@ -121,8 +121,7 @@ export const createPort = (options: PortOptions): ObservePort => {
 
   /**
    * repo の全 PR。**tick に 1 回しか取らない。**`issueFacts` は Issue ごとに呼ばれるので、
-   * ここで都度 `--paginate` すると `O(Issue 数 × 全 PR)` になり、Issue が数百ある repo では
-   * 1 周で secondary rate limit に達して観測そのものが落ちる（実測）。
+   * 都度 `--paginate` しない。
    */
   let prsOnce:
     | Promise<
@@ -140,6 +139,8 @@ export const createPort = (options: PortOptions): ObservePort => {
   const comments = new Map<number, readonly string[]>();
   /** claim の記録が書かれた時刻。**merge の枠の順序キー**なので、固定値へ倒さない */
   const claimTimes = new Map<number, Observed<number>>();
+  /** 人待ちコメントの `createdAt`。**`updatedAt` で代用しない** */
+  const waitTimes = new Map<number, Observed<number>>();
 
   /**
    * 面ごとの `base..統合先` で変わった path。**`plan` と `ready` で同じ手順を 2 度書かない** ——
@@ -173,8 +174,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       return result.stdout;
     },
 
-    // **Issue ごとに引かない。**board の件数ぶん REST を投げると `O(items)` になり、
-    // 289 件の board で secondary rate limit に達する（実測）。repo 単位の bulk 1 系統にする。
+    // **Issue ごとに引かない。**repo 単位の bulk 1 系統にする。
     //
     // **打ち切りは fail-closed。**`--paginate` が途中で落ちたら、欠けた分を「無い」と
     // 読むことになる —— 記録が無い課題として claim や差し戻しが走る。
@@ -223,6 +223,7 @@ export const createPort = (options: PortOptions): ObservePort => {
           const miss: Observed<readonly string[]> = unobservable("コメント一覧を読めない");
           comments.set(n, []);
           claimTimes.set(n, unobservable("コメントを読めない"));
+          waitTimes.set(n, unobservable("コメントを読めない"));
           map.set(n, miss);
         }
         return map;
@@ -255,6 +256,8 @@ export const createPort = (options: PortOptions): ObservePort => {
         map.set(n, present(bodiesOfIssue));
         const claim = list.find((c) => hasStandaloneLine(c.body ?? "", "<!-- claim -->"));
         claimTimes.set(n, claim === undefined ? absent() : present(Date.parse(claim.created_at)));
+        const wait = list.find((c) => hasStandaloneLine(c.body ?? "", "<!-- wait -->"));
+        waitTimes.set(n, wait === undefined ? absent() : present(Date.parse(wait.created_at)));
       }
       return map;
     },
@@ -321,6 +324,7 @@ export const createPort = (options: PortOptions): ObservePort => {
           return;
         }
         const path = `${tmpdir()}/conductor-${input.issue}-${flag.replace(/^--/, "")}-${randomUUID()}`;
+        // bytes は `protocols.md` の「file の bytes」。
         await Bun.write(path, body);
         files.push(path);
         args.push(flag, path);
@@ -329,6 +333,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       if (input.ledger === "未計画") {
         for (const b of input.issueBodies) {
           const path = `${tmpdir()}/conductor-body-${b.issue}-${randomUUID()}`;
+          // bytes は `protocols.md` の「file の bytes」。
           await Bun.write(path, b.body);
           files.push(path);
           args.push("--issue-body", `${b.issue}:${path}`);
@@ -362,6 +367,12 @@ export const createPort = (options: PortOptions): ObservePort => {
           else args.push("--worktree", `${s.name}:${s.worktree}`);
         }
         await fileArg("--plan-comment", input.planComment, "--no-plan-comment");
+        if (input.occupied.length === 0) args.push("--no-occupied");
+        else {
+          for (const row of input.occupied) {
+            args.push("--occupied", `${row.name}:${row.cwd}`);
+          }
+        }
       }
       await fileArg("--wait-record", input.waitRecord, "--no-wait-record");
 
@@ -440,6 +451,7 @@ export const createPort = (options: PortOptions): ObservePort => {
         // **壊れている宣言を「無い」と読まない** —— 読むと、止めているつもりの横で claim が進む。
         blocksEntry: entryBlockRecord(commentText).kind !== "absent",
         claimedAt: claimTimes.get(issue) ?? absent(),
+        waitRecordCreatedAt: waitTimes.get(issue) ?? absent(),
         linkedPrReportComments:
           prs.kind !== "present"
             ? unobservable("PR 一覧を読めない")
