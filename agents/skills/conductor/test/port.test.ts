@@ -11,10 +11,10 @@ import {
   ConfigError,
   extractHarnessCmd,
   parseConfig,
-  parseJsonc,
   parseWiring,
   resolveSurfaces,
 } from "../src/config.ts";
+import { parseJsonc } from "../src/jsonc.ts";
 import { readFileSync } from "node:fs";
 import { createPort, snapshotArgs } from "../src/port.ts";
 import { present } from "../src/types.ts";
@@ -216,10 +216,6 @@ describe("配線の JSONC", () => {
       refine: { kind: "claude", args: [] },
       resolve: { kind: "grok", args: ["--model", "x // not a comment"] },
     });
-  });
-
-  test("壊れていれば止まる", () => {
-    expect(() => parseJsonc("{ refine: }")).toThrow();
   });
 });
 

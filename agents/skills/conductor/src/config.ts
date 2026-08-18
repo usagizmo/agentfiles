@@ -5,6 +5,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { parseJsonc } from "./jsonc.ts";
 import type { TickConfig } from "./decide.ts";
 import { DEFAULT_CONFIG } from "./decide.ts";
 import { LEDGER_VALUES } from "./types.ts";
@@ -244,77 +245,6 @@ const parseExecutor = (stage: "refine" | "resolve", raw: unknown): ExecutorSpec 
     args.push(item);
   }
   return { kind, args };
-};
-
-/** 配線は JSONC。行コメントとブロックコメント、末尾カンマを許す。文字列の中は触らない。 */
-export const parseJsonc = (text: string): unknown => JSON.parse(toJson(text));
-
-const toJson = (text: string): string => {
-  let out = "";
-  let i = 0;
-  const n = text.length;
-  const skipIdle = (from: number): number => {
-    let j = from;
-    while (j < n) {
-      const ch = text[j];
-      if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-        j += 1;
-        continue;
-      }
-      if (ch === "/" && text[j + 1] === "/") {
-        j += 2;
-        while (j < n && text[j] !== "\n") j += 1;
-        continue;
-      }
-      if (ch === "/" && text[j + 1] === "*") {
-        j += 2;
-        while (j < n && !(text[j] === "*" && text[j + 1] === "/")) j += 1;
-        if (j < n) j += 2;
-        continue;
-      }
-      break;
-    }
-    return j;
-  };
-  while (i < n) {
-    const c = text[i];
-    if (c === '"') {
-      out += c;
-      i += 1;
-      while (i < n) {
-        const s = text[i];
-        out += s;
-        i += 1;
-        if (s === "\\") {
-          if (i < n) {
-            out += text[i];
-            i += 1;
-          }
-          continue;
-        }
-        if (s === '"') break;
-      }
-      continue;
-    }
-    if (c === "/" && text[i + 1] === "/") {
-      i = skipIdle(i);
-      continue;
-    }
-    if (c === "/" && text[i + 1] === "*") {
-      i = skipIdle(i);
-      continue;
-    }
-    if (c === ",") {
-      const next = skipIdle(i + 1);
-      if (text[next] === "}" || text[next] === "]") {
-        i += 1;
-        continue;
-      }
-    }
-    out += c;
-    i += 1;
-  }
-  return out;
 };
 
 /** 配線を読む。工程は kind と args の object。文字列は受けない。kind 既定へ倒さない。 */

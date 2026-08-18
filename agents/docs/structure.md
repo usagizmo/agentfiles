@@ -95,6 +95,9 @@ flowchart LR
     subgraph shared["agents/shared/ — 普遍"]
         RC["review-contract.md<br/><small>レビュー委譲の契約</small>"]
         AD["advisors.md<br/><small>アドバイザー起動表</small>"]
+        AJ["advisors.json<br/><small>候補表 JSONC</small>"]
+        JC["jsonc.ts<br/><small>JSONC parse</small>"]
+        AM["advisors.ts<br/><small>選出・検証</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
     end
@@ -144,6 +147,10 @@ flowchart LR
     CS --> AS
     ZB --> AD
     ZB --> AS
+    AS --> AJ
+    AS --> AM
+    AM --> JC
+    CO --> JC
     TD --> RC
     DC --> RC
     CM --> GM
@@ -165,13 +172,13 @@ skill 固有の `references/`:
 
 skill 固有の `scripts/`:
 
-| skill       | 実体                                                                                                                                      | 何をするか                                                                                                 |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk` | 起床監視・checks 抽出・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
-| `docs`      | `audit-skills.sh` / `check-emphasis.mjs` / `check-hard-wrap.mjs`                                                                          | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
-| `resolve`   | `serialize-plan.ts`                                                                                                                       | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                   |
-| `pr`        | `sync-and-push.sh`                                                                                                                        | base への追随と push（素の `git push` を使わせない）                                                       |
-| 共有        | `shared/advisors.sh`（`consult` / `zero-base-loop` から symlink）                                                                         | アドバイザーの起動と回収                                                                                   |
+| skill       | 実体                                                                                                                                                                                                | 何をするか                                                                                                 |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                           | 起床監視・checks 抽出・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
+| `docs`      | `audit-skills.sh` / `check-emphasis.mjs` / `check-hard-wrap.mjs`                                                                                                                                    | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
+| `resolve`   | `serialize-plan.ts`                                                                                                                                                                                 | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                   |
+| `pr`        | `sync-and-push.sh`                                                                                                                                                                                  | base への追随と push（素の `git push` を使わせない）                                                       |
+| 共有        | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink） | 候補表・JSONC・選出・起動と回収                                                                            |
 
 skill 固有の `assets/`:
 

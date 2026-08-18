@@ -27,7 +27,7 @@ description: >-
 
 ### 2. プロンプトを一時ファイルへ
 
-本文は下記。ファイルへの書き方と起動は `references/advisors.md`。軽量なら観点を絞って短くてよい:
+本文は下記。ファイルへの書き方は `references/advisors.md`。軽量なら観点を絞って短くてよい:
 
 ```markdown
 あなたは設計判断のレビュアーです。コードは変更せず分析と提案だけ返してください。
@@ -59,7 +59,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-同ディレクトリの `references/advisors.md` に従う（アドバイザー起動の SSOT）。
+`scripts/advisors.sh start <prompt-file>`。起動・回収と選び方は同ディレクトリの `references/advisors.md`。
 
 ### 4. 統合して提示
 

@@ -48,7 +48,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-同ディレクトリの `references/advisors.md` に従う（アドバイザー起動の SSOT。Herdr の外では立てない）。
+`scripts/advisors.sh start <prompt-file>`。起動・回収と選び方は同ディレクトリの `references/advisors.md`。
 
 ### 4. 精査 → 修正
 

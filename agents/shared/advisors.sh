@@ -2,12 +2,12 @@
 # アドバイザーの起動と回収。**同じ run を 2 度使えない形にするのが目的。**
 # Herdr の tab 1 + 左右 pane で interactive に立て、思考が見えるようにする。
 #
-#   advisors.sh start <prompt-file> <advisor>...   run dir を作って起動。run dir を stdout へ
+#   advisors.sh start <prompt-file>   run dir を作って起動。run dir を stdout へ
 #   advisors.sh collect <run-dir> [wait-seconds]   出揃うまで待って出力。既定 1200 秒
 #                                                  1 run 1 回。2 度目は落ちる
 #
-# advisor は codex / claude / grok。**実行中の自分自身を除いた 2 つ**を呼び出し側が選ぶ。
-# 不変条件: アドバイザーにコードを変更させない（codex は -s read-only、他は --permission-mode plan）。
+# 候補は advisors.json（JSONC）。選出は advisors.ts。位置引数で kind を渡さない。
+# 不変条件: アドバイザーにコードを変更させない（宣言の args のあとに read-only を足す）。
 # Herdr の外では立てない。headless CLI に倒さない。
 
 set -u
@@ -18,6 +18,11 @@ fatal() {
 	printf 'FATAL\t%s\n' "$1" >&2
 	exit 2
 }
+
+here=$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0") ||
+	fatal "スクリプトの場所が取れない"
+roster=$here/advisors.json
+select_ts=$here/advisors.ts
 
 json_get() {
 	python3 -c '
@@ -38,14 +43,6 @@ else:
 ' "$1" "$2"
 }
 
-kind_args() {
-	case $1 in
-	codex) printf '%s\n' -s read-only ;;
-	claude | grok) printf '%s\n' --permission-mode plan ;;
-	*) fatal "未知の advisor: $1" ;;
-	esac
-}
-
 close_tab() {
 	c_tab=$1
 	[ -n "$c_tab" ] || return 0
@@ -53,14 +50,17 @@ close_tab() {
 }
 
 cmd=${1:-}
-[ -n "$cmd" ] || fatal "使い方: advisors.sh start <prompt-file> <advisor>... | collect <run-dir> [秒]"
+[ -n "$cmd" ] || fatal "使い方: advisors.sh start <prompt-file> | collect <run-dir> [秒]"
 shift
 
 case "$cmd" in
 start)
 	[ "${HERDR_ENV:-}" = 1 ] || fatal "Herdr の外ではアドバイザーを立てない"
 	command -v herdr >/dev/null 2>&1 || fatal "herdr が PATH に無い"
+	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
 	[ -n "${HERDR_WORKSPACE_ID:-}" ] || fatal "HERDR_WORKSPACE_ID が無い"
+	[ -f "$roster" ] || fatal "候補表が無い: $roster"
+	[ -f "$select_ts" ] || fatal "選出スクリプトが無い: $select_ts"
 
 	prompt=${1:-}
 	[ -n "$prompt" ] && [ -s "$prompt" ] || fatal "prompt が空 / 不正: ${prompt:-未指定}"
@@ -68,20 +68,47 @@ start)
 	/*) ;;
 	*) prompt=$(CDPATH= cd -P -- "$(dirname "$prompt")" && pwd)/$(basename "$prompt") ;;
 	esac
-	shift
-	[ $# -ge 1 ] || fatal "advisor を 1 つ以上指定する"
-	[ $# -le 2 ] || fatal "advisor は 2 つまで（左右 2 pane）"
-
-	for a in "$@"; do
-		case "$a" in codex | claude | grok) ;; *) fatal "未知の advisor: $a" ;; esac
-	done
+	[ $# -eq 1 ] || fatal "advisor の位置引数は渡さない"
 
 	run=$(mktemp -d "${TMPDIR:-/tmp}/advisors.XXXXXX") || fatal "run dir を作れない"
 	rid=$(basename "$run")
 	rid=${rid#advisors.}
 	rid=$(printf '%s' "$rid" | tr 'A-Z' 'a-z')
-	printf '%s\n' "$*" >"$run/advisors"
 	cp "$prompt" "$run/prompt" || fatal "prompt を配れない"
+	cp "$roster" "$run/roster.json" || fatal "候補表を配れない"
+
+	if ! herdr pane current --current >"$run/self.json" 2>>"$run/select.log"; then
+		cat "$run/select.log" >&2 || true
+		rm -rf "$run"
+		fatal "自己 kind が取れない"
+	fi
+	self=$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+print(((d.get("result") or {}).get("pane") or {}).get("agent") or "")
+' "$run/self.json") || {
+		rm -rf "$run"
+		fatal "自己 kind が読めない"
+	}
+	[ -n "$self" ] || {
+		rm -rf "$run"
+		fatal "自己 kind が空"
+	}
+	printf '%s\n' "$self" >"$run/self"
+
+	if ! bun "$select_ts" select --roster "$run/roster.json" --self "$self" \
+		>"$run/selected.json" 2>"$run/select.err"; then
+		cat "$run/select.err" >&2
+		rm -rf "$run"
+		fatal "選出できない"
+	fi
+	cat "$run/select.err" >&2 || true
+	python3 -c '
+import json, sys
+for s in json.load(open(sys.argv[1], encoding="utf-8")):
+    print(s["kind"])
+' "$run/selected.json" >"$run/advisors" || fatal "選出結果が読めない"
+	[ -s "$run/advisors" ] || fatal "選出結果が空"
 
 	tab_json=$run/tab.json
 	if ! herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" \
@@ -115,6 +142,15 @@ for p in panes:
 		fatal "root pane が取れない"
 	}
 
+	set --
+	while IFS= read -r a; do
+		[ -n "$a" ] && set -- "$@" "$a"
+	done <"$run/advisors"
+	[ $# -ge 1 ] || {
+		close_tab "$tab_id"
+		fatal "選出した advisor が無い"
+	}
+
 	left=$root
 	right=""
 	if [ $# -eq 2 ]; then
@@ -131,11 +167,24 @@ for p in panes:
 
 	started=0
 	i=0
-	for a in $(cat "$run/advisors"); do
+	for a in "$@"; do
 		i=$((i + 1))
 		mkdir -p "$run/$a" || {
 			close_tab "$tab_id"
 			fatal "$run/$a を作れない"
+		}
+		python3 -c '
+import json, sys
+kind = sys.argv[2]
+for s in json.load(open(sys.argv[1], encoding="utf-8")):
+    if s["kind"] == kind:
+        json.dump(s, open(sys.argv[3], "w", encoding="utf-8"))
+        break
+else:
+    sys.exit(1)
+' "$run/selected.json" "$a" "$run/$a/slot.json" || {
+			close_tab "$tab_id"
+			fatal "$a の枠が取れない"
 		}
 		if [ "$i" -eq 1 ]; then
 			pane=$left
@@ -145,15 +194,20 @@ for p in panes:
 		name=a-$a-$rid
 		printf '%s\n' "$name" >"$run/$a/name"
 		printf '%s\n' "$pane" >"$run/$a/pane"
-		extra=$(kind_args "$a")
-		# extra はスクリプトが出すフラグだけ。IFS 分割して -- の後ろへ渡す
+		if ! bun "$select_ts" start-argv --slot "$run/$a/slot.json" --name "$name" --pane "$pane" \
+			>"$run/$a/argv.json" 2>>"$run/$a/log"; then
+			close_tab "$tab_id"
+			fatal "$a の argv が組めない"
+		fi
 		# pane が interactive shell になる前に start すると agent_pane_busy になる
-		# shellcheck disable=SC2086
 		n=0
 		started_one=0
 		while [ "$n" -lt 20 ]; do
-			if herdr agent start "$name" --kind "$a" --pane "$pane" --timeout 90000 -- $extra \
-				>"$run/$a/start.json" 2>>"$run/$a/log"; then
+			if python3 -c '
+import json, subprocess, sys
+argv = json.load(open(sys.argv[1], encoding="utf-8"))
+raise SystemExit(subprocess.run(argv, stdout=open(sys.argv[2], "w", encoding="utf-8")).returncode)
+' "$run/$a/argv.json" "$run/$a/start.json" 2>>"$run/$a/log"; then
 				started_one=1
 				break
 			fi
@@ -175,7 +229,7 @@ $run/prompt" >>"$run/$a/log" 2>&1; then
 	done
 
 	if [ "$started" -eq 0 ]; then
-		for a in $(cat "$run/advisors"); do
+		for a in "$@"; do
 			printf '=== %s start 失敗 ===\n' "$a" >&2
 			tail -n 20 "$run/$a/log" 2>/dev/null >&2
 		done
@@ -194,13 +248,16 @@ collect)
 	case $wait_s in
 	'' | *[!0-9]*) fatal "待ち秒数が数値でない: $wait_s" ;;
 	esac
-	names=$(cat "$run/advisors")
+	set --
+	while IFS= read -r a; do
+		[ -n "$a" ] && set -- "$@" "$a"
+	done <"$run/advisors"
 	tab_id=""
 	[ -f "$run/tab_id" ] && tab_id=$(cat "$run/tab_id")
 	deadline=$(($(date +%s) + wait_s))
 
 	incomplete=0
-	for a in $names; do
+	for a in "$@"; do
 		name=""
 		[ -f "$run/$a/name" ] && name=$(cat "$run/$a/name")
 		start_rc=$(cat "$run/$a/start.rc" 2>/dev/null) || start_rc=1
@@ -223,7 +280,7 @@ collect)
 			>"$run/$a/out" 2>>"$run/$a/log" || true
 	done
 
-	for a in $names; do
+	for a in "$@"; do
 		rc=$(cat "$run/$a/rc" 2>/dev/null) || rc=1
 		printf '=== %s (rc=%s) ===\n' "$a" "$rc"
 		[ -s "$run/$a/out" ] && cat "$run/$a/out"
