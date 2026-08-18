@@ -141,7 +141,7 @@ bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
 
 対で渡す。`<代表>` は実行しなかった action の代表。壊れた渡しは `src/cli.ts` の `specGap` が止める。
 
-設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
+座標は **project 差分 skill の `config.json`**（JSON）、配線は隣の untracked `config.local.json`（JSONC。tracked に置かない）。必須項目と検証は `src/config.ts` の `loadProjectFiles` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
 
 **checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**宣言された面を 1 つでも渡さなければ exit 2**。
 

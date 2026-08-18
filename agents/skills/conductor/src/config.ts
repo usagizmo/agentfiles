@@ -3,7 +3,8 @@
 // **既定値を置くのは、推測が外れても待ちが伸びるだけの項目まで。**
 // 間違ったものを掴む項目（Status の対応・着地面の座標表）には置かず、欠けたら止まる。
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { TickConfig } from "./decide.ts";
 import { DEFAULT_CONFIG } from "./decide.ts";
 import { LEDGER_VALUES } from "./types.ts";
@@ -41,15 +42,18 @@ export type ProjectConfig = {
    */
   readonly sessionsCmd: string;
   readonly workspacesCmd: string;
-  /**
-   * 工程ごとに何で実行器を起こすか（`herdr agent start --kind` の値）。**両方必須**。
-   *
-   * **何で起こすかは配線**（`~/.agents/AGENTS.md`「意味と手順は共通、起動・配線は個別」）——
-   * 共通 skill が harness を名指しすると、project ごとに変えられず、計画と実装で別の実行器を
-   * 試すこともできない。**モデルは持たない** —— 既定は harness の設定側が持っている。
-   */
-  readonly executors: { readonly refine: string; readonly resolve: string };
   readonly tick: TickConfig;
+};
+
+export type ExecutorSpec = {
+  readonly kind: string;
+  readonly args: readonly string[];
+};
+
+/** `--config` の隣の untracked `config.local.json`。座標キーを持たない。 */
+export type WiringConfig = {
+  readonly refine: ExecutorSpec;
+  readonly resolve: ExecutorSpec;
 };
 
 /** 座標に checkout path を束ねたもの。`port` が実際に触るのはこちら。 */
@@ -102,6 +106,29 @@ const readHarnessCmds = (): { readonly sessionsCmd: string; readonly workspacesC
 
 const isLedger = (v: unknown): v is Ledger => LEDGER_VALUES.includes(v as Ledger);
 
+const TRACKED_KEYS = new Set([
+  "ghRepo",
+  "projectOrg",
+  "projectNumber",
+  "statusField",
+  "statusMap",
+  "surfaces",
+  "sessionsCmd",
+  "workspacesCmd",
+  "tick",
+]);
+
+const WIRING_KEYS = new Set(["refine", "resolve"]);
+
+const TRACKED_REQUIRED = "ghRepo, projectOrg, projectNumber, statusField, statusMap, surfaces";
+const WIRING_REQUIRED = "refine.kind, refine.args, resolve.kind, resolve.args";
+
+const wrapLoadError = (label: "設定" | "配線", abs: string, detail: unknown): ConfigError => {
+  const needed = label === "設定" ? TRACKED_REQUIRED : WIRING_REQUIRED;
+  const msg = detail instanceof ConfigError ? detail.message : String(detail);
+  return new ConfigError(`${label}を読めない: ${abs}\n${msg}\n必要なキー: ${needed}`);
+};
+
 /**
  * 設定 JSON を読む。**欠けたら止まる**（fail-closed）——
  * 既定へ倒すと、対応表に無い Status を持つ Issue が黙って `未計画` として計画される。
@@ -109,6 +136,9 @@ const isLedger = (v: unknown): v is Ledger => LEDGER_VALUES.includes(v as Ledger
 export const parseConfig = (raw: unknown): ProjectConfig => {
   if (typeof raw !== "object" || raw === null) throw new ConfigError("設定が object ではない");
   const o = raw as Record<string, unknown>;
+  for (const key of Object.keys(o)) {
+    if (!TRACKED_KEYS.has(key)) throw new ConfigError(`設定の ${key} は未知`);
+  }
 
   const required = (key: string): unknown => {
     const v = o[key];
@@ -168,15 +198,6 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     seenNames.add(s.name);
   }
 
-  const executorsRaw = required("executors");
-  if (typeof executorsRaw !== "object" || executorsRaw === null)
-    throw new ConfigError("executors が object ではない");
-  const executor = (stage: "refine" | "resolve"): string => {
-    const kind = (executorsRaw as Record<string, unknown>)[stage];
-    if (typeof kind !== "string" || kind === "") throw new ConfigError(`executors.${stage} が無い`);
-    return kind;
-  };
-
   return {
     ghRepo: String(required("ghRepo")),
     projectOrg: String(required("projectOrg")),
@@ -186,7 +207,6 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     surfaces,
     sessionsCmd: optionalCmd("sessionsCmd", () => readHarnessCmds().sessionsCmd),
     workspacesCmd: optionalCmd("workspacesCmd", () => readHarnessCmds().workspacesCmd),
-    executors: { refine: executor("refine"), resolve: executor("resolve") },
     // 硬い上限は既定を持つ（推測が外れても待ちが伸びるだけ）。
     tick: (() => {
       const rawTick = o["tick"];
@@ -203,4 +223,146 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
       return { ...DEFAULT_CONFIG, ...parsed };
     })(),
   };
+};
+
+const parseExecutor = (stage: "refine" | "resolve", raw: unknown): ExecutorSpec => {
+  if (raw === undefined) throw new ConfigError(`配線に ${stage} が無い`);
+  if (typeof raw !== "object" || raw === null)
+    throw new ConfigError(`配線の ${stage} が object ではない`);
+  const o = raw as Record<string, unknown>;
+  for (const key of Object.keys(o)) {
+    if (key !== "kind" && key !== "args") throw new ConfigError(`配線の ${stage}.${key} は未知`);
+  }
+  const kind = o["kind"];
+  if (typeof kind !== "string" || kind === "") throw new ConfigError(`配線の ${stage}.kind が無い`);
+  const argsRaw = o["args"];
+  if (!Array.isArray(argsRaw)) throw new ConfigError(`配線の ${stage}.args が配列ではない`);
+  const args: string[] = [];
+  for (const item of argsRaw) {
+    if (typeof item !== "string" || item === "")
+      throw new ConfigError(`配線の ${stage}.args に空がある`);
+    args.push(item);
+  }
+  return { kind, args };
+};
+
+/** 配線は JSONC。行コメントとブロックコメント、末尾カンマを許す。文字列の中は触らない。 */
+export const parseJsonc = (text: string): unknown => JSON.parse(toJson(text));
+
+const toJson = (text: string): string => {
+  let out = "";
+  let i = 0;
+  const n = text.length;
+  const skipIdle = (from: number): number => {
+    let j = from;
+    while (j < n) {
+      const ch = text[j];
+      if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+        j += 1;
+        continue;
+      }
+      if (ch === "/" && text[j + 1] === "/") {
+        j += 2;
+        while (j < n && text[j] !== "\n") j += 1;
+        continue;
+      }
+      if (ch === "/" && text[j + 1] === "*") {
+        j += 2;
+        while (j < n && !(text[j] === "*" && text[j + 1] === "/")) j += 1;
+        if (j < n) j += 2;
+        continue;
+      }
+      break;
+    }
+    return j;
+  };
+  while (i < n) {
+    const c = text[i];
+    if (c === '"') {
+      out += c;
+      i += 1;
+      while (i < n) {
+        const s = text[i];
+        out += s;
+        i += 1;
+        if (s === "\\") {
+          if (i < n) {
+            out += text[i];
+            i += 1;
+          }
+          continue;
+        }
+        if (s === '"') break;
+      }
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      i = skipIdle(i);
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      i = skipIdle(i);
+      continue;
+    }
+    if (c === ",") {
+      const next = skipIdle(i + 1);
+      if (text[next] === "}" || text[next] === "]") {
+        i += 1;
+        continue;
+      }
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
+};
+
+/** 配線を読む。工程は kind と args の object。文字列は受けない。kind 既定へ倒さない。 */
+export const parseWiring = (raw: unknown): WiringConfig => {
+  if (typeof raw !== "object" || raw === null) throw new ConfigError("配線が object ではない");
+  const o = raw as Record<string, unknown>;
+  for (const key of Object.keys(o)) {
+    if (!WIRING_KEYS.has(key)) throw new ConfigError(`配線の ${key} は未知`);
+  }
+  return {
+    refine: parseExecutor("refine", o["refine"]),
+    resolve: parseExecutor("resolve", o["resolve"]),
+  };
+};
+
+export const WIRING_FILE = "config.local.json";
+
+/**
+ * `--config` と隣の配線を読む。片方に他方のキー、欠落・破損・工程欠けは止まる。
+ * 返すのは座標だけ。配線は検証して捨てる（Decision は参照しない）。
+ */
+export const loadProjectFiles = (configPath: string): ProjectConfig => {
+  const configAbs = resolve(configPath);
+  const wiringAbs = join(dirname(configAbs), WIRING_FILE);
+
+  const readJson = (abs: string, label: "設定" | "配線"): unknown => {
+    if (!existsSync(abs)) throw wrapLoadError(label, abs, "file が無い");
+    try {
+      const text = readFileSync(abs, "utf8");
+      return (label === "配線" ? parseJsonc(text) : JSON.parse(text)) as unknown;
+    } catch (error) {
+      throw wrapLoadError(label, abs, error);
+    }
+  };
+
+  const trackedRaw = readJson(configAbs, "設定");
+  let config: ProjectConfig;
+  try {
+    config = parseConfig(trackedRaw);
+  } catch (error) {
+    throw wrapLoadError("設定", configAbs, error);
+  }
+
+  const wiringRaw = readJson(wiringAbs, "配線");
+  try {
+    parseWiring(wiringRaw);
+  } catch (error) {
+    throw wrapLoadError("配線", wiringAbs, error);
+  }
+  return config;
 };

@@ -40,7 +40,6 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 - **面ごとにセッションを起こさない**（1 課題 = 1 セッション = 1 計画）
 - どちらも完了を待た**ない**。渡すのは Issue 番号だけで、起こされた側は Issue 本文を読んで自分で文脈を作る
 - **セッション名は `refine-<番号>` / `resolve-<番号>` に固定する**
-- **実行器のモデルは落とさない**（`--` 以降で渡す。conductor 自身とは別に指定する）
 
 入れ物は 3 段で、上から「隔離が要る順」に選ぶ。
 
@@ -147,7 +146,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | tab を作る（refine）                         | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                                       |
 | pane を作る（振られた作業）                  | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                                    |
 | pane_id を得る                               | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                                 |
-| セッションを起こす                           | `herdr agent start <名前> --kind <工程の実行器> --pane <id> --timeout 90000`（`--pane` 以外の受け口は無い）                                                                                                                                                                               |
+| セッションを起こす                           | `herdr agent start <名前> --kind <配線の kind> --pane <id> --timeout 90000 [-- <args>...]`                                                                                                                                                                                                |
 | 課題を渡す・再開する                         | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                              |
 | セッションを観測する                         | `herdr agent list`（`name` / `agent_status` / `cwd`）                                                                                                                                                                                                                                     |
 | worktree を作る（claim。二次面）             | **`git -C <その面の checkout> worktree add -b <名> <path> <その面の統合先>`**（**pane を作らない**。`<path>` の決め方は下記）                                                                                                                                                             |
@@ -163,7 +162,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 退避〜branch の workspace ID                 | checkout があるとき `herdr worktree list --cwd <面の checkout>` の `open_workspace_id`                                                                                                                                                                                                    |
 | 閉じる段の workspace ID                      | **`herdr workspace list`** を引き直した行の `workspace_id`。`open_workspace_id` からは取ら**ない**                                                                                                                                                                                        |
 
-**`--kind` は project の `config.json` の `executors`**（工程ごと。検証は `src/config.ts` の `parseConfig`）。**モデルは渡さ**ない —— 既定は harness の設定側が持つ。
+`--kind` は `--config` の隣の `config.local.json` の kind（工程ごと。検証は `src/config.ts` の `parseWiring`）。`--` 以降は同じ file の args を要素ごと 1 argv。kind ごとのフラグ組み立ては持た**ない**。空配列なら `--` を付けない。
 
 **3 つの経路は、それぞれ別の問いに対して権威。1 つに寄せない。**
 
@@ -197,7 +196,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 名乗る:
 
-- `<kind>` は自分の実行器。`herdr agent start` の `--kind` と同じ語。project の `executors` ではない
+- `<kind>` は自分の実行器。`herdr agent start` の `--kind` と同じ語。配線 file は見ない
 - `agent` が既にあるときは `report-agent` しない
 - `--current` は `agent rename` に無い。pane ID を渡す
 
@@ -234,7 +233,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 3. close 直前に `herdr agent get <名前>` で `agent_status` と `state_change_seq` を引き直す
 4. `agent_status` が `idle` / `done` のまま、かつ `state_change_seq` が 1 で取った値と同じなら `herdr pane close <pane_id>`。外れていたら閉じずその tick を終える
 5. `herdr pane list --workspace <workspace_id>` と `herdr agent list` で旧 pane と旧 agent の消滅を観測する
-6. `herdr agent start <名前> --kind <工程の実行器> --pane <新 pane> --timeout 90000`
+6. 「セッションを起こす」と同じ。新 pane へ
 7. 「起こす」表の本文を `herdr agent prompt` で送る。`交差を解消する` では送らず、元の渡す内容を送る
 
 ### 起こされる仕組み
@@ -362,7 +361,7 @@ worktree 一覧は面ごとの checkout から取る（スクリプトが `--rep
 
 手順（既存の受け口だけで足りる。新しい仕組みを作らない）:
 
-1. `pane split` で pane を作り、`conductor-next` で `agent start`（**同名で立てない**。多重起動の判定に触れる）
+1. `pane split` で pane を作り、`conductor-next` で `agent start`（**同名で立てない**。`--kind` は自分と同じ。配線 file は見ない）
 2. `agent prompt` で `/conductor` を渡す。引き継ぎ本文は原則として付け**ない**
 3. 後継が観測を始めたことを `agent list` で確認する
 4. **自分を `conductor-prev` へ rename してから、後継を `conductor` へ rename する**（逆順だと同名が 2 本並ぶ）

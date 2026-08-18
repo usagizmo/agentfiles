@@ -10,7 +10,7 @@
 //
 // `cli.ts` はトップレベルで実行して `process.exit` するので、import では試せない。
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, test } from "bun:test";
@@ -36,15 +36,26 @@ const VALID = {
   ],
   sessionsCmd: "echo conductor present",
   workspacesCmd: "echo ws -",
-  executors: { refine: "claude", resolve: "claude" },
 };
 
-/** 設定を書き出して path を返す。`over` を undefined にした key は落とす。 */
-const configFile = (name: string, over: Record<string, unknown> = {}): string => {
+const WIRING = {
+  refine: { kind: "claude", args: [] as string[] },
+  resolve: { kind: "claude", args: [] as string[] },
+};
+
+/** 設定を dir に書き、隣へ配線を置く。`over` を undefined にした key は落とす。 */
+const configFile = (
+  name: string,
+  over: Record<string, unknown> = {},
+  wiring: unknown | null = WIRING,
+): string => {
+  const dir = join(TMP, name);
+  mkdirSync(dir, { recursive: true });
   const merged: Record<string, unknown> = { ...VALID, ...over };
   for (const [k, v] of Object.entries(over)) if (v === undefined) delete merged[k];
-  const path = join(TMP, `${name}.json`);
+  const path = join(dir, "config.json");
   writeFileSync(path, JSON.stringify(merged));
+  if (wiring !== null) writeFileSync(join(dir, "config.local.json"), JSON.stringify(wiring));
   return path;
 };
 
@@ -112,7 +123,6 @@ describe("設定の fail-closed", () => {
     "statusField",
     "statusMap",
     "surfaces",
-    "executors",
   ]) {
     test(`${key} が欠けたら 2 で止まる`, async () => {
       const path = configFile(`no-${key}`, { [key]: undefined });
@@ -157,6 +167,96 @@ describe("設定の fail-closed", () => {
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
     expect(err).toContain("countsCapacity");
+  });
+
+  test("配線 file が無ければ 2 で止まる", async () => {
+    const path = configFile("no-wiring", {}, null);
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain(join(TMP, "no-wiring", "config.local.json"));
+    expect(err).toContain("必要なキー");
+    expect(err).toContain("refine");
+    expect(err).toContain("resolve");
+  });
+
+  test("配線 file が壊れていれば 2 で止まる", async () => {
+    const path = configFile("broken-wiring");
+    writeFileSync(join(TMP, "broken-wiring", "config.local.json"), "{ not json");
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain(join(TMP, "broken-wiring", "config.local.json"));
+    expect(err).toContain("必要なキー");
+  });
+
+  test("tracked に executors があれば 2 で止まる", async () => {
+    const path = configFile("tracked-executors", {
+      executors: { refine: "claude", resolve: "claude" },
+    });
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain(join(TMP, "tracked-executors", "config.json"));
+    expect(err).toContain("executors");
+  });
+
+  test("配線に座標キーがあれば 2 で止まる", async () => {
+    const path = configFile("wiring-coord", {}, { ...WIRING, ghRepo: "acme/control" });
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain(join(TMP, "wiring-coord", "config.local.json"));
+    expect(err).toContain("ghRepo");
+  });
+
+  test("工程が欠けたら 2 で止まる", async () => {
+    const path = configFile("no-resolve", {}, { refine: WIRING.refine });
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain("resolve");
+    expect(err).toContain("必要なキー");
+  });
+
+  test("kind が空なら 2 で止まる", async () => {
+    const path = configFile(
+      "empty-kind",
+      {},
+      { refine: WIRING.refine, resolve: { kind: "", args: [] } },
+    );
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain("kind");
+  });
+
+  test("args の空要素なら 2 で止まる", async () => {
+    const path = configFile(
+      "empty-arg",
+      {},
+      { refine: WIRING.refine, resolve: { kind: "claude", args: [""] } },
+    );
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain("args");
+  });
+
+  test("配線の JSONC は通る", async () => {
+    const path = configFile("jsonc-wiring");
+    writeFileSync(
+      join(TMP, "jsonc-wiring", "config.local.json"),
+      `{
+        // refine / resolve
+        "refine": { "kind": "claude", "args": [] },
+        "resolve": { "kind": "claude", "args": [] },
+      }`,
+    );
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(1);
+    expect(err).toContain("観測に失敗した");
+  });
+
+  test("座標の JSONC は通さない", async () => {
+    const path = configFile("jsonc-tracked");
+    writeFileSync(path, `{\n  // no\n  "ghRepo": "acme/control"\n}`);
+    const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
+    expect(code).toBe(2);
+    expect(err).toContain(path);
   });
 });
 

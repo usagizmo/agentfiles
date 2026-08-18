@@ -7,7 +7,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { ConfigError, extractHarnessCmd, parseConfig, resolveSurfaces } from "../src/config.ts";
+import {
+  ConfigError,
+  extractHarnessCmd,
+  parseConfig,
+  parseJsonc,
+  parseWiring,
+  resolveSurfaces,
+} from "../src/config.ts";
 import { readFileSync } from "node:fs";
 import { createPort, snapshotArgs } from "../src/port.ts";
 import { present } from "../src/types.ts";
@@ -30,7 +37,6 @@ const raw = {
   ],
   sessionsCmd: "list-sessions",
   workspacesCmd: "list-workspaces",
-  executors: { refine: "claude", resolve: "grok" },
 };
 
 const PATHS = new Map([
@@ -150,28 +156,66 @@ describe("設定の fail-closed", () => {
   });
 });
 
-describe("実行器の起動", () => {
-  // **何で起こすかは配線**（`~/.agents/AGENTS.md`「意味と手順は共通、起動・配線は個別」）。
-  // 共通 skill が harness を名指しすると、project ごとに変えられず実験もできない。
-  test("工程ごとに別の実行器を指定できる", () => {
-    const config = parseConfig(raw);
-    expect(config.executors.refine).toBe("claude");
-    expect(config.executors.resolve).toBe("grok");
-  });
+describe("実行器の配線", () => {
+  const wiring = {
+    refine: { kind: "claude", args: [] as const },
+    resolve: { kind: "grok", args: ["--model", "x"] as const },
+  };
 
-  test("executors が無ければ止まる", () => {
-    const { executors: _drop, ...without } = raw;
-    expect(() => parseConfig(without)).toThrow(ConfigError);
+  test("工程ごとに kind と args を読む", () => {
+    expect(parseWiring(wiring)).toEqual({
+      refine: { kind: "claude", args: [] },
+      resolve: { kind: "grok", args: ["--model", "x"] },
+    });
   });
 
   test("工程が 1 つでも欠けたら止まる", () => {
-    expect(() => parseConfig({ ...raw, executors: { refine: "claude" } })).toThrow(ConfigError);
+    expect(() => parseWiring({ refine: wiring.refine })).toThrow("resolve");
   });
 
-  test("空文字なら止まる（既定へ倒さない）", () => {
-    expect(() => parseConfig({ ...raw, executors: { ...raw.executors, resolve: "" } })).toThrow(
-      ConfigError,
+  test("kind が空なら止まる（既定へ倒さない）", () => {
+    expect(() => parseWiring({ ...wiring, resolve: { kind: "", args: [] } })).toThrow(ConfigError);
+  });
+
+  test("args の空要素は止まる", () => {
+    expect(() => parseWiring({ ...wiring, resolve: { kind: "grok", args: [""] } })).toThrow("args");
+  });
+
+  test("配線以外のキーは止まる", () => {
+    expect(() => parseWiring({ ...wiring, ghRepo: "acme/control" })).toThrow("ghRepo");
+  });
+
+  test("tracked の executors は未知として止まる", () => {
+    expect(() => parseConfig({ ...raw, executors: { refine: "claude", resolve: "grok" } })).toThrow(
+      "executors",
     );
+  });
+
+  test("tracked の未知キーは止まる", () => {
+    expect(() => parseConfig({ ...raw, extra: 1 })).toThrow("未知");
+  });
+});
+
+describe("配線の JSONC", () => {
+  const body = `{
+    // kind は herdr agent start --kind
+    "refine": { "kind": "claude", "args": [] },
+    "resolve": {
+      "kind": "grok",
+      /* モデル・effort は kind ごとに違う */
+      "args": ["--model", "x // not a comment"],
+    },
+  }`;
+
+  test("コメントと末尾カンマを読んで args の文字列は残す", () => {
+    expect(parseWiring(parseJsonc(body))).toEqual({
+      refine: { kind: "claude", args: [] },
+      resolve: { kind: "grok", args: ["--model", "x // not a comment"] },
+    });
+  });
+
+  test("壊れていれば止まる", () => {
+    expect(() => parseJsonc("{ refine: }")).toThrow();
   });
 });
 

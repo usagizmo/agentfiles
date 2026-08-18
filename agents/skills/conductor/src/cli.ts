@@ -12,7 +12,7 @@
 //   1  観測に失敗した（**watcher は呼び出し側が直前の snapshot で張る**）
 //   2  設定が壊れている（fail-closed。何も選ばずに止まる）
 
-import { ConfigError, parseConfig, resolveSurfaces } from "./config.ts";
+import { ConfigError, loadProjectFiles, resolveSurfaces } from "./config.ts";
 import { decide, type TickInput } from "./decide.ts";
 import { observeTick } from "./observe.ts";
 import { createPort } from "./port.ts";
@@ -76,9 +76,9 @@ const runTick = async (): Promise<void> => {
 
   const scriptsDir = new URL("../scripts", import.meta.url).pathname;
 
-  const config = await (async () => {
+  const config = (() => {
     try {
-      return parseConfig(await Bun.file(configPath).json());
+      return loadProjectFiles(configPath);
     } catch (error) {
       return fail(
         2,
