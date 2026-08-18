@@ -383,6 +383,55 @@ keys: [skills]
     expect(plan?.issueBodies).toEqual([{ issue: 34, body }]);
   });
 
+  test("計画の周は同居相手の本文を渡さない", async () => {
+    const body = "Same branch as #12\n\n本文34\n";
+    const seen: CycleMarkInput[] = [];
+    await observe(
+      port({
+        issueBodies: async () =>
+          new Map([
+            [12, present("同居相手の本文")],
+            [34, present(body)],
+          ]),
+        cycleMark: async (input) => {
+          seen.push(input);
+          return present("mark-1");
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "進行中"],
+        ["計画済み", "未計画"],
+      ]),
+      SURFACES,
+    );
+    const plan = seen.find((s) => s.issue === 34);
+    expect(plan?.issueBodies).toEqual([{ issue: 34, body }]);
+  });
+
+  test("計画の周は同居相手の本文が読めなくても自分の指紋を作る", async () => {
+    const seen: number[] = [];
+    const rows = await observe(
+      port({
+        issueBodies: async () =>
+          new Map([
+            [12, unobservable("読めない")],
+            [34, present("Same branch as #12\n\n本文34\n")],
+          ]),
+        cycleMark: async (input) => {
+          seen.push(input.issue);
+          return present("mark-1");
+        },
+      }),
+      new Map<string, Ledger>([
+        ["進行中", "進行中"],
+        ["計画済み", "未計画"],
+      ]),
+      SURFACES,
+    );
+    expect(seen).toContain(34);
+    expect(find(rows, 34).currentMark.kind).toBe("present");
+  });
+
   test("指紋には ledger と progress と面ごとの worktree を渡す", async () => {
     const seen: unknown[] = [];
     await observe(

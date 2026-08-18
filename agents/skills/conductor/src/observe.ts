@@ -136,7 +136,7 @@ export type CycleMarkInput = {
   readonly planComment: string | null;
   /** 人待ちの記録。bytes は `protocols.md` の「file の bytes」 */
   readonly waitRecord: string | null;
-  /** 計画の周のみ。対象集合の全件。bytes は `protocols.md` の「file の bytes」 */
+  /** 計画の周のみ。その課題自身 1 件。bytes は `protocols.md` の「file の bytes」 */
   readonly issueBodies: readonly { readonly issue: number; readonly body: string }[];
   /**
    * 同じ worktree に居る所有外セッション。**name + cwd だけ。状態は入れない。**
@@ -515,16 +515,14 @@ export const observeTick = async (
     const ledger = o.ledger.value;
     const issueBodies: { issue: number; body: string }[] = [];
     if (ledger === "未計画") {
-      // **計画の周は対象集合の全件**。claim 前なので group は本文の宣言から引く。
-      // **読めない番号を空へ畳まない。**畳むと「本文が無い」周と同じ指紋になる。
-      for (const n of [o.issue, ...o.sameBranchAs]) {
-        const b = bodies.get(n);
-        if (b?.kind !== "present") {
-          marks.set(o.issue, unobservable(`Issue ${String(n)} の本文を読めない`));
-          return;
-        }
-        issueBodies.push({ issue: n, body: b.value });
+      // **計画の周は、その課題自身の本文 1 件。**
+      // **読めない本文を空へ畳まない。**
+      const b = bodies.get(o.issue);
+      if (b?.kind !== "present") {
+        marks.set(o.issue, unobservable(`Issue ${String(o.issue)} の本文を読めない`));
+        return;
       }
+      issueBodies.push({ issue: o.issue, body: b.value });
     }
     marks.set(
       o.issue,

@@ -1218,6 +1218,47 @@ describe("外から状態が動く", () => {
       "片付ける",
     );
   });
+
+  test("10y: claim 前の group で、成員 A だけ周回 count が上限", () => {
+    const a = observation({
+      issue: 1,
+      ledger: present("未計画"),
+      sameBranchAs: [2],
+      cycleRecord: present({ count: 3, mark: "mark-0" }),
+    });
+    const b = observation({
+      issue: 2,
+      ledger: present("未計画"),
+      sameBranchAs: [1],
+      cycleRecord: present({ count: 0, mark: null }),
+    });
+    const o = tick([a, b]).outcome;
+    expect(o.kind === "action" ? o.params : o.kind).toMatchObject({
+      action: "差し戻す",
+      to: "退避先",
+    });
+    expect(o.kind === "action" ? o.target.members : []).toEqual([1]);
+  });
+
+  test("10z: claim 済み group で、代表の周回 count が上限", () => {
+    const lead = implementing({
+      session: session.none,
+      cycleRecord: present({ count: 3, mark: "mark-0" }),
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const member = observation({
+      issue: 2,
+      ledger: present("進行中"),
+      sameBranchAs: [1],
+      cycleRecord: present({ count: 0, mark: null }),
+    });
+    const o = tick([lead, member]).outcome;
+    expect(o.kind === "action" ? o.params : o.kind).toMatchObject({
+      action: "差し戻す",
+      to: "退避先",
+    });
+    expect(o.kind === "action" ? o.target.members : []).toEqual([1, 2]);
+  });
 });
 
 describe("意図の確認", () => {
@@ -1594,7 +1635,7 @@ describe("group", () => {
   });
 
   test("12j: claim 前の group で、成員の側にだけ人待ちの記録がある", () => {
-    // claim 前の人待ちは渡された Issue に書かれる（代表がまだ決まっていない）。
+    // claim の記録が無ければ人待ちは渡された Issue に書かれる。
     const a = observation({ issue: 1, ledger: present("未計画"), sameBranchAs: [2] });
     const b = observation({
       issue: 2,

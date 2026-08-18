@@ -12,12 +12,13 @@ tick の分岐そのものではなく、**その action を選んだ後に何�
 2. **着地面を解決する**（本文の宣言 → 座標表。解決できなければ候補を捨てて次へ。`landing-surface.md`）
 3. **制御面の** remote branch を代表の番号で一意に作成する。失敗したら候補を捨てて次へ
 4. **claim の記録を代表の Issue へ書く**（代表と全員の番号、および解決した着地面。形式は `same-branch.md`。書き手はそこの記述）
-5. **記録した全員**の Status を進行中にし、assignee を自分にする（group でも代表だけにしない）
-6. **着地面ごとに** branch と worktree を作る（同じ branch 名。その時点の統合先から切る）
-7. セッションを起こす（`harness.md`）
+5. **成員側に残った周回の記録と失敗の記録を消す**。代表へ count を写さない。新しい単位では 0 から数える
+6. **記録した全員**の Status を進行中にし、assignee を自分にする（group でも代表だけにしない）
+7. **着地面ごとに** branch と worktree を作る（同じ branch 名。その時点の統合先から切る）
+8. セッションを起こす（`harness.md`）
 
 - **4 が書けなければ、3 で作った remote branch を消してから終える**。branch を作るのは記録を書く直前で、書けたことを確かめるまでが 1 手
-- **5 が誰か 1 人でも失敗したらセッションを起こさない**。branch は残し、次の tick へ返す
+- **6 が誰か 1 人でも失敗したらセッションを起こさない**。branch は残し、次の tick へ返す
 - **Project の更新失敗で claim をロールバックしない**。branch が真実で、Status は台帳
 - **base は常にその面の統合先から切る**（制御面では default branch）。他 branch から切ら**ない**
 - **着地面を解決してから branch を作る**（順序を逆にすると、座標表に無い面の claim branch だけが残る）
@@ -39,7 +40,7 @@ lastAction: <失敗した action の名前>
 <!-- /retry -->
 ````
 
-同じコメントを書き換える（増やさない）。何を数え、何を数えず、いつリセットするかは本文「1 tick」が SSOT。ここは書式だけ。
+同じコメントを書き換える（増やさない）。帰属は `same-branch.md`。何を数え、何を数えず、いつリセットするかは本文「1 tick」が SSOT。ここは書式だけ。
 
 ## 周回の記録
 
@@ -87,7 +88,7 @@ count: <成果ゼロで回った周の数>
 | `--plan-comment <file>` \| `--no-plan-comment`       | 解決の周のみ。file の bytes は下表                                            |
 | `--wait-record <file>` \| `--no-wait-record`         | **有効なときだけ file を渡す**（有効の判定は `wait-record.md`）               |
 | `--occupied <名前>:<cwd>` \| `--no-occupied`         | 解決の周のみ。所有外セッションの name + cwd。**状態は入れない**               |
-| `--issue-body <番号>:<file>`                         | 計画の周のみ。対象集合の全件（並べ替えは実装が行う）                          |
+| `--issue-body <番号>:<file>`                         | 計画の周のみ。**その課題自身 1 件**                                           |
 
 **file の bytes**は次の値そのもの。足しも落としもしない。
 
@@ -176,6 +177,7 @@ keys: [<交差した資源キー>]
 | `着地済み` | 全着地面の worktree・セッション・着地面の branch・制御面の claim branch・claim の記録・その他の記録 | —                          |
 | `取り下げ` | worktree・セッション・記録                                                                          | **branch と claim の記録** |
 
+- **記録は対象集合の全員から消す**（claim 前に成員へ散った周回の記録と失敗の記録が残っている経路がある）
 - **1 面でも残したら片付いていない**（実 checkout が残る。`progress` は終端なので二度と拾われない）
 - **あわせて制御面の claim branch を消す**（着地面に制御面が含まれるかに依らず）。claim の防壁は常に制御面の remote branch
 - **live checkout は片付けの対象ではない**（`landing-surface.md`）

@@ -804,7 +804,7 @@ def build_parser():
         default=[],
         type=issue_body_arg,
         metavar="番号:file",
-        help="計画の周で必須。対象集合の全件を渡す（並べ替えは実装が行う）。bytes は references/protocols.md の「file の bytes」",
+        help="計画の周で必須。1 つ以上（並べ替えは実装が行う）。呼び出し側が何件渡すかは references/protocols.md。bytes は references/protocols.md の「file の bytes」",
     )
     return parser
 

@@ -960,7 +960,7 @@ def test_plan_cycle(tmp):
     group_reversed = ["--ledger", "未計画", "--issue-body", "1:" + body_a, "--issue-body", "2:" + body_b,
                       "--no-wait-record"]
     check(
-        "計画の周（group）",
+        "計画の周（複数本文）",
         mark(group),
         ref_plan("未計画", [(1, "本文 A\n".encode("utf-8")), (2, "本文 B".encode("utf-8"))], None),
     )

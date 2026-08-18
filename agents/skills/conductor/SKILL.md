@@ -62,7 +62,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 指紋に入る材料は `scripts/watch.sh --snapshot` から読む。取った file は捨てず、tick を終えるときに `--baseline` として渡す。
 
-別に取るのは snapshot に無いもの**だけ** —— Issue 本文、固定 marker のコメント本文、各着地面の統合先に含まれる commit、成果の指紋（`scripts/cycle-mark.py`）。
+別に取るのは snapshot に無いもの**だけ** —— Issue 本文、固定 marker のコメント本文、各着地面の統合先に含まれる commit、成果の指紋（`scripts/cycle-mark.py`。渡す引数は `references/protocols.md`）。
 
 観測の最初に、各着地面の統合先を fetch する（snapshot が行う）。
 
@@ -97,7 +97,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 述語の実体は `src/normalize.ts`、期待は `test/normalize.test.ts`。**ここに写さない**。
 
-正規化は Issue 単位で行う。group を 1 レコードに畳ま**ない**。group が単位になるのは選出と資源の集約だけ（claim・在庫・write の数え方）。共有の成果物の帰属は `references/same-branch.md`。
+正規化は Issue 単位で行う。group を 1 レコードに畳ま**ない**。適用の単位と帰属は `references/same-branch.md`。
 
 1 件につき 4 つのフィールドへ畳む。`progress` と `runtime` は排他ラダー（上から読んで先に当たった行が勝つ）。`capacity` と `ledger` は値そのものが互いに素。
 
@@ -260,7 +260,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 同じ課題に 1 tick で 2 つの action を出さ**ない**。上から最初に当たったものを 1 つだけ実行する。「1 tick で」を落とさ**ない**。
 
-適用の単位は group（正規化は Issue 単位、実体を触る action は代表の番号で 1 回）。帰属・代表の固定・片付けの条件は `references/same-branch.md`。終端が混在する group は `Conflict`。
+適用の単位と帰属は `references/same-branch.md`。実体を触る action は代表の番号で 1 回。終端が混在する group は `Conflict`。
 
 順序: 止める・消えるものを残す → 終わったものを消す → 台帳のずれを直す → 実行器を動かす → 新しく始める。**規約の穴の起票だけは最上段に近い**（次の tick に観測から復元できない**唯一**の行）。
 
@@ -411,8 +411,8 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 **既定値は `src/decide.ts` の `DEFAULT_CONFIG`。ここに写さない。**
 
 - 1 tick あたりの最大 action 数。**内容が変わらない報告は数えない**（`Conflict` の報告と「成果が確認できないので片付けない」報告）。観測もやり直さない
-- retry budget は**対象集合ごとに数える**（Issue ごとではない）。連続失敗は選出対象外へ退避する。記録の置き場は `references/same-branch.md` の帰属表、形は `references/protocols.md`、数える失敗と数えない失敗の区別は「1 tick」
-- 成果ゼロの周の上限も対象集合ごと（記録は `references/protocols.md`）。**retry budget とは別に数える**
+- retry budget の数え方・書き先・退避の範囲は `references/same-branch.md`「書き先と読み先」。連続失敗は選出対象外へ退避する。形は `references/protocols.md`。数える失敗と数えない失敗の区別は「1 tick」
+- 成果ゼロの周の上限も同じ節（記録は `references/protocols.md`）。**retry budget とは別に数える**
 - systemic failure の circuit breaker。rate limit・ネットワーク断は backoff
 - 解釈不能な状態では fail-closed（進めずに報告する）
 - 所有していない worktree / セッションは**削除しない**。自分が作ったものは claim の記録から引く
@@ -429,13 +429,12 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 
 Status は claim から着地まで単調に進む。戻すのは 5 事象だけで、**人待ちは含まない**（人待ちは記録で表し、Status は進行中のまま）。判定キーは観測できる条件で固定する。
 
-**5 事象の判定・順序・戻し先の実体は `src/decide.ts` の `revertTarget` と `stockStale`、期待は `test/decide.test.ts`。ここに写さない。**
+**5 事象の判定・順序・戻し先・単位の実体は `src/decide.ts` の `budgetRevertTarget` / `revertTarget` / `stockStale` と LADDER の `unit`、期待は `test/decide.test.ts`。ここに写さない。**
 
 コードに無い規約:
 
 - **記録の無い `進行中` × `未着手` はどの行にも当たらず、`Conflict` に落ちる**。branch が生えるか人が Status を戻すまで解けない
 - 「在庫が陳腐化した」に claim の除外を足さ**ない**。「claim が構造的に止まっていない」が既に claim 済みを除いている
-- **戻す単位が Issue なのは「在庫が陳腐化した」だけ**（他の 4 事象は group）
 - **差し戻した先が、そのまま期待値と整合する形にする**。`未計画` へ戻すのに branch を残さない
 - 永続コメントで期待値を上書きし**ない**（失効条件を持てないので、再 claim 後も古い戻し先が残る）
 
@@ -508,9 +507,9 @@ Issue 本文の **`Same branch as #N`** で結ばれた集合が group（宣言�
 
 - **`alsoResolves` だけでは claim から計画コメント書き込みまでの窓が空く**（`references/same-branch.md`）
 - group の一部だけが計画済みなら claim し**ない**
-- **group はどこでも 1 と数える**。1 group = 1 計画 = 1 write lease = 1 integration lease。在庫の件数も同じ
-- **鮮度だけは group で数えない**（記録は成員ごとに別々に書かれる。`references/ready-record.md`）
-- **容量だけは 1 ではない**。数える本数は代表の、枠を消費する面の checkout。実 checkout は別に残す
+- 数え方・記録の書き先・上限の退避範囲は `references/same-branch.md`「書き先と読み先」
+- claim 後は 1 対象集合 = 1 write lease = 1 integration lease
+- **容量は 1 ではない**。数える本数は代表の、枠を消費する面の checkout。実 checkout は別に残す
 
 ### 順序
 

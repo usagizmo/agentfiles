@@ -112,7 +112,7 @@ const links = (o: IssueObservation): readonly number[] =>
  * **Issue 単位のまま残すもの**: 台帳・open / closed・Issue 契約・本文から引くもの・
  * 在庫の鮮度・`refine` のセッション（どれも成員ごとに別々に在る）。
  *
- * **claim 前には当てない。**代表がまだ決まっておらず、人待ちは渡された Issue に書かれる。
+ * **claim 前には当てない。**記録は各課題自身に在る。
  */
 const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueObservation =>
   member.issue === lead.issue
@@ -340,15 +340,12 @@ const REVERTABLE: readonly Ledger[] = ["未計画", "計画済み", "進行中"]
  * **排他ラダー**。上から読み、最初に当たった行が勝つ。**上限に達した行を上に置く。**
  * `ledger` の範囲は行ごとに持つ（全行共通の 1 文へ外出ししない）。
  */
-const revertTarget = (
-  g: Group,
-  config: TickConfig,
-): "未計画" | "計画済み" | "退避先" | undefined => {
+const budgetRevertTarget = (g: Group, config: TickConfig): "退避先" | undefined => {
   const r = g.lead;
   const o = g.leadObservation;
+  if (!REVERTABLE.includes(r.ledger)) return undefined;
 
   if (
-    REVERTABLE.includes(r.ledger) &&
     failure(g).count >= config.retryBudget &&
     failure(g).lastAction !== "計画枠の逼迫を伝える" &&
     !tellRecipientWorking(failure(g).lastAction, r.runtime)
@@ -356,17 +353,22 @@ const revertTarget = (
     return "退避先";
   }
 
-  // **正規化後の `runtime` では引かない** —— 人待ちの記録があると生きたセッションでも
-  // `人待ち` に写るので、起こした直後の実行器を結果が出る前に落とす。
   if (
-    REVERTABLE.includes(r.ledger) &&
     cycle(g).count >= config.emptyCycleBudget &&
     markUnchanged(g) &&
     !validWaiting(o) &&
+    // **正規化後の `runtime` では引かない** —— 人待ちの記録があると生きたセッションでも
+    // `人待ち` に写るので、起こした直後の実行器を結果が出る前に落とす。
     !sessionActive(o.session)
   ) {
     return "退避先";
   }
+  return undefined;
+};
+
+const structuralRevertTarget = (g: Group): "未計画" | "計画済み" | undefined => {
+  const r = g.lead;
+  const o = g.leadObservation;
 
   // **「claim の痕跡」は claim の記録で引く**（`未着手` なら claim branch は無い）。
   if (
@@ -389,6 +391,13 @@ const revertTarget = (
 
   return undefined;
 };
+
+const revertTarget = (g: Group, config: TickConfig): "未計画" | "計画済み" | "退避先" | undefined =>
+  budgetRevertTarget(g, config) ?? structuralRevertTarget(g);
+
+/** claim の記録がある。帰属単位の述語。branch の有無では引かない。 */
+const hasClaimRecord = (g: Group): boolean =>
+  g.observations.some((o) => o.claimRecord.kind === "present");
 
 /**
  * 在庫の陳腐化。**この事象だけ戻す単位が Issue** —— 鮮度の記録は成員ごとに別々に書かれるので、
@@ -641,9 +650,7 @@ type Rung = {
   readonly match: (g: Group, ctx: Context) => boolean;
   /**
    * 適用の単位。既定は group（**実体を触る action は代表の番号で 1 回**）。
-   * **`refine` を起こす / 片付ける / 計画枠の逼迫を伝えるだけが Issue 単位** ——
-   * `refine-<番号>` は Issue ごとで worktree を持たないので、group へ畳むと
-   * **揃っていない group の未計画側が永久に計画されない**。
+   * Issue 単位にする rung は `unit: "issue"` を付ける。
    */
   readonly unit?: "issue";
 };
@@ -824,9 +831,25 @@ const LADDER: readonly Rung[] = [
     },
   },
   {
+    params: (g, ctx) => ({
+      action: "差し戻す",
+      to: budgetRevertTarget(g, ctx.config) ?? "退避先",
+    }),
+    unit: "issue",
+    why: "claim 前の空振り上限または retry 上限",
+    match: (g, ctx) =>
+      !isShelved(g) &&
+      !hasClaimRecord(parentOf(g, ctx)) &&
+      budgetRevertTarget(g, ctx.config) !== undefined,
+  },
+  {
     params: (g, ctx) => ({ action: "差し戻す", to: revertTarget(g, ctx.config) ?? "未計画" }),
-    why: "差し戻しの 4 事象のどれかに当たった",
-    match: (g, ctx) => !isShelved(g) && revertTarget(g, ctx.config) !== undefined,
+    why: "差し戻しの事象",
+    match: (g, ctx) => {
+      if (isShelved(g)) return false;
+      if (hasClaimRecord(g)) return revertTarget(g, ctx.config) !== undefined;
+      return structuralRevertTarget(g) !== undefined;
+    },
   },
   {
     params: () => ({ action: "差し戻す", to: "未計画" }),
