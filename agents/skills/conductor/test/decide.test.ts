@@ -336,6 +336,16 @@ describe("実行器が消える / 止まる", () => {
     ]);
   });
 
+  test("人待ちの leftover には枠を渡さない", () => {
+    expectIdle([
+      implementing({
+        waitRecord: wait.waiting,
+        session: session.running,
+        leftover: true,
+      }),
+    ]);
+  });
+
   test("7b: 行 7a と同じ状況でセッションが消えた", () => {
     expectAction(
       [
@@ -390,6 +400,16 @@ describe("実行器が消える / 止まる", () => {
     // rename 済みなので「計画セッションを片付ける」は当たらない（対象は `refine-<番号>` の完全一致）。
     // **塞ぎは残る** —— 当てて消すと、次の tick で二重計画になる。
     expectIdle([observation({ ledger: present("未計画"), retiredRefineExists: true })]);
+  });
+
+  test("retired-refine があるあいだ計画を起こし直さない", () => {
+    expectIdle([
+      observation({
+        ledger: present("未計画"),
+        retiredRefineExists: true,
+        waitRecord: wait.waiting,
+      }),
+    ]);
   });
 
   test("7e: 計画セッションが idle", () => {
@@ -464,6 +484,68 @@ describe("実行器が消える / 止まる", () => {
 
   test("7m: write を保持したままターンが終わった", () => {
     expectLease([implementing({ session: session.idle })], "write");
+  });
+
+  test("7u: leftover の working。runtime は 稼働中 のまま write を渡す", () => {
+    const obs = [
+      implementing({
+        session: session.running,
+        leftover: true,
+        activity: "再開しうる",
+      }),
+    ];
+    expectLease(obs, "write");
+    expectEmptyCycle(obs, true);
+  });
+
+  test("7u2: 行 7u と同じ leftover だが、着地待ち", () => {
+    expectLease(
+      [
+        awaitingLanding({
+          session: session.running,
+          leftover: true,
+          activity: "再開しうる",
+        }),
+      ],
+      "integration",
+    );
+  });
+
+  test("7u3: 行 7u と同じ leftover だが、同じ worktree に所有外が genuine-working", () => {
+    const d = tick([
+      implementing({
+        session: session.running,
+        leftover: true,
+        activity: "再開しうる",
+        worktreeBusy: true,
+      }),
+    ]);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.stalls).toEqual([{ issues: [1], progress: "実装中", runtime: "稼働中" }]);
+  });
+
+  test("7v: 計画セッションが done で活動は 再開しうる", () => {
+    expectAction(
+      [
+        observation({
+          ledger: present("未計画"),
+          refineSession: session.idle,
+          refineActivity: "再開しうる",
+        }),
+      ],
+      "計画セッションを片付ける",
+    );
+  });
+
+  test("7v2: 計画セッションが leftover の working", () => {
+    expectIdle([
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.running,
+        refineLeftover: true,
+        refineActivity: "再開しうる",
+      }),
+    ]);
   });
 
   test("7r: 起こし直しのあと、記録は cleared でセッションは 稼働中", () => {
@@ -672,6 +754,19 @@ describe("外から状態が動く", () => {
     );
   });
 
+  test("leftover の 稼働中 では伝える 2 つの失敗カウント免除が外れない", () => {
+    expectFailureCount(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.running,
+          leftover: true,
+        }),
+      ],
+      true,
+    );
+  });
+
   test("伝える 2 つの lastAction が上限でも、受け手が 稼働中 なら退避先へ落とさない", () => {
     expectAction(
       [
@@ -692,6 +787,20 @@ describe("外から状態が動く", () => {
         }),
       ],
       "本文の変更を伝える",
+    );
+  });
+
+  test("leftover の 稼働中 では伝える 2 つの lastAction が上限なら退避先へ落とす", () => {
+    expectRevert(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.running,
+          leftover: true,
+          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
+        }),
+      ],
+      "退避先",
     );
   });
 
@@ -868,6 +977,36 @@ describe("外から状態が動く", () => {
     );
   });
 
+  test("提出中 × 休止 では checks を引き直させず枠を渡す", () => {
+    expectLease(
+      [
+        implementing({
+          openPr: present(true),
+          checks: present({ running: 0, green: false }),
+          intentRecord: intent.confirmed,
+          session: session.idle,
+          pauseRecordExists: true,
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("提出中 × leftover の 稼働中 では checks を引き直させる", () => {
+    expectAction(
+      [
+        implementing({
+          openPr: present(true),
+          checks: present({ running: 0, green: false }),
+          intentRecord: intent.confirmed,
+          session: session.running,
+          leftover: true,
+        }),
+      ],
+      "checks を引き直させる",
+    );
+  });
+
   test("9s: 提出中 で SUCCESS と SKIPPED だけなら緑なので引き直させない", () => {
     expectLease(
       [
@@ -996,6 +1135,19 @@ describe("外から状態が動く", () => {
     ]);
   });
 
+  test("leftover の 稼働中 は空周回の上限で退避先へ落とす", () => {
+    expectRevert(
+      [
+        implementing({
+          session: session.running,
+          leftover: true,
+          cycleRecord: present({ count: 3, mark: "mark-0" }),
+        }),
+      ],
+      "退避先",
+    );
+  });
+
   test("10l: count が上限に達したが、runtime が 休止", () => {
     expectRevert(
       [
@@ -1093,6 +1245,14 @@ describe("外から状態が動く", () => {
 
   test("10f4: 行 10f3 と同じ状態に、claim できる課題がある", () => {
     const jammed = submittedJam({ issue: 1 });
+    const candidate = observation({ issue: 2, ledger: present("計画済み") });
+    const d = tick([jammed, candidate]).outcome;
+    expect(d.kind === "action" ? d.params.action : d.kind).toBe("claim する");
+    expect(d.kind === "action" ? d.target.representative : d.kind).toBe(2);
+  });
+
+  test("10f7: 行 10f4 と同じだが jammed が leftover の 稼働中", () => {
+    const jammed = submittedJam({ issue: 1, session: session.running, leftover: true });
     const candidate = observation({ issue: 2, ledger: present("計画済み") });
     const d = tick([jammed, candidate]).outcome;
     expect(d.kind === "action" ? d.params.action : d.kind).toBe("claim する");
@@ -1259,6 +1419,50 @@ describe("外から状態が動く", () => {
     });
     expect(o.kind === "action" ? o.target.members : []).toEqual([1, 2]);
   });
+
+  test("leftover の 稼働中 は claim 済み group でも対象集合全員を退避先へ", () => {
+    const lead = implementing({
+      session: session.running,
+      leftover: true,
+      cycleRecord: present({ count: 3, mark: "mark-0" }),
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const member = observation({
+      issue: 2,
+      ledger: present("進行中"),
+      sameBranchAs: [1],
+      cycleRecord: present({ count: 0, mark: null }),
+    });
+    const o = tick([lead, member]).outcome;
+    expect(o.kind === "action" ? o.params : o.kind).toMatchObject({
+      action: "差し戻す",
+      to: "退避先",
+    });
+    expect(o.kind === "action" ? o.target.members : []).toEqual([1, 2]);
+  });
+
+  test("leftover の 稼働中 でも claim 前 group では count 上限の成員だけ退避する", () => {
+    const a = observation({
+      issue: 1,
+      ledger: present("未計画"),
+      sameBranchAs: [2],
+      session: session.running,
+      leftover: true,
+      cycleRecord: present({ count: 3, mark: "mark-0" }),
+    });
+    const b = observation({
+      issue: 2,
+      ledger: present("未計画"),
+      sameBranchAs: [1],
+      cycleRecord: present({ count: 0, mark: null }),
+    });
+    const o = tick([a, b]).outcome;
+    expect(o.kind === "action" ? o.params : o.kind).toMatchObject({
+      action: "差し戻す",
+      to: "退避先",
+    });
+    expect(o.kind === "action" ? o.target.members : []).toEqual([1]);
+  });
 });
 
 describe("意図の確認", () => {
@@ -1289,6 +1493,19 @@ describe("意図の確認", () => {
     );
     expectAction(
       [awaitingLanding({ intentRecord: intent.broken("parse 失敗"), session: session.idle })],
+      "意図の確認を促す",
+    );
+  });
+
+  test("着地待ち × leftover の 稼働中 では意図の確認を促す", () => {
+    expectAction(
+      [
+        awaitingLanding({
+          intentRecord: intent.absent,
+          session: session.running,
+          leftover: true,
+        }),
+      ],
       "意図の確認を促す",
     );
   });
@@ -1803,6 +2020,16 @@ describe("入場を止める宣言（続き）", () => {
       });
     expectConflict([shelved(session.running)], "退避先だがセッションが止まらない");
     expectConflict([shelved(session.blocked)], "退避先だがセッションが止まらない");
+    const leftoverShelved = implementing({
+      issue: 1,
+      blocksEntry: true,
+      ledger: present("退避先"),
+      session: session.running,
+      leftover: true,
+    });
+    expect(tick([leftoverShelved]).conflicts.map((c) => c.reason)).not.toContain(
+      "退避先だがセッションが止まらない",
+    );
   });
 });
 
@@ -1901,6 +2128,20 @@ describe("merge の直列化（続き）", () => {
           ...heldIntegration(1),
           waitRecord: wait.waiting,
           session: session.running,
+        }),
+      ],
+      "失効した記録を片付ける",
+    );
+  });
+
+  test("退避先 × leftover の 稼働中 でも渡しの記録を回収する", () => {
+    expectAction(
+      [
+        awaitingLanding({
+          ...heldIntegration(1),
+          ledger: present("退避先"),
+          session: session.running,
+          leftover: true,
         }),
       ],
       "失効した記録を片付ける",

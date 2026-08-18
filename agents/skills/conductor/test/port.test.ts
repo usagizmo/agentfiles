@@ -137,7 +137,11 @@ describe("設定の fail-closed", () => {
 
   test("sessionsCmd を省略したら harness.md の code block を使う", () => {
     const { sessionsCmd: _drop, ...without } = raw;
-    expect(parseConfig(without).sessionsCmd).toBe(extractHarnessCmd(harnessMd(), "sessions-cmd"));
+    const cmd = parseConfig(without).sessionsCmd;
+    expect(cmd).toBe(extractHarnessCmd(harnessMd(), "sessions-cmd"));
+    expect(cmd).toContain("leftover=leftover");
+    expect(cmd).toContain("activity=may-resume");
+    expect(cmd).not.toContain("workspace list");
   });
 
   test("workspacesCmd を省略したら harness.md の code block を使う", () => {

@@ -168,8 +168,9 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
 
   // **`退避先` は論理 lease を返す**ので、そこでセッションが動いているのは
   // 「lease を持たないまま書いている」状態。人が Status だけ動かすと起きる。
+  // leftover は turn が終わっていて「いま書いている」ではないので入れない。
   // 出さないと、入場を止める宣言も merge の枠も外れないまま誰にも見えない。
-  if (value(o.ledger) === "退避先" && sessionActive(o.session)) {
+  if (value(o.ledger) === "退避先" && sessionActive(o.session) && !o.leftover) {
     found.push(
       conflict(
         "退避先だがセッションが止まらない",

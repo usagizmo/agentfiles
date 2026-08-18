@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { IssueObservation } from "../src/observation.ts";
 import type { CycleMarkInput, ObservePort, StatusMap } from "../src/observe.ts";
-import { observeTick, worktreeBusy, worktreeOccupied } from "../src/observe.ts";
+import { observeTick, parseSessionRow, worktreeBusy, worktreeOccupied } from "../src/observe.ts";
 import { extractMarker } from "../src/records.ts";
 import { normalizeProgress } from "../src/normalize.ts";
 import { SNAPSHOT_SCHEMA } from "../src/decode.ts";
@@ -234,6 +234,13 @@ keys: [skills]
     expect(find(rows, 34).worktreeBusy).toBe(false);
   });
 
+  test("7u4: 所有外 leftover は worktreeBusy にしない", () => {
+    const owned = ["/tmp/wt/feat-12-x"];
+    expect(worktreeBusy(["a-grok-1 working may-resume leftover /tmp/wt/feat-12-x"], owned)).toBe(
+      false,
+    );
+  });
+
   test("worktreeBusy: 同じ path かその配下だけを同じ worktree と読む", () => {
     const owned = ["/tmp/wt/feat-12-x"];
     expect(worktreeBusy(["a-grok-1 working /tmp/wt/feat-12-x"], owned)).toBe(true);
@@ -242,6 +249,9 @@ keys: [skills]
     expect(worktreeBusy(["a-grok-1 working"], owned)).toBe(false);
     expect(worktreeBusy(["resolve-12 working /tmp/wt/feat-12-x"], owned)).toBe(false);
     expect(worktreeBusy(["conductor working /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeBusy(["a-grok-1 working may-resume - /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeBusy(["a-grok-1 working mystery - /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeBusy(["a-grok-1 working may-resume maybe /tmp/wt/feat-12-x"], owned)).toBe(true);
   });
 
   test("所有外が idle でも worktreeOccupied。worktreeBusy は working のまま", async () => {
@@ -290,12 +300,107 @@ keys: [skills]
     expect(worktreeOccupied(["conductor idle /tmp/wt/feat-12-x"], owned)).toBe(false);
   });
 
+  test("parseSessionRow: 活動と leftover のトークンを読む。トークンが無い行は leftover にしない", () => {
+    expect(parseSessionRow("resolve-12 working may-resume leftover")).toEqual({
+      name: "resolve-12",
+      status: "working",
+      activity: "再開しうる",
+      leftover: true,
+      cwd: "",
+    });
+    expect(parseSessionRow("resolve-12 done undecidable -")).toEqual({
+      name: "resolve-12",
+      status: "done",
+      activity: "判定不能",
+      leftover: false,
+      cwd: "",
+    });
+    expect(parseSessionRow("resolve-12 done may-resume -")).toEqual({
+      name: "resolve-12",
+      status: "done",
+      activity: "再開しうる",
+      leftover: false,
+      cwd: "",
+    });
+    expect(parseSessionRow("a-grok-1 working may-resume leftover /tmp/wt/feat-12-x")).toEqual({
+      name: "a-grok-1",
+      status: "working",
+      activity: "再開しうる",
+      leftover: true,
+      cwd: "/tmp/wt/feat-12-x",
+    });
+    expect(parseSessionRow("resolve-12 working")).toEqual({
+      name: "resolve-12",
+      status: "working",
+      activity: "再開しうる",
+      leftover: false,
+      cwd: "",
+    });
+    expect(parseSessionRow("resolve-12 done")).toEqual({
+      name: "resolve-12",
+      status: "done",
+      activity: "判定不能",
+      leftover: false,
+      cwd: "",
+    });
+    expect(parseSessionRow("a-grok-1 working /tmp/wt/feat-12-x")).toEqual({
+      name: "a-grok-1",
+      status: "working",
+      activity: "再開しうる",
+      leftover: false,
+      cwd: "/tmp/wt/feat-12-x",
+    });
+    expect(parseSessionRow("a-grok-1  undecidable - /tmp/wt/feat-12-x")).toEqual({
+      name: "a-grok-1",
+      status: "",
+      activity: "判定不能",
+      leftover: false,
+      cwd: "/tmp/wt/feat-12-x",
+    });
+    expect(parseSessionRow("a-grok-1 - undecidable - /tmp/wt/feat-12-x")).toEqual({
+      name: "a-grok-1",
+      status: "-",
+      activity: "判定不能",
+      leftover: false,
+      cwd: "/tmp/wt/feat-12-x",
+    });
+    expect(parseSessionRow("a-grok-1 working mystery - /tmp/wt/feat-12-x")).toEqual({
+      name: "a-grok-1",
+      status: "working",
+      activity: "判定不能",
+      leftover: false,
+      cwd: "/tmp/wt/feat-12-x",
+    });
+    expect(parseSessionRow("a-grok-1 working may-resume maybe /tmp/wt/feat-12-x")).toEqual({
+      name: "a-grok-1",
+      status: "working",
+      activity: "再開しうる",
+      leftover: false,
+      cwd: "/tmp/wt/feat-12-x",
+    });
+    expect(parseSessionRow("conductor present")).toBeUndefined();
+  });
+
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {
     // **代用すると計画中は必ず `none` になり**、走っているものを畳まない保護が一度も効かない。
     const planning = SNAP.replace("resolve-12 working", "refine-12 working");
     const rows = await observe(port({ snapshot: async () => planning }), STATUS, SURFACES);
     expect(find(rows, 12).refineSession).toEqual({ kind: "running" });
     expect(find(rows, 12).session).toEqual({ kind: "none" });
+  });
+
+  test("所有セッションの leftover と活動トークンを読む", async () => {
+    const leftover = SNAP.replace("resolve-12 working", "resolve-12 working may-resume leftover");
+    const rows = await observe(port({ snapshot: async () => leftover }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "running" });
+    expect(find(rows, 12).leftover).toBe(true);
+    expect(find(rows, 12).activity).toBe("再開しうる");
+  });
+
+  test("トークンが無い sessions 行は leftover 無し・活動は状態から補う", async () => {
+    const rows = await observe(port(), STATUS, SURFACES);
+    expect(find(rows, 12).leftover).toBe(false);
+    expect(find(rows, 12).activity).toBe("再開しうる");
   });
 
   test("対応表に無い Status を既定へ倒さない", async () => {

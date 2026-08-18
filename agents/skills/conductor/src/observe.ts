@@ -18,7 +18,12 @@ import {
   worktrees as decodeWorktrees,
 } from "./decode.ts";
 import type { LocalBranchRow, Tri, WorkspaceRow } from "./decode.ts";
-import type { IssueObservation, SessionObservation, SurfaceObservation } from "./observation.ts";
+import type {
+  IssueObservation,
+  SessionActivity,
+  SessionObservation,
+  SurfaceObservation,
+} from "./observation.ts";
 import {
   claimRecord,
   cycleRecord,
@@ -215,15 +220,89 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
   return found;
 };
 
-/** `sessions` の行は `<名前> <状態>`。任意で後ろに cwd。**分類できない値を丸めない。** */
-const classifySession = (rows: readonly string[], name: string): SessionObservation => {
+/**
+ * `sessions` 行の活動トークン。harness の `--sessions-cmd` が書く。
+ * トークンが無い行は leftover にしない。活動は状態から補う。
+ */
+const ACTIVITY_TOKENS = {
+  "may-resume": "再開しうる",
+  stopped: "停止確認",
+  undecidable: "判定不能",
+} as const satisfies Record<string, SessionActivity>;
+
+type ParsedSessionRow = {
+  readonly name: string;
+  readonly status: string;
+  readonly activity: SessionActivity;
+  readonly leftover: boolean;
+  readonly cwd: string;
+};
+
+const sessionFromStatus = (status: string): SessionObservation => {
+  if (status === "working") return { kind: "running" };
+  if (status === "idle" || status === "done") return { kind: "idle" };
+  if (status === "blocked") return { kind: "blocked" };
+  return { kind: "unclassifiable", raw: status };
+};
+
+/** トークンが無い行。`working` / `blocked` は再開しうる。それ以外は確認できない。 */
+const defaultActivity = (status: string): SessionActivity =>
+  status === "working" || status === "blocked" ? "再開しうる" : "判定不能";
+
+export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
+  const parts = row.split(" ");
+  const name = parts[0];
+  if (name === undefined || name === "" || name === "conductor") return undefined;
+  const status = parts[1] ?? "";
+  const activityToken = parts[2];
+  const leftoverToken = parts[3];
+  const newFormat =
+    leftoverToken === "leftover" ||
+    leftoverToken === "-" ||
+    (activityToken !== undefined && activityToken !== "" && activityToken in ACTIVITY_TOKENS);
+  if (newFormat) {
+    const known =
+      activityToken !== undefined && activityToken !== "" && activityToken in ACTIVITY_TOKENS;
+    return {
+      name,
+      status,
+      activity: known ? ACTIVITY_TOKENS[activityToken as keyof typeof ACTIVITY_TOKENS] : "判定不能",
+      leftover: leftoverToken === "leftover",
+      cwd: parts.slice(4).join(" ").trim(),
+    };
+  }
+  return {
+    name,
+    status,
+    activity: defaultActivity(status),
+    leftover: false,
+    cwd: parts.slice(2).join(" ").trim(),
+  };
+};
+
+type OwnedClassification = {
+  readonly session: SessionObservation;
+  readonly activity: SessionActivity;
+  readonly leftover: boolean;
+};
+
+const noneOwned: OwnedClassification = {
+  session: { kind: "none" },
+  activity: "判定不能",
+  leftover: false,
+};
+
+/** 所有セッション 1 本。**分類できない値を丸めない。** */
+const classifyOwned = (rows: readonly string[], name: string): OwnedClassification => {
   const row = rows.find((r) => r.split(" ")[0] === name);
-  if (row === undefined) return { kind: "none" };
-  const raw = row.split(" ")[1] ?? "";
-  if (raw === "working") return { kind: "running" };
-  if (raw === "idle" || raw === "done") return { kind: "idle" };
-  if (raw === "blocked") return { kind: "blocked" };
-  return { kind: "unclassifiable", raw };
+  if (row === undefined) return noneOwned;
+  const parsed = parseSessionRow(row);
+  if (parsed === undefined) return noneOwned;
+  return {
+    session: sessionFromStatus(parsed.status),
+    activity: parsed.activity,
+    leftover: parsed.leftover,
+  };
 };
 
 const OWNED_SESSION = /^(retired-)?(refine|resolve)-\d+$/;
@@ -233,28 +312,40 @@ const cwdOnOwned = (cwd: string, ownedPaths: readonly string[]): boolean =>
     (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
   );
 
-type ForeignRow = { readonly name: string; readonly status: string; readonly cwd: string };
+type ForeignRow = {
+  readonly name: string;
+  readonly status: string;
+  readonly leftover: boolean;
+  readonly cwd: string;
+};
 
 /** 所有外で、課題の worktree に cwd が載っている行。**cwd が無い行は入れない。** */
 const foreignOnOwned = (rows: readonly string[], ownedPaths: readonly string[]): ForeignRow[] => {
   const out: ForeignRow[] = [];
   for (const row of rows) {
-    const [name, status, ...cwdParts] = row.split(" ");
-    if (name === undefined || name === "conductor" || OWNED_SESSION.test(name)) continue;
-    if (status === undefined) continue;
-    const cwd = cwdParts.join(" ");
+    const parsed = parseSessionRow(row);
+    if (parsed === undefined) continue;
+    if (OWNED_SESSION.test(parsed.name)) continue;
     // **cwd が無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
     // 帰属できない 1 本が全課題の write を止める。
-    if (cwd === "") continue;
-    if (!cwdOnOwned(cwd, ownedPaths)) continue;
-    out.push({ name, status, cwd });
+    if (parsed.cwd === "") continue;
+    if (!cwdOnOwned(parsed.cwd, ownedPaths)) continue;
+    out.push({
+      name: parsed.name,
+      status: parsed.status,
+      leftover: parsed.leftover,
+      cwd: parsed.cwd,
+    });
   }
   return out;
 };
 
-/** 同じ worktree で `refine` / `resolve` / `conductor` 以外が working か。 */
+/**
+ * 同じ worktree で `refine` / `resolve` / `conductor` 以外が genuine-working か。
+ * **所有外の leftover は turn 中の証拠にしない。**
+ */
 export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
-  foreignOnOwned(rows, ownedPaths).some((row) => row.status === "working");
+  foreignOnOwned(rows, ownedPaths).some((row) => row.status === "working" && !row.leftover);
 
 /** 同じ worktree で `refine` / `resolve` / `conductor` 以外が居るか。**状態は問わない。** */
 export const worktreeOccupied = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
@@ -419,6 +510,8 @@ export const observeTick = async (
     );
 
     const row = issueRows.get(issue);
+    const owned = classifyOwned(sessionRows, `resolve-${issue}`);
+    const refine = classifyOwned(sessionRows, `refine-${issue}`);
 
     return {
       issue,
@@ -450,9 +543,13 @@ export const observeTick = async (
 
       submissionEvidence: await submissionEvidenceOf(report, surfaceNames, tips, port),
 
-      session: classifySession(sessionRows, `resolve-${issue}`),
+      session: owned.session,
+      leftover: owned.leftover,
+      activity: owned.activity,
       retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
-      refineSession: classifySession(sessionRows, `refine-${issue}`),
+      refineSession: refine.session,
+      refineLeftover: refine.leftover,
+      refineActivity: refine.activity,
       worktreeBusy: worktreeBusy(
         sessionRows,
         worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
