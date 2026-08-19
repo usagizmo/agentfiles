@@ -3,11 +3,16 @@
 // 実体の advisors.json 自身も対象。fixture だけ通して実体を外すと、
 // 宣言 file が壊れていても緑のまま残る。
 
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import {
   MAX_ADVISORS,
   ROSTER_URL,
   RosterError,
+  advisorComplete,
+  isChromeLine,
   herdrStartArgv,
   parseRoster,
   readOnlyArgs,
@@ -199,4 +204,95 @@ test("JSONC のコメントと末尾カンマは枠にならない", () => {
   const slots = parseRoster(text);
   expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
   expect(slots[1]?.args).toEqual(["--model", "x // not a comment"]);
+});
+
+const MARKER = "ADVISOR-DONE-test";
+
+const PREAMBLE = `あなたはコードレビュアーです。コードは変更しないでください。
+
+## 必読
+
+- ~/.agents/AGENTS.md（設計原則）
+
+## 観点
+
+設計原則からの逸脱。
+
+## 出力
+
+重要度順「ファイル:行 / 問題 / 推奨修正」。なければ「指摘なし」のみ。
+`;
+
+const MARKER_SNAPSHOT = `指摘なし
+ADVISOR-DONE-test
+
+  ╭─────────────────────────────────────────╮
+  │ ❯                                       │
+  ╰───────────────────────────────────────── Grok 4.6 (high) · always-approve ─╯
+
+  Shift+Tab:mode  │  Ctrl+.:shortcuts
+`;
+
+test("preamble のみは未完", () => {
+  expect(advisorComplete(PREAMBLE, MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
+});
+
+test("空出力は未完", () => {
+  expect(advisorComplete("", MARKER)).toEqual({ ok: false, reason: "出力なし" });
+});
+
+test("マーカー付きは完走", () => {
+  expect(advisorComplete(MARKER_SNAPSHOT, MARKER)).toEqual({ ok: true });
+});
+
+test("指令行はマーカーと一致しない", () => {
+  const text = `応答の最後の行に ${MARKER} をそのまま書け。この指令行は書かない。`;
+  expect(advisorComplete(text, MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
+});
+
+test("マーカーのあとに本文が続くと未完", () => {
+  expect(advisorComplete(`指摘なし\n${MARKER}\n追加`, MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test("語彙ゆれは未完", () => {
+  expect(advisorComplete("指摘なし", MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
+  expect(advisorComplete("LGTM", MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
+});
+
+test("行末の幅埋めは落としてから照合する", () => {
+  expect(advisorComplete(`${MARKER}   █\n`, MARKER)).toEqual({ ok: true });
+});
+
+test("枠行の判定は繰り返し呼んでも同じ", () => {
+  const footer = "╰───────────────────────────────────────── Grok 4.6 (high) · always-approve ─╯";
+  for (let i = 0; i < 5; i++) {
+    expect(isChromeLine(footer)).toBe(true);
+  }
+});
+
+test("TUI 枠だけは出力なし", () => {
+  const chrome = `
+  ╭─────────────────────────────────────────╮
+  │ ❯                                       │
+  ╰───────────────────────────────────────── Grok 4.6 (high) · always-approve ─╯
+
+  Shift+Tab:mode  │  Ctrl+.:shortcuts
+`;
+  expect(advisorComplete(chrome, MARKER)).toEqual({ ok: false, reason: "出力なし" });
+});
+
+test("complete CLI は JSON と終了コードを返す", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "advisors-complete-"));
+  const output = join(dir, "out");
+  await Bun.write(output, MARKER_SNAPSHOT);
+  const proc = Bun.spawn(
+    ["bun", "agents/shared/advisors.ts", "complete", "--output", output, "--marker", MARKER],
+    { stdout: "pipe", stderr: "pipe", cwd: import.meta.dir + "/.." },
+  );
+  const [stdout, exited] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+  expect(exited).toBe(0);
+  expect(JSON.parse(stdout)).toEqual({ ok: true });
 });

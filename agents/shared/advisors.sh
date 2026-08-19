@@ -76,6 +76,10 @@ start)
 	rid=$(printf '%s' "$rid" | tr 'A-Z' 'a-z')
 	cp "$prompt" "$run/prompt" || fatal "prompt を配れない"
 	cp "$roster" "$run/roster.json" || fatal "候補表を配れない"
+	marker=ADVISOR-DONE-$rid
+	printf '%s\n' "$marker" >"$run/marker" || fatal "marker を書けない"
+	printf '\n\n応答の最後の行に %s をそのまま書け。この指令行は書かない。\n' "$marker" >>"$run/prompt" ||
+		fatal "marker を prompt へ追記できない"
 
 	if ! herdr pane current --current >"$run/self.json" 2>>"$run/select.log"; then
 		cat "$run/select.log" >&2 || true
@@ -259,30 +263,73 @@ collect)
 	incomplete=0
 	for a in "$@"; do
 		name=""
+		reason=""
 		[ -f "$run/$a/name" ] && name=$(cat "$run/$a/name")
 		start_rc=$(cat "$run/$a/start.rc" 2>/dev/null) || start_rc=1
 		if [ -z "$name" ] || [ "$start_rc" != 0 ]; then
 			printf '%s\n' 1 >"$run/$a/rc"
+			: >"$run/$a/reason"
 			incomplete=$((incomplete + 1))
 			continue
 		fi
 		remain=$((deadline - $(date +%s)))
 		[ "$remain" -lt 1 ] && remain=1
 		# blocked は承認待ちであって完了ではない
-		if herdr agent wait "$name" --until idle --until done --timeout "$((remain * 1000))" \
+		if ! herdr agent wait "$name" --until idle --until done --timeout "$((remain * 1000))" \
 			>>"$run/$a/log" 2>&1; then
-			printf '%s\n' 0 >"$run/$a/rc"
-		else
-			printf '%s\n' 1 >"$run/$a/rc"
-			incomplete=$((incomplete + 1))
+			reason=timeout
 		fi
 		herdr agent read "$name" --source recent-unwrapped --lines 400 \
 			>"$run/$a/out" 2>>"$run/$a/log" || true
+		if [ -z "$reason" ]; then
+			if [ ! -f "$select_ts" ] || [ ! -f "$run/marker" ]; then
+				reason=predicate欠落
+			elif ! command -v bun >/dev/null 2>&1; then
+				reason=bun失敗
+			else
+				marker=$(cat "$run/marker")
+				complete_json=$run/$a/complete.json
+				bun "$select_ts" complete --output "$run/$a/out" --marker "$marker" \
+					>"$complete_json" 2>>"$run/$a/log"
+				complete_rc=$?
+				if [ "$complete_rc" -eq 0 ]; then
+					reason=""
+				elif [ "$complete_rc" -eq 2 ]; then
+					reason=predicate欠落
+				else
+					reason=$(python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+r = d.get("reason")
+if isinstance(r, str) and r:
+    print(r)
+else:
+    sys.exit(1)
+' "$complete_json") || reason=bun失敗
+				fi
+			fi
+		fi
+		if [ -n "$reason" ]; then
+			printf '%s\n' 1 >"$run/$a/rc"
+			printf '%s\n' "$reason" >"$run/$a/reason"
+			incomplete=$((incomplete + 1))
+		else
+			printf '%s\n' 0 >"$run/$a/rc"
+			: >"$run/$a/reason"
+		fi
 	done
 
 	for a in "$@"; do
 		rc=$(cat "$run/$a/rc" 2>/dev/null) || rc=1
-		printf '=== %s (rc=%s) ===\n' "$a" "$rc"
+		reason=$(cat "$run/$a/reason" 2>/dev/null) || reason=""
+		if [ -n "$reason" ]; then
+			printf '=== %s (rc=%s %s) ===\n' "$a" "$rc" "$reason"
+		else
+			printf '=== %s (rc=%s) ===\n' "$a" "$rc"
+		fi
 		[ -s "$run/$a/out" ] && cat "$run/$a/out"
 		if [ "$rc" != 0 ] || [ ! -s "$run/$a/out" ]; then
 			printf '(log の末尾)\n'

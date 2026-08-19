@@ -3,6 +3,7 @@
 //
 //   bun advisors.ts select --roster <file> --self <kind>
 //   bun advisors.ts start-argv --slot <file> --name <name> --pane <id>
+//   bun advisors.ts complete --output <file> --marker <token>
 //
 // select の stdout は選出した枠の JSON。表に無い self は先頭 2 枠 + stderr へ警告。
 // start-argv の stdout は herdr agent start の argv JSON。read-only 手段を末尾に足す。
@@ -22,6 +23,15 @@ export type Selection = {
   readonly chosen: readonly Slot[];
   readonly warning: boolean;
 };
+
+export type CompleteReason = "出力なし" | "マーカー無し";
+
+export type CompleteResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: CompleteReason };
+
+const BOX = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯]/u;
+const BOX_STRIP = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯·]/gu;
 
 const SLOT_KEYS = new Set(["kind", "args", "members"]);
 const KIND_RE = /^[a-z][a-z0-9_-]*$/;
@@ -148,6 +158,33 @@ export const parseRoster = (text: string): Slot[] => {
   return slots;
 };
 
+const normalizeSnapshotLine = (line: string): string => line.replace(/\s*█?\s*$/u, "").trimEnd();
+
+export const isChromeLine = (line: string): boolean => {
+  const trimmed = line.trim();
+  if (trimmed === "") return true;
+  if (trimmed.startsWith("Shift+Tab:")) return true;
+  const stripped = trimmed.replace(BOX_STRIP, "").trim();
+  if (stripped === "") return true;
+  return BOX.test(line) && /always-approve|shortcuts/.test(line);
+};
+
+export const lastContentLine = (text: string): string | undefined => {
+  const lines = text.split(/\r?\n/).map(normalizeSnapshotLine);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i] ?? "";
+    if (!isChromeLine(line)) return line;
+  }
+  return undefined;
+};
+
+export const advisorComplete = (text: string, marker: string): CompleteResult => {
+  const last = lastContentLine(text);
+  if (last === undefined) return { ok: false, reason: "出力なし" };
+  if (last !== marker) return { ok: false, reason: "マーカー無し" };
+  return { ok: true };
+};
+
 export const selectAdvisors = (slots: readonly Slot[], selfKind: string): Selection => {
   const matched = slots.find((s) => s.members.includes(selfKind));
   const remaining = matched === undefined ? slots : slots.filter((s) => s !== matched);
@@ -203,6 +240,19 @@ const main = async (): Promise<void> => {
       process.stdout.write(`${JSON.stringify(chosen)}\n`);
       return;
     }
+    if (cmd === "complete") {
+      const outputPath = flag(argv, "--output");
+      const marker = flag(argv, "--marker");
+      if (outputPath === undefined || marker === undefined || marker === "") {
+        throw new RosterError("--output / --marker が必要");
+      }
+      const file = Bun.file(outputPath);
+      const text = (await file.exists()) ? await file.text() : "";
+      const result = advisorComplete(text, marker);
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+      process.exit(result.ok ? 0 : 1);
+      return;
+    }
     if (cmd === "start-argv") {
       const slotPath = flag(argv, "--slot");
       const name = flag(argv, "--name");
@@ -215,7 +265,7 @@ const main = async (): Promise<void> => {
       process.stdout.write(`${JSON.stringify(herdrStartArgv(slot, { name, pane }))}\n`);
       return;
     }
-    throw new RosterError("使い方: advisors.ts select | start-argv");
+    throw new RosterError("使い方: advisors.ts select | start-argv | complete");
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);
     console.error(`FATAL\t${message}`);
