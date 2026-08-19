@@ -115,6 +115,7 @@ git / gh の一部操作は、理由・きっかけを問わず**必ず skill �
 | `git commit`      | `commit` |
 | `git merge`       | `merge`  |
 | `gh pr create`    | `pr`     |
+| `git push`        | `pr`     |
 | `gh pr merge`     | `ship`   |
 | `gh issue create` | `issue`  |
 

@@ -1,13 +1,15 @@
 ---
 name: pr
-description: PR の作成は理由・きっかけを問わず必ずこの skill を経由する（`gh pr create` を直接実行しない）。
+description: >-
+  PR の作成は理由・きっかけを問わず必ずこの skill を経由する（`gh pr create` を直接実行しない）。
+  push は `scripts/sync-and-push.sh` で行い、素の `git push` は使わない。
 ---
 
 PR を作り、**merge 可能な状態まで**持っていく。タイトル先頭に gitmoji。
 
 ## base — 順序はここだけで表す
 
-**他の PR を待たない**。順序が要るなら base に書き、要らないなら順序は無い。
+**他の PR を待たない**。
 
 | その変更は                   | base                                     | 結果                              |
 | ---------------------------- | ---------------------------------------- | --------------------------------- |
@@ -16,11 +18,11 @@ PR を作り、**merge 可能な状態まで**持っていく。タイトル先�
 
 **依存しないブランチを他のフィーチャーブランチへ rebase しない**。偽の依存が生まれ、本来不要な直列化を招く。
 
-**base の PR が既に着地しているなら、`gh pr edit <自分> --base "$DEFAULT"` で張り替えてから rebase する。** 親の head ブランチが残る運用では GitHub は base を付け替えないので、放置すると merge できない。
+**base の PR が既に着地しているなら、`gh pr edit <自分> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替えてから rebase する。** 親の head ブランチが残る運用では GitHub は base を付け替えないので、放置すると merge できない。
 
 ## フロー
 
-1. **push は `sh <skills root>/pr/scripts/sync-and-push.sh [<base>]` で行う。素の `git push` を使わない。** base への追随（fetch → ローカル default の ff → rebase）と push を 1 つにまとめてある。衝突が出たら解消して再実行する。**path は skill 側の実体を指す** —— cwd 相対で書くと作業中の repo の下を探して `No such file or directory` で落ち、等価な手順を毎回組み直すことになる
+1. **push は `sh <skills root>/pr/scripts/sync-and-push.sh [<base>]` で行う。素の `git push` を使わない。** 衝突が出たら解消して再実行する。**path は skill 側の実体を指す** —— cwd 相対で書くと作業中の repo の下を探して `No such file or directory` で落ち、等価な手順を毎回組み直すことになる
 2. PR が無ければ `gh pr create --base <base>`、あれば `gh pr edit` で title / body を更新
 3. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
 

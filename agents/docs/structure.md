@@ -100,6 +100,7 @@ flowchart LR
         AM["advisors.ts<br/><small>選出・検証</small>"]
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
+        SD["sync-local-default.sh<br/><small>ローカル default の ff</small>"]
     end
     subgraph sharedq["agents/shared/queue/ — キュー機構専用"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
@@ -160,6 +161,8 @@ flowchart LR
     IS --> GM
     PR --> GM
     SH --> GM
+    PR --> SD
+    SH --> SD
 ```
 
 掲載条件は所有判定だけ。`*.test.*` は本体の行へ畳む。
@@ -170,18 +173,17 @@ skill 固有の `references/`:
 | ----------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `conductor` | `harness.md` / `protocols.md` / `intake.md` / `tick.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 正規化と action の論証 / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
 | `resolve`   | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `written-record.md`              | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
-| `ship`      | `sync-default.md`                                                                         | 着地後にローカル default を最新化する手順                                                                                                    |
 | `docs`      | `review-prompt.md`                                                                        | 更新判定用                                                                                                                                   |
 
 skill 固有の `scripts/`:
 
-| skill       | 実体                                                                                                                                                                                                                                                                                         | 何をするか                                                                                                                            |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `comment-fingerprint.jq` / `issue-fingerprint.py` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                                                                | 起床監視・checks 抽出・コメント指紋・本文 digest・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
-| `docs`      | `audit-skills.sh` / `check-emphasis.mjs` / `check-hard-wrap.mjs`                                                                                                                                                                                                                             | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                                                      |
-| `resolve`   | `serialize-plan.ts`                                                                                                                                                                                                                                                                          | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                                              |
-| `pr`        | `sync-and-push.sh`                                                                                                                                                                                                                                                                           | base への追随と push（素の `git push` を使わせない）                                                                                  |
-| 共有        | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink）+ `shared/queue/standalone-line.ts`（`conductor/src` と `resolve/scripts/` から symlink） | 候補表・JSONC・選出・起動と回収・固定 marker の単独行                                                                                 |
+| skill       | 実体                                                                                                                                                                                                                                                                                                                                                                     | 何をするか                                                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `comment-fingerprint.jq` / `issue-fingerprint.py` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                                                                                                                                            | 起床監視・checks 抽出・コメント指紋・本文 digest・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
+| `docs`      | `audit-skills.sh` / `check-emphasis.mjs` / `check-hard-wrap.mjs`                                                                                                                                                                                                                                                                                                         | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                                                      |
+| `resolve`   | `serialize-plan.ts`                                                                                                                                                                                                                                                                                                                                                      | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                                              |
+| `pr`        | `sync-and-push.sh` + `sync-and-push.test.sh`                                                                                                                                                                                                                                                                                                                             | base への追随と origin の同名への push（素の `git push` を使わせない）                                                                |
+| 共有        | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink）+ `shared/queue/standalone-line.ts`（`conductor/src` と `resolve/scripts/` から symlink）+ `shared/sync-local-default.sh`（`pr` / `ship` の `scripts/` から symlink） | 候補表・JSONC・選出・起動と回収・固定 marker の単独行・ローカル default の ff                                                         |
 
 skill 固有の `assets/`:
 
