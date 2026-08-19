@@ -181,7 +181,7 @@ flowchart TD
 | `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                                                                     |
 | `idle`          | watcher を張って終える                                                                                                                                                                                                                  |
 
-`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）と、action の `countsEmptyCycle` / `countsFailure`。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。`runtime` を引き直さない。
+`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。`countsEmptyCycle` / `countsFailure` は `action` だけが持つ。
 
 ### 応答に出すもの
 
@@ -231,7 +231,7 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 retry の `count` を 0 に戻すのは、action が成功したときと、`ledger` が `退避先` のものを観測したとき（`lastAction` は残す）。
 **例外は** 伝える 3 つで、伝達が通ったことでは戻さない。戻すのは解除表。`計画枠の逼迫を伝える` は解除表の行が揃う前には `退避先` を観測しても消さない。
-伝える 3 つの加算は Decision の `countsFailure` を読む。`runtime` を引き直さない。
+伝える 3 つの加算は、action が成功したあと Decision の `countsFailure` を読む。活動も `runtime` も引き直さない。
 
 「落とす側が一体で精算する」形に**しない**。戻す主体を人に**しない**。どちらも不変条件として書く。
 

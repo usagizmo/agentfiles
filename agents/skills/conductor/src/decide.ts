@@ -5,7 +5,7 @@
 //
 // **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。
 
-import type { IssueObservation } from "./observation.ts";
+import type { IssueObservation, SessionActivity, SessionObservation } from "./observation.ts";
 import { sessionActive } from "./observation.ts";
 import {
   blocks,
@@ -268,30 +268,38 @@ export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
   return !excludedFromEmptyCycle(input);
 };
 
-/** 伝える 2 つ。受け手が `稼働中` の周では失敗カウントも退避も掛けない。 */
+/** 伝える 2 つ。受け手が再開しうる / 判定不能の周では失敗カウントも退避も掛けない。 */
 const isTellTwo = (name: string | null): boolean =>
   name === "本文の変更を伝える" || name === "計画の失効を伝える";
 
-/** 伝える 2 つの受け手がいま書いている。leftover はここに入れない。 */
-const tellRecipientWorking = (name: string | null, runtime: Runtime, leftover: boolean): boolean =>
-  isTellTwo(name) && runtime === "稼働中" && !leftover;
+/**
+ * 伝える 2 つの受け手が、外部入力なしに再開しうるか判定不能。
+ * セッション無しはここに入れない。leftover は見ない。
+ */
+const tellRecipientExempt = (
+  name: string | null,
+  session: SessionObservation,
+  activity: SessionActivity,
+): boolean =>
+  isTellTwo(name) &&
+  session.kind !== "none" &&
+  (activity === "再開しうる" || activity === "判定不能");
 
 export type FailureCountInput = {
   readonly action: ActionName;
-  readonly runtime: Runtime;
-  readonly leftover: boolean;
+  readonly session: SessionObservation;
+  readonly activity: SessionActivity;
 };
 
 /**
  * この action が成功したあと、失敗の記録の `count` を +1 するか。
- * 実行側はこれを読む。`runtime` を引き直さない。
  *
- * 伝える 2 つは受け手が genuine-working なら偽。leftover を「いま書いている」に使わない。
- * `計画枠の逼迫を伝える` は常に真。
+ * 伝える 2 つは受け手が再開しうる / 判定不能なら偽。セッション無しは数える。
+ * leftover を数える判定に使わない。`計画枠の逼迫を伝える` は常に真。
  */
 export const countsFailure = (input: FailureCountInput): boolean => {
   if (isTellTwo(input.action))
-    return !tellRecipientWorking(input.action, input.runtime, input.leftover);
+    return !tellRecipientExempt(input.action, input.session, input.activity);
   return input.action === "計画枠の逼迫を伝える";
 };
 
@@ -362,7 +370,7 @@ const budgetRevertTarget = (g: Group, config: TickConfig): "退避先" | undefin
   if (
     failure(g).count >= config.retryBudget &&
     failure(g).lastAction !== "計画枠の逼迫を伝える" &&
-    !tellRecipientWorking(failure(g).lastAction, r.runtime, o.leftover)
+    !tellRecipientExempt(failure(g).lastAction, o.session, o.activity)
   ) {
     return "退避先";
   }
@@ -1313,8 +1321,8 @@ export const decide = (input: TickInput): Decision => {
         }),
         countsFailure: countsFailure({
           action: params.action,
-          runtime: g.lead.runtime,
-          leftover: g.leadObservation.leftover,
+          session: g.leadObservation.session,
+          activity: g.leadObservation.activity,
         }),
         records: recordsOf(g),
         evidence: {

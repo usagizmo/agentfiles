@@ -4,7 +4,7 @@
 // **テスト名は行 ID**。`何も選ばない` は選択結果の null 値なので `idle` で受ける。
 
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CONFIG, buildGroups, decide } from "../src/decide.ts";
+import { DEFAULT_CONFIG, buildGroups, countsFailure, decide } from "../src/decide.ts";
 import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
@@ -627,6 +627,7 @@ describe("外から状態が動く", () => {
           ...heldIntegration(1),
           planInvalidated: present(true),
           session: session.running,
+          activity: "再開しうる",
         }),
       ],
       "計画の失効を伝える",
@@ -637,6 +638,7 @@ describe("外から状態が動く", () => {
           ...heldIntegration(1),
           planInvalidated: present(true),
           session: session.running,
+          activity: "再開しうる",
         }),
       ],
       false,
@@ -647,6 +649,7 @@ describe("外から状態が動く", () => {
           ...heldIntegration(1),
           planInvalidated: present(true),
           session: session.idle,
+          activity: "停止確認",
         }),
       ],
       true,
@@ -732,47 +735,131 @@ describe("外から状態が動く", () => {
   });
 
   test("9b: 行 9 を伝えたが、受け手が計画の記録を更新しないまま tick が進む", () => {
-    // 再送は冪等。runtime は 待機。加算は Decision の countsFailure。
+    // 再送は冪等。活動は 停止確認。加算は Decision の countsFailure。
     expectAction(
-      [implementing({ bodyMatchesPlan: present(false), session: session.idle })],
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.idle,
+          activity: "停止確認",
+        }),
+      ],
       "本文の変更を伝える",
     );
-    expectFailureCount(
-      [implementing({ bodyMatchesPlan: present(false), session: session.idle })],
-      true,
-    );
-  });
-
-  test("9b2: 行 9 を伝えたが、受け手は 稼働中 のまま計画の記録を更新しない", () => {
-    expectAction(
-      [implementing({ bodyMatchesPlan: present(false), session: session.running })],
-      "本文の変更を伝える",
-    );
-    expectFailureCount(
-      [implementing({ bodyMatchesPlan: present(false), session: session.running })],
-      false,
-    );
-  });
-
-  test("leftover の 稼働中 では伝える 2 つの失敗カウント免除が外れない", () => {
     expectFailureCount(
       [
         implementing({
           bodyMatchesPlan: present(false),
-          session: session.running,
-          leftover: true,
+          session: session.idle,
+          activity: "停止確認",
         }),
       ],
       true,
     );
   });
 
-  test("伝える 2 つの lastAction が上限でも、受け手が 稼働中 なら退避先へ落とさない", () => {
+  test("9b2: 行 9 を伝えたが、受け手は 稼働中 のまま計画の記録を更新しない", () => {
+    expectAction(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.running,
+          activity: "再開しうる",
+        }),
+      ],
+      "本文の変更を伝える",
+    );
+    expectFailureCount(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.running,
+          activity: "再開しうる",
+        }),
+      ],
+      false,
+    );
+  });
+
+  test("9b3: 行 9 を伝えたが、受け手は idle で活動は 再開しうる", () => {
+    expectAction(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.idle,
+          activity: "再開しうる",
+        }),
+      ],
+      "本文の変更を伝える",
+    );
+    expectFailureCount(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.idle,
+          activity: "再開しうる",
+        }),
+      ],
+      false,
+    );
+  });
+
+  test("9b4: 行 9 を伝えたが、受け手は idle で活動は 判定不能", () => {
+    expectAction(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.idle,
+          activity: "判定不能",
+        }),
+      ],
+      "本文の変更を伝える",
+    );
+    expectFailureCount(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.idle,
+          activity: "判定不能",
+        }),
+      ],
+      false,
+    );
+  });
+
+  test("9b5: leftover の 稼働中 で活動は 再開しうる。伝える 2 つは数えない", () => {
+    const obs = [
+      implementing({
+        bodyMatchesPlan: present(false),
+        session: session.running,
+        leftover: true,
+        activity: "再開しうる",
+      }),
+    ];
+    expectAction(obs, "本文の変更を伝える");
+    expectFailureCount(obs, false);
+  });
+
+  test("9b6: leftover の 稼働中 で活動は 停止確認。伝える 2 つは数える", () => {
+    const obs = [
+      implementing({
+        bodyMatchesPlan: present(false),
+        session: session.running,
+        leftover: true,
+        activity: "停止確認",
+      }),
+    ];
+    expectAction(obs, "本文の変更を伝える");
+    expectFailureCount(obs, true);
+  });
+
+  test("伝える 2 つの lastAction が上限でも、活動が 再開しうる なら退避先へ落とさない", () => {
     expectAction(
       [
         implementing({
           planInvalidated: present(true),
           session: session.running,
+          activity: "再開しうる",
           failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
         }),
       ],
@@ -783,6 +870,7 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.running,
+          activity: "再開しうる",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -790,13 +878,29 @@ describe("外から状態が動く", () => {
     );
   });
 
-  test("leftover の 稼働中 では伝える 2 つの lastAction が上限なら退避先へ落とす", () => {
+  test("9b7: leftover の 稼働中 で活動は 再開しうる。上限でも退避先へ落とさない", () => {
+    expectAction(
+      [
+        implementing({
+          bodyMatchesPlan: present(false),
+          session: session.running,
+          leftover: true,
+          activity: "再開しうる",
+          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
+        }),
+      ],
+      "本文の変更を伝える",
+    );
+  });
+
+  test("leftover の 稼働中 で活動は 停止確認。上限なら退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           bodyMatchesPlan: present(false),
           session: session.running,
           leftover: true,
+          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -816,12 +920,13 @@ describe("外から状態が動く", () => {
     );
   });
 
-  test("伝える 2 つの lastAction が上限で、受け手が 待機 なら退避先へ落とす", () => {
+  test("伝える 2 つの lastAction が上限で、活動が 停止確認 なら退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           planInvalidated: present(true),
           session: session.idle,
+          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
         }),
       ],
@@ -832,11 +937,70 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.idle,
+          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
       "退避先",
     );
+  });
+
+  test("9b8: 休止中でも活動が 再開しうる なら上限でも退避先へ落とさない", () => {
+    expectLease(
+      [
+        implementing({
+          pauseRecordExists: true,
+          session: session.idle,
+          activity: "再開しうる",
+          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
+        }),
+      ],
+      "write",
+    );
+  });
+
+  test("休止中で活動が 停止確認 なら上限で退避先へ落とす", () => {
+    expectRevert(
+      [
+        implementing({
+          pauseRecordExists: true,
+          session: session.idle,
+          activity: "停止確認",
+          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
+        }),
+      ],
+      "退避先",
+    );
+  });
+
+  test("9b9: セッションが無い周は伝える 2 つの上限で退避先へ落とす", () => {
+    expectRevert(
+      [
+        implementing({
+          session: session.none,
+          activity: "判定不能",
+          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
+        }),
+      ],
+      "退避先",
+    );
+  });
+
+  test("伝える 2 つはセッションが無いなら加算する", () => {
+    expect(
+      countsFailure({
+        action: "本文の変更を伝える",
+        session: session.none,
+        activity: "判定不能",
+      }),
+    ).toBe(true);
+    expect(
+      countsFailure({
+        action: "計画の失効を伝える",
+        session: session.none,
+        activity: "再開しうる",
+      }),
+    ).toBe(true);
   });
 
   test("9c: 資源キーが交差する write 保持者が 2 つ。どちらにも休止の記録が無い", () => {
