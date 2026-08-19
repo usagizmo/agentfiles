@@ -26,13 +26,13 @@ description: >-
 
 触る関数の周りだけを読ま**ない**。規則の理由は doc comment にあり、述語の理由は関数の直上、順序と単位の理由は `LADDER` と `Rung` の定義側にある。
 
-| 変えるもの          | 全文を読むファイル                                                                                                                                                                              |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                       |
-| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                          |
-| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                  |
-| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
-| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                           |
+| 変えるもの          | 全文を読むファイル                                                                                                                                                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                                                                                                                      |
+| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                                                                                                                         |
+| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                                                                                                                 |
+| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `src/standalone-line.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/comment-fingerprint.jq` / `scripts/issue-fingerprint.py` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
+| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                                                                                                                          |
 
 自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` と `stalls[]` は `cli.ts` が出す。
 
@@ -315,7 +315,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 
 - worktree が prepare を抜けたかは 0 か 1 に丸める。読めなかったときの `-` は 3 つ目の値で、clean へ**畳まない**
 - 正規化で同じ値になるものは、指紋でも同じ文字列に畳む。**意味が違うものは畳まない**（`稼働中` と人待ちの手掛かり、セッションの `done` と `idle`）
-- 同じ項目を、遷移を駆動しうる部分集合へ絞る。追跡していない PR の checks は `scripts/pr-list.jq`。snapshot の issues は board 上の番号で、`scripts/restrict-to-board.awk`
+- 同じ項目を、遷移を駆動しうる部分集合へ絞る。追跡していない PR の checks は `scripts/pr-list.jq`。snapshot の issues と comments は board 上の番号。issues の board 絞りは `scripts/restrict-to-board.awk`、本文 digest は `scripts/issue-fingerprint.py`。comments は `scripts/comment-fingerprint.jq`
 - 先発判定の 2 段目（作業量）は入れ**ない**。値は action が読む
 - 自分の状態は落とし、**存在は残す**（多重起動の判定に要る）
 

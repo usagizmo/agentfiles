@@ -10,7 +10,7 @@
 import type { Check } from "./checks.ts";
 
 /** `watch.sh` が先頭に書く版数。**節を足す・消す・名前を変えたら両方を上げる。** */
-export const SNAPSHOT_SCHEMA = 3;
+export const SNAPSHOT_SCHEMA = 4;
 
 /** 節の名前。`--- <name> (補足) ---` の `(` より前だけを見る。 */
 export const SECTIONS = [
@@ -174,11 +174,11 @@ export const projectStatus = (s: Snapshot): ProjectStatusRow[] =>
     return { boardOrder: Number(p[0]), issue: Number(p[1]), status: p[2] ?? "-" };
   });
 
-/** `--- issues ---` は `番号 state updated_at assignees` */
+/** `--- issues ---` は `番号 state bodyDigest assignees` */
 export type IssueRow = {
   readonly issue: number;
   readonly open: boolean;
-  readonly updatedAt: string;
+  readonly bodyDigest: string;
   readonly assignees: readonly string[];
 };
 
@@ -192,7 +192,7 @@ export const issues = (s: Snapshot): IssueRow[] =>
     return {
       issue: Number(p[0]),
       open: state === "open",
-      updatedAt: p[2] ?? "",
+      bodyDigest: p[2] ?? "",
       assignees: (p[3] ?? "").split(",").filter((a) => a !== ""),
     };
   });

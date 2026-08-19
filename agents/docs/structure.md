@@ -112,6 +112,7 @@ flowchart LR
         IT["intent-record.md<br/><small>意図の確認の記録</small>"]
         LS["landing-surface.md<br/><small>着地面の意味論</small>"]
         SR["session-report.md<br/><small>セッションまとめ</small>"]
+        SL["standalone-line.ts<br/><small>固定 marker の単独行</small>"]
     end
 
     RF --> AF
@@ -143,6 +144,8 @@ flowchart LR
     CO --> SR
     RS --> SR
     RF --> SR
+    CO --> SL
+    RS --> SL
     CS --> AD
     CS --> AS
     ZB --> AD
@@ -172,13 +175,13 @@ skill 固有の `references/`:
 
 skill 固有の `scripts/`:
 
-| skill       | 実体                                                                                                                                                                                                | 何をするか                                                                                                 |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                           | 起床監視・checks 抽出・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
-| `docs`      | `audit-skills.sh` / `check-emphasis.mjs` / `check-hard-wrap.mjs`                                                                                                                                    | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                           |
-| `resolve`   | `serialize-plan.ts`                                                                                                                                                                                 | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                   |
-| `pr`        | `sync-and-push.sh`                                                                                                                                                                                  | base への追随と push（素の `git push` を使わせない）                                                       |
-| 共有        | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink） | 候補表・JSONC・選出・起動と回収                                                                            |
+| skill       | 実体                                                                                                                                                                                                                                                                                         | 何をするか                                                                                                                            |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `conductor` | `watch.sh` + `watch.test.sh` / `pr-list.jq` / `comment-fingerprint.jq` / `issue-fingerprint.py` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                                                                | 起床監視・checks 抽出・コメント指紋・本文 digest・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなくここが観測の SSOT** |
+| `docs`      | `audit-skills.sh` / `check-emphasis.mjs` / `check-hard-wrap.mjs`                                                                                                                                                                                                                             | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                                                      |
+| `resolve`   | `serialize-plan.ts`                                                                                                                                                                                                                                                                          | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                                              |
+| `pr`        | `sync-and-push.sh`                                                                                                                                                                                                                                                                           | base への追随と push（素の `git push` を使わせない）                                                                                  |
+| 共有        | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink）+ `shared/queue/standalone-line.ts`（`conductor/src` と `resolve/scripts/` から symlink） | 候補表・JSONC・選出・起動と回収・固定 marker の単独行                                                                                 |
 
 skill 固有の `assets/`:
 

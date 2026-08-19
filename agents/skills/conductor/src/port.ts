@@ -12,6 +12,7 @@ import {
   carriesReportOrHalt,
   entryBlockRecord,
   hasStandaloneLine,
+  hasStandaloneMarkerShape,
   liveOwnedPrs,
   keysOfPlan,
   planRecord,
@@ -228,8 +229,8 @@ export const createPort = (options: PortOptions): ObservePort => {
         }
         return map;
       }
-      // **marker を持つものだけ残す。**種類は列挙しない（形だけで拾う）。
-      const marked = all.value.filter((c) => /<!--\s*[a-z][a-z-]*\s*-->/.test(c.body ?? ""));
+      // **単独行の marker を持つものだけ残す。**種類は列挙しない（形だけで拾う）。
+      const marked = all.value.filter((c) => hasStandaloneMarkerShape(c.body ?? ""));
       const byIssue = new Map<number, typeof marked>();
       for (const c of marked) {
         const n = Number(c.issue_url.split("/").pop());

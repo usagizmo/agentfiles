@@ -116,8 +116,8 @@ describe("行の decode", () => {
 
   test("assignee が空でも欠損にしない", () => {
     expect(issues(snap)).toEqual([
-      { issue: 12, open: true, updatedAt: "2026-08-12T00:00:00Z", assignees: ["alice"] },
-      { issue: 34, open: false, updatedAt: "2026-08-11T00:00:00Z", assignees: [] },
+      { issue: 12, open: true, bodyDigest: "2026-08-12T00:00:00Z", assignees: ["alice"] },
+      { issue: 34, open: false, bodyDigest: "2026-08-11T00:00:00Z", assignees: [] },
     ]);
   });
 

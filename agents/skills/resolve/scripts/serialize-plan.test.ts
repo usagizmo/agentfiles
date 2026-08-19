@@ -32,6 +32,11 @@ describe("serialize-plan", () => {
     expect(r.reason).toContain("quoted path");
   });
 
+  test("行末の空白がある plan marker でも読める", () => {
+    const body = "<!-- plan -->  \n```yaml\nbaseSha: aaa\n```\n<!-- /plan -->\n";
+    expect(checkPlan(body).ok).toBe(true);
+  });
+
   test("git octal を二重引用符の scalar に入れた本文は check が落とす", () => {
     const body = wrapPlan(
       [

@@ -290,9 +290,13 @@ done
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 QUERY_FILE="$DIR/project-status.graphql"
 RESTRICT="$DIR/restrict-to-board.awk"
+COMMENT_FP="$DIR/comment-fingerprint.jq"
+ISSUE_FP="$DIR/issue-fingerprint.py"
 [ -f "$QUERY_FILE" ] || { echo "not found: $QUERY_FILE" >&2; exit 2; }
 [ -f "$DIR/pr-list.jq" ] || { echo "not found: $DIR/pr-list.jq" >&2; exit 2; }
 [ -f "$RESTRICT" ] || { echo "not found: $RESTRICT" >&2; exit 2; }
+[ -f "$COMMENT_FP" ] || { echo "not found: $COMMENT_FP" >&2; exit 2; }
+[ -f "$ISSUE_FP" ] || { echo "not found: $ISSUE_FP" >&2; exit 2; }
 
 # 起動のたびに使い捨てる。**外へ残すのは `--snapshot` で明示的に指定された path だけ**
 # （呼び出し側がその file の寿命を持ち、次の起動で baseline として渡す）。
@@ -337,25 +341,18 @@ snapshot() {
 
   # REST（0 pt）。`gh issue list --limit N` は N を超えると**不完全なまま非 0 件で返る**ので使わない。
   # REST の issues は PR も返すため `.pull_request` で落とす。
-  issues=$(gh api "repos/$GH_REPO/issues?state=all&per_page=100" --paginate --jq '
-      .[] | select(.pull_request == null)
-      | "\(.number) \(.state) \(.updated_at) \([.assignees[].login] | sort | join(","))"') || return 1
+  # issues 行は `$ISSUE_FP`。コメントの upsert で Issue が動いても起きない。
+  issues_json=$(gh api "repos/$GH_REPO/issues?state=all&per_page=100" --paginate) || return 1
+  issues=$(printf '%s' "$issues_json" | python3 "$ISSUE_FP") || return 1
   issues=$(printf '%s\n' "$issues" | sort -n)
-  # **board 上の番号だけ残す。**board 外の updated_at が動いても起きない。
   # ページは最後まで取る。絞るのは出力であって打ち切りではない。
   board_nums=$(printf '%s\n' "$proj" | awk '{print $2}')
   printf '%s\n' "$board_nums" > "$STATE_DIR/board_nums"
   issues=$(printf '%s\n' "$issues" | awk -f "$RESTRICT" "$STATE_DIR/board_nums" -) || return 1
 
-  # marker コメントの変化で起床する。upsert は必ず `updated_at` を更新するので、
-  # `sort=updated` の窓に必ず入る。marker 名まで指紋に入れる（新設・消滅がそのまま digest に出る）。
-  #
-  # **marker 名を allowlist で列挙しない**。記録を 1 種類足すたびにここも直す形にすると、
-  # 直し忘れた種類だけが digest から消える —— 起床自体は `updated_at` が担保するので**壊れ方が
-  # 静か**で、「どの記録が動いたか」が diff から落ちたことに誰も気づけない（実際に `integration`
-  # と `intent` の 2 種類が列挙から漏れていた）。**形だけで拾い、種類は増えるに任せる**。
-  comments=$(gh api "repos/$GH_REPO/issues/comments?sort=updated&direction=desc&per_page=100" --jq '
-      .[] | "\(.id) \(.updated_at) \([.body | scan("<!-- ([a-z][a-z-]*) -->")] | flatten | join(","))"') || return 1
+  # コメント指紋は `$COMMENT_FP`。ページは最後まで取る。直近 100 件の窓は使わない。
+  comments_json=$(gh api "repos/$GH_REPO/issues/comments?per_page=100" --paginate) || return 1
+  comments=$(printf '%s' "$comments_json" | jq -r -f "$COMMENT_FP" --arg board "$board_nums") || return 1
   comments=$(printf '%s\n' "$comments" | sort)
 
   sessions=$(eval "$SESSIONS_CMD") || return 1
@@ -566,7 +563,7 @@ snapshot() {
   # baseline との比較は全文の digest なので、定数行が 1 本増えても差分の意味は変わらない。
   cat <<SNAP
 --- schema ---
-3
+4
 --- default ---
 $default
 --- landing tips ---

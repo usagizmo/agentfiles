@@ -598,8 +598,9 @@ done
 # queue 判定に実体の在処が要るので、symlink 検査より前に解決しておく。
 SHARED_ROOT=$(CDPATH= cd -P -- "$ROOT/../shared" 2>/dev/null && pwd -P) || SHARED_ROOT=""
 # 張り先と名前の規約は repo の AGENTS.md。ここはその検査。
+# references / scripts / assets に加え `src/` も回す（`jsonc.ts` / `standalone-line.ts`）。
 : >"$WORK/shared_use"
-for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets; do
+for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets "$ROOT"/*/src; do
 	[ -d "$d" ] || continue
 	skill=${d%/*}
 	skill=${skill##*/}
@@ -669,7 +670,7 @@ done
 
 # shared に同名の実体があるのに skill 側が通常ファイル = コピーによる重複。
 if [ -n "$SHARED_DIR" ]; then
-	for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets; do
+	for d in "$ROOT"/*/references "$ROOT"/*/scripts "$ROOT"/*/assets "$ROOT"/*/src; do
 		[ -d "$d" ] || continue
 		skill=${d%/*}
 		skill=${skill##*/}
