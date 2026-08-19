@@ -5,7 +5,7 @@
 //
 // **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。
 
-import type { IssueObservation, SessionActivity, SessionObservation } from "./observation.ts";
+import type { IssueObservation } from "./observation.ts";
 import { sessionActive } from "./observation.ts";
 import {
   blocks,
@@ -268,40 +268,16 @@ export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
   return !excludedFromEmptyCycle(input);
 };
 
-/** 伝える 2 つ。受け手が再開しうる / 判定不能の周では失敗カウントも退避も掛けない。 */
-const isTellTwo = (name: string | null): boolean =>
-  name === "本文の変更を伝える" || name === "計画の失効を伝える";
-
-/**
- * 伝える 2 つの受け手が、外部入力なしに再開しうるか判定不能。
- * セッション無しはここに入れない。leftover は見ない。
- */
-const tellRecipientExempt = (
-  name: string | null,
-  session: SessionObservation,
-  activity: SessionActivity,
-): boolean =>
-  isTellTwo(name) &&
-  session.kind !== "none" &&
-  (activity === "再開しうる" || activity === "判定不能");
-
-export type FailureCountInput = {
-  readonly action: ActionName;
-  readonly session: SessionObservation;
-  readonly activity: SessionActivity;
-};
-
 /**
  * この action が成功したあと、失敗の記録の `count` を +1 するか。
  *
- * 伝える 2 つは受け手が再開しうる / 判定不能なら偽。セッション無しは数える。
- * leftover を数える判定に使わない。`計画枠の逼迫を伝える` は常に真。
+ * 伝える 2 つは常に真。送る周は `canPrompt` だけなので、再開しうる / 判定不能を免除しない。
+ * `計画枠の逼迫を伝える` は常に真。
  */
-export const countsFailure = (input: FailureCountInput): boolean => {
-  if (isTellTwo(input.action))
-    return !tellRecipientExempt(input.action, input.session, input.activity);
-  return input.action === "計画枠の逼迫を伝える";
-};
+const countsFailure = (action: ActionName): boolean =>
+  action === "本文の変更を伝える" ||
+  action === "計画の失効を伝える" ||
+  action === "計画枠の逼迫を伝える";
 
 /** group 内で終端と非終端が混在しているか。共有実体をどちらに倒しても壊れる。 */
 const terminalMixedInGroup = (g: Group): boolean => {
@@ -321,7 +297,7 @@ const sessionAlive = (g: Group): boolean => g.leadObservation.session.kind !== "
 const receivable = (runtime: Runtime, leftover: boolean): boolean =>
   runtime === "待機" || runtime === "休止" || (leftover && runtime === "稼働中");
 
-/** checks / 意図の確認。`休止` は「枠を渡す」へ譲る。 */
+/** checks / 意図の確認 / 伝える 2 つ。`休止` は「枠を渡す」へ譲る。 */
 const canPrompt = (runtime: Runtime, leftover: boolean): boolean =>
   runtime === "待機" || (leftover && runtime === "稼働中");
 
@@ -367,11 +343,7 @@ const budgetRevertTarget = (g: Group, config: TickConfig): "退避先" | undefin
   const o = g.leadObservation;
   if (!REVERTABLE.includes(r.ledger)) return undefined;
 
-  if (
-    failure(g).count >= config.retryBudget &&
-    failure(g).lastAction !== "計画枠の逼迫を伝える" &&
-    !tellRecipientExempt(failure(g).lastAction, o.session, o.activity)
-  ) {
+  if (failure(g).count >= config.retryBudget && failure(g).lastAction !== "計画枠の逼迫を伝える") {
     return "退避先";
   }
 
@@ -892,8 +864,7 @@ const LADDER: readonly Rung[] = [
       !isShelved(g) &&
       g.observations.some((o) => value(o.bodyMatchesPlan) === false) &&
       sessionAlive(g) &&
-      g.lead.runtime !== "人待ち" &&
-      g.lead.runtime !== "休止",
+      canPrompt(g.lead.runtime, g.leadObservation.leftover),
   },
   {
     params: () => ({ action: "計画の失効を伝える" }),
@@ -902,8 +873,7 @@ const LADDER: readonly Rung[] = [
       !isShelved(g) &&
       value(g.leadObservation.planInvalidated) === true &&
       sessionAlive(g) &&
-      g.lead.runtime !== "人待ち" &&
-      g.lead.runtime !== "休止" &&
+      canPrompt(g.lead.runtime, g.leadObservation.leftover) &&
       // **着地待ちの非保持者には伝えない。** 枠を渡す本文が再 plan を載せる。
       // 保持者は着地だけ止める。実装中は書いている前提が古くなるので残す。
       // 発火条件に受け手の有無を入れない。
@@ -1319,11 +1289,7 @@ export const decide = (input: TickInput): Decision => {
           progress: g.lead.progress,
           checks: g.leadObservation.checks,
         }),
-        countsFailure: countsFailure({
-          action: params.action,
-          session: g.leadObservation.session,
-          activity: g.leadObservation.activity,
-        }),
+        countsFailure: countsFailure(params.action),
         records: recordsOf(g),
         evidence: {
           progress: g.lead.progress,

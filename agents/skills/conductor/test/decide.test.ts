@@ -4,7 +4,7 @@
 // **テスト名は行 ID**。`何も選ばない` は選択結果の null 値なので `idle` で受ける。
 
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CONFIG, buildGroups, countsFailure, decide } from "../src/decide.ts";
+import { DEFAULT_CONFIG, buildGroups, decide } from "../src/decide.ts";
 import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
@@ -605,14 +605,7 @@ describe("実行器が消える / 止まる", () => {
 
 describe("外から状態が動く", () => {
   test("9: 実装中に Issue 本文が変わった", () => {
-    expectAction(
-      [implementing({ bodyMatchesPlan: present(false), session: session.running })],
-      "本文の変更を伝える",
-    );
-    expectFailureCount(
-      [implementing({ bodyMatchesPlan: present(false), session: session.running })],
-      false,
-    );
+    expectIdle([implementing({ bodyMatchesPlan: present(false), session: session.running })]);
   });
 
   test("8: PR は緑だが、その後 default が進んで計画の資源キーに交差した", () => {
@@ -621,28 +614,25 @@ describe("外から状態が動く", () => {
   });
 
   test("8o: 枠を保持した着地待ちが失効している", () => {
-    expectAction(
-      [
-        awaitingLanding({
-          ...heldIntegration(1),
-          planInvalidated: present(true),
-          session: session.running,
-          activity: "再開しうる",
-        }),
-      ],
-      "計画の失効を伝える",
-    );
-    expectFailureCount(
-      [
-        awaitingLanding({
-          ...heldIntegration(1),
-          planInvalidated: present(true),
-          session: session.running,
-          activity: "再開しうる",
-        }),
-      ],
-      false,
-    );
+    expectIdle([
+      awaitingLanding({
+        ...heldIntegration(1),
+        planInvalidated: present(true),
+        session: session.running,
+        activity: "再開しうる",
+      }),
+    ]);
+    const leftover = [
+      awaitingLanding({
+        ...heldIntegration(1),
+        planInvalidated: present(true),
+        session: session.running,
+        leftover: true,
+        activity: "再開しうる",
+      }),
+    ];
+    expectAction(leftover, "計画の失効を伝える");
+    expectFailureCount(leftover, true);
     expectFailureCount(
       [
         awaitingLanding({
@@ -759,26 +749,13 @@ describe("外から状態が動く", () => {
   });
 
   test("9b2: 行 9 を伝えたが、受け手は 稼働中 のまま計画の記録を更新しない", () => {
-    expectAction(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.running,
-          activity: "再開しうる",
-        }),
-      ],
-      "本文の変更を伝える",
-    );
-    expectFailureCount(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.running,
-          activity: "再開しうる",
-        }),
-      ],
-      false,
-    );
+    expectIdle([
+      implementing({
+        bodyMatchesPlan: present(false),
+        session: session.running,
+        activity: "再開しうる",
+      }),
+    ]);
   });
 
   test("9b3: 行 9 を伝えたが、受け手は idle で活動は 再開しうる", () => {
@@ -800,7 +777,7 @@ describe("外から状態が動く", () => {
           activity: "再開しうる",
         }),
       ],
-      false,
+      true,
     );
   });
 
@@ -823,11 +800,11 @@ describe("外から状態が動く", () => {
           activity: "判定不能",
         }),
       ],
-      false,
+      true,
     );
   });
 
-  test("9b5: leftover の 稼働中 で活動は 再開しうる。伝える 2 つは数えない", () => {
+  test("9b5: leftover の 稼働中 で活動は 再開しうる。伝える 2 つは数える", () => {
     const obs = [
       implementing({
         bodyMatchesPlan: present(false),
@@ -837,7 +814,7 @@ describe("外から状態が動く", () => {
       }),
     ];
     expectAction(obs, "本文の変更を伝える");
-    expectFailureCount(obs, false);
+    expectFailureCount(obs, true);
   });
 
   test("9b6: leftover の 稼働中 で活動は 停止確認。伝える 2 つは数える", () => {
@@ -853,8 +830,8 @@ describe("外から状態が動く", () => {
     expectFailureCount(obs, true);
   });
 
-  test("伝える 2 つの lastAction が上限でも、活動が 再開しうる なら退避先へ落とさない", () => {
-    expectAction(
+  test("伝える 2 つの lastAction が上限なら、活動が 再開しうる でも退避先へ落とす", () => {
+    expectRevert(
       [
         implementing({
           planInvalidated: present(true),
@@ -863,9 +840,9 @@ describe("外から状態が動く", () => {
           failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
         }),
       ],
-      "計画の失効を伝える",
+      "退避先",
     );
-    expectAction(
+    expectRevert(
       [
         implementing({
           bodyMatchesPlan: present(false),
@@ -874,12 +851,12 @@ describe("外から状態が動く", () => {
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
-      "本文の変更を伝える",
+      "退避先",
     );
   });
 
-  test("9b7: leftover の 稼働中 で活動は 再開しうる。上限でも退避先へ落とさない", () => {
-    expectAction(
+  test("9b7: leftover の 稼働中 で活動は 再開しうる。上限なら退避先へ落とす", () => {
+    expectRevert(
       [
         implementing({
           bodyMatchesPlan: present(false),
@@ -889,7 +866,7 @@ describe("外から状態が動く", () => {
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
-      "本文の変更を伝える",
+      "退避先",
     );
   });
 
@@ -945,8 +922,8 @@ describe("外から状態が動く", () => {
     );
   });
 
-  test("9b8: 休止中でも活動が 再開しうる なら上限でも退避先へ落とさない", () => {
-    expectLease(
+  test("9b8: 休止中でも伝える 2 つの上限なら退避先へ落とす", () => {
+    expectRevert(
       [
         implementing({
           pauseRecordExists: true,
@@ -955,7 +932,7 @@ describe("外から状態が動く", () => {
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
-      "write",
+      "退避先",
     );
   });
 
@@ -984,23 +961,6 @@ describe("外から状態が動く", () => {
       ],
       "退避先",
     );
-  });
-
-  test("伝える 2 つはセッションが無いなら加算する", () => {
-    expect(
-      countsFailure({
-        action: "本文の変更を伝える",
-        session: session.none,
-        activity: "判定不能",
-      }),
-    ).toBe(true);
-    expect(
-      countsFailure({
-        action: "計画の失効を伝える",
-        session: session.none,
-        activity: "再開しうる",
-      }),
-    ).toBe(true);
   });
 
   test("9c: 資源キーが交差する write 保持者が 2 つ。どちらにも休止の記録が無い", () => {
@@ -2279,6 +2239,7 @@ describe("merge の直列化（続き）", () => {
           ...heldIntegration(1),
           bodyMatchesPlan: present(false),
           session: session.running,
+          leftover: true,
         }),
       ],
       "本文の変更を伝える",
@@ -2773,19 +2734,29 @@ describe("着地面が制御面と違う（action）", () => {
   });
 
   test("17j: 同じ面へ別の課題が着地し、統合先が動いた", () => {
-    expectAction(
-      [
-        landed({
-          surfaces: [
-            control(),
-            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
-          ],
-          planInvalidated: present(true),
-          session: session.running,
-        }),
-      ],
-      "計画の失効を伝える",
-    );
+    expectIdle([
+      landed({
+        surfaces: [
+          control(),
+          secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+        ],
+        planInvalidated: present(true),
+        session: session.running,
+      }),
+    ]);
+    const leftover = [
+      landed({
+        surfaces: [
+          control(),
+          secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+        ],
+        planInvalidated: present(true),
+        session: session.running,
+        leftover: true,
+      }),
+    ];
+    expectAction(leftover, "計画の失効を伝える");
+    expectFailureCount(leftover, true);
   });
 
   test("17l: 依存先が closed かつ 完了 なら、依存は解けている", () => {
