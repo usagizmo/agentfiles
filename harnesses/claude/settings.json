@@ -37,6 +37,7 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "language": "Japanese",
+  "outputStyle": "Concise",
   "alwaysThinkingEnabled": true,
   "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": true,
