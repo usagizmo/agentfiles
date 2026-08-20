@@ -4,13 +4,14 @@
 // fence / frontmatter / 表 / HTML ブロックの中は見ない。文末で終わる行は通す。
 
 import { marked } from "marked";
+import type { Token, Tokens } from "marked";
 
 const SENTENCE_END = /(?:[。．.！!？?…]|……)[」』）)】〉》"'”’]*$/u;
 const COLON_END = /[：:]$/u;
 const NESTED_LIST = /^[ \t]+(?:[-*+]|\d+\.)[ \t]/u;
 const FENCE_LINE = /^[ \t]*(?:```|~~~)/u;
 
-export function isSentenceEnd(line) {
+export function isSentenceEnd(line: string): boolean {
   const trimmed = line
     .replace(/^[ \t]*>[ \t]?/u, "")
     .replace(/[ \t]+$/u, "")
@@ -19,13 +20,13 @@ export function isSentenceEnd(line) {
   return SENTENCE_END.test(trimmed) || COLON_END.test(trimmed);
 }
 
-function contentLines(raw) {
+function contentLines(raw: string): string[] {
   const lines = raw.replace(/(?:\r?\n)+$/u, "").split("\n");
-  while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
+  while (lines.length > 0 && (lines[lines.length - 1] ?? "").trim() === "") lines.pop();
   return lines;
 }
 
-function listItemLeadingRaw(item) {
+function listItemLeadingRaw(item: Tokens.ListItem): string {
   const lines = item.raw.split("\n");
   const out = [lines[0] ?? ""];
   for (let i = 1; i < lines.length; i++) {
@@ -40,14 +41,14 @@ function listItemLeadingRaw(item) {
   return out.join("\n");
 }
 
-function visitProse(tokens, visit) {
+function visitProse(tokens: Token[], visit: (raw: string) => void): void {
   for (const token of tokens) {
     switch (token.type) {
       case "list":
         for (const item of token.items) {
           visit(listItemLeadingRaw(item));
           visitProse(
-            (item.tokens ?? []).filter((child) => child.type === "list"),
+            (item.tokens ?? []).filter((child: Token) => child.type === "list"),
             visit,
           );
         }
@@ -66,10 +67,12 @@ function visitProse(tokens, visit) {
   }
 }
 
-export function hardWrapLines(src) {
-  const out = [];
+export type HardWrapLine = { no: number; text: string };
+
+export function hardWrapLines(src: string): HardWrapLine[] {
+  const out: HardWrapLine[] = [];
   let cursor = 0;
-  visitProse(marked.lexer(src), (raw) => {
+  visitProse(marked.lexer(src), (raw: string) => {
     let at = src.indexOf(raw, cursor);
     if (at < 0) at = src.indexOf(raw);
     if (at >= 0) cursor = at + raw.length;
@@ -77,7 +80,8 @@ export function hardWrapLines(src) {
     if (lines.length < 2) return;
     const base = src.slice(0, Math.max(at, 0)).split("\n").length;
     for (let i = 0; i < lines.length - 1; i++) {
-      if (!isSentenceEnd(lines[i])) out.push({ no: base + i, text: lines[i] });
+      const line = lines[i] ?? "";
+      if (!isSentenceEnd(line)) out.push({ no: base + i, text: line });
     }
   });
   return out;
@@ -85,7 +89,7 @@ export function hardWrapLines(src) {
 
 const KIND = "hard-wrap";
 
-const FIXTURES = [
+const FIXTURES: { name: string; source: string; expect: string[] }[] = [
   { name: "幅で折った段落", source: "これは文の途中で\n折り返している。", expect: [KIND] },
   { name: "文末で改行した段落", source: "これは文末。\n次の文。", expect: [] },
   {
@@ -111,12 +115,12 @@ const FIXTURES = [
   },
 ];
 
-function stripFrontmatter(src) {
+function stripFrontmatter(src: string): string {
   return src.replace(/^\uFEFF?---[ \t]*\r?\n[\s\S]*?(?:\r?\n)?---[ \t]*(?:\r?\n|$)/, "");
 }
 
-export function validateHardWrapFixtures() {
-  const problems = [];
+export function validateHardWrapFixtures(): string[] {
+  const problems: string[] = [];
   if (FIXTURES.length === 0) problems.push("FIXTURES が空です");
   const expectations = FIXTURES.map((f) => f.expect);
   if (!expectations.some((kinds) => kinds.length === 0)) {

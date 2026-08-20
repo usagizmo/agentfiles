@@ -1,4 +1,4 @@
-// audit-skills.sh の統合 smoke test。強調の判定そのものは check-emphasis.test.mjs。
+// audit-skills.sh の統合 smoke test。強調の判定そのものは check-emphasis.test.ts。
 //
 // ここで押さえるのは **sh 側の配線**: 検出が VIOLATION として出るか、道具が無いときに
 // 黙らず SKIP を出すか、SUMMARY が数を持つか。**「違反 0」と「検査していない」を
@@ -11,17 +11,19 @@ import { expect, test } from "bun:test";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const AUDIT = `${ROOT}agents/skills/docs/scripts/audit-skills.sh`;
-const fixture = (name) => `${ROOT}test/fixtures/${name}`;
+const fixture = (name: string) => `${ROOT}test/fixtures/${name}`;
 
-function withoutGitEnv(base = process.env) {
-  const env = { ...base };
+type Env = Record<string, string | undefined>;
+
+function withoutGitEnv(base: Env = process.env): Env {
+  const env: Env = { ...base };
   for (const key of Object.keys(env)) {
     if (key.startsWith("GIT_")) delete env[key];
   }
   return env;
 }
 
-function isolatedGitEnv(base = process.env) {
+function isolatedGitEnv(base: Env = process.env): Env {
   return {
     ...withoutGitEnv(base),
     GIT_CONFIG_GLOBAL: "/dev/null",
@@ -29,7 +31,7 @@ function isolatedGitEnv(base = process.env) {
   };
 }
 
-async function audit(root, env = {}, args = []) {
+async function audit(root: string, env: Env = {}, args: string[] = []) {
   const p = Bun.spawn(["sh", AUDIT, root, ...args], {
     cwd: ROOT,
     env: isolatedGitEnv({ ...process.env, ...env }),
@@ -122,10 +124,10 @@ test("fence と引用の中は layer / ref / ref-heading / sibling に出ない"
   expect(exitCode).toBe(1);
 });
 
-// --- checker の異常系（EMPHASIS_JS で差し替える） -------------------------
+// --- checker の異常系（EMPHASIS_TS で差し替える） -------------------------
 // **「落ちた」と「違反なし」を取り違えないこと**が要点。緑で通ると検査が消える。
 
-const checker = (name) => ({ EMPHASIS_JS: `${ROOT}test/fixtures/checker/${name}.mjs` });
+const checker = (name: string): Env => ({ EMPHASIS_TS: `${ROOT}test/fixtures/checker/${name}.ts` });
 
 test("checker が出力なしで失敗したら audit ごと落ちる", async () => {
   const { stdout, exitCode } = await audit(fixture("emphasis-clean"), checker("silent-fail"));
@@ -148,13 +150,13 @@ test("依存が無い（exit 2）は SKIP として通す", async () => {
 // --- owned: gitignore された skill を棚卸しから外す ----------------------
 // 祖先の .git を拾わないよう、独立した git repo を /tmp に作る。
 
-const derivedViolations = (stdout) =>
+const derivedViolations = (stdout: string) =>
   stdout
     .split("\n")
-    .filter((l) => l.startsWith("VIOLATION\tderived"))
+    .filter((l: string) => l.startsWith("VIOLATION\tderived"))
     .sort();
 
-async function git(args, cwd) {
+async function git(args: string[], cwd: string) {
   const p = Bun.spawn(["git", ...args], {
     cwd,
     env: isolatedGitEnv(),
@@ -172,20 +174,20 @@ async function git(args, cwd) {
   return stdout;
 }
 
-function writeLayerReadme(dir, skills) {
-  const cells = skills.map((s) => `\`${s}\``).join(" ");
+function writeLayerReadme(dir: string, skills: string[]) {
+  const cells = skills.map((s: string) => `\`${s}\``).join(" ");
   writeFileSync(
     join(dir, "agents/docs/README.md"),
     `# docs\n\n## 層構造\n\n| 層 | skills |\n| --- | --- |\n| leaf | ${cells} |\n\n## 次\n`,
   );
 }
 
-function writeSkill(dir, name) {
+function writeSkill(dir: string, name: string) {
   mkdirSync(join(dir, "agents/skills", name), { recursive: true });
   writeFileSync(join(dir, "agents/skills", name, "SKILL.md"), `# ${name}\n`);
 }
 
-async function ownedRepo({ table, extras = [] }) {
+async function ownedRepo({ table, extras = [] }: { table: string[]; extras?: string[] }) {
   const dir = mkdtempSync(join(tmpdir(), "audit-owned-"));
   mkdirSync(join(dir, "agents/docs"), { recursive: true });
   writeFileSync(join(dir, ".gitignore"), "/agents/skills/ghost/\n");
@@ -298,10 +300,10 @@ test("repo が無いときは所有判定不能として成功終了しない", 
   }
 });
 
-const refLines = (stdout) =>
+const refLines = (stdout: string) =>
   stdout
     .split("\n")
-    .filter((l) => l.startsWith("VIOLATION\tref\t") || l.startsWith("REVIEW\tref\t"))
+    .filter((l: string) => l.startsWith("VIOLATION\tref\t") || l.startsWith("REVIEW\tref\t"))
     .sort();
 
 test("所有外 skill を先頭にする参照はディスク有無で色が変わらない", async () => {
@@ -320,7 +322,7 @@ test("所有外 skill を先頭にする参照はディスク有無で色が変�
   }
 });
 
-async function skillRepo(skills) {
+async function skillRepo(skills: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), "audit-skills-"));
   mkdirSync(join(dir, "agents/docs"), { recursive: true });
   writeFileSync(join(dir, ".gitignore"), "\n");

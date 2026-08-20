@@ -798,16 +798,16 @@ fi
 # --- check emphasis: 描画が壊れる強調 -------------------------------------
 # **正規表現では届かない。**flanking は開き / 閉じの対応まで見ないと結論が出ず、
 # 右 flanking は成立するのに相手が無くてリテラルへ落ちる `**` を取り逃す。
-# 描画して判定する実体は隣の check-emphasis.mjs。
+# 描画して判定する実体は隣の check-emphasis.ts。
 # **道具が無ければ飛ばす。**強調記法はこの検査の付随物で、欠いても本来の目的
 # （実在・形・重複・層）は達成できる。飛ばしたことは SKIP で出す。
 emphasis_self=$(canon "$0") || emphasis_self=$0
 # 既定はスクリプトの隣。test が異常系の checker を差し込めるように上書きを許す
-EMPHASIS_JS=${EMPHASIS_JS:-$(dirname "$emphasis_self")/check-emphasis.mjs}
+EMPHASIS_TS=${EMPHASIS_TS:-$(dirname "$emphasis_self")/check-emphasis.ts}
 if ! command -v bun >/dev/null 2>&1; then
 	emit SKIP emphasis "-" "note=bun が無いので強調記法を検査していない"
-elif [ ! -f "$EMPHASIS_JS" ]; then
-	emit SKIP emphasis "-" "note=$EMPHASIS_JS が無いので強調記法を検査していない"
+elif [ ! -f "$EMPHASIS_TS" ]; then
+	emit SKIP emphasis "-" "note=$EMPHASIS_TS が無いので強調記法を検査していない"
 else
 	# **instructions 入口も入れる。**skills だけを対象にすると AGENTS.md が対象外になる。
 	{
@@ -821,7 +821,7 @@ else
 			done
 		fi
 	} >"$WORK/md_targets"
-	bun "$EMPHASIS_JS" <"$WORK/md_targets" >"$WORK/emphasis" 2>"$WORK/emphasis_err"
+	bun "$EMPHASIS_TS" <"$WORK/md_targets" >"$WORK/emphasis" 2>"$WORK/emphasis_err"
 	emphasis_rc=$?
 	# 契約は 0=壊れなし / 1=壊れあり（出力あり） / 2=marked が無い。
 	# **それ以外と、1 なのに出力が空の場合は落とす。**checker 自体が落ちた状態を
