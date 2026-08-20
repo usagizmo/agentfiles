@@ -38,11 +38,22 @@ esac
 }
 
 # GIT_DIR が効いていると -C が無視され、別の repo を触る。
+# **repo-local な変数は git 自身に列挙させる。**手書きの allowlist は git が版で
+# 増やすたびに漏れる。`GIT_CEILING_DIRECTORIES` は宣言に無いので合併する。
+# **`GIT_AUTHOR_*` / `GIT_COMMITTER_*` は宣言に含まれない** —— ここは commit を作るので
+# 落ちると author が変わる。
+git_local_env_strip() {
+  if [ -z "${GIT_ENV_STRIP:-}" ]; then
+    GIT_ENV_STRIP="$(git rev-parse --local-env-vars |
+      sed 's/^/-u /' | tr '\n' ' ')-u GIT_CEILING_DIRECTORIES"
+  fi
+  printf '%s' "$GIT_ENV_STRIP"
+}
+
 git_clean() {
-  env -u GIT_CONFIG -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE \
-    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
-    -u GIT_COMMON_DIR -u GIT_CEILING_DIRECTORIES \
-    -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+  # 分割は意図的（`-u NAME` を並べる）
+  # shellcheck disable=SC2086
+  env $(git_local_env_strip) \
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 \
     GIT_ATTR_NOSYSTEM=1 GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 \
     git "$@"

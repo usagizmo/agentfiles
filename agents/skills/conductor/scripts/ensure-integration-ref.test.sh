@@ -6,9 +6,13 @@
 
 set -u
 
-# commit hook が GIT_DIR を渡す。残ると -C しても本番の repo へ書く。
+# **周りの git 環境を持ち込まない。**呼び出し元が GIT_DIR を立てていると、-C を付けても
+# 本番の repo へ書く。**repo-local な変数は git 自身に列挙させる** —— 手書きの allowlist は
+# git が版で増やすたびに漏れる。identity はこの下で立て直すので、落ちても困らない。
 # （`git push origin HEAD:main` が origin/main へ届く。）
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_PREFIX GIT_COMMON_DIR
+for git_env_var in $(git rev-parse --local-env-vars) GIT_CEILING_DIRECTORIES; do
+  unset "$git_env_var"
+done
 
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 ENSURE="$DIR/ensure-integration-ref.sh"
