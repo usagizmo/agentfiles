@@ -15,26 +15,32 @@ const fixture = (name: string) => `${ROOT}test/fixtures/${name}`;
 
 type Env = Record<string, string | undefined>;
 
-function withoutGitEnv(base: Env = process.env): Env {
+// 利用者の global / system config で出力が変わらないようにする。GIT_DIR 等の遮断とは別。
+const CONFIG_ISOLATION: Env = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+};
+
+/**
+ * **自分で spawn する git は自分で守る。**sandbox repo へ `config user.email` を撃つので、
+ * GIT_DIR が残っていると -C を無視して本物の repo の config へ書く。委譲先が無い。
+ */
+function isolatedGitEnv(base: Env = process.env): Env {
   const env: Env = { ...base };
   for (const key of Object.keys(env)) {
     if (key.startsWith("GIT_")) delete env[key];
   }
-  return env;
+  return { ...env, ...CONFIG_ISOLATION };
 }
 
-function isolatedGitEnv(base: Env = process.env): Env {
-  return {
-    ...withoutGitEnv(base),
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_SYSTEM: "/dev/null",
-  };
-}
-
+/**
+ * **audit 側は GIT_* を剥がさない。**剥がすと audit-skills.sh 自身の sanitizer が
+ * 検査されず、防御が抜けても緑のまま通る。
+ */
 async function audit(root: string, env: Env = {}, args: string[] = []) {
   const p = Bun.spawn(["sh", AUDIT, root, ...args], {
     cwd: ROOT,
-    env: isolatedGitEnv({ ...process.env, ...env }),
+    env: { ...process.env, ...CONFIG_ISOLATION, ...env },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -153,7 +159,7 @@ test("依存が無い（exit 2）は SKIP として通す", async () => {
 const derivedViolations = (stdout: string) =>
   stdout
     .split("\n")
-    .filter((l: string) => l.startsWith("VIOLATION\tderived"))
+    .filter((l) => l.startsWith("VIOLATION\tderived"))
     .sort();
 
 async function git(args: string[], cwd: string) {
@@ -175,7 +181,7 @@ async function git(args: string[], cwd: string) {
 }
 
 function writeLayerReadme(dir: string, skills: string[]) {
-  const cells = skills.map((s: string) => `\`${s}\``).join(" ");
+  const cells = skills.map((s) => `\`${s}\``).join(" ");
   writeFileSync(
     join(dir, "agents/docs/README.md"),
     `# docs\n\n## 層構造\n\n| 層 | skills |\n| --- | --- |\n| leaf | ${cells} |\n\n## 次\n`,
@@ -213,6 +219,24 @@ test("gitignore された skill の有無で derived の VIOLATION が変わら�
   } finally {
     rmSync(absent, { recursive: true, force: true });
     rmSync(present, { recursive: true, force: true });
+  }
+});
+
+test("親の GIT_DIR が立っていても derived の判定は変わらない", async () => {
+  // audit-skills.sh の git_in が剥がしきれていなければ、所有判定が別 repo のものになる
+  const dir = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
+  const decoy = await ownedRepo({ table: ["owned"] });
+  try {
+    const clean = await audit(join(dir, "agents/skills"));
+    const injected = await audit(join(dir, "agents/skills"), {
+      GIT_DIR: join(decoy, ".git"),
+      GIT_WORK_TREE: decoy,
+    });
+    expect(injected.stdout).toEqual(clean.stdout);
+    expect(derivedViolations(injected.stdout)).toEqual([]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(decoy, { recursive: true, force: true });
   }
 });
 
@@ -303,7 +327,7 @@ test("repo が無いときは所有判定不能として成功終了しない", 
 const refLines = (stdout: string) =>
   stdout
     .split("\n")
-    .filter((l: string) => l.startsWith("VIOLATION\tref\t") || l.startsWith("REVIEW\tref\t"))
+    .filter((l) => l.startsWith("VIOLATION\tref\t") || l.startsWith("REVIEW\tref\t"))
     .sort();
 
 test("所有外 skill を先頭にする参照はディスク有無で色が変わらない", async () => {
