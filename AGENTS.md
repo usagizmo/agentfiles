@@ -48,14 +48,15 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 ### スコープと絵文字の対応
 
-| 絵文字 | スコープ   | 説明                                                                                                      |
-| ------ | ---------- | --------------------------------------------------------------------------------------------------------- |
-| 🤖     | `[agents]` | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
-| 🤖     | `[claude]` | `harnesses/claude` 配下の Claude Code 設定                                                                |
-| 🤖     | `[codex]`  | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
-| 🤖     | `[grok]`   | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
-| 🎨     | `[lint]`   | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
-| 🔧     | `[複数]`   | 複数スコープにまたがる変更（例: `[agents][claude]`）                                                      |
+| 絵文字 | スコープ     | 説明                                                                                                      |
+| ------ | ------------ | --------------------------------------------------------------------------------------------------------- |
+| 🤖     | `[agents]`   | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
+| 🤖     | `[claude]`   | `harnesses/claude` 配下の Claude Code 設定                                                                |
+| 🤖     | `[codex]`    | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
+| 🤖     | `[grok]`     | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
+| 🤖     | `[opencode]` | `~/.config/opencode` 配下の opencode 設定                                                                 |
+| 🎨     | `[lint]`     | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
+| 🔧     | `[複数]`     | 複数スコープにまたがる変更（例: `[agents][claude]`）                                                      |
 
 スコープに該当しない全体的な変更は、汎用 gitmoji を使う（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）。
 
