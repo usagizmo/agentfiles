@@ -22,7 +22,7 @@ export function isSentenceEnd(line: string): boolean {
 
 function contentLines(raw: string): string[] {
   const lines = raw.replace(/(?:\r?\n)+$/u, "").split("\n");
-  while (lines.length > 0 && (lines[lines.length - 1] ?? "").trim() === "") lines.pop();
+  while (lines.at(-1)?.trim() === "") lines.pop();
   return lines;
 }
 
@@ -72,15 +72,15 @@ export type HardWrapLine = { no: number; text: string };
 export function hardWrapLines(src: string): HardWrapLine[] {
   const out: HardWrapLine[] = [];
   let cursor = 0;
-  visitProse(marked.lexer(src), (raw: string) => {
+  visitProse(marked.lexer(src), (raw) => {
     let at = src.indexOf(raw, cursor);
     if (at < 0) at = src.indexOf(raw);
     if (at >= 0) cursor = at + raw.length;
     const lines = contentLines(raw);
     if (lines.length < 2) return;
     const base = src.slice(0, Math.max(at, 0)).split("\n").length;
-    for (let i = 0; i < lines.length - 1; i++) {
-      const line = lines[i] ?? "";
+    // 最後の行は継続行ではない（次の行が無いので幅で折ったとは言えない）
+    for (const [i, line] of lines.slice(0, -1).entries()) {
       if (!isSentenceEnd(line)) out.push({ no: base + i, text: line });
     }
   });

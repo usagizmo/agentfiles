@@ -14,8 +14,6 @@
 //
 // marked は GFM。GitHub でどう出るかが知りたいことなので、素の CommonMark より合う。
 
-import type { Token } from "marked";
-
 type Marked = typeof import("marked").marked;
 
 // 依存が入っていないことと、違反が在ることを exit code で区別する（未インストールは 2）。
@@ -52,8 +50,9 @@ function violationKinds(html: string): Set<string> {
   if (text.replace(/<[^>]*>/g, "").includes("**")) kinds.add("literal-asterisks");
   const open: string[] = [];
   for (const match of text.matchAll(/<(\/?)(strong|em)\b[^>]*>/g)) {
+    // 正規表現の捕獲は strong / em だけ。既知の 2 つ以外はスタックへ積まない
     const tag = match[2];
-    if (tag === undefined) continue;
+    if (tag !== "strong" && tag !== "em") continue;
     if (match[1] === "/") {
       const at = open.lastIndexOf(tag);
       if (at >= 0) open.splice(at, 1);
@@ -81,7 +80,7 @@ export function brokenLines(src: string): BrokenLine[] {
     if (!broken(markdown().parser([token]))) continue;
     // この block が壊れている。原因は中の `**` を持つ行。
     const base = src.slice(0, start).split("\n").length;
-    token.raw.split("\n").forEach((text: string, i: number) => {
+    token.raw.split("\n").forEach((text, i) => {
       // コードスパンの中の記号は原因ではない。斜体の入れ子は `*` 1 個なので `*` を見る。
       if (text.replace(/`+[^`]*`+/g, "").includes("*")) out.push({ no: base + i, text });
     });
@@ -120,7 +119,7 @@ export function validateEmphasisFixtures(): string[] {
       ...new Set(
         markdown()
           .lexer(source)
-          .flatMap((token: Token) =>
+          .flatMap((token) =>
             token.type === "space" || token.type === "code"
               ? []
               : [...violationKinds(markdown().parser([token]))],
