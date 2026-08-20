@@ -65,10 +65,14 @@ GIT_STATUS_PINS=(-c core.fsmonitor=false -c core.untrackedCache=false
 # `git_clean`）。status だけを sanitize しても、`GIT_DIR` / `GIT_WORK_TREE` が効いていれば
 # `-C <checkout>` は無視され、**別の repo を「その面」として観測したままラウンドが成功する**。
 # `GIT_CONFIG_COUNT` は空文字だと数値として解釈されて落ちうるので、env から外す。
-GIT_ENV_STRIP=(-u GIT_CONFIG -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE
-               -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES
-               -u GIT_COMMON_DIR -u GIT_CEILING_DIRECTORIES
-               -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS)
+# **repo-local な変数は git 自身に列挙させる。**手書きの allowlist は git が版で
+# 増やすたびに漏れる。`GIT_CEILING_DIRECTORIES` は宣言に無いので合併する。
+# **`GIT_AUTHOR_*` / `GIT_COMMITTER_*` は宣言に含まれない** —— 落とさない。
+GIT_ENV_STRIP=()
+while read -r git_env_var; do
+  GIT_ENV_STRIP+=(-u "$git_env_var")
+done < <(git rev-parse --local-env-vars)
+GIT_ENV_STRIP+=(-u GIT_CEILING_DIRECTORIES)
 
 git_clean() {
   env "${GIT_ENV_STRIP[@]}" \

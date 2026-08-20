@@ -80,7 +80,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 共通 `agents/AGENTS.md` に書けるのは、その機能が無い harness でも代替手段で成立するルールまで（例: 譜面を HTML にして `open` する → 開けない環境ではパスを応答に書く）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ。
 
-共通 `agents/AGENTS.md` には文字数の上限がある。値・単位・理由・検査は `test/agents-md.test.mjs`。
+共通 `agents/AGENTS.md` には文字数の上限がある。値・単位・理由・検査は `test/agents-md.test.ts`。
 
 ### 共通と個別の分け方
 

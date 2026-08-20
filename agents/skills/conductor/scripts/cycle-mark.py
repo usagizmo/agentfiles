@@ -57,6 +57,7 @@
 # 壊れた checkout がそのまま「成果ゼロ」として数えられる。
 
 import argparse
+import functools
 import hashlib
 import os
 import re
@@ -113,17 +114,20 @@ GIT_ENV_OVERRIDES = {
 }
 
 # 呼び出し側の環境から漏れると、どの repo を見るか・どの設定で読むかが引数と食い違う。
-# `GIT_CONFIG_PARAMETERS` は `git -c` が子プロセスへ伝える経路なので、`COUNT` とは別に落とす。
-GIT_ENV_DROP = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_COMMON_DIR",
-    "GIT_CONFIG",
-    "GIT_CONFIG_PARAMETERS",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-)
+# **repo-local な変数は git 自身に列挙させる。**手書きの allowlist は git が版で
+# 増やすたびに漏れる。`GIT_CEILING_DIRECTORIES` は宣言に無いので合併する。
+# **`GIT_AUTHOR_*` / `GIT_COMMITTER_*` は宣言に含まれない** —— 落とさない。
+GIT_ENV_DROP_EXTRA = ("GIT_CEILING_DIRECTORIES",)
+
+
+@functools.cache
+def git_env_drop():
+    out = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    return tuple(out.stdout.decode("utf-8").split()) + GIT_ENV_DROP_EXTRA
 
 # **設定で動く欄を引数で固定する。**`--untracked-files` は `status.showUntrackedFiles` を
 # 打ち消すため（既定の `normal` だと untracked なディレクトリが `dir/` に畳まれ、中の変化が
@@ -197,7 +201,7 @@ class Encoder:
 
 def git_env():
     env = os.environ.copy()
-    for key in GIT_ENV_DROP:
+    for key in git_env_drop():
         env.pop(key, None)
     env.update(GIT_ENV_OVERRIDES)
     return env

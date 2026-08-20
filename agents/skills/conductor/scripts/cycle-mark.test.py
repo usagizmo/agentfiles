@@ -250,8 +250,8 @@ CLEAN_GIT_ENV = {
 
 
 def git(cwd, *args):
-    # **周りの git 環境を持ち込まない。**commit hook の下では `GIT_DIR` / `GIT_INDEX_FILE` が
-    # 立っているので、そのまま渡すと `-C` を無視して**実 repo が fixture として使われる**
+    # **周りの git 環境を持ち込まない。**呼び出し元が `GIT_DIR` / `GIT_INDEX_FILE` を
+    # 立てていると、そのまま渡すと `-C` を無視して**実 repo が fixture として使われる**
     # （`init` が再初期化に、`add` と `commit` が実 repo の index への書き込みになる）。
     # **allowlist にしない** —— git が変数を増やすたびに漏れる。
     env = dict((k, v) for k, v in os.environ.items() if not k.startswith("GIT_"))

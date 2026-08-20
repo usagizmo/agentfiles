@@ -25,7 +25,10 @@ function sandbox() {
   return { dir, state, snapshot: join(dir, "snapshot") };
 }
 
-async function watch(args, { state, env = {} }) {
+async function watch(
+  args: string[],
+  { state, env = {} }: { state: string; env?: Record<string, string | undefined> },
+) {
   const p = Bun.spawn(
     [
       WATCH_SHELL,
@@ -50,7 +53,7 @@ async function watch(args, { state, env = {} }) {
     ],
     {
       cwd: ROOT,
-      env: { ...process.env, PATH: `${SHIM}:${process.env.PATH}`, ...env },
+      env: { ...process.env, PATH: `${SHIM}:${process.env["PATH"]}`, ...env },
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -140,7 +143,7 @@ test("呼び出し側へ渡せなかった観測は、置いてある snapshot �
     ` --sessions-cmd "cat '${box.state}'" --workspaces-cmd 'echo ws-1 /fake/wt' --deadline 20`;
   const p = Bun.spawn(["bash", "-c", cmd], {
     cwd: ROOT,
-    env: { ...process.env, PATH: `${SHIM}:${process.env.PATH}` },
+    env: { ...process.env, PATH: `${SHIM}:${process.env["PATH"]}` },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -155,7 +158,7 @@ test("値の無い option は、観測の失敗と区別できる終了コード
   // `--snapshot` に値が無い。**exit 1 に落ちると「観測できなかった」と読まれる**
   const p = Bun.spawn([WATCH_SHELL, WATCH, "--snapshot"], {
     cwd: ROOT,
-    env: { ...process.env, PATH: `${SHIM}:${process.env.PATH}` },
+    env: { ...process.env, PATH: `${SHIM}:${process.env["PATH"]}` },
     stdout: "pipe",
     stderr: "pipe",
   });

@@ -4,9 +4,9 @@
 // 品質パスから呼ばれるので、誤検知を出すと「gate が常時赤で新しい違反が埋もれる」側へ倒れる。
 
 import { expect, test } from "bun:test";
-import { brokenLines } from "../agents/skills/docs/scripts/check-emphasis.mjs";
+import { brokenLines } from "../agents/skills/docs/scripts/check-emphasis.ts";
 
-const at = (src) => brokenLines(src).map((l) => l.no);
+const at = (src: string) => brokenLines(src).map((l) => l.no);
 
 // --- 壊れている（検出しなければならない） --------------------------------
 

@@ -249,7 +249,7 @@ FINDINGS=$WORK/findings
 # 追跡中の `.gitignore` が除外する skill は所有しない。
 # `.git/info/exclude` と `core.excludesFile` は見ない（端末ごとに出力が変わる）。
 # 判定不能は repo が無いときと git が無いときだけ。空の所有集合へ畳まない。
-# 親の GIT_DIR を無視する。pre-commit 配下では GIT_DIR が検査対象を上書きする。
+# 親の GIT_DIR を無視する。立っていると検査対象の repo を上書きする。
 # 所有集合と層の既知名は別の入力。畳まない。
 repo_of() {
 	r_probe=$1
@@ -263,13 +263,23 @@ repo_of() {
 	return 1
 }
 
+# **repo-local な変数は git 自身に列挙させる。**手書きの allowlist は git が版で
+# 増やすたびに漏れる。`GIT_CEILING_DIRECTORIES` は宣言に無いので合併する。
+# **`GIT_AUTHOR_*` / `GIT_COMMITTER_*` は宣言に含まれない** —— 落とさない。
+git_local_env_strip() {
+	if [ -z "${GIT_ENV_STRIP:-}" ]; then
+		GIT_ENV_STRIP="$(git rev-parse --local-env-vars |
+			sed 's/^/-u /' | tr '\n' ' ')-u GIT_CEILING_DIRECTORIES"
+	fi
+	printf '%s' "$GIT_ENV_STRIP"
+}
+
 git_in() {
 	g_repo=$1
 	shift
-	env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE \
-		-u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
-		-u GIT_PREFIX \
-		git -C "$g_repo" "$@"
+	# 分割は意図的（`-u NAME` を並べる）
+	# shellcheck disable=SC2086
+	env $(git_local_env_strip) git -C "$g_repo" "$@"
 }
 
 # $1 = repo / $2 = repo 相対の skill dir / $3 = 追跡中 gitignore
@@ -798,16 +808,16 @@ fi
 # --- check emphasis: 描画が壊れる強調 -------------------------------------
 # **正規表現では届かない。**flanking は開き / 閉じの対応まで見ないと結論が出ず、
 # 右 flanking は成立するのに相手が無くてリテラルへ落ちる `**` を取り逃す。
-# 描画して判定する実体は隣の check-emphasis.mjs。
+# 描画して判定する実体は隣の check-emphasis.ts。
 # **道具が無ければ飛ばす。**強調記法はこの検査の付随物で、欠いても本来の目的
 # （実在・形・重複・層）は達成できる。飛ばしたことは SKIP で出す。
 emphasis_self=$(canon "$0") || emphasis_self=$0
 # 既定はスクリプトの隣。test が異常系の checker を差し込めるように上書きを許す
-EMPHASIS_JS=${EMPHASIS_JS:-$(dirname "$emphasis_self")/check-emphasis.mjs}
+EMPHASIS_TS=${EMPHASIS_TS:-$(dirname "$emphasis_self")/check-emphasis.ts}
 if ! command -v bun >/dev/null 2>&1; then
 	emit SKIP emphasis "-" "note=bun が無いので強調記法を検査していない"
-elif [ ! -f "$EMPHASIS_JS" ]; then
-	emit SKIP emphasis "-" "note=$EMPHASIS_JS が無いので強調記法を検査していない"
+elif [ ! -f "$EMPHASIS_TS" ]; then
+	emit SKIP emphasis "-" "note=$EMPHASIS_TS が無いので強調記法を検査していない"
 else
 	# **instructions 入口も入れる。**skills だけを対象にすると AGENTS.md が対象外になる。
 	{
@@ -821,7 +831,7 @@ else
 			done
 		fi
 	} >"$WORK/md_targets"
-	bun "$EMPHASIS_JS" <"$WORK/md_targets" >"$WORK/emphasis" 2>"$WORK/emphasis_err"
+	bun "$EMPHASIS_TS" <"$WORK/md_targets" >"$WORK/emphasis" 2>"$WORK/emphasis_err"
 	emphasis_rc=$?
 	# 契約は 0=壊れなし / 1=壊れあり（出力あり） / 2=marked が無い。
 	# **それ以外と、1 なのに出力が空の場合は落とす。**checker 自体が落ちた状態を

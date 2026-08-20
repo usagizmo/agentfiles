@@ -30,4 +30,17 @@ bun run typecheck || exit 1
 #
 # **探索は bun の既定に任せる。**`bunfig.toml` も test script も置かないので、
 # `*.test.*` を置けばそれだけで gate に乗る。列挙を持つと、足した検査が呼ばれないまま残る。
+#
+# **test へ git の文脈を渡さない。**`GIT_` で始まる変数をすべて落とす。名前は列挙しない。
+# 本番 sanitizer の `git rev-parse --local-env-vars` では足りない —— identity
+# （`GIT_AUTHOR_*` / `GIT_COMMITTER_*`）も落とす側なので prefix で掃く。
+#
+# **lint-staged より後に置く。**partial commit は一時 index を `GIT_INDEX_FILE` で渡す。
+# 先に落とすと整形結果が commit される index へ戻らない。
+#
+# 検査は test/pre-commit.test.ts。
+for name in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
+	unset "$name"
+done
+
 bun test

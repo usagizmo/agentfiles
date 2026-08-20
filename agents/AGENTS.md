@@ -132,13 +132,13 @@
 - 表は欠けを見せるために使う（全行が同じ列を持つので、埋まっていないセルが空白として出る）。短くする手段では**ない**
 - 表のセルは 1 行に収める。理由・実例・例外を詰め**ない**。詰まるなら表の外へ箇条書きで出す
 
-幅で折り返さない。文の切れ目での改行は残してよい。判定は `agents/skills/docs/scripts/check-hard-wrap.mjs`、gate は `bun test`。
+幅で折り返さない。文の切れ目での改行は残してよい。判定は `agents/skills/docs/scripts/check-hard-wrap.ts`、gate は `bun test`。
 
 ### Markdown 記法
 
 強調の内側の端に全角約物を**置かない**。句点は `**` の外へ出す（`**規則**。` と書き、`**規則。**` と書か**ない**）。
 
-判定は `agents/skills/docs/scripts/check-emphasis.mjs`、gate は `bun test`。
+判定は `agents/skills/docs/scripts/check-emphasis.ts`、gate は `bun test`。
 
 ## コーディング規約（default stack: TypeScript / Svelte 5）
 
