@@ -1,13 +1,24 @@
-// commit gate が test へ渡す環境。
+// commit gate が各段へ渡す環境。
 //
 // **hook には GIT_DIR が入っている。**そのまま `bun test` へ渡すと、sandbox repo へ
 // `git -C <tmp> config user.email ...` を撃つ test の書き込み先が、-C を付けても
 // この repo の .git/config になる。一度当たると以後の commit の author が入れ替わり、
 // **`git log` を見るまで気づけない**。
 //
-// checker を PATH で差し替えて、hook が実際に渡した環境を読む。
+// **落とす位置も固定する。**lint-staged より前で落とすと、partial commit
+// （`git commit -- <path>`）の一時 index を見失い、整形結果が commit されない。
+//
+// 実行器を PATH で差し替えて、hook が各段へ実際に渡した環境を読む。
 
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -15,7 +26,7 @@ import { expect, test } from "bun:test";
 const ROOT = new URL("..", import.meta.url).pathname;
 const HOOK = `${ROOT}.githooks/pre-commit`;
 
-/** hook が呼ぶ bun を差し替える。`bun test` のときだけ受け取った GIT_* を書き出す。 */
+/** hook が呼ぶ bun を差し替え、段ごとに受け取った GIT_* を書き出す。 */
 function stubBun(dir: string, record: string): string {
   const bin = join(dir, "bin");
   mkdirSync(bin, { recursive: true });
@@ -23,10 +34,10 @@ function stubBun(dir: string, record: string): string {
   writeFileSync(
     stub,
     `#!/bin/sh
-if [ "$1" = test ]; then
-  printf 'ran\\n' >"${record}"
-  env | grep '^GIT_' >>"${record}"
-fi
+stage=$1
+[ "$stage" = run ] && stage=$2
+printf 'ran\\n' >"${record}.$stage"
+env | grep '^GIT_' >>"${record}.$stage"
 exit 0
 `,
   );
@@ -34,7 +45,9 @@ exit 0
   return bin;
 }
 
-async function runHook(): Promise<string> {
+type Stage = { ran: boolean; gitVars: string[] };
+
+async function runHook(): Promise<Record<string, Stage>> {
   const dir = mkdtempSync(join(tmpdir(), "pre-commit-"));
   try {
     const record = join(dir, "record");
@@ -63,15 +76,31 @@ async function runHook(): Promise<string> {
       stderr: "pipe",
     });
     await p.exited;
-    return readFileSync(record, "utf8");
+
+    const stages: Record<string, Stage> = {};
+    for (const stage of ["lint-staged", "typecheck", "test"]) {
+      const path = `${record}.${stage}`;
+      const lines = existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
+      stages[stage] = {
+        ran: lines[0] === "ran",
+        gitVars: lines.filter((l) => l.startsWith("GIT_")).map((l) => l.split("=")[0] ?? ""),
+      };
+    }
+    return stages;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
 test("commit gate は GIT_* を落としてから test を起動する", async () => {
-  const recorded = await runHook();
+  const stages = await runHook();
   // **「呼ばれなかった」を緑にしない。**stub に届いていなければ環境も見えない
-  expect(recorded.split("\n")[0]).toBe("ran");
-  expect(recorded.split("\n").filter((l) => l.startsWith("GIT_"))).toEqual([]);
+  expect(stages["test"]?.ran).toBe(true);
+  expect(stages["test"]?.gitVars).toEqual([]);
+});
+
+test("落とすのは lint-staged より後（一時 index を見失わない）", async () => {
+  const stages = await runHook();
+  expect(stages["lint-staged"]?.ran).toBe(true);
+  expect(stages["lint-staged"]?.gitVars).toContain("GIT_INDEX_FILE");
 });
