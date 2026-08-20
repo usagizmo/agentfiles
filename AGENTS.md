@@ -35,7 +35,8 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 ## コミットメッセージ規約
 
-スコープごとに固定の gitmoji を使う。
+絵文字は変更の性質を、スコープは触った場所を表す。絵文字の一覧は `commit` skill の `references/gitmoji.md`。
+一覧に**ない**のは 🤖 だけで、agent の判断基準・発火条件を変えるときに使う。
 
 ### 形式
 
@@ -46,19 +47,18 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - {詳細2}
 ```
 
-### スコープと絵文字の対応
+### スコープ
 
-| 絵文字 | スコープ     | 説明                                                                                                      |
-| ------ | ------------ | --------------------------------------------------------------------------------------------------------- |
-| 🤖     | `[agents]`   | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
-| 🤖     | `[claude]`   | `harnesses/claude` 配下の Claude Code 設定                                                                |
-| 🤖     | `[codex]`    | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
-| 🤖     | `[grok]`     | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
-| 🤖     | `[opencode]` | `~/.config/opencode` 配下の opencode 設定                                                                 |
-| 🎨     | `[lint]`     | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
-| 🔧     | `[複数]`     | 複数スコープにまたがる変更（例: `[agents][claude]`）                                                      |
+| スコープ     | 対象                                                                                                      |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| `[agents]`   | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
+| `[claude]`   | `harnesses/claude` / `~/.claude` 配下の Claude Code 設定                                                  |
+| `[codex]`    | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
+| `[grok]`     | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
+| `[opencode]` | `~/.config/opencode` 配下の opencode 設定                                                                 |
+| `[lint]`     | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 
-スコープに該当しない全体的な変更は、汎用 gitmoji を使う（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）。
+複数スコープにまたがるときは並べる（例: `[agents][claude]`）。どのスコープにも入らない変更はスコープを省く。
 
 ### コミット例
 
@@ -127,7 +127,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 新しい harness を足す手順:
 
 1. `lib/inventory.sh` の `inventory_define` に 1 ブロック追加（`inv_home` / `inv_symlink` / `inv_harness_skills` 等）
-2. 上の「スコープと絵文字の対応」に harness の行を追加する
+2. 上の「スコープ」に harness の行を追加する
 3. `./init.sh` で配線
 4. `./doctor.sh` で検査
 
