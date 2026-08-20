@@ -21,6 +21,7 @@ tick の分岐そのものではなく、**その action を選んだ後に何�
 - **6 が誰か 1 人でも失敗したらセッションを起こさない**。branch は残し、次の tick へ返す
 - **Project の更新失敗で claim をロールバックしない**。branch が真実で、Status は台帳
 - **base は常にその面の統合先から切る**（制御面では default branch）。他 branch から切ら**ない**
+- **PR を使わない面は、統合先を base にする直前に `scripts/ensure-integration-ref.sh <その面の checkout> <その面の統合先>` を呼ぶ**（作成と switch の述語は script が SSOT。作業 branch の「在れば checkout、無ければ統合先から作る」とは別名。そちらの行は触らない）
 - **着地面を解決してから branch を作る**（順序を逆にすると、座標表に無い面の claim branch だけが残る）
 
 **branch を新しく作ってよいのは、その面に branch が無いときだけ**（claim の初回と、部分 claim で欠けた面を埋めるとき）。**在る branch は上書きしない**。起こし直しで worktree を作り直すときも同じ述語で、在れば checkout、無ければ統合先から作る。**「claim の 1 回だけ」と読まない。**

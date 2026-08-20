@@ -89,7 +89,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 | 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                                                           |
 | 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                                                                |
 | 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                                                        |
-| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査は `merge` skill の fail-closed（`references/landing-surface.md`）                                                |
+| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査の項目は `merge` の「着地の検査」。いつ掛けるかは `references/landing-surface.md`                                 |
 | 容量                     | 着地面ごとの worktree と、repo 非依存の workspace 一覧（1 回）。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）。`prunable` の述語は `references/harness.md` |
 | 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                                                                |
 
@@ -427,7 +427,7 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 - systemic failure の circuit breaker。rate limit・ネットワーク断は backoff
 - 解釈不能な状態では fail-closed（進めずに報告する）
 - 所有していない worktree / セッションは**削除しない**。自分が作ったものは claim の記録から引く
-- **live checkout を編集しない**。行ってよいのは fetch と統合先への merge だけで、dirty も分岐も自動で解消しない（`references/landing-surface.md`）
+- **live checkout を課題の実装で編集しない**。行ってよい操作は `references/landing-surface.md`。dirty も分岐も checkout / stash / reset で解消しない
 - worktree を作るのは着地面の linked worktree**だけ**
 - Issue の close は「片付ける」の一部。条件は `references/protocols.md` の片付け手順が SSOT。**述語をここに写さない**
 - tick の中で Issue を作ら**ない**・Status を計画済みへ進め**ない**。台帳を期待値へ寄せることと差し戻しは行う

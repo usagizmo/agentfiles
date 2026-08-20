@@ -476,15 +476,13 @@ snapshot() {
     branches_local="$branches_local$lb
 "
 
-    # **live checkout の姿勢も撮る。**dirty / 統合先でない branch / 分岐は異常として報告する
-    # 契約なので、観測材料が無いと述語だけがあって誰も判定できない。
-    # **`--short` にしない。**統合先は `refs/heads/temp` のような full ref で渡ってくるので、
-    # `temp` と文字列比較すると**常に不一致**になり、その面を持つ課題が全部 live の異常として
-    # 止まる。両側を full ref に揃える（読む側で正規化させない）。
+    # **live checkout の姿勢も撮る。**dirty / いまの branch / 分岐は材料として出す。異常か
+    # どうかの判定は merge の検査が持つ。材料が無いと述語だけがあって誰も判定できない。
+    # **`--short` にしない。**統合先は `refs/heads/temp` のような full ref で渡ってくる。
+    # 両側を full ref に揃える（読む側で正規化させない）。
     live_branch=$(git_clean -C "$checkout" symbolic-ref --quiet HEAD) || live_branch='-'
-    # **`status` の失敗を clean へ畳まない。**畳むと、壊れた checkout が「異常なし」として
-    # merge の可否・`着地待ち`・write の解放へ進む（fail-open）。読めないことは `-` で出し、
-    # 判定する側が異常として扱えるようにする。
+    # **`status` の失敗を clean へ畳まない。**畳むと壊れた checkout が dirty=0 になる。
+    # 読めないことは `-` で出す。
     if live_out=$(git_status "$checkout"); then
       live_dirty=0
       [ -n "$(printf '%s' "$live_out" | head -1)" ] && live_dirty=1
