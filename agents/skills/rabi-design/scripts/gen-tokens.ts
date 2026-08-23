@@ -12,8 +12,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMap, isScalar, type Node, parseDocument, type YAMLMap } from "yaml";
 
-const ASSETS = join(dirname(fileURLToPath(import.meta.url)), "../assets");
-const DESIGN = join(ASSETS, "DESIGN.md");
+const SKILL = dirname(fileURLToPath(import.meta.url));
+const ASSETS = join(SKILL, "../assets");
+const DESIGN = join(SKILL, "../references/DESIGN.md");
 
 /** `light-dark(a, b)` の a。引数は `rgb(…)` のように自分のカンマを持つので括弧を数える。 */
 function lightArgument(value: string): string {

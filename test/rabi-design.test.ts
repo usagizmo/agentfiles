@@ -39,6 +39,7 @@ async function withSandbox(body: (dir: string) => Promise<void>): Promise<void> 
 }
 
 const asset = (dir: string, name: string) => join(dir, "assets", name);
+const designPath = (dir: string) => join(dir, "references/DESIGN.md");
 
 /** DESIGN.md の front matter だけを返す。本文の例は写しでは**ない**ので検査に混ぜない。 */
 function frontMatter(design: string): string {
@@ -136,14 +137,14 @@ test("rabi.css を動かすと --check が落ち、書き戻しで追随する",
     expect((await run(dir, "--check")).code).not.toBe(0);
 
     expect((await run(dir)).code).toBe(0);
-    expect(readFileSync(asset(dir, "DESIGN.md"), "utf8")).toContain('"3": 14px');
+    expect(readFileSync(designPath(dir), "utf8")).toContain('"3": 14px');
     expect((await run(dir, "--check")).code).toBe(0);
   });
 });
 
 test("front matter を手で動かすと --check が落ちる", async () => {
   await withSandbox(async (dir) => {
-    const design = asset(dir, "DESIGN.md");
+    const design = designPath(dir);
     const original = readFileSync(design, "utf8");
     expect(original).toContain('accent: "#dc143c"');
     writeFileSync(design, original.replace('accent: "#dc143c"', 'accent: "#ff0000"'));
@@ -162,7 +163,7 @@ test("文字の段を動かすと --check が落ち、書き戻しで追随す�
     expect((await run(dir, "--check")).code).not.toBe(0);
 
     expect((await run(dir)).code).toBe(0);
-    expect(readFileSync(asset(dir, "DESIGN.md"), "utf8")).toContain("fontSize: 15px");
+    expect(readFileSync(designPath(dir), "utf8")).toContain("fontSize: 15px");
   });
 });
 
@@ -180,7 +181,7 @@ test("CSS 変数を改名すると読み飛ばさずに落ちる", async () => {
 
 test("表に無い key を front matter へ足すと落ちる", async () => {
   await withSandbox(async (dir) => {
-    const design = asset(dir, "DESIGN.md");
+    const design = designPath(dir);
     const original = readFileSync(design, "utf8");
     writeFileSync(design, original.replace("spacing:\n", "spacing:\n  inset: 4px\n"));
 
@@ -192,7 +193,7 @@ test("表に無い key を front matter へ足すと落ちる", async () => {
 
 test("components の外で token 参照へ変えると落ちる", async () => {
   await withSandbox(async (dir) => {
-    const design = asset(dir, "DESIGN.md");
+    const design = designPath(dir);
     const original = readFileSync(design, "utf8");
     writeFileSync(design, original.replace('ink: "#222222"', 'ink: "{colors.accent}"'));
 
@@ -219,7 +220,7 @@ test("CSS 変数を足して front matter へ写さないと落ちる", async ()
 
 test("components の token 参照が実在しないと落ちる", async () => {
   await withSandbox(async (dir) => {
-    const design = asset(dir, "DESIGN.md");
+    const design = designPath(dir);
     const original = readFileSync(design, "utf8");
     writeFileSync(
       design,
@@ -246,7 +247,7 @@ test("多段の var 参照を展開しきる", async () => {
     );
 
     expect((await run(dir)).code).toBe(0);
-    const front = frontMatter(readFileSync(asset(dir, "DESIGN.md"), "utf8"));
+    const front = frontMatter(readFileSync(designPath(dir), "utf8"));
     expect(front).toContain("#dc143c 88%");
     expect(front).not.toContain("var(--rabi-");
   });
@@ -302,7 +303,7 @@ test("fallback 付きの var 参照は落ちる", async () => {
 
 test("colors.primary に literal を置くと落ちる", async () => {
   await withSandbox(async (dir) => {
-    const design = asset(dir, "DESIGN.md");
+    const design = designPath(dir);
     const original = readFileSync(design, "utf8");
     writeFileSync(design, original.replace('primary: "{colors.ink}"', 'primary: "#222222"'));
 
@@ -314,7 +315,7 @@ test("colors.primary に literal を置くと落ちる", async () => {
 
 test("色を引用しても書き戻しが YAML を壊さない", async () => {
   await withSandbox(async (dir) => {
-    const design = asset(dir, "DESIGN.md");
+    const design = designPath(dir);
     writeFileSync(design, readFileSync(design, "utf8").replace('ink: "#222222"', "ink: '#222222'"));
 
     expect((await run(dir)).code).toBe(0);
@@ -376,7 +377,7 @@ test("値が $& を含んでも front matter が壊れない", async () => {
     writeFileSync(css, readFileSync(css, "utf8").replace("-apple-system,", probe));
 
     expect((await run(dir)).code).toBe(0);
-    const design = readFileSync(asset(dir, "DESIGN.md"), "utf8");
+    const design = readFileSync(designPath(dir), "utf8");
     expect(design).toContain("$&");
     expect(design).not.toContain("version: alpha\nversion: alpha");
     expect((await run(dir, "--check")).code).toBe(0);

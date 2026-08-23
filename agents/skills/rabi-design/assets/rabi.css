@@ -1,6 +1,6 @@
 /* Rabi コーポレートスタイル — HTML / 譜面 / UI 用デザイントークン */
 
-/* 値の SSOT。規則は `DESIGN.md`。写しの書き戻しは `../scripts/gen-tokens.ts` */
+/* 値の SSOT。規則は `../references/DESIGN.md`。写しの書き戻しは `../scripts/gen-tokens.ts` */
 :root {
   color-scheme: light dark; /* ネイティブ部品とスクロールバーを地に合わせる */
   accent-color: var(--rabi-accent);
