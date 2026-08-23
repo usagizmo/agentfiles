@@ -18,7 +18,7 @@
 ````
 
 - 書き先は `same-branch.md`（claim 後は代表の Issue）
-- 同じ marker のコメントを複数作らない。SHA を足すとき、0 件なら 1 つ作る。1 件なら書き換える。2 件以上なら書かずに記録不能
+- SHA を足すときの upsert は `marker-upsert.md`
 - 面ごとに SHA を足す。消さない。同じ SHA は重ねない
 - 空の記録は作らない
 

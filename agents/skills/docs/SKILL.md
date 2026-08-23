@@ -50,6 +50,7 @@ description: >-
   - **数値と既定値の SSOT は本文だけ**にし、reference には導出を書く
 - **行動を変えられる具体性**: 何をするか / 何をしないか / SSOT はどこかを明示する
 - **非自明な境界を持つ API は動く正例を残す**: prose の言い換えで代替しない
+- **skill 本文の実行コマンドは skill 側の実体を指す**: 起点は `<skills root>`（投影先の skills ディレクトリ）と綴る。cwd は作業中の repo なので、cwd 相対で書くと `No such file or directory` で落ちる。doc comment・エラー文言に写した分も同じ
 - **repo 内で完結させる**: Issue / PR 番号等の外部リンクを張らない。仕様・判断は文書本文に書き、参照は repo 内へ張る
 - **図は文章や表より速く読めるときだけ**: 直列手順は箇条書き、分類は表の方が短い。表せるものに合った図種を選ぶ（分岐は `flowchart`、状態遷移は `stateDiagram-v2`、登場人物のやりとりは `sequenceDiagram`、構造は `classDiagram` / `erDiagram`…）。禁止は experimental な図種（`*-beta`）だけ — レンダラが追随しておらず壊れて表示されうる
 - **ゲート系 skill は置き換える生コマンド名にする**: `git commit` を塞ぐなら commit、`gh issue create` なら issue というように、名前から対応が引ける。語が既存の skill と衝突するときだけ別語にする（`gh pr merge` は merge が埋まっているので ship）。それ以外の skill 名は自由
