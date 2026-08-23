@@ -91,7 +91,7 @@ written: # この claim が書いた commit。`heads = bases` のときの証明
 
 **課題全体がどの状態かは、ここでは決めない**。`progress` の述語は `landing-surface.md` が SSOT。**両方に書かない。**
 
-**PR がある課題でも marker を省かない**（省いてよい条件を作ると、面ごとに探し方が変わる）。**同じ marker のコメントを複数作らない** —— 書き直すときは既存を書き換える（`halt` の後に提出まで進んだら `report` へ）。
+**PR がある課題でも marker を省かない**（省いてよい条件を作ると、面ごとに探し方が変わる）。upsert は `marker-upsert.md`（`halt` の後に提出まで進んだら `report` へ）。
 
 ## 何を書くか
 

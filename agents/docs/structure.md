@@ -113,6 +113,7 @@ flowchart LR
         LS["landing-surface.md<br/><small>着地面の意味論</small>"]
         SR["session-report.md<br/><small>セッションまとめ</small>"]
         SL["standalone-line.ts<br/><small>固定 marker の単独行</small>"]
+        MU["marker-upsert.md<br/><small>記録コメントを 1 つに保つ手順</small>"]
     end
 
     RF --> AF
@@ -121,6 +122,9 @@ flowchart LR
     CO --> SB
     CO --> IC
     RF --> IC
+    CO --> MU
+    RF --> MU
+    RS --> MU
     CO --> WR
     CO --> RR
     CO --> BD

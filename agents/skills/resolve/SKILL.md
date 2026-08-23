@@ -169,7 +169,7 @@ alsoResolves: [<Issue 番号>] # このブランチで一緒に片付ける Issu
 
 **`expectedWrites` と `invalidationScope` は別物**。前者は書く範囲、後者は変わったらやり直しになる範囲で、後者が無いと再 plan の判定ができない。
 
-同じ marker のコメントを複数作らない。更新するときは既存コメントを書き換える。
+marker の upsert は `references/marker-upsert.md`。
 
 **投稿する直前に** `bun run <skill>/scripts/serialize-plan.ts --check <本文の file>` を通す。落ちたら投稿しない。
 

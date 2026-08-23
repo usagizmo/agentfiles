@@ -33,7 +33,7 @@ reason: <要らないと判定した根拠> # not-required のときだけ
 | ---- | ---- | ------------------ |
 ````
 
-- **同じ marker のコメントを複数作らない**。**代表の Issue に 1 つ**（帰属は `same-branch.md`）
+- upsert は `marker-upsert.md`。**代表の Issue に 1 つ**（帰属は `same-branch.md`）
 - Issue を持たない課題は制御面の PR のコメントに置く。**どちらも無いなら着地させない**
 - **PR を使わない面だけに着地する課題は、PR を持たない**（`landing-surface.md`）。確認が要る変更をそこで扱うなら、**制御面へ Issue を立ててから着手する**
 

@@ -23,7 +23,7 @@ invalidationScope: # 変わると結論が崩れる範囲。空にしない
 
 ハッシュの取り方は `body-digest.md`（`plan` と同じ規則。ここに書き写さない）。
 
-**同じ marker のコメントを複数作らない**。更新するときは既存コメントを書き換える。
+upsert は `marker-upsert.md`。
 
 ## 記録するのは自分の Issue 1 件だけ
 
