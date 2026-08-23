@@ -55,7 +55,7 @@
       }
 
       :focus-visible {
-        outline: 2px solid var(--rabi-accent);
+        outline: 1px solid var(--rabi-accent);
         outline-offset: 2px;
       }
 
@@ -168,7 +168,7 @@
         justify-content: center;
         gap: var(--rabi-gap-2);
         height: var(--rabi-control);
-        padding: 0 var(--rabi-gap-4);
+        padding: 0 var(--rabi-gap-3);
         font-size: var(--rabi-t-body);
         font-weight: 700;
         font-family: var(--rabi-font);
@@ -775,9 +775,8 @@
         min-height: calc(var(--rabi-control) * 3);
       }
 
-      /* 誤りは枠の太さで表す。色の付け替えでは focus と区別が付かない */
+      /* 誤りは枠の色と説明文で表す。focus とは位置で分かれる —— focus は枠の外 */
       .input[aria-invalid="true"] {
-        border-width: 2px;
         border-color: var(--rabi-accent);
         color: var(--rabi-accent-text);
       }

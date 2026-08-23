@@ -103,7 +103,7 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.md}"
     height: "{spacing.control}"
-    padding: "{spacing.4}"
+    padding: "{spacing.3}"
   button-primary-hover:
     backgroundColor: "{colors.accent-hover}"
   button-primary-active:
@@ -114,7 +114,7 @@ components:
     textColor: "{colors.ink}"
     rounded: "{rounded.md}"
     height: "{spacing.control}"
-    padding: "{spacing.4}"
+    padding: "{spacing.3}"
   button-secondary-hover:
     backgroundColor: "{colors.paper-2}"
   button-disabled:
@@ -139,7 +139,6 @@ components:
     padding: "{spacing.2.5}"
   input-invalid:
     borderColor: "{colors.accent}"
-    borderWidth: 2px
     textColor: "{colors.accent-text}"
   checkbox:
     borderColor: "{colors.edge}"
@@ -171,7 +170,7 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.md}"
     height: "{spacing.control}"
-    padding: "{spacing.4}"
+    padding: "{spacing.3}"
   button-ghost-hover:
     backgroundColor: "{colors.paper-2}"
     textColor: "{colors.ink}"
@@ -344,15 +343,15 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 | ------ | -------------------------------------------------------------------------------------- |
 | hover  | 赤ベタは地を 1 段暗く。他は地を `paper-2` へ沈める                                     |
 | active | hover と同じ軸で、赤ベタだけ 1 段暗く                                                  |
-| focus  | 部品の外側の `outline` 2px + `outline-offset` 2px。色は `accent`。地は変え**ない**     |
+| focus  | 部品の外側の `outline` 1px + `outline-offset` 2px。色は `accent`。地は変え**ない**     |
 | 選択   | 部品の外側の `outline` 2px。色は `ink` で、赤の面の上だけ `accent`。チップだけ面で表す |
 | 完了   | 赤ベタと反転した印                                                                     |
-| 警告   | 面と文字。入力欄は枠を太くして説明文を添える                                           |
+| 警告   | 面と文字。入力欄は枠を `accent` にして説明文を添える                                   |
 | 無効   | 地・文字・輪郭の 3 つとも下げる                                                        |
 
 選択で地を赤にし**ない**。
 
-focus・選択と、エラー・警告は形で分ける —— 前者は部品の外側の `outline`、後者は枠そのものを太くする。
+focus・選択と、エラー・警告は位置で分ける —— 前者は部品の**外側**の `outline`、後者は**枠そのもの**の色。誤りは説明文を必ず添える。色だけで表さ**ない**。
 
 無効を色だけで表さ**ない**。押せないことを形と文言でも示す。
 
@@ -567,7 +566,7 @@ UI 部品のクラスは持た**ない**。`.rabi-heading` と `.rabi-table` を
 - カード: 強調は `card-accent`（赤ベタ）。赤の面の上では使え**ない**（「赤を出す場所」）。その面では大きさと影で付ける
 - リンク: 本文中は色だけで示さ**ない**。下線を必ず添える。ナビ・ボタン・面全体のリンクは位置と形で分かるので対象外
 - リンクの hover: 下線を外す。色は動かさ**ない**
-- 入力: 誤りは枠を太くする。枠色の付け替えで表さ**ない**
+- 入力: 誤りは枠を `accent` にし、説明文を添える。枠の太さは変え**ない**
 - チップ: 分類の色分けをし**ない**。文言で区別する
 - リスト行: hover は地、選択は `outline`。両方を地で表さ**ない**
 - hover は押せるものだけ。押せない面を hover で動かさ**ない**
