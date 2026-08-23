@@ -74,6 +74,8 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場が決まる**（読む → `references/`、実行する → `scripts/`、成果物に使う → `assets/`）。大きさでは分けない。何を `references/` へ出すかの判断は `docs` skill の品質基準
 - `./agents/docs/` は人が全体を把握・監査するための資料。**agent へは投影しない**（`lib/inventory.sh` に載せない）。規約の本体は置かず、skills から導出した図と索引だけを持つ
+- `./design/` は人がブラウザで見て規則の組み合わせを確かめる面。agent へは投影し**ない**（`lib/inventory.sh` に載せない）。skill の下には置かない
+- `./test/` は `bun test` の gate。skills の `scripts/`・`design/` の面・tracked な `*.md` を検査する。agent へは投影し**ない**（`lib/inventory.sh` に載せない）
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置か**ない**
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイルへの symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（**空 overlay を先回りで作らない**）
 - **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。一覧は `lib/inventory.sh`
