@@ -192,13 +192,14 @@ issues: [12]
     expect(find(rows, 12).integrationRecordCount).toEqual(present(2));
   });
 
-  test("休止の記録の to / keys を本体として残す", async () => {
+  test("休止の記録の partners を本体として残す", async () => {
     const yieldComment = `<!-- yield -->
 
 \`\`\`yaml
 issues: [12]
-to: 34
-keys: [skills]
+partners:
+  - to: 34
+    keys: [skills]
 \`\`\`
 
 <!-- /yield -->`;
@@ -209,7 +210,9 @@ keys: [skills]
     );
     const twelve = find(rows, 12);
     expect(twelve.pauseRecordExists).toBe(true);
-    expect(twelve.yieldRecord).toEqual(present({ issues: [12], to: 34, keys: ["skills"] }));
+    expect(twelve.yieldRecord).toEqual(
+      present({ issues: [12], partners: [{ to: 34, keys: ["skills"] }] }),
+    );
   });
 
   test("blocked は分類する（unclassifiable にしない）", async () => {

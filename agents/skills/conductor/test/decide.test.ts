@@ -888,7 +888,7 @@ describe("外から状態が動く", () => {
     expectAction([a, b], "交差を解消する");
   });
 
-  test("9d: 休止の記録の to / keys が現在の交差と一致し、セッションは動き続けている", () => {
+  test("9d: 休止の記録の partners が現在の交差と一致し、セッションは動き続けている", () => {
     const a = implementing({
       issue: 1,
       resourceKeys: present(["skills"]),
@@ -899,13 +899,13 @@ describe("外から状態が動く", () => {
       claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       pauseRecordExists: true,
-      yieldRecord: present({ issues: [2], to: 1, keys: ["skills"] }),
+      yieldRecord: present({ issues: [2], partners: [{ to: 1, keys: ["skills"] }] }),
       session: session.running,
     });
     expectIdle([a, b]);
   });
 
-  test("9k: 休止の記録はあるが、to か keys が現在の交差と一致しない", () => {
+  test("9k: 休止の記録はあるが、相手の行か keys が現在の交差と一致しない", () => {
     const a = implementing({
       issue: 1,
       resourceKeys: present(["skills"]),
@@ -916,10 +916,107 @@ describe("外から状態が動く", () => {
       claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       pauseRecordExists: true,
-      yieldRecord: present({ issues: [2], to: 1, keys: ["old"] }),
+      yieldRecord: present({ issues: [2], partners: [{ to: 1, keys: ["old"] }] }),
       session: session.running,
     });
     expectAction([a, b], "交差を解消する");
+  });
+
+  const writer = (issue: number, over: Partial<IssueObservation> = {}): IssueObservation =>
+    implementing({
+      issue,
+      claimRecord: present({ representative: issue, members: [issue], landing: ["control"] }),
+      resourceKeys: present(["skills"]),
+      session: session.running,
+      ...over,
+    });
+
+  test("9w: 3 者交差で休止の記録が 1 相手しか書いていない", () => {
+    expectAction(
+      [
+        writer(1),
+        writer(2, {
+          pauseRecordExists: true,
+          yieldRecord: present({ issues: [2], partners: [{ to: 1, keys: ["skills"] }] }),
+        }),
+        writer(3),
+      ],
+      "交差を解消する",
+    );
+  });
+
+  test("9x: 3 者交差で各後発の記録が相手の全員を記述している", () => {
+    expectIdle([
+      writer(1),
+      writer(2, {
+        pauseRecordExists: true,
+        yieldRecord: present({
+          issues: [2],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 3, keys: ["skills"] },
+          ],
+        }),
+      }),
+      writer(3, {
+        pauseRecordExists: true,
+        yieldRecord: present({
+          issues: [3],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 2, keys: ["skills"] },
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  test("9y: 3 者交差で 1 相手の keys が現況と一致しない", () => {
+    expectAction(
+      [
+        writer(1),
+        writer(2, {
+          pauseRecordExists: true,
+          yieldRecord: present({
+            issues: [2],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 3, keys: ["old"] },
+            ],
+          }),
+        }),
+        writer(3, {
+          pauseRecordExists: true,
+          yieldRecord: present({
+            issues: [3],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 2, keys: ["skills"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
+  });
+
+  test("9z: 解けた相手の行が残っている", () => {
+    expectAction(
+      [
+        writer(1),
+        writer(2, {
+          pauseRecordExists: true,
+          yieldRecord: present({
+            issues: [2],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 3, keys: ["skills"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
   });
 
   test("9e: 先発が着地し、休止していた後発と交差する保持者が居なくなった", () => {

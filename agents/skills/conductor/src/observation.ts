@@ -140,7 +140,7 @@ export type IssueObservation = {
   readonly waitRecordCreatedAt: Observed<number>;
   /** 休止の記録。**「記録あり」だけでは `休止` にならない**（非稼働も要る） */
   readonly pauseRecordExists: boolean;
-  /** 休止の記録の本体。交差の記述（`to` / `keys`）を突き合わせるときだけ読む */
+  /** 休止の記録の本体。交差の記述（`partners` の各行）を突き合わせるときだけ読む */
   readonly yieldRecord: Observed<YieldRecord>;
   readonly intentRecord: IntentRecord;
   /** merge の枠の渡しの記録。2 件以上は `Conflict` */

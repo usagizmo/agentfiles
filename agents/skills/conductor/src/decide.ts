@@ -7,6 +7,7 @@
 
 import type { IssueObservation } from "./observation.ts";
 import { sessionActive } from "./observation.ts";
+import type { YieldPartner, YieldRecord } from "./records.ts";
 import {
   blocks,
   checkoutCount,
@@ -729,24 +730,47 @@ const sameKeySet = (a: readonly string[], b: readonly string[]): boolean => {
   return true;
 };
 
-/** 記録の `to` / `keys` が、この 2 者のいまの交差を記述しているか。 */
+const yieldRowFor = (rec: YieldRecord, partner: Group): YieldPartner | undefined =>
+  rec.partners.find((p) => p.to === partner.representative || partner.members.includes(p.to));
+
+/** 記録のその相手の行の `keys` が、この 2 者のいまの交差を記述しているか。 */
 const yieldDescribesPair = (holder: Group, partner: Group): boolean => {
   const rec = holder.leadObservation.yieldRecord;
   if (rec.kind !== "present") return false;
-  if (rec.value.to !== partner.representative && !partner.members.includes(rec.value.to)) {
-    return false;
-  }
+  const row = yieldRowFor(rec.value, partner);
+  if (row === undefined) return false;
   const shared = sharedKeys(
     holder.leadObservation.resourceKeys,
     partner.leadObservation.resourceKeys,
   );
   if (shared === undefined) return false;
-  return sameKeySet(rec.value.keys, shared);
+  return sameKeySet(row.keys, shared);
 };
 
-/** 交差相手のすべてについて、どちらかの yield が現況を記述しているか。 */
-const crossingDescribed = (g: Group, crossing: readonly Group[]): boolean =>
-  crossing.every((partner) => yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g));
+/** 解けた相手の行が残っている。現況の交差に居ない `to` は記述済みと読まない。 */
+const yieldHasExtraPartners = (g: Group, crossing: readonly Group[]): boolean => {
+  const rec = g.leadObservation.yieldRecord;
+  if (rec.kind !== "present") return false;
+  return rec.value.partners.some(
+    (row) => !crossing.some((p) => row.to === p.representative || p.members.includes(row.to)),
+  );
+};
+
+/**
+ * 交差相手のすべてについて、いまの交差を記述しているか。
+ * 自前に余分な行があれば偽。自前にその相手の行があれば自前の `keys` だけ。
+ * 行が無い相手は相手側でも足りる。
+ */
+const crossingDescribed = (g: Group, crossing: readonly Group[]): boolean => {
+  if (yieldHasExtraPartners(g, crossing)) return false;
+  return crossing.every((partner) => {
+    const rec = g.leadObservation.yieldRecord;
+    if (rec.kind === "present" && yieldRowFor(rec.value, partner) !== undefined) {
+      return yieldDescribesPair(g, partner);
+    }
+    return yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g);
+  });
+};
 
 /**
  * 位置に依らない Conflict。**ラダーへ乗せない** —— どの rung より先に、その group を
@@ -963,7 +987,7 @@ const LADDER: readonly Rung[] = [
       // 直列化（`intersect` の `unknown`）は残す。
       if (g.leadObservation.resourceKeys.kind !== "present") return false;
       if (crossing.some((p) => p.leadObservation.resourceKeys.kind !== "present")) return false;
-      // **記録の有無だけでは見ない。**`to` / `keys` が現況と一致しているあいだは送らない。
+      // **記録の有無だけでは見ない。**`partners` の各行が現況と一致しているあいだは送らない。
       return !crossingDescribed(g, crossing);
     },
   },

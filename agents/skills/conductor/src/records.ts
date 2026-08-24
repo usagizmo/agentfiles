@@ -357,17 +357,30 @@ export const readyRecord = (body: string): Observed<ReadyRecord> => {
   });
 };
 
-export type YieldRecord = {
-  readonly issues: readonly number[];
+export type YieldPartner = {
   readonly to: number;
   readonly keys: readonly string[];
 };
 
-const isYield = (v: unknown): v is YieldRecord =>
-  isRecord(v) &&
-  isNumberArray(v["issues"]) &&
-  typeof v["to"] === "number" &&
-  isStringArray(v["keys"]);
+export type YieldRecord = {
+  readonly issues: readonly number[];
+  readonly partners: readonly YieldPartner[];
+};
+
+const isNonEmptyKeyList = (v: unknown): v is readonly string[] =>
+  isStringArray(v) && v.length > 0 && v.every((key) => key.length > 0);
+
+const isYieldPartner = (v: unknown): v is YieldPartner =>
+  isRecord(v) && typeof v["to"] === "number" && isNonEmptyKeyList(v["keys"]);
+
+const isYield = (v: unknown): v is YieldRecord => {
+  if (!isRecord(v) || !isNumberArray(v["issues"]) || !Array.isArray(v["partners"])) return false;
+  if (v["partners"].length === 0 || !v["partners"].every(isYieldPartner)) return false;
+  const tos = v["partners"].map((p) => p.to);
+  if (new Set(tos).size !== tos.length) return false;
+  const own = new Set(v["issues"]);
+  return !tos.some((to) => own.has(to));
+};
 
 export const yieldRecord = (body: string): Observed<YieldRecord> =>
   parseYaml(extractMarker(body, "yield"), isYield);
