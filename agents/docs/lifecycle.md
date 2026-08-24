@@ -214,12 +214,7 @@ sequenceDiagram
             F->>F: 同じセッションでその相手を手順の先頭から流す
         end
         C->>C: 観測 → 計画セッションが終わっている
-
-        alt done（未 seen のまま終わった）
-            C->>C: pane を閉じる（計画枠を空ける）
-        else idle（人が入力を書いている最中かもしれない）
-            C->>C: retired-refine-#N へ rename する
-            Note over C: 枠は返るが、その Issue の再計画は塞いだまま。<br/>解けるのは人が pane を閉じたときだけ
-        end
+        C->>C: tab を閉じる（計画枠を空ける）
+        Note over C: 計画の成果は Status・ready・Issue 本文へ外部化されている。<br/>Status が未計画のままなら失敗の記録を進める
     end
 ```

@@ -274,11 +274,16 @@ export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
  *
  * 伝える 2 つは常に真。送る周は `canPrompt` だけなので、再開しうる / 判定不能を免除しない。
  * `計画枠の逼迫を伝える` は常に真。
+ *
+ * `計画セッションを片付ける` は `ledger` が `未計画` のときだけ真。閉じたあとも `未計画` なら
+ * 「計画を起こす」がまた当たるので、**閉じる → 起こす → 閉じるの往復はどちらの action も成功する**
+ * —— 数える場所がここ以外に無い。上限に達したら rung 自身が順位を譲り、`差し戻す` が拾う。
  */
-const countsFailure = (action: ActionName): boolean =>
+const countsFailure = (action: ActionName, ledger: Ledger): boolean =>
   action === "本文の変更を伝える" ||
   action === "計画の失効を伝える" ||
-  action === "計画枠の逼迫を伝える";
+  action === "計画枠の逼迫を伝える" ||
+  (action === "計画セッションを片付ける" && ledger === "未計画");
 
 /** group 内で終端と非終端が混在しているか。共有実体をどちらに倒しても壊れる。 */
 const terminalMixedInGroup = (g: Group): boolean => {
@@ -492,7 +497,6 @@ const countsAsSupply = (
 ): boolean => {
   if (g.members.some((n) => excluded.has(n))) return false;
   if (g.lead.ledger === "退避先") return false;
-  if (g.observations.some((o) => o.retiredRefineExists)) return false;
   if (g.observations.some((o) => o.refineSession.kind !== "none" && validWaiting(o))) {
     return false;
   }
@@ -571,8 +575,7 @@ const byPriority = (groups: readonly Group[]) => (a: Group, b: Group) => {
 const planStartable = (g: Group, ctx: Context): boolean => {
   if (isShelved(g)) return false;
   if (g.lead.ledger !== "未計画" || g.lead.progress !== "未着手") return false;
-  if (g.leadObservation.refineSession.kind !== "none" || g.leadObservation.retiredRefineExists)
-    return false;
+  if (g.leadObservation.refineSession.kind !== "none") return false;
   if (g.leadObservation.waitRecord.kind === "waiting") return false;
   return ctx.supply < ctx.supplyTarget;
 };
@@ -823,6 +826,10 @@ const LADDER: readonly Rung[] = [
       // 一度も止められない。`refine` は Status を進めてから終わるので `計画済み` の窓も通る ——
       // 絞ると、起こす → 次の tick で畳む → また起こす、の往復から出られない。
       if (sessionActive(o.refineSession)) return false;
+      // **活動 3 値でゲートしない。**計画の成果は Status と `ready` の記録と Issue 本文へ
+      // 外部化されるので、pane にしか無いものを持たない —— 途中で殺したときの最悪は `ready` が
+      // 壊れることで、壊れた記録は陳腐化として読まれ再計画へ倒れる。`resolve` は未コミットの
+      // 成果を持つので、この緩和を広げ**ない**。
       // **`count` 条件は `ledger` が `未計画` のときだけ掛かる。**
       if (g.lead.ledger === "未計画" && failure(g).count >= ctx.config.retryBudget) return false;
       return true;
@@ -896,7 +903,6 @@ const LADDER: readonly Rung[] = [
       g.lead.ledger === "未計画" &&
       g.lead.runtime === "人待ち" &&
       g.leadObservation.refineSession.kind === "none" &&
-      !g.leadObservation.retiredRefineExists &&
       ctx.planSlotsUsed < ctx.config.planSlots,
   },
   {
@@ -1292,7 +1298,7 @@ export const decide = (input: TickInput): Decision => {
           progress: g.lead.progress,
           checks: g.leadObservation.checks,
         }),
-        countsFailure: countsFailure(params.action),
+        countsFailure: countsFailure(params.action, g.lead.ledger),
         records: recordsOf(g),
         evidence: {
           progress: g.lead.progress,

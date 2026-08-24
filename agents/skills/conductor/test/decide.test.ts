@@ -263,14 +263,25 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("6b: refine が Status も人待ちの記録も残さずに終わった", () => {
-    expectAction(
+    const rows = [observation({ ledger: present("未計画"), refineSession: session.idle })];
+    expectAction(rows, "計画セッションを片付ける");
+    // **`未計画` のまま閉じたら失敗の記録を進める。**閉じる → 起こす → 閉じるの往復は
+    // どちらの action も成功するので、数える場所がここ以外に無い。
+    expectFailureCount(rows, true);
+  });
+
+  test("6c: 未計画の計画セッションを閉じ続けて retry budget が尽きた", () => {
+    // **上限に達した周は片付ける行が順位を譲る。**譲らないと差し戻しに永久に到達せず、
+    // 計画の失敗が `退避先` にも応答にも出ないまま計画枠が 1 つ焼け続ける。
+    expectRevert(
       [
         observation({
           ledger: present("未計画"),
           refineSession: session.idle,
+          failureRecord: present({ count: 3, lastAction: "計画セッションを片付ける" }),
         }),
       ],
-      "計画セッションを片付ける",
+      "退避先",
     );
   });
 
@@ -370,15 +381,10 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7d: 計画工程が自分で 退避先 へ移して終えた（pane は残っている）", () => {
-    expectAction(
-      [
-        observation({
-          ledger: present("退避先"),
-          refineSession: session.idle,
-        }),
-      ],
-      "計画セッションを片付ける",
-    );
+    const rows = [observation({ ledger: present("退避先"), refineSession: session.idle })];
+    expectAction(rows, "計画セッションを片付ける");
+    // Status が動いているので往復は起きない。数えると `退避先` の精算と押し合う。
+    expectFailureCount(rows, false);
   });
 
   test("7d2: 起こした直後で、計画セッションが動いている", () => {
@@ -396,32 +402,10 @@ describe("実行器が消える / 止まる", () => {
     );
   });
 
-  test("7d4: retired-refine は片付けの対象ではなく、計画を塞ぐ印として残る", () => {
-    // rename 済みなので「計画セッションを片付ける」は当たらない（対象は `refine-<番号>` の完全一致）。
-    // **塞ぎは残る** —— 当てて消すと、次の tick で二重計画になる。
-    expectIdle([observation({ ledger: present("未計画"), retiredRefineExists: true })]);
-  });
-
-  test("retired-refine があるあいだ計画を起こし直さない", () => {
-    expectIdle([
-      observation({
-        ledger: present("未計画"),
-        retiredRefineExists: true,
-        waitRecord: wait.waiting,
-      }),
-    ]);
-  });
-
   test("7e: 計画セッションが idle", () => {
-    expectAction(
-      [
-        observation({
-          ledger: present("計画済み"),
-          refineSession: session.idle,
-        }),
-      ],
-      "計画セッションを片付ける",
-    );
+    const rows = [observation({ ledger: present("計画済み"), refineSession: session.idle })];
+    expectAction(rows, "計画セッションを片付ける");
+    expectFailureCount(rows, false);
   });
 
   test("7k: claim 済み・branch は clean・計画コメント無し。prepare の途中", () => {
@@ -522,30 +506,6 @@ describe("実行器が消える / 止まる", () => {
     ]);
     expect(d.outcome.kind).toBe("idle");
     expect(d.stalls).toEqual([{ issues: [1], progress: "実装中", runtime: "稼働中" }]);
-  });
-
-  test("7v: 計画セッションが done で活動は 再開しうる", () => {
-    expectAction(
-      [
-        observation({
-          ledger: present("未計画"),
-          refineSession: session.idle,
-          refineActivity: "再開しうる",
-        }),
-      ],
-      "計画セッションを片付ける",
-    );
-  });
-
-  test("7v2: 計画セッションが leftover の working", () => {
-    expectIdle([
-      observation({
-        ledger: present("未計画"),
-        refineSession: session.running,
-        refineLeftover: true,
-        refineActivity: "再開しうる",
-      }),
-    ]);
   });
 
   test("7r: 起こし直しのあと、記録は cleared でセッションは 稼働中", () => {
@@ -3131,11 +3091,6 @@ describe("容量と供給", () => {
   test("19k: 退避先の計画済みは供給に数えない", () => {
     const shelved = planned(1, { ledger: present("退避先") });
     expect(tick([shelved]).usage.supply).toBe(0);
-  });
-
-  test("19l: retired-refine が残っているものは供給に数えない", () => {
-    const retired = planned(1, { retiredRefineExists: true });
-    expect(tick([retired]).usage.supply).toBe(0);
   });
 
   test("19m: 依存が未解決の group は供給に数えない", () => {

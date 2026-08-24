@@ -306,7 +306,7 @@ const classifyOwned = (rows: readonly string[], name: string): OwnedClassificati
   };
 };
 
-const OWNED_SESSION = /^(retired-)?(refine|resolve)-\d+$/;
+const OWNED_SESSION = /^(refine|resolve)-\d+$/;
 
 const cwdOnOwned = (cwd: string, ownedPaths: readonly string[]): boolean =>
   ownedPaths.some(
@@ -548,10 +548,7 @@ export const observeTick = async (
       session: owned.session,
       leftover: owned.leftover,
       activity: owned.activity,
-      retiredRefineExists: sessionRows.some((r) => r.startsWith(`retired-refine-${issue} `)),
       refineSession: refine.session,
-      refineLeftover: refine.leftover,
-      refineActivity: refine.activity,
       worktreeBusy: worktreeBusy(
         sessionRows,
         worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),

@@ -137,16 +137,12 @@ export type IssueObservation = {
   readonly leftover: boolean;
   /** 所有セッションの活動 3 値。殺す・割り込む・write を取り上げる側が読む。 */
   readonly activity: SessionActivity;
-  /** `retired-refine-<番号>` が残っているか。**`runtime` には写さない**（`無し` として扱う） */
-  readonly retiredRefineExists: boolean;
   /**
    * `refine-<番号>` のセッション（完全一致）。**存在の有無ではなく状態で持つ** ——
    * `session` は `resolve-<番号>` を見るので計画中は常に `none` になり、
    * 有無だけでは「走っているものを畳まない」を書けない。
    */
   readonly refineSession: SessionObservation;
-  readonly refineLeftover: boolean;
-  readonly refineActivity: SessionActivity;
 
   readonly waitRecord: WaitRecord;
   /** 人待ちコメントの `createdAt`。促す相手の順序キー。**`updatedAt` で代用しない** */

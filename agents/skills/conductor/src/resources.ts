@@ -120,8 +120,7 @@ export const surfaceCountsTowardCapacity = (r: NormalizedIssue, s: SurfaceObserv
 };
 
 /**
- * 計画枠は**生存している `refine-<番号>` のセッション数**（完全一致）。
- * `retired-refine-<番号>` は数えない。**人待ちでも返らない。**
+ * 計画枠は**生存している `refine-<番号>` のセッション数**（完全一致）。**人待ちでも返らない。**
  */
 export const planSlotUsage = (observations: readonly IssueObservation[]): number =>
   observations.filter((o) => o.refineSession.kind !== "none").length;

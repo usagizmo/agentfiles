@@ -296,7 +296,7 @@ keys: [skills]
     expect(worktreeOccupied(["theme-polish-12 idle /tmp/other"], owned)).toBe(false);
     expect(worktreeOccupied(["theme-polish-12 idle"], owned)).toBe(false);
     expect(worktreeOccupied(["resolve-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
-    expect(worktreeOccupied(["retired-resolve-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
+    expect(worktreeOccupied(["refine-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
     expect(worktreeOccupied(["conductor idle /tmp/wt/feat-12-x"], owned)).toBe(false);
   });
 
