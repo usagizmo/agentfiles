@@ -365,7 +365,7 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 | `runtime` が `人待ち`            | 回収する                                                                                                   |
 | `ledger` が `退避先`             | leftover は回収する（いま書いていない）。それ以外は**セッションを止めてから**。止められないなら `Conflict` |
 | `着地済み` / `取り下げ`          | 片付けるが回収する（実体を消す手順に含める）                                                               |
-| 記録が 2 件以上ある・壊れている  | `Conflict`。壊れた記録は全着地面を占める                                                                   |
+| 記録が `Conflict`                | 全着地面を占める（判定は `references/integration-record.md`）                                              |
 
 どの回収も、「枠を渡す」より上位の action が旧保持者を止めてから起きる。
 
