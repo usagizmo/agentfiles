@@ -18,6 +18,8 @@ description: >-
 
 CSS を書く媒体では `assets/rabi.css` を先頭にインライン展開する。
 
+図を描く媒体では `assets/rabi-mermaid.js` も入れる。**`assets/rabi.css` より後に置く**。
+
 ## 値を変えるとき
 
 両方に現れる値は `assets/rabi.css` だけを直し、次で写しへ書き戻す。

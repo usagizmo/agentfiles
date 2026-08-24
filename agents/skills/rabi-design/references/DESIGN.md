@@ -335,6 +335,22 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 
 面に載せる赤い文字は `accent-text`、ベタ・枠・点・下罫は `accent`。
 
+### 図
+
+面・罫・文字の割り当ては `../assets/rabi-mermaid.js` が持つ。ここへ写さ**ない**。
+
+図のソースへ色を書かない。強調するノードには `accent` クラスを当てる。
+
+```html
+<pre class="mermaid">
+flowchart LR
+  A[前] --> B[後]
+  class B accent
+</pre>
+```
+
+テーマ切替では図を描き直す。印刷は追随しないので、`data-theme="light"` にしてから印刷する。描けない図はソースのまま残る。
+
 ### 状態
 
 状態ごとに新しい色を作ら**ない**。部品ごとの値は front matter の `components` の `-hover` / `-active` / `-disabled` / `-invalid` / `-selected` が持つ。ここには何の軸で表すかと、front matter に置けない値だけを書く。

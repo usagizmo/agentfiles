@@ -100,6 +100,7 @@ flowchart LR
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
         SD["sync-local-default.sh<br/><small>ローカル default の ff</small>"]
+        EI["ensure-integration-ref.sh<br/><small>統合先 ref の ensure</small>"]
     end
     subgraph sharedq["agents/shared/queue/ — キュー機構専用"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
@@ -133,6 +134,8 @@ flowchart LR
     RF --> RR
     RS --> RR
     ME --> GM
+    CO --> EI
+    ME --> EI
     RF --> BD
     RS --> SB
     RS --> WR
@@ -191,18 +194,19 @@ skill 固有の `scripts/`:
 
 skill 固有の `assets/`:
 
-| skill         | 実体       | 何を持つか          |
-| ------------- | ---------- | ------------------- |
-| `rabi-design` | `rabi.css` | ブランドの値の SSOT |
+| skill         | 実体              | 何を持つか                                   |
+| ------------- | ----------------- | -------------------------------------------- |
+| `rabi-design` | `rabi.css`        | ブランドの値の SSOT                          |
+| `rabi-design` | `rabi-mermaid.js` | mermaid をトークンで塗る初期化（CDN を引く） |
 
 ## skill を参照する repo 側の実体
 
 skill の外に在り、skill 側からは参照し**ない**。役割は [`../../AGENTS.md`](../../AGENTS.md) の配置方針。
 
-| 実体         | 何を参照するか                                          |
-| ------------ | ------------------------------------------------------- |
-| `../design/` | `rabi-design` の `assets/`                              |
-| `../test/`   | 各 skill の `scripts/`・`../design/`・tracked な `*.md` |
+| 実体         | 何を参照するか                                                  |
+| ------------ | --------------------------------------------------------------- |
+| `../design/` | `rabi-design` の `assets/`                                      |
+| `../test/`   | `bun test` の gate。範囲は [`../../AGENTS.md`](../../AGENTS.md) |
 
 置き場の判定は [`../../AGENTS.md`](../../AGENTS.md) の配置方針。
 

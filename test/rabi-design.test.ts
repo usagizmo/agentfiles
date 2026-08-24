@@ -53,13 +53,34 @@ const DESIGN_DIR = join(import.meta.dir, "../design");
 /** `design/` の面は全部見る。1 枚だけ見ると 2 枚目が無検査で入る。 */
 const surfaces = readdirSync(DESIGN_DIR).filter((name) => name.endsWith(".html"));
 
-test.each(surfaces)("%s が引くトークンは rabi.css に在る", (name) => {
+/** `assets/` の html も展開されて面になる。design/ だけ見ると asset が無検査で入る。 */
+const assets = readdirSync(join(SKILL, "assets")).filter((name) => /\.(html|js)$/.test(name));
+
+/** rabi.css が宣言していない `var(--rabi-…)` を返す。 */
+function undeclaredTokens(path: string): string[] {
   const declared = declarations(readFileSync(join(SKILL, "assets/rabi.css"), "utf8"));
+  const referenced = [...readFileSync(path, "utf8").matchAll(/var\(--rabi-([a-z0-9_-]+)\)/g)].map(
+    (m) => m[1] as string,
+  );
+  return [...new Set(referenced.filter((n) => !declared.has(n)))];
+}
 
-  const html = readFileSync(join(DESIGN_DIR, name), "utf8");
-  const referenced = [...html.matchAll(/var\(--rabi-([a-z0-9_-]+)\)/g)].map((m) => m[1] as string);
+test.each(surfaces)("%s が引くトークンは rabi.css に在る", (name) => {
+  expect(undeclaredTokens(join(DESIGN_DIR, name))).toEqual([]);
+});
 
-  expect([...new Set(referenced.filter((n) => !declared.has(n)))]).toEqual([]);
+test.each(assets)("assets/%s が引くトークンは rabi.css に在る", (name) => {
+  expect(undeclaredTokens(join(SKILL, "assets", name))).toEqual([]);
+});
+
+test("assets/ に展開する html が 1 枚以上ある", () => {
+  expect(assets.length).toBeGreaterThan(0);
+});
+
+// DESIGN.md「Colors」の「16 進値を写さず、常にトークンを参照する」を asset 自身にも効かせる
+test.each(assets)("assets/%s は 16 進値を写していない", (name) => {
+  const html = readFileSync(join(SKILL, "assets", name), "utf8");
+  expect(html.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
 });
 
 test("design/ に面が 1 枚以上ある", () => {
