@@ -102,6 +102,18 @@ export type IssueObservation = {
     readonly members: readonly number[];
     readonly landing: readonly string[];
   }>;
+  /**
+   * 片付ける意図。**あるあいだ「片付ける」が当たり続ける。**
+   * 無い `完了` × 非終端は `Conflict` のまま。
+   */
+  readonly cleanupRecord: Observed<{
+    readonly kind: "着地" | "取り下げ";
+    readonly members: readonly number[];
+    readonly landing: readonly string[];
+    readonly claimBranch: string;
+    readonly branches: Readonly<Record<string, string>>;
+    readonly tips: Readonly<Record<string, string>>;
+  }>;
 
   readonly surfaces: readonly SurfaceObservation[];
 

@@ -26,6 +26,7 @@ import type {
 } from "./observation.ts";
 import {
   claimRecord,
+  cleanupRecord,
   cycleRecord,
   extractMarker,
   intentRecord,
@@ -530,6 +531,7 @@ export const observeTick = async (
       planCommentExists: present(extractMarker(commentText, "plan").kind === "present"),
       issueContractComplete: extra.issueContractComplete,
       claimRecord: claim,
+      cleanupRecord: cleanupRecord(commentText),
 
       surfaces,
 

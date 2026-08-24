@@ -4,6 +4,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   claimRecord,
+  cleanupMayBeWritten,
+  cleanupRecord,
   keysOfPlan,
   planRecord,
   type PlanRecord,
@@ -117,6 +119,52 @@ describe("claim の記録", () => {
 
   test("必須の欄が欠けていれば invalid（既定へ丸めない）", () => {
     expect(claimRecord(wrap("claim", "members: [12]")).kind).toBe("invalid");
+  });
+});
+
+describe("片付けの記録", () => {
+  const yaml = [
+    "kind: 着地",
+    "members: [1]",
+    "landing: [control]",
+    "claimBranch: fix/1-x",
+    "branches:",
+    "  control: fix/1-x",
+    "tips:",
+    "  control: aaa",
+  ].join("\n");
+
+  test("必須の欄が揃えば present", () => {
+    expect(cleanupRecord(wrap("cleanup", yaml))).toEqual({
+      kind: "present",
+      value: {
+        kind: "着地",
+        members: [1],
+        landing: ["control"],
+        claimBranch: "fix/1-x",
+        branches: { control: "fix/1-x" },
+        tips: { control: "aaa" },
+      },
+    });
+  });
+
+  test("kind が 2 値でなければ invalid", () => {
+    expect(cleanupRecord(wrap("cleanup", yaml.replace("着地", "完了"))).kind).toBe("invalid");
+  });
+
+  test("members が空なら invalid（既定へ丸めない）", () => {
+    expect(cleanupRecord(wrap("cleanup", yaml.replace("members: [1]", "members: []"))).kind).toBe(
+      "invalid",
+    );
+  });
+
+  test("17p3: claim の記録が無いあいだは書けない", () => {
+    expect(cleanupMayBeWritten(claimRecord("本文だけ"))).toBe(false);
+    expect(
+      cleanupMayBeWritten(
+        claimRecord(wrap("claim", "representative: 1\nmembers: [1]\nlanding: [control]")),
+      ),
+    ).toBe(true);
   });
 });
 

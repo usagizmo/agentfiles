@@ -146,6 +146,11 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   // 成果物を伴う 2 つは、`完了` かつ提出の証跡があるときにだけ立てない。
   const settled = value(o.ledger) === "完了";
   const submitted = settledSubmitted(o);
+  // **記録があるあいだ、`settled` / `submitted` が免除している standing conflict を引き継ぐ。**
+  // 観測できない・所有外セッションは免除しない。
+  const cleaning = o.cleanupRecord.kind === "present";
+  const exemptSettled = settled || cleaning;
+  const exemptSubmitted = submitted || cleaning;
 
   // **本文とコメントを読めていないなら、他の値は詰め物。**先に報告して止める。
   if (o.sourceReadable.kind !== "present" || o.sourceReadable.value === false) {
@@ -184,7 +189,7 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   // **`waiting` の無効・壊れは下の既存行が扱う**（7h の自己修復を Conflict で潰さない）。
   // **終端には当てない** —— 当てると `片付ける` が選出対象外になり、pane が残る。
   if (
-    !settled &&
+    !exemptSettled &&
     (markWithoutWait(o.session, o.waitRecord) || markWithoutWait(o.refineSession, o.waitRecord))
   ) {
     found.push(
@@ -193,12 +198,16 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   }
 
   // **本文の欠落だけで解除しない** —— 本物の質問を選択 UI にだけ出して書き損ねた経路がある。
-  if (!settled && o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "undecidable") {
+  if (
+    !exemptSettled &&
+    o.waitRecord.kind === "waiting" &&
+    o.waitRecord.validity.kind === "undecidable"
+  ) {
     found.push(
       conflict("証跡が矛盾している", n, "人待ちの記録に質問の本文が無く、実行資源待ちの証跡も無い"),
     );
   }
-  if (!settled && o.waitRecord.kind === "broken") {
+  if (!exemptSettled && o.waitRecord.kind === "broken") {
     found.push(
       conflict("証跡が矛盾している", n, `人待ちの記録が壊れている: ${o.waitRecord.reason}`),
     );
@@ -213,7 +222,7 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
 
   // **保守的に全交差のまま保持し続ける**（非保持へ倒すと、投稿に失敗した課題が無防備に書く）。
   // **`完了` かつ提出の証跡がある残骸には当てない** —— 当てると standing が片付けの入口を塞ぐ。
-  if (!submitted && value(o.planCommentExists) === false && artifacts) {
+  if (!exemptSubmitted && value(o.planCommentExists) === false && artifacts) {
     found.push(
       conflict(
         "計画コメントが無いまま実装の証跡がある",
@@ -223,7 +232,7 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
     );
   }
 
-  if (!submitted && value(o.issueContractComplete) === false && artifacts) {
+  if (!exemptSubmitted && value(o.issueContractComplete) === false && artifacts) {
     found.push(
       conflict(
         "Issue 契約が欠けたまま成果物がある",
@@ -240,7 +249,7 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   // **claim の remote branch が無い着地済みには当てない**（ship の既定が branch を消す）。
   const landedWithoutClaimBranch = value(o.claimBranchExists) === false;
   if (
-    !settled &&
+    !exemptSettled &&
     value(o.prMerged) === true &&
     value(o.submissionEvidence) !== true &&
     !landedWithoutClaimBranch
@@ -262,6 +271,7 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   // **提出の証跡が無い `完了` の残骸は片付けに入らず、人が見る。**残骸が無い形（17m3）には立てない。
   // **claim の remote branch が無い着地済みには当てない**（行 17m6）。
   if (
+    !cleaning &&
     settled &&
     value(o.submissionEvidence) !== true &&
     !nothingLeft &&
@@ -292,7 +302,7 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   }
 
   // **待つのをやめたのに要求が残っている形。**放置すると実物を見せないまま着地する。
-  if (!settled && o.intentRecord.kind === "pending" && o.waitRecord.kind !== "waiting") {
+  if (!exemptSettled && o.intentRecord.kind === "pending" && o.waitRecord.kind !== "waiting") {
     found.push(
       conflict("意図の確認が pending なのに人待ちが無い", n, "人待ちの記録が cleared か無い"),
     );
@@ -300,10 +310,10 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
 
   // `完了` の課題に残った渡しの記録は、報告ではなく `片付ける` が消す。
   const integrationRecords = value(o.integrationRecordCount);
-  if (!settled && integrationRecords !== undefined && integrationRecords >= 2) {
+  if (!exemptSettled && integrationRecords !== undefined && integrationRecords >= 2) {
     found.push(conflict("渡しの記録が複数", n, `渡しの記録が ${integrationRecords} 件ある`));
   }
-  if (!settled && isUnreadable(o.integrationRecordCount)) {
+  if (!exemptSettled && isUnreadable(o.integrationRecordCount)) {
     found.push(conflict("渡しの記録が壊れている", n, "渡しの記録を読めない"));
   }
 

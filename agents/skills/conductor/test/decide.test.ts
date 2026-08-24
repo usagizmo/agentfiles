@@ -9,7 +9,7 @@ import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
 import { absent, invalid, present, unobservable } from "../src/types.ts";
-import { intent, observation, session, surface, wait } from "./fixtures.ts";
+import { cleanup, intent, observation, session, surface, wait } from "./fixtures.ts";
 
 const surfaceNamesOf = (observations: readonly IssueObservation[]): readonly string[] => {
   const names: string[] = [];
@@ -584,22 +584,24 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7t4: 着地済みでも所有外が居るあいだは片付けない", () => {
-    const obs = [
-      implementing({
-        surfaces: [
-          surface({
-            aheadOfIntegration: present(true),
-            hasCheckout: present(true),
-            terminal: present(true),
-          }),
-        ],
-        submissionEvidence: present(true),
-        session: session.none,
-        worktreeOccupied: true,
-      }),
-    ];
+    const base = {
+      surfaces: [
+        surface({
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          terminal: present(true),
+        }),
+      ],
+      submissionEvidence: present(true),
+      session: session.none,
+      worktreeOccupied: true,
+    } as const;
+    const obs = [implementing(base)];
     expectConflict(obs, "同じ worktree に所有外セッションがある");
     expectIdle(obs);
+    const recorded = [implementing({ ...base, cleanupRecord: cleanup() })];
+    expectConflict(recorded, "同じ worktree に所有外セッションがある");
+    expectIdle(recorded);
   });
 });
 
@@ -2487,6 +2489,163 @@ describe("着地面が制御面と違う（action）", () => {
           surfaces: [
             control({ terminal: present(true) }),
             secondary({ terminal: present(true), hasCheckout: present(true) }),
+          ],
+          submissionEvidence: present(true),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d3: 記録あり。progress は終端から退行。残骸あり", () => {
+    expectAction(
+      [
+        implementing({
+          cleanupRecord: cleanup(),
+          ledger: present("完了"),
+          submissionEvidence: present(true),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d4: 記録あり。残る worktree が dirty", () => {
+    expectAction(
+      [
+        implementing({
+          cleanupRecord: cleanup(),
+          ledger: present("完了"),
+          submissionEvidence: present(true),
+          surfaces: [
+            surface({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              dirty: present(true),
+            }),
+          ],
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d5: 記録あり。面が読めない。残骸あり", () => {
+    const obs = [
+      implementing({
+        cleanupRecord: cleanup(),
+        ledger: present("完了"),
+        submissionEvidence: present(true),
+        surfaces: [
+          surface({
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            terminal: unobservable("面の観測が読めない"),
+            landable: unobservable("面の観測が読めない"),
+          }),
+        ],
+      }),
+    ];
+    expectIdle(obs);
+    expectConflict(obs, "着地面が解決できない");
+  });
+
+  test("17d6: 記録あり。実体は全部消えた。記録だけ残る", () => {
+    expectAction(
+      [
+        observation({
+          ledger: present("完了"),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
+          cleanupRecord: cleanup(),
+          surfaces: [surface({ terminal: present(true) })],
+          submissionEvidence: present(true),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d7: group。記録あり。途中停止", () => {
+    const lead = implementing({
+      cleanupRecord: cleanup({ members: [1, 2] }),
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+      ledger: present("完了"),
+      submissionEvidence: present(true),
+    });
+    const member = observation({ issue: 2, ledger: present("完了"), sameBranchAs: [1] });
+    expectAction([lead, member], "片付ける");
+    const o = tick([lead, member]).outcome;
+    expect(o.kind === "action" ? o.target.members : []).toEqual([1, 2]);
+  });
+
+  test("17d8: PR を使う面と使わない面が混在。記録あり。途中停止", () => {
+    expectAction(
+      [
+        landed({
+          cleanupRecord: cleanup({
+            landing: ["control", "skills"],
+            branches: { control: "fix/1-x", skills: "fix/1-x" },
+            tips: { control: "aaa", skills: "bbb" },
+          }),
+          ledger: present("完了"),
+          submissionEvidence: present(true),
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d9: 取り下げの列。記録あり。途中停止", () => {
+    expectAction(
+      [
+        landed({
+          open: present(false),
+          cleanupRecord: cleanup({ kind: "取り下げ" }),
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          session: session.none,
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17p: 片付け開始後に再 open / 再 claim。記録に無い仕事が現れた", () => {
+    expectAction(
+      [
+        implementing({
+          cleanupRecord: cleanup(),
+          surfaces: [
+            surface({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+            surface({
+              name: "skills",
+              usesPr: false,
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+            }),
+          ],
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17p2: 記録を書く直前に落ちた。終端 progress のまま記録は無い", () => {
+    expectAction(
+      [
+        implementing({
+          surfaces: [
+            surface({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              terminal: present(true),
+            }),
           ],
           submissionEvidence: present(true),
         }),

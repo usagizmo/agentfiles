@@ -123,6 +123,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         claimBranchExists: lead.claimBranchExists,
         planCommentExists: lead.planCommentExists,
         claimRecord: lead.claimRecord,
+        cleanupRecord: lead.cleanupRecord,
         surfaces: lead.surfaces,
         openPr: lead.openPr,
         checks: lead.checks,
@@ -793,6 +794,8 @@ const LADDER: readonly Rung[] = [
     match: (g) => {
       const r = g.lead;
       const o = g.leadObservation;
+      // **再開の入口は記録。**終端から退行していても、記録だけが残っていても当たる。
+      if (o.cleanupRecord.kind === "present") return true;
       const done = TERMINAL.includes(r.progress);
       if (!done) return false;
       // **片付ける対象が全部消えるまで当たり続ける述語にする**（branch も入れる）。

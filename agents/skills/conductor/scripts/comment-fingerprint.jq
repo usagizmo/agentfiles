@@ -21,7 +21,7 @@ def open_names:
   | map(capture("^<!-- (?<n>[a-z][a-z-]*) -->$") | .n);
 
 def owned:
-  ["cycle", "retry", "yield", "integration"];
+  ["cycle", "retry", "yield", "integration", "cleanup"];
 
 def fold:
   . as $names

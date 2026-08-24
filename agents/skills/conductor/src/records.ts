@@ -31,6 +31,7 @@ export const MARKERS = [
   "integration",
   "report",
   "entry-block",
+  "cleanup",
 ] as const;
 export type Marker = (typeof MARKERS)[number];
 
@@ -64,6 +65,9 @@ const isNumberArray = (v: unknown): v is number[] =>
 
 const isStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === "string");
+
+const isStringMap = (v: unknown): v is Record<string, string> =>
+  isRecord(v) && Object.values(v).every((x) => typeof x === "string");
 
 /**
  * 面の接頭辞を持ちうる項目の列（`invalidationScope` / `expectedWrites`）を、
@@ -110,6 +114,47 @@ const isClaim = (v: unknown): v is ClaimRecord =>
 
 export const claimRecord = (body: string): Observed<ClaimRecord> =>
   parseYaml(extractMarker(body, "claim"), isClaim);
+
+/** 片付けの区分。消す対象の表はこれで引く。 */
+export const CLEANUP_KINDS = ["着地", "取り下げ"] as const;
+export type CleanupKind = (typeof CLEANUP_KINDS)[number];
+
+/**
+ * 片付ける意図。claim を消したあとも、区分・対象集合・着地面・branch・tip から対象を復元する。
+ * **claim の記録が無い本文へ書いてはいけない。**
+ */
+export type CleanupRecord = {
+  readonly kind: CleanupKind;
+  readonly members: readonly number[];
+  readonly landing: readonly string[];
+  /** 制御面の claim branch。取り下げの列でも記録する（残す対象の照合に使う） */
+  readonly claimBranch: string;
+  /** 面ごとの branch 名。記録に無い branch は消さない */
+  readonly branches: Readonly<Record<string, string>>;
+  /** 記録時の tip。残る先端がこれと違うなら消さない */
+  readonly tips: Readonly<Record<string, string>>;
+};
+
+const isCleanupKind = (v: unknown): v is CleanupKind => v === "着地" || v === "取り下げ";
+
+const isCleanup = (v: unknown): v is CleanupRecord =>
+  isRecord(v) &&
+  isCleanupKind(v["kind"]) &&
+  isNumberArray(v["members"]) &&
+  v["members"].length > 0 &&
+  isStringArray(v["landing"]) &&
+  v["landing"].length > 0 &&
+  typeof v["claimBranch"] === "string" &&
+  v["claimBranch"] !== "" &&
+  isStringMap(v["branches"]) &&
+  isStringMap(v["tips"]);
+
+export const cleanupRecord = (body: string): Observed<CleanupRecord> =>
+  parseYaml(extractMarker(body, "cleanup"), isCleanup);
+
+/** claim の記録が present のときだけ書いてよい。 */
+export const cleanupMayBeWritten = (claim: Observed<ClaimRecord>): boolean =>
+  claim.kind === "present";
 
 export type RetryRecord = { readonly count: number; readonly lastAction: string | null };
 
@@ -220,9 +265,6 @@ export type ReportRecord = {
   /** この claim が書いた SHA。無い面は空。 */
   readonly written: Readonly<Record<string, readonly string[]>>;
 };
-
-const isStringMap = (v: unknown): v is Record<string, string> =>
-  isRecord(v) && Object.values(v).every((x) => typeof x === "string");
 
 const isStringArrayMap = (v: unknown): v is Record<string, readonly string[]> => {
   if (!isRecord(v)) return false;

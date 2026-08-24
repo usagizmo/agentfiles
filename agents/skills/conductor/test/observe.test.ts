@@ -879,6 +879,46 @@ describe("記録の読み取りを繋ぐ", () => {
     expect(find(rows, 12).claimRecord.kind).toBe("present");
   });
 
+  test("cleanup の記録をコメントから読む", async () => {
+    const body = `${claimComment}
+
+<!-- cleanup -->
+
+\`\`\`yaml
+kind: 着地
+members: [12]
+landing: [o/control]
+claimBranch: feat/12-x
+branches:
+  o/control: feat/12-x
+tips:
+  o/control: aaa
+\`\`\`
+
+<!-- /cleanup -->`;
+    const rows = await observe(
+      port({
+        issueComments: async () =>
+          new Map([
+            [12, comment(body)],
+            [34, present([])],
+          ]),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).cleanupRecord).toEqual(
+      present({
+        kind: "着地",
+        members: [12],
+        landing: ["o/control"],
+        claimBranch: "feat/12-x",
+        branches: { "o/control": "feat/12-x" },
+        tips: { "o/control": "aaa" },
+      }),
+    );
+  });
+
   test("計画の照合には、その課題の着地面だけを渡す", async () => {
     // 座標表の全面を渡すと、**制御面の base を持たない repo で `git diff` が必ず落ちて**
     // 判定不能 = 交差扱いになり、計画を持つ全課題が常に失効扱いになる。

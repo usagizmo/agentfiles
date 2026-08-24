@@ -72,7 +72,7 @@ describe("comment-fingerprint.jq", () => {
   });
 
   test("専有記録だけの時刻を owned へ畳む", async () => {
-    const owned = ["cycle", "retry", "yield", "integration"] as const;
+    const owned = ["cycle", "retry", "yield", "integration", "cleanup"] as const;
     for (const name of owned) {
       const out = await fingerprint("12", [
         comment({ id: 10, issue: 12, updatedAt: "2026-08-12T00:00:00Z", body: wrap(name) }),
