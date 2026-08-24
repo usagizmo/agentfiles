@@ -37,10 +37,12 @@ describe("scripts の自前テスト", () => {
     expect(code === 0 ? "" : output).toBe("");
   }, 60_000);
 
+  // 22 件が git を temp dir で回すので数秒かかる。**既定の 5 秒に置かない** ——
+  // 負荷の掛かった機械で境界を越え、gate が中身と無関係に落ちる。
   test("ensure-integration-ref.sh の述語", async () => {
     const { code, output } = await run(["sh", "ensure-integration-ref.test.sh"]);
     expect(code === 0 ? "" : output).toBe("");
-  });
+  }, 60_000);
 
   test("`*.test.*` を持つ script は全部ここから回している", () => {
     // **一覧を数え上げない。**足した検査が呼ばれないまま残る経路を塞ぐ。
