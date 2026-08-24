@@ -164,6 +164,14 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   if (o.session.kind === "unclassifiable") {
     found.push(conflict("観測できない", n, `セッションの生の状態が分類できない: ${o.session.raw}`));
   }
+  // **計画セッションも同じ扱い。**立てないと `sessionActive` が偽なので閉じる rung が選び、
+  // 実行直前は生値が分類できないので実行しない —— 毎 tick 選んで実行しない周が続き、
+  // 計画枠が空かないまま他の action も出ない。
+  if (o.refineSession.kind === "unclassifiable") {
+    found.push(
+      conflict("観測できない", n, `計画セッションの生の状態が分類できない: ${o.refineSession.raw}`),
+    );
+  }
   // **`absent` もここに含める。**対応表に無い Status の Issue は `decode` が
   // キューから外すので、ここまで来た `absent` は「キューに居るのに Status が無い」——
   // 既定へ倒すと、台帳の無い課題が `未計画` として計画を起こされる。

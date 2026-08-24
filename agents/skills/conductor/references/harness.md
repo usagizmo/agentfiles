@@ -85,7 +85,7 @@ close 直前に引き直して述語を外れていたら、閉じずその tick
 | 所有している workspace の一覧 | `capacity` が `prunable` かの判定。孤児の述語は下の「3 つの経路」 |
 
 - **worktree 一覧は repo を明示して取る**（「今いる場所」に依存する手段を使わない）
-- 引く repo の集合は「制御面 + project 差分の座標表が持つ全着地面」。**「いま使われている面だけ」にも制御面だけにも絞らない**
+- 引く repo の集合は project 差分の座標表の全面（先頭が制御面）。**「いま使われている面だけ」にも制御面だけにも絞らない**
 - 座標表へ面を足すことは、その面を毎周観測すると決めること。使わなくなった面は表から外す（**外す前の条件は `landing-surface.md`**）
 - 面ごとの失敗はその面を `-` にするだけで、ラウンドは捨て**ない**。**制御面の失敗だけがラウンドを無効にする**
 - セッションの状態表示だけでは `progress` は分からない。`progress` は git と PR からのみ引く
@@ -137,7 +137,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 契約                                           | herdr                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 名乗る                                         | `herdr pane current --current` の `agent` が無ければ `herdr pane report-agent --source <kind> --agent <kind> --state working "$HERDR_PANE_ID"`。続けて `herdr agent rename "$HERDR_PANE_ID" conductor`                                                                                                                                                                                                                   |
-| 統合先 ref を ensure（claim。PR を使わない面） | **`sh scripts/ensure-integration-ref.sh <その面の checkout> <その面の統合先>`**（conductor skill の `scripts/`。**worktree を切る直前**。作成と switch は script が持つ。作業 branch の述語とは別名）                                                                                                                                                                                                                    |
+| 統合先 ref を ensure（claim。PR を使わない面） | **`sh <skills root>/conductor/scripts/ensure-integration-ref.sh <その面の checkout> <その面の統合先>`**（**worktree を切る直前**。作成と switch は script が持つ。作業 branch の述語とは別名）                                                                                                                                                                                                                           |
 | worktree を作る（claim。セッションを置く面）   | `herdr worktree create --cwd <その面の checkout> --branch <名> --base <その面の統合先> --label "#<番号>" --no-focus`（**1 課題に 1 回**）                                                                                                                                                                                                                                                                                |
 | tab を作る（refine）                           | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                                                                                                                                                                      |
 | pane を作る（振られた作業）                    | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                                                                                                                                                                   |
@@ -264,7 +264,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 project 固有値は引数で渡す（**座標は project 差分が持ち、実装は共通側が持つ**）。
 
 ```
-scripts/watch.sh (--snapshot <path> | --baseline <path>)
+<skills root>/conductor/scripts/watch.sh (--snapshot <path> | --baseline <path>)
                  --repo <path> --gh-repo <owner/name>
                  [--landing <owner/name>:<統合先 ref>:<checkout>]...
                  --project-org <org> --project-number <n> --status-field <name>
@@ -348,6 +348,8 @@ done | sort | grep .
 **何を入れて何に畳むかは `../SKILL.md` の「いつ打つか」が SSOT。ここで省かない**。ここは herdr での写し方だけ。
 
 **この 2 つはそのまま渡す。手で書き直さない。**
+
+**`# --sessions-cmd` / `# --workspaces-cmd` の行と fence の境界は parse 対象**。`src/config.ts` の `extractHarnessCmd` がこの字面で切り出し、省略した project の既定値にする。まとめる・名を変える・fence を張り直すと exit 2 で起動しなくなる。
 
 - **`.name // .pane_id` を使わない**（無名 pane まで拾う）
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ

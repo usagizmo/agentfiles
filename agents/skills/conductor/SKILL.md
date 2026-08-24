@@ -34,7 +34,7 @@ description: >-
 | 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `src/standalone-line.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/comment-fingerprint.jq` / `scripts/issue-fingerprint.py` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
 | 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                                                                                                                          |
 
-自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` と `stalls[]` は `cli.ts` が出す。
+自分が本文を作るのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` と `stalls[]` は `cli.ts` が出す。
 
 実行器へ渡す prompt 本文は、選んだ action のすることから一意に決まる。することの所在は `references/protocols.md`。**表に無い伝達をその場で組み立てない**。
 
@@ -60,7 +60,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 ## 観測
 
-指紋に入る材料は `scripts/watch.sh --snapshot` から読む。取った file は捨てず、tick を終えるときに `--baseline` として渡す。
+指紋に入る材料は `<skills root>/conductor/scripts/watch.sh --snapshot` から読む。取った file は捨てず、tick を終えるときに `--baseline` として渡す。
 
 別に取るのは snapshot に無いもの**だけ** —— Issue 本文、固定 marker のコメント本文、各着地面の統合先に含まれる commit、成果の指紋（`scripts/cycle-mark.py`。渡す引数は `references/protocols.md`）。
 
@@ -135,7 +135,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 - **「この action は良くないと思う」では止めない**。止めてよいのは前提が観測と割れているときだけ
 
 ```bash
-bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
+bun run <skills root>/conductor/src/cli.ts --config <project 差分 skill の config.json> \
   --snapshot-out <baseline に渡す file> --surface-path <面の名前>=<checkout>... \
   [--spec-gap-issue <代表> --spec-gap-fact <事実>]
 ```
@@ -144,7 +144,7 @@ bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
 
 座標は **project 差分 skill の `config.json`**（JSON）、配線は隣の untracked `config.local.json`（JSONC。tracked に置かない）。必須項目と検証は `src/config.ts` の `loadProjectFiles` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
 
-**checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**宣言された面を 1 つでも渡さなければ exit 2**。
+**checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**座標表の全面を 1 つでも渡さなければ exit 2**（Issue 本文の宣言では**ない**）。
 
 ```mermaid
 flowchart TD
@@ -202,7 +202,7 @@ flowchart TD
 **終了コードで分ける**。`1` は観測に失敗した（**直前に成功した snapshot を渡して watcher を張る**。
 取り直して張らない）。`2` は設定が壊れている（報告して止まる）。
 
-**exit 1 で watcher を張らずに終えない** —— 張らずに終えた tick の後には起こし手が居ないので、一時的な API 障害が永久停止に化ける。
+**exit 1 で watcher を張らずに終えない**（例外は「いつ打つか」の 3 つ）—— 張らずに終えた tick の後には起こし手が居ないので、一時的な API 障害が永久停止に化ける。
 
 1 つ実行したら観測からやり直す。git・GitHub・multiplexer は同時に撮れるスナップショットでは**ない**。
 
@@ -238,15 +238,14 @@ retry の `count` を 0 に戻すのは、action が成功したときと、`led
 
 解除条件を発火条件の否定に**しない**。**例外は「伝える」のうち本文変更と計画失効の 2 つだけ**。
 
-| `lastAction`             | 例外の解除条件（現在の観測だけで決める）                               |
-| ------------------------ | ---------------------------------------------------------------------- |
-| 計画セッションを片付ける | `ledger` が `計画済み` 以降で、`refine-<番号>` のセッションが無い      |
-| 本文の変更を伝える       | 計画コメントが変わった、またはその action の発火条件が偽になった       |
-| 計画の失効を伝える       | 同上。**project が足した発火条件も含む**                               |
-| 計画枠の逼迫を伝える     | `ledger` が `退避先` かつ有効な waiting でなく、`refine-<番号>` が無い |
-| 交差を解消する           | 休止の記録が現在の交差を記述しているか、記録が無くなった               |
-| checks を引き直させる    | `progress` が `着地待ち` になった                                      |
-| 意図の確認を促す         | 意図の確認の記録が観測できるようになった（3 状態のどれでもよい）       |
+| `lastAction`          | 例外の解除条件（現在の観測だけで決める）                               |
+| --------------------- | ---------------------------------------------------------------------- |
+| 本文の変更を伝える    | 計画コメントが変わった、またはその action の発火条件が偽になった       |
+| 計画の失効を伝える    | 同上。**project が足した発火条件も含む**                               |
+| 計画枠の逼迫を伝える  | `ledger` が `退避先` かつ有効な waiting でなく、`refine-<番号>` が無い |
+| 交差を解消する        | 休止の記録が現在の交差を記述しているか、記録が無くなった               |
+| checks を引き直させる | `progress` が `着地待ち` になった                                      |
+| 意図の確認を促す      | 意図の確認の記録が観測できるようになった（3 状態のどれでもよい）       |
 
 本文変更と計画失効の解除条件を述語の実体で書か**ない**。`refine` セッションの不在で共用し**ない**。
 計画枠の逼迫の精算は解除表の行だけ。人が答えた解除は失敗の `count` 側。枠が一時的に空いただけでは戻さない。
@@ -282,12 +281,11 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 #### 計画セッションを閉じる
 
-非稼働なら閉じる。活動 3 値でも生値でもゲートし**ない**。手順は `references/harness.md`「片付ける」。
+非稼働なら閉じる。活動 3 値でゲートし**ない**。生値は稼働中（`working` / `blocked`）を外すためだけに引き、実行の直前に取り直す。手順は `references/harness.md`「片付ける」。
 
-- 稼働中（`working` / `blocked`）には当てない。実行の直前に生値を取り直して確かめる
 - 閉じずに残す退避路を持た**ない**。`resolve` へ広げるのも同じ（未コミットの成果を持つ）
-- `ledger` が `未計画` のまま閉じるなら失敗の記録を進める。述語は `src/decide.ts` の `countsFailure`
-- 上限に達したら順位を譲る。拾うのは「差し戻す」（`退避先` へ落ちる）
+- 閉じたあとも `ledger` が `未計画` なら「計画を起こす」がまた当たる。往復を止めるのは周回の記録で、失敗の記録では数え**ない**
+- 失敗の記録が上限に達したら順位を譲る。拾うのは「差し戻す」（`退避先` へ落ちる）
 
 ### いつ打つか
 
@@ -300,7 +298,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 - 指紋を動かす書き込みをしたら、観測からやり直す。**action に数えない書き込み**（周回・失敗の記録の精算）も含む（上限には数えないまま）
 - 指紋に入らない出力は含め**ない**
 - 観測できなかった tick も張る。渡すのは直前に成功した snapshot（`--snapshot` は失敗しても既存の file を壊さない）。**取り直さない**
-- 張らずに終えてよいのは、一度も観測に成功していないときと、`halt` でセッションを止めるときだけ。前者は渡せる baseline が無い。後者は人が直すまで動かない
+- 張らずに終えてよいのは、一度も観測に成功していないときと、`halt` でセッションを止めるときと、exit 2 だけ。1 つめは渡せる baseline が無い。あとの 2 つは人が直すまで動かない
 
 指紋に入れるのは、正規化と action が読むものすべての digest。**項目を列挙して数え上げない**。snapshot の節の一覧は `src/decode.ts` の `SECTIONS`、digest は `src/port.ts`。
 

@@ -6,7 +6,7 @@ import type { Ledger, Observed } from "./types.ts";
 
 /**
  * セッションの生の状態。**`分類不能` を `稼働中` にも `待機` にも丸めない**
- * （丸めると、人が入力を書いている最中の pane を閉じる action が `done` と区別できない）。
+ * （丸めると閉じる rung が選ぶのに、実行直前は生値で弾かれる。`normalize` が `Conflict` にする）。
  * **`blocked` も丸めない**（承認・質問 UI。人待ちの印であって、記録の人待ちではない）。
  */
 export type SessionObservation =

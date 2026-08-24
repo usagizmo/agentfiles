@@ -275,15 +275,14 @@ export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
  * 伝える 2 つは常に真。送る周は `canPrompt` だけなので、再開しうる / 判定不能を免除しない。
  * `計画枠の逼迫を伝える` は常に真。
  *
- * `計画セッションを片付ける` は `ledger` が `未計画` のときだけ真。閉じたあとも `未計画` なら
- * 「計画を起こす」がまた当たるので、**閉じる → 起こす → 閉じるの往復はどちらの action も成功する**
- * —— 数える場所がここ以外に無い。上限に達したら rung 自身が順位を譲り、`差し戻す` が拾う。
+ * **`計画セッションを片付ける` は入れない。**閉じる → 起こす → 閉じるの往復は、起こす周が
+ * 成功するたびに `count` を 0 へ戻すので、ここで数えても上限へ届かない。往復を止めるのは
+ * 周回の記録（起こす周の `countsEmptyCycle`）。
  */
-const countsFailure = (action: ActionName, ledger: Ledger): boolean =>
+const countsFailure = (action: ActionName): boolean =>
   action === "本文の変更を伝える" ||
   action === "計画の失効を伝える" ||
-  action === "計画枠の逼迫を伝える" ||
-  (action === "計画セッションを片付ける" && ledger === "未計画");
+  action === "計画枠の逼迫を伝える";
 
 /** group 内で終端と非終端が混在しているか。共有実体をどちらに倒しても壊れる。 */
 const terminalMixedInGroup = (g: Group): boolean => {
@@ -356,10 +355,15 @@ const budgetRevertTarget = (g: Group, config: TickConfig): "退避先" | undefin
   // **正規化後の `runtime` では引かない** —— 人待ちの記録があると生きたセッションでも
   // `人待ち` に写るので、起こした直後の実行器を結果が出る前に落とす。
   // leftover は空周回の退避の対象（`sessionActive` だけでは外れる）。
+  // **計画セッションも同じく外す。**`o.session` は `resolve-<番号>` を見るので計画中は必ず
+  // `none` になり、見ないと最後に起こした `refine` が結果を出す前に `退避先` へ落ちる。
+  // **`ledger` で絞らない** —— `refine` は Status を進めてから終わるので `計画済み` の窓も
+  // 毎回通る（行 7d3）。`未計画` 限定にすると、その窓で稼働中のまま落ちる。
   if (
     cycle(g).count >= config.emptyCycleBudget &&
     markUnchanged(g) &&
     !validWaiting(o) &&
+    !sessionActive(o.refineSession) &&
     (!sessionActive(o.session) || o.leftover)
   ) {
     return "退避先";
@@ -1298,7 +1302,7 @@ export const decide = (input: TickInput): Decision => {
           progress: g.lead.progress,
           checks: g.leadObservation.checks,
         }),
-        countsFailure: countsFailure(params.action, g.lead.ledger),
+        countsFailure: countsFailure(params.action),
         records: recordsOf(g),
         evidence: {
           progress: g.lead.progress,

@@ -265,12 +265,12 @@ describe("実行器が消える / 止まる", () => {
   test("6b: refine が Status も人待ちの記録も残さずに終わった", () => {
     const rows = [observation({ ledger: present("未計画"), refineSession: session.idle })];
     expectAction(rows, "計画セッションを片付ける");
-    // **`未計画` のまま閉じたら失敗の記録を進める。**閉じる → 起こす → 閉じるの往復は
-    // どちらの action も成功するので、数える場所がここ以外に無い。
-    expectFailureCount(rows, true);
+    // **失敗の記録では数えない。**次の周の「計画を起こす」が成功すると `count` は 0 へ戻るので、
+    // ここで数えても上限へ届かない。往復を止めるのは行 6d の周回の記録。
+    expectFailureCount(rows, false);
   });
 
-  test("6c: 未計画の計画セッションを閉じ続けて retry budget が尽きた", () => {
+  test("6c: 未計画の計画セッションで retry budget が尽きた", () => {
     // **上限に達した周は片付ける行が順位を譲る。**譲らないと差し戻しに永久に到達せず、
     // 計画の失敗が `退避先` にも応答にも出ないまま計画枠が 1 つ焼け続ける。
     expectRevert(
@@ -279,6 +279,20 @@ describe("実行器が消える / 止まる", () => {
           ledger: present("未計画"),
           refineSession: session.idle,
           failureRecord: present({ count: 3, lastAction: "計画セッションを片付ける" }),
+        }),
+      ],
+      "退避先",
+    );
+  });
+
+  test("6d: 閉じる → 起こす の往復が空周回の上限に達した", () => {
+    // 計画の周の指紋は Issue 本文と `ledger` だけなので、往復では動かない。
+    expectRevert(
+      [
+        observation({
+          ledger: present("未計画"),
+          cycleRecord: present({ count: 3, mark: "mark-0" }),
+          currentMark: present("mark-0"),
         }),
       ],
       "退避先",
@@ -297,6 +311,19 @@ describe("実行器が消える / 止まる", () => {
   test("7f3: セッションが blocked。人待ちの記録が無い", () => {
     expectConflict([implementing({ session: session.blocked })], "証跡が矛盾している");
     expectIdle([implementing({ session: session.blocked })]);
+  });
+
+  test("7f6: 計画セッションの生の状態が分類できない", () => {
+    // 立てないと、閉じる rung は `sessionActive` が偽なので選ぶのに、実行直前は生値が
+    // 分類できないので実行しない —— 選んで実行しない周が続き、計画枠が空かない。
+    const rows = [
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.unclassifiable("weird"),
+      }),
+    ];
+    expectConflict(rows, "観測できない");
+    expectIdle(rows);
   });
 
   test("7f4: 計画セッションが blocked。人待ちの記録が無い", () => {
@@ -392,6 +419,32 @@ describe("実行器が消える / 止まる", () => {
     // 見るので計画中は常に `none` になり、`refine` の稼働で引かないと保護が一度も効かない ——
     // 起こす → 次の tick で畳む → また起こす、の往復から出られなくなる。
     expectIdle([observation({ ledger: present("未計画"), refineSession: session.running })]);
+    // **空周回の退避も同じ保護を要る。**行 6d の停止はこの分岐なので、`refine` の稼働で
+    // 引かないと最後に起こした計画セッションが結果を出す前に `退避先` へ落ちる（行 10k と同じ）。
+    expectIdle([
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.running,
+        cycleRecord: present({ count: 3, mark: "mark-0" }),
+        currentMark: present("mark-0"),
+      }),
+    ]);
+  });
+
+  test("7d5: 空周回の上限に達したが、計画セッションはまだ稼働中", () => {
+    // **行 10k と同じ。**回っている最中の周は結果が出ていないので差し戻さない。
+    // **`stalls` にも出さない** —— `runtime` は `resolve-<番号>` から導くので `無し` になり、
+    // 稼働中の実行器を「実行器なし」として報告することになる。解決側も `selfAdvancing` で外す。
+    const d = tick([
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.running,
+        cycleRecord: present({ count: 3, mark: "mark-0" }),
+        currentMark: present("mark-0"),
+      }),
+    ]);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.stalls).toEqual([]);
   });
 
   test("7d3: 台帳が進んだ後でも、計画セッションが動いているうちは畳まない", () => {

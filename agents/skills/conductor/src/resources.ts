@@ -121,6 +121,9 @@ export const surfaceCountsTowardCapacity = (r: NormalizedIssue, s: SurfaceObserv
 
 /**
  * 計画枠は**生存している `refine-<番号>` のセッション数**（完全一致）。**人待ちでも返らない。**
+ *
+ * **`sessionActive` へ寄せない** —— `idle` の `refine` は閉じる対象として生きている pane で、
+ * 枠から外すと 1 tick 1 件の閉じる action が追いつく前に tab が上限なく増える。
  */
 export const planSlotUsage = (observations: readonly IssueObservation[]): number =>
   observations.filter((o) => o.refineSession.kind !== "none").length;
