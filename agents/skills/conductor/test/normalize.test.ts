@@ -366,6 +366,21 @@ describe("実行器が消える / 止まる", () => {
     );
   });
 
+  test("7u: leftover の working。runtime は 稼働中 のまま", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        surfaces: [workingSurface()],
+        session: session.running,
+        leftover: true,
+        activity: "再開しうる",
+      }),
+      { progress: "実装中", runtime: "稼働中", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
   test("7r: 起こし直しのあと、記録は cleared でセッションは 稼働中", () => {
     expectFields(
       observation({

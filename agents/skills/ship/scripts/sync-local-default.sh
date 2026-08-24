@@ -1,0 +1,1 @@
+../../../shared/sync-local-default.sh

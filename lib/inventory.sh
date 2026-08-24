@@ -15,6 +15,8 @@
 
 inventory_define() {
   # --- Agents 共通 SSOT 投影 ---
+  # codex / opencode / cursor はここをネイティブに読む。
+  # この 3 つに共通 skills の union は張らない（張ると同じ skill を二重に配る）
   inv_section "agents (SSOT projection)"
   inv_home "$HOME/.agents"
   inv_symlink agents/AGENTS.md "$HOME/.agents/AGENTS.md"
@@ -49,4 +51,11 @@ inventory_define() {
   inv_symlink harnesses/grok/hooks/hooks.json "$HOME/.grok/hooks/hooks.json"
   inv_guard_dir "$HOME/.grok/hooks"
   inv_harness_skills "$HOME/.grok/skills" grok
+
+  # --- opencode ---
+  # home は `~/.opencode`（binary）ではなく config dir。`opencode debug paths` の config が SSOT
+  # opencode は `~/.agents/skills` をネイティブに読む（`opencode debug skill` の location）。union は張らない
+  inv_section "opencode"
+  inv_home "$HOME/.config/opencode"
+  inv_symlink agents/AGENTS.md "$HOME/.config/opencode/AGENTS.md"
 }

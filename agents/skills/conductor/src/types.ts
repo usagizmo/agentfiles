@@ -163,7 +163,7 @@ export type Outcome =
       readonly countsEmptyCycle: boolean;
       /**
        * この action が成功したあと、失敗の記録の `count` を +1 するか。
-       * 実行側はこれを読む。`runtime` を引き直さない。
+       * 実行側はこれを読む。活動も `runtime` も引き直さない。
        */
       readonly countsFailure: boolean;
       readonly records: TargetRecords;

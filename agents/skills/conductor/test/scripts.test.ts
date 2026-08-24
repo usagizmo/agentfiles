@@ -37,9 +37,18 @@ describe("scripts の自前テスト", () => {
     expect(code === 0 ? "" : output).toBe("");
   }, 60_000);
 
+  test("ensure-integration-ref.sh の述語", async () => {
+    const { code, output } = await run(["sh", "ensure-integration-ref.test.sh"]);
+    expect(code === 0 ? "" : output).toBe("");
+  });
+
   test("`*.test.*` を持つ script は全部ここから回している", () => {
     // **一覧を数え上げない。**足した検査が呼ばれないまま残る経路を塞ぐ。
-    const declared = new Set(["watch.test.sh", "cycle-mark.test.py"]);
+    const declared = new Set([
+      "watch.test.sh",
+      "cycle-mark.test.py",
+      "ensure-integration-ref.test.sh",
+    ]);
     const found = readdirSync(SCRIPTS).filter((f) => /\.test\.[a-z]+$/.test(f));
     expect([...found].sort()).toEqual([...declared].sort());
   });

@@ -35,7 +35,8 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 ## コミットメッセージ規約
 
-スコープごとに固定の gitmoji を使う。
+絵文字は変更の性質を、スコープは触った場所を表す。絵文字の一覧は `commit` skill の `references/gitmoji.md`。
+一覧に**ない**のは 🤖 だけで、agent の判断基準・発火条件を変えるときに使う。
 
 ### 形式
 
@@ -46,18 +47,18 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - {詳細2}
 ```
 
-### スコープと絵文字の対応
+### スコープ
 
-| 絵文字 | スコープ   | 説明                                                                                                      |
-| ------ | ---------- | --------------------------------------------------------------------------------------------------------- |
-| 🤖     | `[agents]` | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
-| 🤖     | `[claude]` | `harnesses/claude` 配下の Claude Code 設定                                                                |
-| 🤖     | `[codex]`  | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
-| 🤖     | `[grok]`   | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
-| 🎨     | `[lint]`   | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
-| 🔧     | `[複数]`   | 複数スコープにまたがる変更（例: `[agents][claude]`）                                                      |
+| スコープ     | 対象                                                                                                      |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| `[agents]`   | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
+| `[claude]`   | `harnesses/claude` / `~/.claude` 配下の Claude Code 設定                                                  |
+| `[codex]`    | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
+| `[grok]`     | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
+| `[opencode]` | `~/.config/opencode` 配下の opencode 設定                                                                 |
+| `[lint]`     | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 
-スコープに該当しない全体的な変更は、汎用 gitmoji を使う（新機能: ✨、バグ修正: 🐛、削除: 🔥、リファクタリング: ♻️）。
+複数スコープにまたがるときは並べる（例: `[agents][claude]`）。どのスコープにも入らない変更はスコープを省く。
 
 ### コミット例
 
@@ -73,13 +74,15 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場が決まる**（読む → `references/`、実行する → `scripts/`、成果物に使う → `assets/`）。大きさでは分けない。何を `references/` へ出すかの判断は `docs` skill の品質基準
 - `./agents/docs/` は人が全体を把握・監査するための資料。**agent へは投影しない**（`lib/inventory.sh` に載せない）。規約の本体は置かず、skills から導出した図と索引だけを持つ
+- `./design/` は人がブラウザで見て規則の組み合わせを確かめる面。agent へは投影し**ない**（`lib/inventory.sh` に載せない）。skill の下には置かない
+- `./test/` は `bun test` の gate。skills の `scripts/`・`design/` の面・tracked な `*.md` を検査する。agent へは投影し**ない**（`lib/inventory.sh` に載せない）
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置か**ない**
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイルへの symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（**空 overlay を先回りで作らない**）
 - **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。一覧は `lib/inventory.sh`
 
 共通 `agents/AGENTS.md` に書けるのは、その機能が無い harness でも代替手段で成立するルールまで（例: 譜面を HTML にして `open` する → 開けない環境ではパスを応答に書く）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ。
 
-共通 `agents/AGENTS.md` には文字数の上限がある。値・単位・理由・検査は `test/agents-md.test.mjs`。
+共通 `agents/AGENTS.md` には文字数の上限がある。値・単位・理由・検査は `test/agents-md.test.ts`。
 
 ### 共通と個別の分け方
 
@@ -91,7 +94,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
 - 参照方向は常に個別 → 共通の**一方通行**。共通が特定 harness を知ってはいけない
-- アドバイザーの起動は `agents/shared/` の単一実体（判断表 + スクリプト）にし、harness ごとの上書きを置か**ない**
+- アドバイザーの起動は `agents/shared/` の単一実体（`advisors.md` + `advisors.json` + `advisors.ts` + `advisors.sh`）にし、harness ごとの上書きを置か**ない**
 
 ### skill 間で実体を共有するとき
 
@@ -126,7 +129,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 新しい harness を足す手順:
 
 1. `lib/inventory.sh` の `inventory_define` に 1 ブロック追加（`inv_home` / `inv_symlink` / `inv_harness_skills` 等）
-2. 上の「スコープと絵文字の対応」に harness の行を追加する
+2. 上の「スコープ」に harness の行を追加する
 3. `./init.sh` で配線
 4. `./doctor.sh` で検査
 

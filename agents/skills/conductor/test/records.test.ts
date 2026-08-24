@@ -11,6 +11,7 @@ import {
   cycleRecord,
   extractMarker,
   hasStandaloneLine,
+  hasStandaloneMarkerShape,
   intentRecord,
   integrationRecord,
   integrationRecordCount,
@@ -92,6 +93,16 @@ describe("marker の取り出し", () => {
       "\r\n",
     );
     expect(claimRecord(body).kind).toBe("present");
+  });
+
+  test("行末の空白と CR だけでは欠落に倒れない", () => {
+    const body = "<!-- claim -->  \r\n```yaml\nrepresentative: 1\n```\n<!-- /claim -->\n";
+    expect(extractMarker(body, "claim").kind).toBe("present");
+    expect(hasStandaloneLine("<!-- wait -->\t", "<!-- wait -->")).toBe(true);
+  });
+
+  test("先頭の空白がある行は単独行ではない", () => {
+    expect(hasStandaloneLine(" <!-- wait -->", "<!-- wait -->")).toBe(false);
   });
 });
 
@@ -223,6 +234,8 @@ describe("提出と在庫と枠", () => {
     expect(carriesReportOrHalt(wrap("claim", "representative: 1"))).toBe(false);
     expect(hasStandaloneLine("記録は `<!-- claim -->` を付ける", "<!-- claim -->")).toBe(false);
     expect(hasStandaloneLine(wrap("claim", "representative: 1"), "<!-- claim -->")).toBe(true);
+    expect(hasStandaloneMarkerShape("まとめは `<!-- claim -->` を付ける")).toBe(false);
+    expect(hasStandaloneMarkerShape(wrap("claim", "representative: 1"))).toBe(true);
   });
 
   test("closed-unmerged と他人の PR は生きた PR に入れない", () => {

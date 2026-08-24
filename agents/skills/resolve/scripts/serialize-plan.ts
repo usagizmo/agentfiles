@@ -3,6 +3,7 @@
 // git の quoted path は拒否する。YAML パーサに git octal 互換は足さない。
 
 import { parse, stringify } from "yaml";
+import { extractStandaloneYaml } from "./standalone-line.ts";
 
 const GIT_OCTAL = /\\[0-7]{3}/;
 
@@ -23,28 +24,11 @@ export type CheckResult = { readonly ok: true } | { readonly ok: false; readonly
 export const wrapPlan = (yaml: string): string =>
   `<!-- plan -->\n\n\`\`\`yaml\n${yaml}\n\`\`\`\n\n<!-- /plan -->\n`;
 
-const standalone = (body: string, tag: string): number[] => {
-  const found: number[] = [];
-  let offset = 0;
-  for (const line of body.split("\n")) {
-    const bare = line.endsWith("\r") ? line.slice(0, -1) : line;
-    if (bare === tag) found.push(offset);
-    offset += line.length + 1;
-  }
-  return found;
-};
-
 const extractPlanYaml = (body: string): CheckResult & { yaml?: string } => {
-  const opens = standalone(body, "<!-- plan -->");
-  if (opens.length === 0) return { ok: false, reason: "計画コメントが absent" };
-  if (opens.length >= 2) return { ok: false, reason: "marker plan が 2 つある" };
-  const open = opens[0] ?? 0;
-  const close = standalone(body, "<!-- /plan -->").find((c) => c >= open);
-  if (close === undefined) return { ok: false, reason: "marker plan が閉じていない" };
-  const inner = body.slice(open + "<!-- plan -->".length, close);
-  const fence = /```(?:yaml)?\r?\n([\s\S]*?)```/.exec(inner);
-  if (fence === null) return { ok: false, reason: "marker plan に yaml ブロックが無い" };
-  return { ok: true, yaml: fence[1] ?? "" };
+  const got = extractStandaloneYaml(body, "plan");
+  if (got.kind === "absent") return { ok: false, reason: "計画コメントが absent" };
+  if (got.kind === "invalid") return { ok: false, reason: got.reason };
+  return { ok: true, yaml: got.yaml };
 };
 
 const rejectQuoted = (paths: readonly string[]): CheckResult => {

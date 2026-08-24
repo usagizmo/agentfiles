@@ -8,8 +8,15 @@
 
 import { parse } from "yaml";
 import type { IntentRecord, WaitRecord } from "./observation.ts";
+import {
+  extractStandaloneYaml,
+  hasStandaloneLine,
+  standaloneLineSpans,
+} from "./standalone-line.ts";
 import type { Observed } from "./types.ts";
 import { absent, invalid, present, unobservable } from "./types.ts";
+
+export { hasStandaloneLine, hasStandaloneMarkerShape } from "./standalone-line.ts";
 
 /** marker 名。**allowlist を増やしたらここだけ直す。** */
 export const MARKERS = [
@@ -28,45 +35,14 @@ export const MARKERS = [
 export type Marker = (typeof MARKERS)[number];
 
 /**
- * marker が**行として単独で立っている**位置。
- *
- * **散文の中の字面を拾わない。**記録の説明をする文（再計画の報告・経緯のまとめ・移行の告知）は
- * 運用で必ず出るので、行の途中や code span の中を marker として数えると、**正しい記録がある
- * 課題が「壊れている」に化けて**ラダー最上段に固定される。書く側の規約では塞がらない ——
- * 既に書かれたコメントは残るし、記録について説明する文は今後も書かれる。
- *
- * **行末の `\r` は許す** —— CRLF の本文が実データに混在する。
- */
-const standaloneLines = (body: string, tag: string): { start: number; end: number }[] => {
-  const found: { start: number; end: number }[] = [];
-  let offset = 0;
-  for (const line of body.split("\n")) {
-    const bare = line.endsWith("\r") ? line.slice(0, -1) : line;
-    if (bare === tag) found.push({ start: offset, end: offset + line.length });
-    offset += line.length + 1;
-  }
-  return found;
-};
-
-/** 単独行として `tag` が立っているか。散文の字面は拾わない。 */
-export const hasStandaloneLine = (body: string, tag: string): boolean =>
-  standaloneLines(body, tag).length > 0;
-
-/**
  * コメント本文から marker の中身（YAML）を取り出す。
  * **同じ marker が 2 つある本文は `invalid`** —— どちらを拾うか決まらない。
  */
 export const extractMarker = (body: string, marker: Marker): Observed<string> => {
-  const opens = standaloneLines(body, `<!-- ${marker} -->`);
-  const open = opens[0];
-  if (open === undefined) return absent();
-  if (opens.length >= 2) return invalid(body, `marker ${marker} が 2 つある`);
-  const close = standaloneLines(body, `<!-- /${marker} -->`).find((c) => c.start >= open.end);
-  if (close === undefined) return invalid(body, `marker ${marker} が閉じていない`);
-  const inner = body.slice(open.end, close.start);
-  const fence = /```(?:yaml)?\r?\n([\s\S]*?)```/.exec(inner);
-  if (fence === null) return invalid(inner, `marker ${marker} に yaml ブロックが無い`);
-  return present(fence[1] ?? "");
+  const got = extractStandaloneYaml(body, marker);
+  if (got.kind === "absent") return absent();
+  if (got.kind === "invalid") return invalid(body, got.reason);
+  return present(got.yaml);
 };
 
 const parseYaml = <T>(source: Observed<string>, check: (v: unknown) => v is T): Observed<T> => {
@@ -177,7 +153,7 @@ export const integrationRecord = (body: string): Observed<IntegrationRecord> => 
 
 /** 渡しの記録の件数。**2 件を 0 に畳まない**（畳むと Conflict も保持も消える）。 */
 export const integrationRecordCount = (body: string): Observed<number> => {
-  const n = standaloneLines(body, "<!-- integration -->").length;
+  const n = standaloneLineSpans(body, "<!-- integration -->").length;
   if (n >= 2) return present(n);
   const rec = integrationRecord(body);
   if (rec.kind === "present") return present(1);

@@ -16,6 +16,13 @@ export type SessionObservation =
   | { readonly kind: "none" }
   | { readonly kind: "unclassifiable"; readonly raw: string };
 
+/**
+ * 活動の 3 値。**`SessionObservation` の variant ではない。**同じ分類器の別出口。
+ * `agent_status` の 5 値を活動の証明に使わない。
+ */
+export const SESSION_ACTIVITIES = ["再開しうる", "停止確認", "判定不能"] as const;
+export type SessionActivity = (typeof SESSION_ACTIVITIES)[number];
+
 /** 実行器がまだ動いている（書いている、または承認・質問で止まっている）。 */
 export const sessionActive = (s: SessionObservation): boolean =>
   s.kind === "running" || s.kind === "blocked";
@@ -111,6 +118,13 @@ export type IssueObservation = {
   readonly submissionEvidence: Observed<boolean>;
 
   readonly session: SessionObservation;
+  /**
+   * 所有セッションの leftover。turn が終わり入力が通る正の証拠がある `working`。
+   * **`runtime` には写さない**（leftover のときも `稼働中`）。
+   */
+  readonly leftover: boolean;
+  /** 所有セッションの活動 3 値。殺す・割り込む・write を取り上げる側が読む。 */
+  readonly activity: SessionActivity;
   /** `retired-refine-<番号>` が残っているか。**`runtime` には写さない**（`無し` として扱う） */
   readonly retiredRefineExists: boolean;
   /**
@@ -119,6 +133,8 @@ export type IssueObservation = {
    * 有無だけでは「走っているものを畳まない」を書けない。
    */
   readonly refineSession: SessionObservation;
+  readonly refineLeftover: boolean;
+  readonly refineActivity: SessionActivity;
 
   readonly waitRecord: WaitRecord;
   /** 人待ちコメントの `createdAt`。促す相手の順序キー。**`updatedAt` で代用しない** */
@@ -174,7 +190,10 @@ export type IssueObservation = {
   readonly boardOrder: number;
   /** claim の順序キー。**PR 作成の早さで選ばない**（PR を持たない課題が選外へ落ちる） */
   readonly claimedAt: Observed<number>;
-  /** 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が `working` か */
+  /**
+   * 同じ worktree に `refine` / `resolve` / `conductor` 以外が genuine-working か。
+   * **所有外の leftover は turn 中の証拠にしない。**
+   */
   readonly worktreeBusy: boolean;
   /**
    * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が居るか。

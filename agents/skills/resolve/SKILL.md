@@ -26,13 +26,13 @@ description: >-
 | **提出**             | **着地面ごとに**統合先へ追随し、**資源キーの宣言を実体に合わせてから**、PR を使う面で `pr`。`managed` は base を統合先以外にしない（積み上げると着地の前提を満たせず、integration を握ったまま渡され続ける。順序は `Depends on` と選出が持つ）。契機は `references/session-report.md`。揃ったらまとめを出し、譜面を更新して提示する | `references/session-report.md`。残ったものの振り分けは `references/scope.md`                                               |
 | **意図の確認**       | 要否の述語と要否・結果の残し方は `references/intent-record.md`。要るなら実物を見せて明示承認を待つ。**要否を決めたら譜面を書き直す**（要らないと判定したときも）                                                                                                                                                                    | `references/intent-record.md`・`references/score.md`。見せ方は `references/intent.md`                                      |
 | **integration 待ち** | managed のみ。**merge だけが直列化点**                                                                                                                                                                                                                                                                                              | —                                                                                                                          |
-| **着地**             | **PR がある面は** `ship`。**PR を使わない面は** `merge` skill で統合先へ入れる。透過面はどちらもしない。**`managed` は渡しの記録が自分の対象集合を指していることを先に確かめる**（意図の確認は variant を問わず見る）                                                                                                               | `references/integration-record.md`（`managed` のみ）・`references/landing-surface.md`                                      |
+| **着地**             | **PR がある面は** `ship`。**PR を使わない面は** `merge` skill で統合先へ入れる。透過面はどちらもしない。**`managed` は渡しの記録が自分の対象集合を指していることを先に確かめる**（意図の確認は variant を問わず見る）。**各着地面の統合先へ追随し、`references/replan.md` で判定してから着地する。失効した計画のまま着地しない**    | `references/integration-record.md`（`managed` のみ）・`references/landing-surface.md`・`references/replan.md`              |
 
 **`finish` のあと、その面の HEAD を `<!-- written -->` へ足す**（形は `references/written-record.md`）。`report` の書き方は `references/session-report.md`。
 
 **仕上げは面ごとに通す**。`finish` とその先の `commit` は 1 つの木しか見ないので、**編集した面の数だけ回す**（規模の判定は課題全体で 1 回、通すのは面ごと）。1 面でも残すと、その面は dirty のままなので `着地待ち` に到達せず、**write を渡し直されては同じ所で止まる**。**面ごとに規約が違う**（検証も commit の作法も project 差分が持つ）ので、その面の規約を読んでから通す。
 
-**回すときは、その面の worktree を作業ディレクトリにする**（`cd`）。`finish` とその先の `commit` は cwd の木しか見ず、`git -C` に当たる受け口を持たない —— **絶対 path で書けるのは編集までで、 commit を作る操作は cwd に縛られる**。着地の `merge` だけは操作台を引数で受ける（あちらは統合先が出ている別の木を触るため）。
+**回すときは、その面の worktree を作業ディレクトリにする**（`cd`）。`finish` とその先の `commit` は cwd の木しか見ず、`git -C` に当たる受け口を持たない —— **絶対 path で書けるのは編集までで、 commit を作る操作は cwd に縛られる**。着地の `merge` だけは操作台を引数で受ける（あちらは live checkout を触るため）。
 
 セッションまとめの契機と置き場は `references/session-report.md` が SSOT。面の型ではなく**PR が実在するか**で決まる —— PR を使う面が 0 commit で透過した課題には PR が無いので、面の型で分岐すると存在しない PR へ書こうとして出せなくなる。PR を持たない面では、まとめの公開が「提出した」の唯一の観測材料なので、出すまで integration の受け手にならない。
 
@@ -57,7 +57,7 @@ PR を使う面が無くても、`managed` は integration を待つ。PR を使
 
 **harness の skill 一覧に出ないことを「無い」と読まない**（一覧は cwd から作られる）。出ていなければ、上の path を直接読む。**読めないまま進めない** —— Status の対応表を落とすと `interactive` に落ち、lease を一度も待たずに着地まで走る。
 
-実行面は着地面ごとに 1 つ。セッションが居るのは 1 面だけで、残りの面は絶対 path で書く（どの面に居るかは `references/landing-surface.md`。claim 後は記録の順で決まり、本文からは引き直さない）。**面ごとにセッションを分けない。**
+**回すときは、その面の worktree を作業ディレクトリにする**（`cd`）。`finish` とその先の `commit` は cwd の木しか見ず、`git -C` に当たる受け口を持たない —— **絶対 path で書けるのは編集までで、 commit を作る操作は cwd に縛られる**。着地の `merge` だけは操作台を引数で受ける（あちらは live checkout を触るため）。
 
 ## variant
 
@@ -93,7 +93,7 @@ PR を使う面が無くても、`managed` は integration を待つ。PR を使
 
 **variant で着地の可否は変わらない**。違うのは lease を待つかどうかだけ。lease を誰が出すかは知らない。空くまで idle で待ち、渡されたら続きを進める。
 
-**人を待って止まったときは write も integration も返っている**。答えを受け取ったらまず記録を `cleared` にし、`managed` は**渡し直されるまで書き始めないし、着地もしない**（停止条件・意図の確認のどちらも同じ）。止まっている間に枠は別の課題へ回っているので、勝手に進めると交差する 2 つが同時に書くか、2 件が同時に merge へ進む。
+**人を待って止まったときは write も integration も返っている**。答えを受け取ったら、要求が残るかを先に見る（`references/wait-record.md`）。残るなら `waiting` のまま待つ。残らないなら人待ちを `cleared` にする。意図の確認は `references/intent-record.md` の順。`managed` は**渡し直されるまで書き始めないし、着地もしない**。
 
 **休止を伝えられたら、次の不可逆操作の前まで書いてから応答を終える**（commit できる地点まで）。`interactive` にも効く —— lease を待たない variant でも、交差する先発が居ることは外からしか分からないので、伝えられた時点で従う。
 
@@ -169,7 +169,7 @@ alsoResolves: [<Issue 番号>] # このブランチで一緒に片付ける Issu
 
 **`expectedWrites` と `invalidationScope` は別物**。前者は書く範囲、後者は変わったらやり直しになる範囲で、後者が無いと再 plan の判定ができない。
 
-同じ marker のコメントを複数作らない。更新するときは既存コメントを書き換える。
+marker の upsert は `references/marker-upsert.md`。
 
 **投稿する直前に** `bun run <skill>/scripts/serialize-plan.ts --check <本文の file>` を通す。落ちたら投稿しない。
 

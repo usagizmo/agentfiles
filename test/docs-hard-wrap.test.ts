@@ -1,11 +1,11 @@
 // tracked な markdown に幅折り返しが無いことを bun test で止める。
-// 判定そのものは check-hard-wrap.mjs。ここが見るのは実際の文書と fixture 自己検査。
+// 判定そのものは check-hard-wrap.ts。ここが見るのは実際の文書と fixture 自己検査。
 
 import { expect, test } from "bun:test";
 import {
   hardWrapLines,
   validateHardWrapFixtures,
-} from "../agents/skills/docs/scripts/check-hard-wrap.mjs";
+} from "../agents/skills/docs/scripts/check-hard-wrap.ts";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 

@@ -14,36 +14,45 @@
 //
 // marked は GFM。GitHub でどう出るかが知りたいことなので、素の CommonMark より合う。
 
+type Marked = typeof import("marked").marked;
+
 // 依存が入っていないことと、違反が在ることを exit code で区別する（未インストールは 2）。
 // 混ぜると「入っていないから落ちた」が「検査して黒だった」に見える。
-let marked = null;
+let marked: Marked | null = null;
 try {
   ({ marked } = await import("marked"));
 } catch (e) {
   // **未導入だけを 2 に落とす。**壊れた依存も初期化例外もまとめて畳むと、
   // 「入っていない」と「壊れている」が同じ SKIP になって検査が黙って消える
-  if (e?.code !== "ERR_MODULE_NOT_FOUND") throw e;
-  // CLI は import.meta.main 側で exit 2。import した側には次の参照で throw させる
+  if ((e as { code?: string } | null)?.code !== "ERR_MODULE_NOT_FOUND") throw e;
+  // CLI は import.meta.main 側で exit 2。import した側には markdown() が throw させる
+}
+
+/** marked が無いまま判定へ入ったら止める。未導入を「違反なし」に化けさせない。 */
+function markdown(): Marked {
+  if (!marked) throw new Error("marked が入っていない（./init.sh）");
+  return marked;
 }
 
 // **描画結果からタグとコードを取り除いてから探す。**残すとテキスト以外の `**` を数える —
 // 規約を逐語で説明する `` `**` ``、HTML コメント、属性値。いずれも表示上は強調ではない。
-const stripped = (html) =>
+const stripped = (html: string) =>
   html.replace(/<code[^>]*>[\s\S]*?<\/code>/g, "").replace(/<!--[\s\S]*?-->/g, "");
 
 /**
  * 同種の強調の入れ子は delimiter に依らず落とす。`<strong>` の正規表現 1 本だと
  * `<em>` の入れ子が軸ごと抜ける。描画結果のタグスタックで見る。
  * 隣り合う 2 つの強調と、種類の違う入れ子（太字の中の斜体）は通す。
- * @param {string} html
  */
-function violationKinds(html) {
-  const kinds = new Set();
+function violationKinds(html: string): Set<string> {
+  const kinds = new Set<string>();
   const text = stripped(html);
   if (text.replace(/<[^>]*>/g, "").includes("**")) kinds.add("literal-asterisks");
-  const open = [];
+  const open: string[] = [];
   for (const match of text.matchAll(/<(\/?)(strong|em)\b[^>]*>/g)) {
+    // 正規表現の捕獲は strong / em だけ。既知の 2 つ以外はスタックへ積まない
     const tag = match[2];
+    if (tag !== "strong" && tag !== "em") continue;
     if (match[1] === "/") {
       const at = open.lastIndexOf(tag);
       if (at >= 0) open.splice(at, 1);
@@ -55,18 +64,20 @@ function violationKinds(html) {
   return kinds;
 }
 
-const broken = (html) => violationKinds(html).size > 0;
+const broken = (html: string) => violationKinds(html).size > 0;
+
+export type BrokenLine = { no: number; text: string };
 
 /** 壊れている行を `{ no, text }` で返す。判定の入口はここ 1 つ（test もこれを見る）。 */
-export function brokenLines(src) {
-  const out = [];
+export function brokenLines(src: string): BrokenLine[] {
+  const out: BrokenLine[] = [];
   let offset = 0;
-  for (const token of marked.lexer(src)) {
+  for (const token of markdown().lexer(src)) {
     const start = offset;
     offset += token.raw.length;
     // コードブロックは本文ではない（規約そのものを逐語で載せたブロックがある）
     if (token.type === "space" || token.type === "code") continue;
-    if (!broken(marked.parser([token]))) continue;
+    if (!broken(markdown().parser([token]))) continue;
     // この block が壊れている。原因は中の `**` を持つ行。
     const base = src.slice(0, start).split("\n").length;
     token.raw.split("\n").forEach((text, i) => {
@@ -79,8 +90,7 @@ export function brokenLines(src) {
 
 const REQUIRED_KINDS = ["literal-asterisks", "nested-emphasis"];
 
-/** @type {{ name: string, source: string, expect: string[] }[]} */
-const FIXTURES = [
+const FIXTURES: { name: string; source: string; expect: string[] }[] = [
   { name: "閉じ側", source: "**これは。**続く文", expect: ["literal-asterisks"] },
   { name: "誤ペア strong", source: "これは**前。**続き**後**です", expect: ["nested-emphasis"] },
   { name: "誤ペア em", source: "これは*前。*続き*後*です", expect: ["nested-emphasis"] },
@@ -91,10 +101,9 @@ const FIXTURES = [
 /**
  * 軸の集合と正例・負例の存在を corpus 走査の前に確かめる。
  * 件数閾値で代用しない。判定 file からこの関数が消えたら import 側が赤くなる。
- * @returns {string[]}
  */
-export function validateEmphasisFixtures() {
-  const problems = [];
+export function validateEmphasisFixtures(): string[] {
+  const problems: string[] = [];
   if (FIXTURES.length === 0) problems.push("FIXTURES が空です");
   const expectations = FIXTURES.map((f) => f.expect);
   if (!expectations.some((kinds) => kinds.length === 0)) {
@@ -108,12 +117,12 @@ export function validateEmphasisFixtures() {
   for (const { name, source, expect } of FIXTURES) {
     const detected = [
       ...new Set(
-        marked
+        markdown()
           .lexer(source)
           .flatMap((token) =>
             token.type === "space" || token.type === "code"
               ? []
-              : [...violationKinds(marked.parser([token]))],
+              : [...violationKinds(markdown().parser([token]))],
           ),
       ),
     ].sort();

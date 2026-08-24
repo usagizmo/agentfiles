@@ -11,7 +11,8 @@ import { expect, test } from "bun:test";
 
 const CAP = 10_000;
 
-const chars = async (path) => [...(await Bun.file(new URL(path, import.meta.url)).text())].length;
+const chars = async (path: string) =>
+  [...(await Bun.file(new URL(path, import.meta.url)).text())].length;
 
 test("共通 AGENTS.md は grok の上限を超えない", async () => {
   expect(await chars("../agents/AGENTS.md")).toBeLessThanOrEqual(CAP);

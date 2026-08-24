@@ -1,6 +1,6 @@
 // snapshot の issues 節を board 上の番号へ絞る。
 //
-// **行の形は変えない。**落とすのは board に無い番号だけ。board 上の state / updated_at は残る。
+// **行の形は変えない。**落とすのは board に無い番号だけ。残った列はそのまま。
 
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";

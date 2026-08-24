@@ -26,13 +26,13 @@ description: >-
 
 触る関数の周りだけを読ま**ない**。規則の理由は doc comment にあり、述語の理由は関数の直上、順序と単位の理由は `LADDER` と `Rung` の定義側にある。
 
-| 変えるもの          | 全文を読むファイル                                                                                                                                                                              |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                       |
-| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                          |
-| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                  |
-| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
-| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                           |
+| 変えるもの          | 全文を読むファイル                                                                                                                                                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                                                                                                                      |
+| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                                                                                                                         |
+| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                                                                                                                 |
+| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `src/standalone-line.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/comment-fingerprint.jq` / `scripts/issue-fingerprint.py` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
+| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                                                                                                                          |
 
 自分がやるのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` と `stalls[]` は `cli.ts` が出す。
 
@@ -62,7 +62,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 指紋に入る材料は `scripts/watch.sh --snapshot` から読む。取った file は捨てず、tick を終えるときに `--baseline` として渡す。
 
-別に取るのは snapshot に無いもの**だけ** —— Issue 本文、固定 marker のコメント本文、各着地面の統合先に含まれる commit、成果の指紋（`scripts/cycle-mark.py`）。
+別に取るのは snapshot に無いもの**だけ** —— Issue 本文、固定 marker のコメント本文、各着地面の統合先に含まれる commit、成果の指紋（`scripts/cycle-mark.py`。渡す引数は `references/protocols.md`）。
 
 観測の最初に、各着地面の統合先を fetch する（snapshot が行う）。
 
@@ -89,7 +89,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 | 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                                                           |
 | 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                                                                |
 | 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                                                        |
-| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査は `merge` skill の fail-closed（`references/landing-surface.md`）                                                |
+| live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査の項目は `merge` の「着地の検査」。いつ掛けるかは `references/landing-surface.md`                                 |
 | 容量                     | 着地面ごとの worktree と、repo 非依存の workspace 一覧（1 回）。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）。`prunable` の述語は `references/harness.md` |
 | 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                                                                |
 
@@ -97,7 +97,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 述語の実体は `src/normalize.ts`、期待は `test/normalize.test.ts`。**ここに写さない**。
 
-正規化は Issue 単位で行う。group を 1 レコードに畳ま**ない**。group が単位になるのは選出と資源の集約だけ（claim・在庫・write の数え方）。共有の成果物の帰属は `references/same-branch.md`。
+正規化は Issue 単位で行う。group を 1 レコードに畳ま**ない**。適用の単位と帰属は `references/same-branch.md`。
 
 1 件につき 4 つのフィールドへ畳む。`progress` と `runtime` は排他ラダー（上から読んで先に当たった行が勝つ）。`capacity` と `ledger` は値そのものが互いに素。
 
@@ -141,7 +141,7 @@ bun run <skill>/src/cli.ts --config <project 差分 skill の config.json> \
 
 対で渡す。`<代表>` は実行しなかった action の代表。壊れた渡しは `src/cli.ts` の `specGap` が止める。
 
-設定は JSON で、置き場は **project 差分 skill の `config.json`**。必須項目と検証は `src/config.ts` の `parseConfig` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
+座標は **project 差分 skill の `config.json`**（JSON）、配線は隣の untracked `config.local.json`（JSONC。tracked に置かない）。必須項目と検証は `src/config.ts` の `loadProjectFiles` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
 
 **checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**宣言された面を 1 つでも渡さなければ exit 2**。
 
@@ -181,7 +181,7 @@ flowchart TD
 | `settle-record` | 記録を精算して書く。**action 上限には数えないが、書いたら `cli.ts` を呼び直す**（記録は指紋に入る）                                                                                                                                     |
 | `idle`          | watcher を張って終える                                                                                                                                                                                                                  |
 
-`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）と、action の `countsEmptyCycle` / `countsFailure`。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。`runtime` を引き直さない。
+`action` と `settle-record` の精算に要る値は `records`（`currentMark` / `markMatch` / cycle / failure）。`observeTick` を再実行せず、`cycle-mark.py` を手で組まない。形は `src/types.ts` の `TargetRecords`。`countsEmptyCycle` / `countsFailure` は `action` だけが持つ。
 
 ### 応答に出すもの
 
@@ -230,25 +230,25 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 ### 記録の精算
 
 retry の `count` を 0 に戻すのは、action が成功したときと、`ledger` が `退避先` のものを観測したとき（`lastAction` は残す）。
-**例外は** 伝える 3 つで、伝達が通ったことでは戻さない。戻すのは解除表。`計画枠の逼迫を伝える` は三拍子が揃う前には `退避先` を観測しても消さない。
-伝える 3 つの加算は Decision の `countsFailure` を読む。`runtime` を引き直さない。
+**例外は** 伝える 3 つで、伝達が通ったことでは戻さない。戻すのは解除表。`計画枠の逼迫を伝える` は解除表の行が揃う前には `退避先` を観測しても消さない。
+伝える 3 つの加算は、action が成功したあと Decision の `countsFailure` を読む。活動も `runtime` も引き直さない。
 
 「落とす側が一体で精算する」形に**しない**。戻す主体を人に**しない**。どちらも不変条件として書く。
 
 解除条件を発火条件の否定に**しない**。**例外は「伝える」のうち本文変更と計画失効の 2 つだけ**。
 
-| `lastAction`             | 例外の解除条件（現在の観測だけで決める）                          |
-| ------------------------ | ----------------------------------------------------------------- |
-| 計画セッションを片付ける | `ledger` が `計画済み` 以降で、`refine-<番号>` のセッションが無い |
-| 本文の変更を伝える       | 計画コメントが変わった、またはその action の発火条件が偽になった  |
-| 計画の失効を伝える       | 同上。**project が足した発火条件も含む**                          |
-| 計画枠の逼迫を伝える     | 三拍子が揃った、または人が答えて有効な `waiting` でなくなった     |
-| 交差を解消する           | 休止の記録が現在の交差を記述しているか、記録が無くなった          |
-| checks を引き直させる    | `progress` が `着地待ち` になった                                 |
-| 意図の確認を促す         | 意図の確認の記録が観測できるようになった（3 状態のどれでもよい）  |
+| `lastAction`             | 例外の解除条件（現在の観測だけで決める）                               |
+| ------------------------ | ---------------------------------------------------------------------- |
+| 計画セッションを片付ける | `ledger` が `計画済み` 以降で、`refine-<番号>` のセッションが無い      |
+| 本文の変更を伝える       | 計画コメントが変わった、またはその action の発火条件が偽になった       |
+| 計画の失効を伝える       | 同上。**project が足した発火条件も含む**                               |
+| 計画枠の逼迫を伝える     | `ledger` が `退避先` かつ有効な waiting でなく、`refine-<番号>` が無い |
+| 交差を解消する           | 休止の記録が現在の交差を記述しているか、記録が無くなった               |
+| checks を引き直させる    | `progress` が `着地待ち` になった                                      |
+| 意図の確認を促す         | 意図の確認の記録が観測できるようになった（3 状態のどれでもよい）       |
 
 本文変更と計画失効の解除条件を述語の実体で書か**ない**。`refine` セッションの不在で共用し**ない**。
-計画枠の逼迫の精算は三拍子だけ。人が答えた解除は失敗の `count` 側。枠が一時的に空いただけでは戻さない。
+計画枠の逼迫の精算は解除表の行だけ。人が答えた解除は失敗の `count` 側。枠が一時的に空いただけでは戻さない。
 
 2 時点の比較に**しない**。禁じているのは観測できない過去を使うことで、比較の相手を記録に持つなら当たら**ない**。
 
@@ -260,7 +260,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 同じ課題に 1 tick で 2 つの action を出さ**ない**。上から最初に当たったものを 1 つだけ実行する。「1 tick で」を落とさ**ない**。
 
-適用の単位は group（正規化は Issue 単位、実体を触る action は代表の番号で 1 回）。帰属・代表の固定・片付けの条件は `references/same-branch.md`。終端が混在する group は `Conflict`。
+適用の単位と帰属は `references/same-branch.md`。実体を触る action は代表の番号で 1 回。終端が混在する group は `Conflict`。
 
 順序: 止める・消えるものを残す → 終わったものを消す → 台帳のずれを直す → 実行器を動かす → 新しく始める。**規約の穴の起票だけは最上段に近い**（次の tick に観測から復元できない**唯一**の行）。
 
@@ -269,7 +269,11 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 コードに無い規約:
 
 - 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）
-- 「枠を渡す」の受け手を、既に write を保持しているかどうかで絞ら**ない**
+- 活動 3 値は `SessionObservation` の variant では**ない**。同じ分類器の別出口。`agent_status` の 5 値を活動の証明に使わない
+- `tab close` は活動が `停止確認` かつ生値が `done` のときだけ行う。例外は計画枠の逼迫の上限到達。それ以外の非稼働は rename に倒す
+- 「実行器だけ止める」は活動が `停止確認` のときだけ行う。判定不能 / 再開しうるでは送らない。例外は計画枠の逼迫の上限到達と、失われた resolve の張り直し（ゲートを掛けない）
+- 終端の片付ける（resolve の workspace close）はセッションを消す入口なので、このゲートの外
+- 意図して稼働中へ送るのは休止を促し直す。伝える 2 つは `canPrompt`。枠を渡すは受信可能を読む
 - 前進と後退を混ぜ**ない**。「台帳を進める」は期待表に向かって進めるだけ、「差し戻す」だけが戻す
 - `stale` は独立した概念では**ない**。`progress` から期待される `runtime` / `capacity` / `ledger` とのずれがそれで、別の表を持た**ない**
 - 「伝える」3 つの加算は「記録の精算」が持つ。ここには写さない。`計画セッションを片付ける` の加算は下の rename が持つ
@@ -277,7 +281,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 #### 計画セッションの rename
 
-`idle` では閉じ**ない**。`retired-refine-<番号>` へ rename する。手順は `references/harness.md`「片付ける」。
+活動が `停止確認` かつ生値が `done` のときだけ閉じる。それ以外の非稼働は `retired-refine-<番号>` へ rename する。手順は `references/harness.md`「片付ける」。
 
 - rename した番号は、`retired-` が残っているあいだ計画が起きない。その Issue の「計画を起こす」「計画を起こし直す」は塞ぐ。物理枠の述語からは外し、「計画セッションが無い」の判定には含める
 - `runtime` には写さ**ない**（`無し` として扱う）
@@ -293,7 +297,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 tick を終えるときに、最後の観測の snapshot を `--baseline` として渡して watcher を張る。張るのはここ 1 箇所。
 
 - 渡すのは、その tick が action を決めるのに使った観測。**起床側で取り直さない**
-- `--interval` / `--max` は検知の遅延の調整であって、この窓の対策では**ない**（既定は `references/harness.md`）
+- `--interval` / `--max` は検知の遅延の調整であって、この窓の対策では**ない**（既定は `scripts/watch.sh`。渡さ**ない**）
 - 指紋を動かす書き込みをしたら、観測からやり直す。**action に数えない書き込み**（周回・失敗の記録の精算）も含む（上限には数えないまま）
 - 指紋に入らない出力は含め**ない**
 - 観測できなかった tick も張る。渡すのは直前に成功した snapshot（`--snapshot` は失敗しても既存の file を壊さない）。**取り直さない**
@@ -311,7 +315,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 
 - worktree が prepare を抜けたかは 0 か 1 に丸める。読めなかったときの `-` は 3 つ目の値で、clean へ**畳まない**
 - 正規化で同じ値になるものは、指紋でも同じ文字列に畳む。**意味が違うものは畳まない**（`稼働中` と人待ちの手掛かり、セッションの `done` と `idle`）
-- 同じ項目を、遷移を駆動しうる部分集合へ絞る。追跡していない PR の checks は `scripts/pr-list.jq`。snapshot の issues は board 上の番号で、`scripts/restrict-to-board.awk`
+- 同じ項目を、遷移を駆動しうる部分集合へ絞る。追跡していない PR の checks は `scripts/pr-list.jq`。snapshot の issues と comments は board 上の番号。issues の board 絞りは `scripts/restrict-to-board.awk`、本文 digest は `scripts/issue-fingerprint.py`。comments は `scripts/comment-fingerprint.jq`
 - 先発判定の 2 段目（作業量）は入れ**ない**。値は action が読む
 - 自分の状態は落とし、**存在は残す**（多重起動の判定に要る）
 
@@ -339,7 +343,7 @@ snapshot の取り方は harness 依存（`references/harness.md`）。
 - `人待ち` は merge の枠も返す（回収の表）。**`休止` は merge の枠の条件に足さない**
 - 記録が `cleared` になった課題・休止の記録を消した課題には、**write を渡し直す**。交差していれば「予定範囲を超えたとき」の後発として休止させる
 
-**容量だけは目安で、超えても止めない**。新しい checkout を伴う action だけ控え、既存の課題を進める action は選び続ける。人待ちと退避先は数える本数に入れない。休止は入れる。
+**容量だけは目安で、超えても止めない**。新しい checkout を伴う action だけ控え、既存の課題を進める action は選び続ける。
 
 計画枠は人待ちでも返らない。空くのはセッションが消えたか rename されたときだけ（「計画セッションを片付ける」がその行）。
 
@@ -357,18 +361,18 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 
 記録が権限の実体。**先に書き、書けたことを取得して確かめてから伝える**（手順は `references/integration-record.md`）。確かめられなければ伝えない。
 
-次の受け手は claim が最も古い 1 件（同値なら代表の番号が小さい方）。保持者への再送は選定の外。PR 作成の早さで選ば**ない**。占有と壊れ判定は `src/resources.ts` の `integrationOccupied`。
+次の受け手は `src/decide.ts` の `nextIntegrationReceiver`。保持者への再送は選定の外。PR 作成の早さで選ば**ない**。占有と壊れ判定は `src/resources.ts` の `integrationOccupied`。
 
-| 事象                             | 扱い                                                                                     |
-| -------------------------------- | ---------------------------------------------------------------------------------------- |
-| 追随の push で `提出中` へ落ちた | 保持継続                                                                                 |
-| セッションが消えた               | 保持継続。起こし直す                                                                     |
-| 伝達に失敗した                   | 保持継続。同じ相手へ再送する                                                             |
-| 本文が不一致 / 計画が失効        | 保持継続。伝えて着地だけ止める                                                           |
-| `runtime` が `人待ち`            | 回収する                                                                                 |
-| `ledger` が `退避先`             | **セッションを止めてから**回収する。Status だけでは足りない。止められないなら `Conflict` |
-| `着地済み` / `取り下げ`          | 片付けるが回収する（実体を消す手順に含める）                                             |
-| 記録が 2 件以上ある・壊れている  | `Conflict`。壊れた記録は全着地面を占める                                                 |
+| 事象                             | 扱い                                                                                                       |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 追随の push で `提出中` へ落ちた | 保持継続                                                                                                   |
+| セッションが消えた               | 保持継続。起こし直す                                                                                       |
+| 伝達に失敗した                   | 保持継続。同じ相手へ再送する                                                                               |
+| 本文が不一致 / 計画が失効        | 保持継続。伝えて着地だけ止める                                                                             |
+| `runtime` が `人待ち`            | 回収する                                                                                                   |
+| `ledger` が `退避先`             | leftover は回収する（いま書いていない）。それ以外は**セッションを止めてから**。止められないなら `Conflict` |
+| `着地済み` / `取り下げ`          | 片付けるが回収する（実体を消す手順に含める）                                                               |
+| 記録が 2 件以上ある・壊れている  | `Conflict`。壊れた記録は全着地面を占める                                                                   |
 
 どの回収も、「枠を渡す」より上位の action が旧保持者を止めてから起きる。
 
@@ -396,7 +400,14 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 
 実装中に資源キーが増えるのは異常ではない。規則を固定しておき、その場で判断しない。
 
-1. **先に write を取った側が継続する**。順序の定義はここだけで、他の節は参照する | 段 | 軸 | | --- | ---------------------------------------------------------------------------------- | | 1 | `progress` が進んでいる方 | | 2 | 同値なら、外部化済みの作業量が多い方（全着地面の、統合先から先の commit 数の合計） | | 3 | claim が古い方 | | 4 | 番号 |
+1. **先に write を取った側が継続する**。順序の定義はここだけで、他の節は参照する。
+
+| 段  | 軸                                                                                 |
+| --- | ---------------------------------------------------------------------------------- |
+| 1   | `progress` が進んでいる方                                                          |
+| 2   | 同値なら、外部化済みの作業量が多い方（全着地面の、統合先から先の commit 数の合計） |
+| 3   | claim が古い方                                                                     |
+| 4   | 番号                                                                               |
 
 2. 休止の記録は conductor が書き、conductor が消す。後発が休止した後に何をするかは解決工程が持つ
 
@@ -411,12 +422,12 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 **既定値は `src/decide.ts` の `DEFAULT_CONFIG`。ここに写さない。**
 
 - 1 tick あたりの最大 action 数。**内容が変わらない報告は数えない**（`Conflict` の報告と「成果が確認できないので片付けない」報告）。観測もやり直さない
-- retry budget は**対象集合ごとに数える**（Issue ごとではない）。連続失敗は選出対象外へ退避する。記録の置き場は `references/same-branch.md` の帰属表、形は `references/protocols.md`、数える失敗と数えない失敗の区別は「1 tick」
-- 成果ゼロの周の上限も対象集合ごと（記録は `references/protocols.md`）。**retry budget とは別に数える**
+- retry budget の数え方・書き先・退避の範囲は `references/same-branch.md`「書き先と読み先」。連続失敗は選出対象外へ退避する。形は `references/protocols.md`。数える失敗と数えない失敗の区別は「1 tick」
+- 成果ゼロの周の上限も同じ節（記録は `references/protocols.md`）。**retry budget とは別に数える**
 - systemic failure の circuit breaker。rate limit・ネットワーク断は backoff
 - 解釈不能な状態では fail-closed（進めずに報告する）
 - 所有していない worktree / セッションは**削除しない**。自分が作ったものは claim の記録から引く
-- **live checkout を編集しない**。行ってよいのは fetch と統合先への merge だけで、dirty も分岐も自動で解消しない（`references/landing-surface.md`）
+- **live checkout を課題の実装で編集しない**。行ってよい操作は `references/landing-surface.md`。dirty も分岐も checkout / stash / reset で解消しない
 - worktree を作るのは着地面の linked worktree**だけ**
 - Issue の close は「片付ける」の一部。条件は `references/protocols.md` の片付け手順が SSOT。**述語をここに写さない**
 - tick の中で Issue を作ら**ない**・Status を計画済みへ進め**ない**。台帳を期待値へ寄せることと差し戻しは行う
@@ -429,22 +440,21 @@ claim するときの交差は `src/decide.ts` の `claimCrossesWriteHolders`。
 
 Status は claim から着地まで単調に進む。戻すのは 5 事象だけで、**人待ちは含まない**（人待ちは記録で表し、Status は進行中のまま）。判定キーは観測できる条件で固定する。
 
-**5 事象の判定・順序・戻し先の実体は `src/decide.ts` の `revertTarget` と `stockStale`、期待は `test/decide.test.ts`。ここに写さない。**
+**5 事象の判定・順序・戻し先・単位の実体は `src/decide.ts` の `budgetRevertTarget` / `revertTarget` / `stockStale` と LADDER の `unit`、期待は `test/decide.test.ts`。ここに写さない。**
 
 コードに無い規約:
 
 - **記録の無い `進行中` × `未着手` はどの行にも当たらず、`Conflict` に落ちる**。branch が生えるか人が Status を戻すまで解けない
 - 「在庫が陳腐化した」に claim の除外を足さ**ない**。「claim が構造的に止まっていない」が既に claim 済みを除いている
-- **戻す単位が Issue なのは「在庫が陳腐化した」だけ**（他の 4 事象は group）
 - **差し戻した先が、そのまま期待値と整合する形にする**。`未計画` へ戻すのに branch を残さない
 - 永続コメントで期待値を上書きし**ない**（失効条件を持てないので、再 claim 後も古い戻し先が残る）
 
 **「前提が崩れた」を差し戻しの理由にしない**。切り分けるのは届け先のセッションの有無。
 
-| 局面                                  | 扱い                                                                 |
-| ------------------------------------- | -------------------------------------------------------------------- |
-| claim 後（届け先のセッションがある）  | 「計画の失効を伝える」→ 受け取った側が再 plan する。**差し戻さない** |
-| `計画済み` × `未着手`（届け先が無い） | 未計画へ戻す（「在庫が陳腐化した」）                                 |
+| 局面                                  | 扱い                                                            |
+| ------------------------------------- | --------------------------------------------------------------- |
+| claim 後（届け先のセッションがある）  | **差し戻さない**。再 plan は解決工程が行う。伝える手は `LADDER` |
+| `計画済み` × `未着手`（届け先が無い） | 未計画へ戻す（「在庫が陳腐化した」）                            |
 
 在庫側には届け先が無いので、action を分ける。判定と後始末は `references/ready-record.md`。
 
@@ -508,9 +518,9 @@ Issue 本文の **`Same branch as #N`** で結ばれた集合が group（宣言�
 
 - **`alsoResolves` だけでは claim から計画コメント書き込みまでの窓が空く**（`references/same-branch.md`）
 - group の一部だけが計画済みなら claim し**ない**
-- **group はどこでも 1 と数える**。1 group = 1 計画 = 1 write lease = 1 integration lease。在庫の件数も同じ
-- **鮮度だけは group で数えない**（記録は成員ごとに別々に書かれる。`references/ready-record.md`）
-- **容量だけは 1 ではない**。数える本数は代表の、枠を消費する面の checkout。実 checkout は別に残す
+- 数え方・記録の書き先・上限の退避範囲は `references/same-branch.md`「書き先と読み先」
+- claim 後は 1 対象集合 = 1 write lease = 1 integration lease
+- **容量は 1 ではない**。数える本数は代表の、枠を消費する面の checkout。実 checkout は別に残す
 
 ### 順序
 
@@ -525,15 +535,13 @@ Issue 本文の **`Same branch as #N`** で結ばれた集合が group（宣言�
 
 依存は選出のフィルタでもあるが、**それだけに使うと詰まりが残る**。待たせている課題があるなら、それを解く課題が最優先。
 
-**枠を渡す先が複数競合したときも、同じ順序で選ぶ。**
-
 **人が優先順を変えたいときは、Project の並びを動かす**。指示を conductor の記憶にも永続コメントにも置かない。
 
 **未計画のままなら拾われない**のが正しい。
 
 ## Issue 契約
 
-**Status が計画済み = 「計画が済んでいる」という宣言**。項目と見出しの字面は `references/issue-contract.md` が SSOT。揃っているかを確認するだけで、欠けていたら着手せず不足項目を挙げて差し戻す（戻し先は「差し戻し」の表）。
+**Status が計画済み = 「計画が済んでいる」という宣言**。項目と見出しの字面は `references/issue-contract.md` が SSOT。揃っているかを確認するだけで、欠けていたら着手せず不足項目を挙げて差し戻す。戻し先は `src/decide.ts`。
 
 ## claim
 

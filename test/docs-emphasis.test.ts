@@ -1,6 +1,6 @@
 // tracked な markdown 全部に強調の検査を当てる。**gate に載せるのはここ。**
 //
-// 判定そのものは check-emphasis.test.mjs、audit-skills.sh との統合は audit-skills.test.mjs。
+// 判定そのものは check-emphasis.test.ts、audit-skills.sh との統合は audit-skills.test.ts。
 // ここが見るのは**実際の文書**で、他の 2 つは fixture しか見ない。
 //
 // **docs skill の品質パスに任せない。**あちらは工程が呼んだときにしか走らないので、
@@ -10,7 +10,7 @@ import { expect, test } from "bun:test";
 import {
   brokenLines,
   validateEmphasisFixtures,
-} from "../agents/skills/docs/scripts/check-emphasis.mjs";
+} from "../agents/skills/docs/scripts/check-emphasis.ts";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
