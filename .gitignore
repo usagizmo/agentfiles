@@ -7,4 +7,5 @@
 # externally installed agent skills
 /agents/skills/agent-browser/
 /agents/skills/herdr/
+/agents/skills/show-me/
 /agents/skills/skill-creator/
