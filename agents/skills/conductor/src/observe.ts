@@ -18,12 +18,7 @@ import {
   worktrees as decodeWorktrees,
 } from "./decode.ts";
 import type { LocalBranchRow, Tri, WorkspaceRow } from "./decode.ts";
-import type {
-  IssueObservation,
-  SessionActivity,
-  SessionObservation,
-  SurfaceObservation,
-} from "./observation.ts";
+import type { IssueObservation, SessionObservation, SurfaceObservation } from "./observation.ts";
 import {
   claimRecord,
   cleanupRecord,
@@ -222,19 +217,12 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
 };
 
 /**
- * `sessions` 行の活動トークン。harness の `--sessions-cmd` が書く。
- * トークンが無い行は leftover にしない。活動は状態から補う。
+ * `sessions` 行の leftover トークン。harness の `--sessions-cmd` が書く。
+ * トークンが無い行は leftover にしない。
  */
-const ACTIVITY_TOKENS = {
-  "may-resume": "再開しうる",
-  stopped: "停止確認",
-  undecidable: "判定不能",
-} as const satisfies Record<string, SessionActivity>;
-
 type ParsedSessionRow = {
   readonly name: string;
   readonly status: string;
-  readonly activity: SessionActivity;
   readonly leftover: boolean;
   readonly cwd: string;
 };
@@ -246,50 +234,32 @@ const sessionFromStatus = (status: string): SessionObservation => {
   return { kind: "unclassifiable", raw: status };
 };
 
-/** トークンが無い行。`working` / `blocked` は再開しうる。それ以外は確認できない。 */
-const defaultActivity = (status: string): SessionActivity =>
-  status === "working" || status === "blocked" ? "再開しうる" : "判定不能";
-
 export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   const parts = row.split(" ");
   const name = parts[0];
   if (name === undefined || name === "" || name === "conductor") return undefined;
   const status = parts[1] ?? "";
-  const activityToken = parts[2];
-  const leftoverToken = parts[3];
-  const newFormat =
-    leftoverToken === "leftover" ||
-    leftoverToken === "-" ||
-    (activityToken !== undefined && activityToken !== "" && activityToken in ACTIVITY_TOKENS);
-  if (newFormat) {
-    const known =
-      activityToken !== undefined && activityToken !== "" && activityToken in ACTIVITY_TOKENS;
+  const leftoverToken = parts[2];
+  // **トークンの位置で見分ける。**`leftover` / `-` はこの位置にしか来ないので、
+  // トークンを持たない行の cwd（絶対 path）と衝突しない。
+  if (leftoverToken === "leftover" || leftoverToken === "-") {
     return {
       name,
       status,
-      activity: known ? ACTIVITY_TOKENS[activityToken as keyof typeof ACTIVITY_TOKENS] : "判定不能",
       leftover: leftoverToken === "leftover",
-      cwd: parts.slice(4).join(" ").trim(),
+      cwd: parts.slice(3).join(" ").trim(),
     };
   }
-  return {
-    name,
-    status,
-    activity: defaultActivity(status),
-    leftover: false,
-    cwd: parts.slice(2).join(" ").trim(),
-  };
+  return { name, status, leftover: false, cwd: parts.slice(2).join(" ").trim() };
 };
 
 type OwnedClassification = {
   readonly session: SessionObservation;
-  readonly activity: SessionActivity;
   readonly leftover: boolean;
 };
 
 const noneOwned: OwnedClassification = {
   session: { kind: "none" },
-  activity: "判定不能",
   leftover: false,
 };
 
@@ -299,11 +269,7 @@ const classifyOwned = (rows: readonly string[], name: string): OwnedClassificati
   if (row === undefined) return noneOwned;
   const parsed = parseSessionRow(row);
   if (parsed === undefined) return noneOwned;
-  return {
-    session: sessionFromStatus(parsed.status),
-    activity: parsed.activity,
-    leftover: parsed.leftover,
-  };
+  return { session: sessionFromStatus(parsed.status), leftover: parsed.leftover };
 };
 
 const OWNED_SESSION = /^(refine|resolve)-\d+$/;
@@ -547,7 +513,6 @@ export const observeTick = async (
 
       session: owned.session,
       leftover: owned.leftover,
-      activity: owned.activity,
       refineSession: refine.session,
       worktreeBusy: worktreeBusy(
         sessionRows,

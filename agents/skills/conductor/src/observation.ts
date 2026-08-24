@@ -16,13 +16,6 @@ export type SessionObservation =
   | { readonly kind: "none" }
   | { readonly kind: "unclassifiable"; readonly raw: string };
 
-/**
- * 活動の 3 値。**`SessionObservation` の variant ではない。**同じ分類器の別出口。
- * `agent_status` の 5 値を活動の証明に使わない。
- */
-export const SESSION_ACTIVITIES = ["再開しうる", "停止確認", "判定不能"] as const;
-export type SessionActivity = (typeof SESSION_ACTIVITIES)[number];
-
 /** 実行器がまだ動いている（書いている、または承認・質問で止まっている）。 */
 export const sessionActive = (s: SessionObservation): boolean =>
   s.kind === "running" || s.kind === "blocked";
@@ -135,8 +128,6 @@ export type IssueObservation = {
    * **`runtime` には写さない**（leftover のときも `稼働中`）。
    */
   readonly leftover: boolean;
-  /** 所有セッションの活動 3 値。殺す・割り込む・write を取り上げる側が読む。 */
-  readonly activity: SessionActivity;
   /**
    * `refine-<番号>` のセッション（完全一致）。**存在の有無ではなく状態で持つ** ——
    * `session` は `resolve-<番号>` を見るので計画中は常に `none` になり、

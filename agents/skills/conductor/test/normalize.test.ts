@@ -375,7 +375,6 @@ describe("実行器が消える / 止まる", () => {
         surfaces: [workingSurface()],
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
       { progress: "実装中", runtime: "稼働中", capacity: "あり", ledger: "進行中" },
     );

@@ -97,7 +97,6 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
 
   session: session.none,
   leftover: false,
-  activity: "判定不能",
   refineSession: { kind: "none" },
 
   waitRecord: wait.absent,

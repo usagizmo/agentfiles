@@ -528,7 +528,6 @@ describe("実行器が消える / 止まる", () => {
       implementing({
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
     ];
     expectLease(obs, "write");
@@ -541,7 +540,6 @@ describe("実行器が消える / 止まる", () => {
         awaitingLanding({
           session: session.running,
           leftover: true,
-          activity: "再開しうる",
         }),
       ],
       "integration",
@@ -553,7 +551,6 @@ describe("実行器が消える / 止まる", () => {
       implementing({
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
         worktreeBusy: true,
       }),
     ]);
@@ -634,7 +631,6 @@ describe("外から状態が動く", () => {
         ...heldIntegration(1),
         planInvalidated: present(true),
         session: session.running,
-        activity: "再開しうる",
       }),
     ]);
     const leftover = [
@@ -643,7 +639,6 @@ describe("外から状態が動く", () => {
         planInvalidated: present(true),
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
     ];
     expectAction(leftover, "計画の失効を伝える");
@@ -654,7 +649,6 @@ describe("外から状態が動く", () => {
           ...heldIntegration(1),
           planInvalidated: present(true),
           session: session.idle,
-          activity: "停止確認",
         }),
       ],
       true,
@@ -740,13 +734,12 @@ describe("外から状態が動く", () => {
   });
 
   test("9b: 行 9 を伝えたが、受け手が計画の記録を更新しないまま tick が進む", () => {
-    // 再送は冪等。活動は 停止確認。加算は Decision の countsFailure。
+    // 再送は冪等。加算は Decision の countsFailure。
     expectAction(
       [
         implementing({
           bodyMatchesPlan: present(false),
           session: session.idle,
-          activity: "停止確認",
         }),
       ],
       "本文の変更を伝える",
@@ -756,7 +749,6 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.idle,
-          activity: "停止確認",
         }),
       ],
       true,
@@ -768,90 +760,28 @@ describe("外から状態が動く", () => {
       implementing({
         bodyMatchesPlan: present(false),
         session: session.running,
-        activity: "再開しうる",
       }),
     ]);
   });
 
-  test("9b3: 行 9 を伝えたが、受け手は idle で活動は 再開しうる", () => {
-    expectAction(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "再開しうる",
-        }),
-      ],
-      "本文の変更を伝える",
-    );
-    expectFailureCount(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "再開しうる",
-        }),
-      ],
-      true,
-    );
-  });
-
-  test("9b4: 行 9 を伝えたが、受け手は idle で活動は 判定不能", () => {
-    expectAction(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "判定不能",
-        }),
-      ],
-      "本文の変更を伝える",
-    );
-    expectFailureCount(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "判定不能",
-        }),
-      ],
-      true,
-    );
-  });
-
-  test("9b5: leftover の 稼働中 で活動は 再開しうる。伝える 2 つは数える", () => {
+  test("9b5: leftover の 稼働中。伝える 2 つは数える", () => {
     const obs = [
       implementing({
         bodyMatchesPlan: present(false),
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
     ];
     expectAction(obs, "本文の変更を伝える");
     expectFailureCount(obs, true);
   });
 
-  test("9b6: leftover の 稼働中 で活動は 停止確認。伝える 2 つは数える", () => {
-    const obs = [
-      implementing({
-        bodyMatchesPlan: present(false),
-        session: session.running,
-        leftover: true,
-        activity: "停止確認",
-      }),
-    ];
-    expectAction(obs, "本文の変更を伝える");
-    expectFailureCount(obs, true);
-  });
-
-  test("伝える 2 つの lastAction が上限なら、活動が 再開しうる でも退避先へ落とす", () => {
+  test("伝える 2 つの lastAction が上限なら、受け手が 稼働中 でも退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           planInvalidated: present(true),
           session: session.running,
-          activity: "再開しうる",
           failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
         }),
       ],
@@ -862,7 +792,6 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.running,
-          activity: "再開しうる",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -870,29 +799,13 @@ describe("外から状態が動く", () => {
     );
   });
 
-  test("9b7: leftover の 稼働中 で活動は 再開しうる。上限なら退避先へ落とす", () => {
+  test("9b7: leftover の 稼働中。上限なら退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           bodyMatchesPlan: present(false),
           session: session.running,
           leftover: true,
-          activity: "再開しうる",
-          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
-        }),
-      ],
-      "退避先",
-    );
-  });
-
-  test("leftover の 稼働中 で活動は 停止確認。上限なら退避先へ落とす", () => {
-    expectRevert(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.running,
-          leftover: true,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -912,13 +825,12 @@ describe("外から状態が動く", () => {
     );
   });
 
-  test("伝える 2 つの lastAction が上限で、活動が 停止確認 なら退避先へ落とす", () => {
+  test("伝える 2 つの lastAction が上限なら、受け手が 待機 でも退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           planInvalidated: present(true),
           session: session.idle,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
         }),
       ],
@@ -929,7 +841,6 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.idle,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -943,21 +854,6 @@ describe("外から状態が動く", () => {
         implementing({
           pauseRecordExists: true,
           session: session.idle,
-          activity: "再開しうる",
-          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
-        }),
-      ],
-      "退避先",
-    );
-  });
-
-  test("休止中で活動が 停止確認 なら上限で退避先へ落とす", () => {
-    expectRevert(
-      [
-        implementing({
-          pauseRecordExists: true,
-          session: session.idle,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -970,7 +866,6 @@ describe("外から状態が動く", () => {
       [
         implementing({
           session: session.none,
-          activity: "判定不能",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],

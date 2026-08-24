@@ -38,7 +38,7 @@ description: >-
 
 ## 着地の検査
 
-統合先の木は自分以外も読む（どの木かは project 差分の着地面の座標。live checkout）。着地なら、検査の前に `<skills root>/conductor/scripts/ensure-integration-ref.sh <操作台> <統合先 ref>` を呼ぶ（作成と条件付き switch。述語は script が SSOT）。統合先に居ることは ensure のあと、この検査で確かめる。次を 1 つでも観測したら、直さずに報告して止まる。
+統合先の木は自分以外も読む（どの木かは project 差分の着地面の座標。live checkout）。着地なら、検査の前に `<skills root>/merge/scripts/ensure-integration-ref.sh <操作台> <統合先 ref>` を呼ぶ（作成と条件付き switch。述語は script が SSOT）。統合先に居ることは ensure のあと、この検査で確かめる。次を 1 つでも観測したら、直さずに報告して止まる。
 
 - dirty（`status --porcelain` が空でない）
 - HEAD が統合先の branch でない（**両側とも full ref**。`symbolic-ref HEAD` と座標の `refs/heads/<name>` を比べる。`--short` / `git branch --show-current` は `temp` 対 `refs/heads/temp` で常に不一致になる）

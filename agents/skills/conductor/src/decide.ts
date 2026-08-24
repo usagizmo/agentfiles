@@ -3,7 +3,7 @@
 // **`select` だけを切り出さない。**記録の精算は action の選択より前に走り、書いたら
 // 観測からやり直す順序制約を持つ。そこを外に置くと、順序が prose に残る。
 //
-// **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。
+// **1 周 1 action。**上から最初に当たった rung を 1 つだけ返す。
 
 import type { IssueObservation } from "./observation.ts";
 import { sessionActive } from "./observation.ts";
@@ -111,7 +111,7 @@ const links = (o: IssueObservation): readonly number[] =>
  *
  * **Issue 単位のまま残すもの**: 台帳・open / closed・Issue 契約・本文から引くもの・
  * 在庫の鮮度・`refine` のセッション（どれも成員ごとに別々に在る）。
- * `session` と leftover / activity は同じ分類器の出口なので揃える。
+ * `session` と leftover は同じ分類器の出口なので揃える。
  *
  * **claim 前には当てない。**記録は各課題自身に在る。
  */
@@ -132,7 +132,6 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         submissionEvidence: lead.submissionEvidence,
         session: lead.session,
         leftover: lead.leftover,
-        activity: lead.activity,
         worktreeBusy: lead.worktreeBusy,
         worktreeOccupied: lead.worktreeOccupied,
         waitRecord: lead.waitRecord,
@@ -272,7 +271,7 @@ export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
 /**
  * この action が成功したあと、失敗の記録の `count` を +1 するか。
  *
- * 伝える 2 つは常に真。送る周は `canPrompt` だけなので、再開しうる / 判定不能を免除しない。
+ * 伝える 2 つは常に真。送る周は `canPrompt` だけなので、受け手の状態で免除しない。
  * `計画枠の逼迫を伝える` は常に真。
  *
  * **`計画セッションを片付ける` は入れない。**閉じる → 起こす → 閉じるの往復は、起こす周が
@@ -830,7 +829,7 @@ const LADDER: readonly Rung[] = [
       // 一度も止められない。`refine` は Status を進めてから終わるので `計画済み` の窓も通る ——
       // 絞ると、起こす → 次の tick で畳む → また起こす、の往復から出られない。
       if (sessionActive(o.refineSession)) return false;
-      // **活動 3 値でゲートしない。**計画の成果は Status と `ready` の記録と Issue 本文へ
+      // **止まったことを確かめずに閉じる。**計画の成果は Status と `ready` の記録と Issue 本文へ
       // 外部化されるので、pane にしか無いものを持たない —— 途中で殺したときの最悪は `ready` が
       // 壊れることで、壊れた記録は陳腐化として読まれ再計画へ倒れる。`resolve` は未コミットの
       // 成果を持つので、この緩和を広げ**ない**。
@@ -1161,7 +1160,7 @@ const collectStalls = (
     ];
   });
 
-/** **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。 */
+/** **1 周 1 action。**上から最初に当たった rung を 1 つだけ返す。 */
 export const decide = (input: TickInput): Decision => {
   const groups = buildGroups(input.observations);
   const all = groups.flatMap((g) => g.records);
