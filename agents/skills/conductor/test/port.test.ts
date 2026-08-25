@@ -142,6 +142,9 @@ describe("設定の fail-closed", () => {
     expect(cmd).toContain("leftover=leftover");
     expect(cmd).toContain("refused=refused");
     expect(cmd).toContain("refused=-");
+    expect(cmd).not.toContain("select(.name != null)");
+    expect(cmd).toContain("occupancy-unreadable");
+    expect(cmd).toContain("herdr pane list");
     expect(cmd).not.toContain("workspace list");
   });
 

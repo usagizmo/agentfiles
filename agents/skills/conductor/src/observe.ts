@@ -235,10 +235,14 @@ const sessionFromStatus = (status: string): SessionObservation => {
   return { kind: "unclassifiable", raw: status };
 };
 
+/** census / detection が読めないときの sessions 行。**foreign にも所有にもしない。** */
+export const OCCUPANCY_UNREADABLE = "occupancy-unreadable";
+
 export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   const parts = row.split(" ");
   const name = parts[0];
   if (name === undefined || name === "" || name === "conductor") return undefined;
+  if (name === OCCUPANCY_UNREADABLE) return undefined;
   const status = parts[1] ?? "";
   const leftoverToken = parts[2];
   // **トークンの位置で見分ける。**`leftover` / `-` はこの位置にしか来ないので、
@@ -342,6 +346,10 @@ export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly strin
 /** 同じ worktree で `refine` / `resolve` / `conductor` 以外が居るか。**状態は問わない。** */
 export const worktreeOccupied = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
   foreignOnOwned(rows, ownedPaths).length > 0;
+
+/** census / detection の失敗。**空集合へ畳まない。** */
+export const occupancyUnreadable = (rows: readonly string[]): boolean =>
+  rows.some((row) => row.split(" ")[0] === OCCUPANCY_UNREADABLE);
 
 /** 指紋用。**状態は落とす。**出現・消滅・cwd だけが動く。 */
 export const occupiedSessions = (
@@ -545,10 +553,14 @@ export const observeTick = async (
         sessionRows,
         worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
       ),
-      worktreeOccupied: worktreeOccupied(
-        sessionRows,
-        worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
-      ),
+      worktreeOccupied: occupancyUnreadable(sessionRows)
+        ? unobservable("pane census / detection を読めない")
+        : present(
+            worktreeOccupied(
+              sessionRows,
+              worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
+            ),
+          ),
 
       waitRecord: waitRecord(commentText, pause),
       waitRecordCreatedAt: extra.waitRecordCreatedAt,

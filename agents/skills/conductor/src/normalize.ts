@@ -19,6 +19,7 @@ import type {
   Progress,
   Runtime,
 } from "./types.ts";
+import { IN_FLIGHT } from "./types.ts";
 
 /** `present` の値だけを取り出す。**既定値へ倒さない** —— 呼ぶ側が 3 値を明示的に扱う。 */
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
@@ -135,7 +136,7 @@ const markWithoutWait = (s: SessionObservation, wait: WaitRecord): boolean =>
  * ラダーで解決できないものだけを集める。**「2 つの行に当たった」は含まない。**
  * `ledger` と期待値のずれは、5 事象の入力が要るので `decide` が見る。
  */
-const collectConflicts = (o: IssueObservation): Conflict[] => {
+const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] => {
   const found: Conflict[] = [];
   const n = o.issue;
   // **記録の整合の Conflict は、その記録がこれから読まれる課題にだけ当てる。**
@@ -328,12 +329,28 @@ const collectConflicts = (o: IssueObservation): Conflict[] => {
   // **所有外セッションが worktree に居るあいだは起こし直さない・片付けない。**
   // `session` が `none` のときだけ。名前付き `resolve-<番号>` が居る行 7s は
   // `worktreeBusy` のまま。状態は問わない。
-  if (o.session.kind === "none" && o.worktreeOccupied) {
+  if (o.session.kind === "none" && value(o.worktreeOccupied) === true) {
     found.push(
       conflict(
         "同じ worktree に所有外セッションがある",
         n,
         "同じ worktree に refine / resolve / conductor 以外のセッションが居る",
+      ),
+    );
+  }
+
+  // **census / detection の失敗を空集合へ畳まない。**畳むと「解決を起こし直す」が当たる。
+  // in-flight かつ owned session 不在のときだけ。未着手の在庫まで止めると claim が死ぬ。
+  if (
+    o.session.kind === "none" &&
+    isUnreadable(o.worktreeOccupied) &&
+    IN_FLIGHT.includes(progress)
+  ) {
+    found.push(
+      conflict(
+        "観測できない",
+        n,
+        reasonOf(o.worktreeOccupied) ?? "所有 worktree の occupancy を読めない",
       ),
     );
   }
@@ -396,6 +413,6 @@ export const normalize = (o: IssueObservation): NormalizedIssue => {
     runtime: normalizeRuntime(o),
     capacity: normalizeCapacity(o),
     ledger,
-    conflicts: collectConflicts(o),
+    conflicts: collectConflicts(o, progress),
   };
 };

@@ -285,13 +285,24 @@ herdr なら:
 
 ```bash
 # --sessions-cmd
-herdr agent list | jq -cS '.result.agents[]? | select(.name != null)' | while IFS= read -r row; do
-  name=$(printf '%s' "$row" | jq -r '.name')
+tmpdir=$(mktemp -d) || exit 1
+trap 'rm -rf "$tmpdir"' EXIT
+herdr agent list > "$tmpdir/agents.json" || exit 1
+: > "$tmpdir/out"
+: > "$tmpdir/seen"
+jq -cS '.result.agents[]?' "$tmpdir/agents.json" > "$tmpdir/agents.ndjson" || exit 1
+while IFS= read -r row; do
+  given=$(printf '%s' "$row" | jq -r '.name // empty')
+  pane_id=$(printf '%s' "$row" | jq -r '.pane_id // empty')
+  name=$given
+  [ -n "$name" ] || name=$pane_id
+  [ -n "$name" ] || continue
+  [ -n "$pane_id" ] && printf '%s\n' "$pane_id" >> "$tmpdir/seen"
   status=$(printf '%s' "$row" | jq -r '.agent_status // ""')
   [ -n "$status" ] || status=-
   cwd=$(printf '%s' "$row" | jq -r '.cwd // ""')
-  if [ "$name" = "conductor" ]; then
-    printf '%s\n' "conductor present"
+  if [ "$given" = "conductor" ]; then
+    printf '%s\n' "conductor present" >> "$tmpdir/out"
     continue
   fi
   owned=0
@@ -316,11 +327,25 @@ herdr agent list | jq -cS '.result.agents[]? | select(.name != null)' | while IF
     printf '%s' "$snippet" | grep -Eiq 'Weekly limit left: 0%|hit your limit|hit your weekly limit' && refused=refused
   fi
   if [ "$owned" = 1 ]; then
-    printf '%s %s %s %s\n' "$name" "$status" "$leftover" "$refused"
+    printf '%s %s %s %s\n' "$name" "$status" "$leftover" "$refused" >> "$tmpdir/out"
   else
-    printf '%s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$cwd"
+    printf '%s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$cwd" >> "$tmpdir/out"
   fi
-done | sort | grep .
+done < "$tmpdir/agents.ndjson"
+if herdr pane list > "$tmpdir/panes.json"; then
+  jq -cS '.result.panes[]? | select(.agent != null and .agent != "")' "$tmpdir/panes.json" > "$tmpdir/exec.ndjson" || true
+  while IFS= read -r prow; do
+    [ -n "$prow" ] || continue
+    pane_id=$(printf '%s' "$prow" | jq -r '.pane_id // empty')
+    [ -n "$pane_id" ] || continue
+    if grep -Fxq "$pane_id" "$tmpdir/seen" 2>/dev/null; then continue; fi
+    cwd=$(printf '%s' "$prow" | jq -r '.cwd // ""')
+    printf '%s - - - %s\n' "$pane_id" "$cwd" >> "$tmpdir/out"
+  done < "$tmpdir/exec.ndjson"
+else
+  printf '%s\n' "occupancy-unreadable - - -" >> "$tmpdir/out"
+fi
+sort "$tmpdir/out" | grep .
 
 # --workspaces-cmd
 herdr workspace list | jq -S -c '.result.workspaces[]?' | while IFS= read -r row; do
@@ -341,12 +366,16 @@ done | sort | grep .
 
 **`# --sessions-cmd` / `# --workspaces-cmd` の行と fence の境界は parse 対象**。`src/config.ts` の `extractHarnessCmd` がこの字面で切り出し、省略した project の既定値にする。まとめる・名を変える・fence を張り直すと exit 2 で起動しなくなる。
 
-- **`.name // .pane_id` を使わない**（無名 pane まで拾う）
+- **`.name // .pane_id` を agent でない pane の fallback には使わない**。採用してよいのは `agent list` の無名行と、実行器 kind がある未登録 pane に限る
+- 無名の `agent list` 行は第 1 欄を `pane_id` にした foreign 行。所有セッションへ昇格し**ない**
+- `agent list` に無い pane は、`pane.agent`（実行器 kind）があるものだけ detection-derived 行にする。形は `pane_id - - - cwd`。stale な検出文字列だけでは occupied にしない
+- 同じ pane を named owned と foreign の両方へ出さ**ない**（`pane_id` で潰す）
+- `pane list` の失敗は空集合へ畳まない。`occupancy-unreadable - - -` を出す。agent list の失敗は非 0 のまま
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
 - **生値をそのまま出す**。分類は `src/observe.ts` の `sessionFromStatus` が持つ
 - **leftover は所有セッションと foreign の行に載せる**。トークンは `leftover` / `-` で、位置は状態の次
 - leftover は turn が終わり入力が通る正の証拠がある `working` だけ。終了行は detection の末尾だけを見る。証拠が無い `working` は genuine。信号が無いことを `Conflict` にしない。`working` 以外は leftover の detection を読ま**ない**
-- **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄、foreign は 5 欄（cwd が末尾）
+- **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄、foreign は 5 欄（cwd が末尾）。detection-derived は `pane_id - - - cwd`
 - leftover でなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
 - トークンが無い行は拒否ではない。kind は行に載せない
 - **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（cwd つき）

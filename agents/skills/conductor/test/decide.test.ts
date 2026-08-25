@@ -650,24 +650,29 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7t: session が none で所有外が idle。起こし直さない", () => {
-    const obs = [implementing({ session: session.none, worktreeOccupied: true })];
+    const obs = [implementing({ session: session.none, worktreeOccupied: present(true) })];
     expectConflict(obs, "同じ worktree に所有外セッションがある");
     expectIdle(obs);
   });
 
   test("7t2: 所有外が working でも起こし直さない", () => {
     const obs = [
-      implementing({ session: session.none, worktreeBusy: true, worktreeOccupied: true }),
+      implementing({
+        session: session.none,
+        worktreeBusy: true,
+        worktreeOccupied: present(true),
+      }),
     ];
     expectConflict(obs, "同じ worktree に所有外セッションがある");
     expectIdle(obs);
   });
 
   test("7t3: 所有外が消えれば解決を起こし直す", () => {
-    expectAction(
-      [implementing({ session: session.none, worktreeOccupied: false })],
-      "解決を起こし直す",
-    );
+    const obs = [implementing({ session: session.none, worktreeOccupied: present(false) })];
+    expectAction(obs, "解決を起こし直す");
+    const o = tick(obs).outcome;
+    expect(o.kind === "action" ? o.evidence.sessionKind : o.kind).toBe("none");
+    expect(o.kind === "action" ? o.evidence.occupancy : o.kind).toBe("absent");
   });
 
   test("7t4: 着地済みでも所有外が居るあいだは片付けない", () => {
@@ -681,7 +686,7 @@ describe("実行器が消える / 止まる", () => {
       ],
       submissionEvidence: present(true),
       session: session.none,
-      worktreeOccupied: true,
+      worktreeOccupied: present(true),
     } as const;
     const obs = [implementing(base)];
     expectConflict(obs, "同じ worktree に所有外セッションがある");
@@ -689,6 +694,30 @@ describe("実行器が消える / 止まる", () => {
     const recorded = [implementing({ ...base, cleanupRecord: cleanup() })];
     expectConflict(recorded, "同じ worktree に所有外セッションがある");
     expectIdle(recorded);
+  });
+
+  test("7t5: occupancy が読めない in-flight は起こし直さない", () => {
+    const obs = [
+      implementing({
+        session: session.none,
+        worktreeOccupied: unobservable("pane census / detection を読めない"),
+      }),
+    ];
+    expectConflict(obs, "観測できない");
+    expectIdle(obs);
+  });
+
+  test("7t6: occupancy が読めない未着手は claim する", () => {
+    expectAction(
+      [
+        observation({
+          ledger: present("計画済み"),
+          session: session.none,
+          worktreeOccupied: unobservable("pane census / detection を読めない"),
+        }),
+      ],
+      "claim する",
+    );
   });
 });
 

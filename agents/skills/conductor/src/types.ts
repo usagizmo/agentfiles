@@ -35,6 +35,15 @@ export const PROGRESS_LADDER = [
 ] as const;
 export type Progress = (typeof PROGRESS_LADDER)[number];
 
+/** 成果物が途中の段。「解決を起こし直す」と occupancy 失敗の Conflict が同じ集合を読む。 */
+export const IN_FLIGHT: readonly Progress[] = [
+  "準備中",
+  "準備済み",
+  "実装中",
+  "提出中",
+  "着地待ち",
+];
+
 /** 実行器がどうなっているか。配列の順がそのまま排他ラダー。 */
 export const RUNTIME_LADDER = ["人待ち", "稼働中", "休止", "待機", "無し"] as const;
 export type Runtime = (typeof RUNTIME_LADDER)[number];
@@ -269,6 +278,8 @@ export type Target = {
  * 決定から実行までに外部状態が動く。実行の直前に precondition を引き直すため、
  * **何を根拠に選んだか**を持ち回る。
  */
+export type OccupancyEvidence = "absent" | "present" | "unreadable";
+
 export type Evidence = {
   readonly progress: Progress;
   readonly runtime: Runtime;
@@ -276,6 +287,10 @@ export type Evidence = {
   readonly ledger: Ledger;
   /** その action を選んだ理由。実行の直前に前提を引き直すため */
   readonly why: string;
+  /** 所有セッションの生の kind。起こし直しの直前に不在を取り直す */
+  readonly sessionKind: "running" | "idle" | "blocked" | "none" | "unclassifiable";
+  /** 所有 worktree の occupancy。起こし直しの直前に不在を取り直す */
+  readonly occupancy: OccupancyEvidence;
 };
 
 // ---------------------------------------------------------------------------

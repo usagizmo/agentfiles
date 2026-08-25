@@ -202,6 +202,7 @@ export type IssueObservation = {
   /**
    * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が居るか。
    * **状態は問わない。**`working` だけの `worktreeBusy` とは別。
+   * **census / detection の失敗を `present(false)` へ畳まない。**
    */
-  readonly worktreeOccupied: boolean;
+  readonly worktreeOccupied: Observed<boolean>;
 };

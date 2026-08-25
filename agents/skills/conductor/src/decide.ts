@@ -27,6 +27,7 @@ import {
   ledgerBehind,
   normalize,
 } from "./normalize.ts";
+import { IN_FLIGHT } from "./types.ts";
 import type {
   ActionName,
   ActionParams,
@@ -37,6 +38,7 @@ import type {
   MarkMatch,
   NormalizedIssue,
   Observed,
+  OccupancyEvidence,
   Outcome,
   Progress,
   Runtime,
@@ -47,6 +49,12 @@ import type {
 } from "./types.ts";
 
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
+
+const occupancyEvidence = (o: Observed<boolean>): OccupancyEvidence => {
+  if (o.kind === "unobservable" || o.kind === "invalid") return "unreadable";
+  if (o.kind === "present" && o.value) return "present";
+  return "absent";
+};
 
 /** 硬い上限。**暴走は「賢さ」で防がない。外部の数値で止める。** */
 export type TickConfig = {
@@ -973,10 +981,8 @@ const LADDER: readonly Rung[] = [
     match: (g, ctx) => {
       if (isShelved(g) || receiveRefusedOf(ctx.groups)) return false;
       const r = g.lead;
-      const inFlight: readonly Progress[] = ["準備中", "準備済み", "実装中", "提出中", "着地待ち"];
-      if (!inFlight.includes(r.progress)) return false;
+      if (!IN_FLIGHT.includes(r.progress)) return false;
       if (sessionAlive(g)) return false;
-      if (r.runtime !== "無し" && r.runtime !== "人待ち" && r.runtime !== "休止") return false;
       if (g.records.some(ledgerBehind)) return false;
       // **checkout が無く、作ると数える本数が目安以上になるなら選ばない** ——
       // ただし論理 lease を保持しているなら、目安を超えても起こす（回収なので）。
@@ -1372,6 +1378,8 @@ export const decide = (input: TickInput): Decision => {
           capacity: g.lead.capacity,
           ledger: g.lead.ledger,
           why: rung.why,
+          sessionKind: g.leadObservation.session.kind,
+          occupancy: occupancyEvidence(g.leadObservation.worktreeOccupied),
         },
       });
     }

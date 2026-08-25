@@ -306,6 +306,18 @@ tips:
 
 送る本文: 意図の確認の記録が観測できないこと。受け手が `intent-record.md` の述語で再評価する。
 
+## 解決を起こし直す
+
+手順は `harness.md` の起こす表。**実行直前に、観測時点と同じ不在の正の証拠を取り直す。**
+
+1. `--sessions-cmd` と同じ観測を 1 回取り直す
+2. `evidence.sessionKind` が `none` のままであること（named `resolve-<番号>` が現れていない）
+3. `evidence.occupancy` が `absent` のままであること（foreign / detection-derived が所有 worktree に居ない）
+4. occupancy が読めること（`occupancy-unreadable` が無い）
+
+どれかが外れたら実行しない。取れないことを空の不在へ畳まない。
+named が無いので張り直しには当たらない。起こす表の `/resolve` を 1 回送る。
+
 ## 枠を渡す
 
 | `lease`     | 送る本文                                                                       |

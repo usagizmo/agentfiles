@@ -112,6 +112,8 @@ branch を `capacity` に入れない: 未マージ branch は意図的に残す
 
 同じ worktree に `refine` / `resolve` / `conductor` 以外が genuine-working なら write を渡さない: consult の子が走っているあいだ親は `done` なので `待機` に写る。渡しが consult を割る。所有外の leftover は turn 中の証拠にしない。integration は別資源。
 
+named 所有行が無いことを実行器の不在に畳まない: `--sessions-cmd` が `select(.name != null)` で無名行を落とすと、稼働中の実行器の上で「解決を起こし直す」が当たる。無名の `agent list` 行と、実行器 kind がある未登録 pane は foreign。既存 7t。census / detection の失敗は空集合へ畳まず、in-flight かつ owned 不在なら `観測できない`。
+
 `枠を渡す` の受け手を「何を待っているか」で絞らない: 渡す資源は `progress` が決める。既に write を保持していることでは外さない。leftover は `稼働中` のまま受信可能。外すと実装の途中で止まったセッションを起こす経路が無くなる。
 
 計画の人待ちが落ちたときに「計画を起こし直す」が拾う: `refine` は成果物を進めないので `progress` は `未着手` のままで、「計画を起こす」の上限に阻まれると記録を `cleared` にする主体が二度と立ち上がらない。

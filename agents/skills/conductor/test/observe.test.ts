@@ -8,6 +8,7 @@ import type { IssueObservation } from "../src/observation.ts";
 import type { CycleMarkInput, ObservePort, StatusMap } from "../src/observe.ts";
 import {
   executorRefused,
+  occupancyUnreadable,
   observeTick,
   parseSessionRow,
   worktreeBusy,
@@ -266,9 +267,9 @@ partners:
       "resolve-12 done\ntheme-polish-12 idle /tmp/wt/feat-12-x",
     );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
-    expect(find(rows, 12).worktreeOccupied).toBe(true);
+    expect(find(rows, 12).worktreeOccupied).toEqual(present(true));
     expect(find(rows, 12).worktreeBusy).toBe(false);
-    expect(find(rows, 34).worktreeOccupied).toBe(false);
+    expect(find(rows, 34).worktreeOccupied).toEqual(present(false));
   });
 
   test("指紋へ渡す所有外は name + cwd だけで、状態を落とす", async () => {
@@ -304,6 +305,55 @@ partners:
     expect(worktreeOccupied(["resolve-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
     expect(worktreeOccupied(["refine-12 idle /tmp/wt/feat-12-x"], owned)).toBe(false);
     expect(worktreeOccupied(["conductor idle /tmp/wt/feat-12-x"], owned)).toBe(false);
+  });
+
+  test("無名の agent list 行は pane_id を第 1 欄にした foreign。所有へ昇格しない", async () => {
+    const snap = SNAP.replace("resolve-12 working", "w7Y:p1 working leftover - /tmp/wt/feat-12-x");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "none" });
+    expect(find(rows, 12).worktreeOccupied).toEqual(present(true));
+    expect(find(rows, 12).leftover).toBe(false);
+  });
+
+  test("detection-derived 行は pane_id - - - cwd。所有へ昇格しない", async () => {
+    const snap = SNAP.replace("resolve-12 working", "w7Y:p1 - - - /tmp/wt/feat-12-x");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "none" });
+    expect(find(rows, 12).worktreeOccupied).toEqual(present(true));
+    expect(parseSessionRow("w7Y:p1 - - - /tmp/wt/feat-12-x")).toEqual({
+      name: "w7Y:p1",
+      status: "-",
+      leftover: false,
+      refused: false,
+      cwd: "/tmp/wt/feat-12-x",
+    });
+  });
+
+  test("同じ pane を named owned と foreign の両方へ出しても所有は resolve 側", async () => {
+    const snap = SNAP.replace(
+      "resolve-12 working",
+      "resolve-12 working leftover -\nw7Y:p1 - - - /tmp/wt/feat-12-x",
+    );
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "running" });
+    expect(find(rows, 12).worktreeOccupied).toEqual(present(true));
+  });
+
+  test("consult 子 a-<kind>-<id> は所有へ昇格しない", () => {
+    const owned = ["/tmp/wt/feat-12-x"];
+    expect(worktreeOccupied(["a-grok-1 idle /tmp/wt/feat-12-x"], owned)).toBe(true);
+    expect(worktreeOccupied(["a-cursor-12 working /tmp/wt/feat-12-x"], owned)).toBe(true);
+  });
+
+  test("occupancy-unreadable は空集合へ畳まない", async () => {
+    expect(occupancyUnreadable(["occupancy-unreadable - - -"])).toBe(true);
+    expect(parseSessionRow("occupancy-unreadable - - -")).toBeUndefined();
+    const snap = SNAP.replace("resolve-12 working", "occupancy-unreadable - - -");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "none" });
+    expect(find(rows, 12).worktreeOccupied).toEqual(
+      unobservable("pane census / detection を読めない"),
+    );
   });
 
   test("parseSessionRow: leftover / refused トークンを読む。トークンが無い行はどちらにもしない", () => {
