@@ -164,6 +164,20 @@ describe("設定の fail-closed", () => {
   });
 });
 
+describe("既に working への agent prompt", () => {
+  test("確認は agent_prompted。seq 非変化を失敗にしない", () => {
+    const md = harnessMd();
+    expect(md).toContain("agent_prompted");
+    expect(md).not.toContain("state_change_seq` が動いたことを確認する。動かなければ失敗");
+  });
+
+  test("張り直しと実行器だけ止めるの seq 確認は残る", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/実行器だけ止める[\s\S]*state_change_seq/);
+    expect(md).toMatch(/失われた resolve を張り直す[\s\S]*state_change_seq/);
+  });
+});
+
 describe("実行器の配線", () => {
   const wiring = {
     refine: { kind: "claude", args: [] as const },

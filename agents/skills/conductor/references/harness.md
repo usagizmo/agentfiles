@@ -170,8 +170,10 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **`--json` を付けない**。socket API 経由のコマンドは既定で JSON を返す（`agent start` に付けると exit 2）
 - **入力欄への送信は `agent prompt` 以外を使わない**。`pane send-keys <id> enter` も `pane send-text` の改行も submit しない。未送信の下書きは `agent prompt` が捨てるので、事前に消そうとしなくてよい
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は `agent prompt` には無い
-- 稼働の確認は `agent prompt <名前> <本文> --wait --until working`。**既に `working` のセッションに使うと返らず timeout する**ので、**その timeout を失敗として数えない**
-- leftover の受け手（既に `working`）は `--until working` を使わない。`agent prompt` の前後で `herdr agent get` の `state_change_seq` が動いたことを確認する。動かなければ失敗
+- 稼働の確認（`idle` / `done` から起こす）は `agent prompt <名前> <本文> --wait --until working`
+- 既に `working` の受け手（leftover も genuine の休止促しも）は `--wait` / `--until` を付けない。CLI が `agent_prompted` を返したら成功。`state_change_seq` が動かないことを**失敗にしない**
+- 既に `working` への失敗は非 0 / `agent_not_found` / `agent_not_ready` / `agent_prompt_stalled` **だけ**
+- `--until working` の timeout は、既に `working` のセッションに使ったとき成功にも失敗にも**しない**。付けると返らず timeout する。`idle` / `done` からの稼働確認の timeout は失敗
 - `agent prompt` / `agent rename` は認識済み agent が要る。`pane current` に `agent` が無ければ `agent_not_found` か `agent_not_ready`。未認識の指定 pane には prompt せず、pane を割って `agent start` する
 - 張り直しの `pane split` は `--pane <対象の pane_id>`。`--current` は使わ**ない**
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わ**ない**

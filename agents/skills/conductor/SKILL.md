@@ -271,6 +271,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 コードに無い規約:
 
 - 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）
+- 既に `working` への `agent prompt` の成否は `references/harness.md`
 - `tab close` を行う入口は計画セッションと計画枠の逼迫の上限到達**だけ**
 - 「実行器だけ止める」は止まったことを `state_change_seq` で確かめてから資源を解放する。**確かめられなければ `Conflict`**。`agent_status` の 5 値を停止の証明に使わない
 - 意図して稼働中へ送るのは休止を促し直す。伝える 2 つは `canPrompt`。枠を渡すは受信可能を読む
