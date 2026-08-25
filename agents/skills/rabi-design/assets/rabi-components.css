@@ -1,0 +1,1305 @@
+/* Rabi UI 部品 — `rabi.css` の後に読む */
+
+/* 部品の実装。値は `../references/DESIGN.md` の front matter `components`、
+ * 規則は同じ文書の本文。ここは構造だけを持ち、16 進値を書か**ない**。
+ * 文書では読み込ま**ない**（`../SKILL.md`「展開する順」） */
+
+/* ==== 状態。部品共通。`DESIGN.md`「状態」 ==== */
+
+/* focus は部品の外側。地は変え**ない** */
+:focus-visible {
+  outline: 1px solid var(--rabi-accent);
+  outline-offset: 2px;
+}
+
+/* 切る容器の縁に接する要素だけ内側へ寄せる（`DESIGN.md`「状態」）。
+ * 中の入力やボタンまで巻き込むと、focus と誤りの枠を位置で分けられ**ない** */
+.rabi-cell-action:focus-visible,
+.rabi-list-item:focus-visible,
+.rabi-accordion-summary:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ==== button ==== */
+.rabi-btn {
+  white-space: nowrap;
+  /* 丈は 1 か所で決める。左右の余白も図の寸法も端寄せの量もここから従属する */
+  --rabi-btn-h: var(--rabi-control);
+  --rabi-btn-pad: var(--rabi-gap-3);
+  --rabi-btn-icon: 16px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rabi-gap-1);
+  height: var(--rabi-btn-h);
+  padding: 0 var(--rabi-btn-pad);
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-body);
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--rabi-r-md);
+  transition: background var(--rabi-motion);
+}
+
+/* 丈は 4 段から選ぶ。独自の寸法を作ら**ない**。`DESIGN.md`「Layout」 */
+.rabi-btn-sm {
+  --rabi-btn-h: var(--rabi-control-sm);
+  --rabi-btn-pad: var(--rabi-gap-2_5);
+  --rabi-btn-icon: 14px;
+  font-size: var(--rabi-t-body-doc);
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* 疎な面の主操作だけ。密な面に出さ**ない** */
+.rabi-btn-lg {
+  --rabi-btn-h: var(--rabi-control-lg);
+}
+
+/* ツールバーの中。丈を 2 段下げたら文字も 2 段下げる */
+.rabi-btn-xs {
+  --rabi-btn-h: var(--rabi-control-xs);
+  --rabi-btn-pad: var(--rabi-gap-2);
+  --rabi-btn-icon: 14px;
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* アイコンだけのボタンは幅を丈と同値にする */
+.rabi-btn-icon {
+  width: var(--rabi-btn-h);
+  padding: 0;
+}
+
+/* 図と文字を並べるときは、図の側だけ 1 段詰める —— 図は文字より軽く見える。
+ * 文字は要素で包む —— テキストノードのままだと `:first-child` が図だけを指し、
+ * 図が先か後かを CSS で判定でき**ない** */
+.rabi-btn:not(.rabi-btn-icon) > svg:first-child {
+  margin-left: calc(-1 * var(--rabi-gap-1));
+}
+
+.rabi-btn:not(.rabi-btn-icon) > svg:last-child {
+  margin-right: calc(-1 * var(--rabi-gap-1));
+}
+
+/* 図の寸法は枠が決める。描画属性（stroke・端の形）は図を引く側。
+ * figure だけのボタンに限ら**ない** —— 文字と並べるときも同じ寸法 */
+.rabi-btn svg {
+  width: var(--rabi-btn-icon);
+  height: var(--rabi-btn-icon);
+  flex: none;
+}
+
+.rabi-btn-primary {
+  background: var(--rabi-accent);
+  color: var(--rabi-on-accent);
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.rabi-btn-primary:hover {
+  background: var(--rabi-accent-hover);
+}
+
+.rabi-btn-primary:active {
+  background: var(--rabi-accent-active);
+}
+
+/* 枠と文字は動かさ**ない**。地だけ沈める */
+.rabi-btn-secondary {
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+  border-color: var(--rabi-edge);
+}
+
+.rabi-btn-secondary:hover {
+  background: var(--rabi-paper-2);
+}
+
+.rabi-btn-ghost {
+  background: transparent;
+  color: var(--rabi-soft);
+}
+
+.rabi-btn-ghost:hover {
+  background: var(--rabi-paper-2);
+}
+
+/* 地・文字・輪郭の 3 つとも下げる。押せないことは形と文言でも示す。
+ * 各 hover より**後ろ**に置く —— 前だと `.rabi-btn-primary:hover` に詳細度で戻される */
+.rabi-btn:disabled,
+.rabi-btn:disabled:hover,
+.rabi-btn:disabled:active {
+  background: var(--rabi-paper-2);
+  border-color: var(--rabi-line);
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+/* ==== chip。分類の色分けをし**ない**。文言で区別する ==== */
+.rabi-chip {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rabi-gap-1);
+  height: var(--rabi-control-xs);
+  padding: 0 var(--rabi-gap-2);
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: 1;
+  background: var(--rabi-paper);
+  color: var(--rabi-soft);
+  border: 1px solid var(--rabi-edge);
+  border-radius: var(--rabi-r-md);
+  cursor: pointer;
+  transition: background var(--rabi-motion);
+}
+
+.rabi-chip:hover {
+  background: var(--rabi-paper-2);
+}
+
+/* 面で表す選択。例外はチップ・タブ・リスト行・セグメント**だけ**（`DESIGN.md`「状態」） */
+.rabi-chip[aria-pressed="true"],
+.rabi-chip[aria-selected="true"] {
+  background: var(--rabi-wash);
+  border-color: var(--rabi-wash-line);
+  color: var(--rabi-accent-text);
+}
+
+.rabi-chip:disabled {
+  background: var(--rabi-paper-2);
+  border-color: var(--rabi-line);
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+.rabi-chip:disabled:hover {
+  background: var(--rabi-paper-2);
+}
+
+/* 無効でも選択は残す。選択の印が面そのものなので、消すと状態が読め**ない** */
+.rabi-chip:disabled[aria-pressed="true"],
+.rabi-chip:disabled[aria-selected="true"],
+.rabi-chip:disabled[aria-pressed="true"]:hover,
+.rabi-chip:disabled[aria-selected="true"]:hover {
+  background: var(--rabi-wash);
+  border-color: var(--rabi-line);
+  color: var(--rabi-faint);
+}
+
+/* ==== badge。丸端の部品 ==== */
+.rabi-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--rabi-gap-1_5);
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: 1;
+  background: var(--rabi-paper-2);
+  color: var(--rabi-soft);
+  border-radius: var(--rabi-r-full);
+}
+
+/* 沈んだ帯の上では地が同じで見え**ない**。輪郭で立てる */
+.rabi-badge-outline {
+  background: transparent;
+  border: 1px solid var(--rabi-edge);
+  color: var(--rabi-soft);
+}
+
+.rabi-badge-accent {
+  background: var(--rabi-accent);
+  color: var(--rabi-on-accent);
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* ==== input / select / textarea。落ちている物体。枠は edge ==== */
+.rabi-input,
+.rabi-select,
+.rabi-textarea {
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-body);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--rabi-ink);
+  background: var(--rabi-paper);
+  border: 1px solid var(--rabi-edge);
+  border-radius: var(--rabi-r-md);
+  padding-inline: var(--rabi-gap-3);
+}
+
+.rabi-input,
+.rabi-select {
+  height: var(--rabi-control);
+}
+
+.rabi-input-sm,
+.rabi-select-sm {
+  height: var(--rabi-control-sm);
+  padding-inline: var(--rabi-gap-2_5);
+  font-size: var(--rabi-t-body-doc);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.rabi-textarea {
+  line-height: var(--rabi-lh-body);
+  padding-block: var(--rabi-gap-1_5);
+  resize: vertical;
+  min-height: calc(var(--rabi-control) * 3);
+}
+
+/* ネイティブの矢印は右端に詰まる。自前で描いて余白を取る */
+.rabi-select-wrap {
+  position: relative;
+  display: grid;
+}
+
+.rabi-select {
+  appearance: none;
+  padding-right: var(--rabi-gap-5);
+}
+
+.rabi-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: var(--rabi-gap-3);
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -5px;
+  border-right: 1.5px solid var(--rabi-soft);
+  border-bottom: 1.5px solid var(--rabi-soft);
+  rotate: 45deg;
+  pointer-events: none;
+}
+
+/* 矢印も文字の側。無効では本体と同じ段まで下げる */
+.rabi-select-wrap:has(.rabi-select:disabled)::after {
+  border-right-color: var(--rabi-faint);
+  border-bottom-color: var(--rabi-faint);
+}
+
+/* 誤りは枠そのものの色。focus とは位置で分かれる。説明文を必ず添える */
+.rabi-input[aria-invalid="true"],
+.rabi-select[aria-invalid="true"],
+.rabi-textarea[aria-invalid="true"] {
+  border-color: var(--rabi-accent);
+  color: var(--rabi-accent-text);
+}
+
+.rabi-input:disabled,
+.rabi-select:disabled,
+.rabi-textarea:disabled {
+  background: var(--rabi-paper-2);
+  border-color: var(--rabi-line);
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+/* ==== check / radio。ネイティブのままでは半径も地も効かない ==== */
+.rabi-check,
+.rabi-radio {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+  background: var(--rabi-paper);
+  border: 1px solid var(--rabi-edge);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+/* 印だけが sm を持つ。md では弧が辺の半分を覆いラジオと読み分けられ**ない** */
+.rabi-check {
+  border-radius: var(--rabi-r-sm);
+}
+
+.rabi-radio {
+  border-radius: var(--rabi-r-full);
+}
+
+.rabi-check:checked,
+.rabi-radio:checked {
+  background: var(--rabi-accent);
+  border-color: var(--rabi-accent);
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* checked の印はチェック。丸では**ない** */
+.rabi-check:checked::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border-left: 2px solid var(--rabi-on-accent);
+  border-bottom: 2px solid var(--rabi-on-accent);
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.rabi-radio:checked::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--rabi-r-full);
+  background: var(--rabi-on-accent);
+}
+
+.rabi-check:disabled,
+.rabi-radio:disabled {
+  background: var(--rabi-paper-2);
+  border-color: var(--rabi-line);
+  cursor: not-allowed;
+}
+
+/* 無効でも選択は残す。地と輪郭を下げても印が消えたら状態が読め**ない** */
+.rabi-check:checked:disabled,
+.rabi-radio:checked:disabled {
+  background: var(--rabi-paper-2);
+  border-color: var(--rabi-line);
+}
+
+.rabi-check:checked:disabled::after {
+  border-left-color: var(--rabi-faint);
+  border-bottom-color: var(--rabi-faint);
+}
+
+.rabi-radio:checked:disabled::after {
+  background: var(--rabi-faint);
+}
+
+/* ==== 欄。ラベルと入力と注記を積む ==== */
+.rabi-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rabi-gap-1);
+}
+
+.rabi-field > label {
+  font-size: var(--rabi-t-label);
+  line-height: var(--rabi-lh-label);
+  font-weight: 600;
+  color: var(--rabi-faint);
+}
+
+/* 補足と誤りの説明。誤りは色だけで表さ**ない**ので、文言が本体 */
+.rabi-field-note {
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: var(--rabi-lh-label);
+  color: var(--rabi-soft);
+}
+
+.rabi-field-note-error {
+  color: var(--rabi-accent-text);
+}
+
+/* 横に並べる欄。名前と補足が左、操作が右。狭い面では縦へ落ちる */
+.rabi-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rabi-gap-3);
+  flex-wrap: wrap;
+}
+
+.rabi-field-row-label {
+  font-size: var(--rabi-t-body);
+  line-height: var(--rabi-lh-body);
+  font-weight: 400;
+  color: var(--rabi-ink);
+  margin: 0;
+}
+
+/* 印と文字を並べる。無効はラベルまで落とす —— 印だけでは形と文言で示せ**ない** */
+.rabi-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rabi-gap-2);
+  font-size: var(--rabi-t-body);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--rabi-ink);
+  cursor: pointer;
+}
+
+.rabi-choice:has(:disabled) {
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+/* ==== switch。印の寸法に載せる。丈の段では**ない** ==== */
+.rabi-switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  margin: 0;
+  width: 34px;
+  height: 20px;
+  background: var(--rabi-paper-2);
+  border: 1px solid var(--rabi-edge);
+  border-radius: var(--rabi-r-full);
+  cursor: pointer;
+  transition: background var(--rabi-motion);
+}
+
+.rabi-switch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  background: var(--rabi-paper);
+  border-radius: var(--rabi-r-full);
+  filter: drop-shadow(var(--rabi-e1));
+  transition: translate var(--rabi-motion);
+}
+
+.rabi-switch:checked {
+  background: var(--rabi-accent);
+  border-color: var(--rabi-accent);
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.rabi-switch:checked::after {
+  translate: 14px 0;
+  /* 赤の面の上なので影を落とさ**ない**（`DESIGN.md`「影の色」） */
+  filter: none;
+}
+
+.rabi-switch:disabled {
+  background: var(--rabi-paper-2);
+  border-color: var(--rabi-line);
+  cursor: not-allowed;
+}
+
+/* 無効の軸は check / radio と同じ。オンはノブの位置と色で残す */
+.rabi-switch:checked:disabled::after {
+  background: var(--rabi-faint);
+}
+
+/* ==== card ==== */
+.rabi-card {
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+  border: 1px solid var(--rabi-divider);
+  border-radius: var(--rabi-r-lg);
+  padding: var(--rabi-gap-4);
+  filter: drop-shadow(var(--rabi-e1));
+}
+
+/* タイトルの左に図。本文は図の下から始まり、図の列に揃え**ない** */
+.rabi-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--rabi-gap-1);
+  margin: 0 0 var(--rabi-gap-2);
+  font-size: var(--rabi-t-subheading);
+  font-weight: 600;
+  line-height: var(--rabi-lh-subheading);
+}
+
+.rabi-card-title svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* 赤ベタ。赤が地の面の上では使え**ない**。罫は引かない */
+.rabi-card-accent {
+  background: var(--rabi-accent);
+  color: var(--rabi-on-accent);
+  border: 0;
+  filter: drop-shadow(var(--rabi-e2-accent));
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* ==== 結合グリッド。`DESIGN.md`「一覧の組み方」。
+ * 列数は使う側が決める。罫は容器が引き、セルは枠を持た**ない** ==== */
+.rabi-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--rabi-line);
+  border: 1px solid var(--rabi-line);
+  border-radius: var(--rabi-r-lg);
+  overflow: hidden;
+  filter: drop-shadow(var(--rabi-e1));
+}
+
+.rabi-cell {
+  background: var(--rabi-paper);
+  padding: var(--rabi-gap-4);
+  font-size: var(--rabi-t-body);
+  font-weight: 400;
+  line-height: var(--rabi-lh-body);
+}
+
+/* 表として組むセル。行が並ぶので「表のセルの内側」の段（`DESIGN.md`「Layout」） */
+.rabi-cell-row {
+  padding: var(--rabi-gap-3);
+}
+
+/* グループ見出しの帯。表の tr.group と同じ扱い。
+ * 使う側（セル / パネルの節）は丈・余白・並びだけを足す */
+.rabi-cell-head,
+.rabi-panel-section-head {
+  background: var(--rabi-paper-2);
+  font-family: var(--rabi-mono);
+  font-size: var(--rabi-t-label-sm);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--rabi-faint);
+}
+
+.rabi-cell-head {
+  padding: var(--rabi-gap-2) var(--rabi-gap-3);
+}
+
+/* 押せるセルの hover は地だけ。容器と罫は動かさ**ない**。
+ * `button` で組むので、ネイティブの枠と字と寄せを均す */
+.rabi-cell-action {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--rabi-motion);
+}
+
+.rabi-cell-action:hover {
+  background: var(--rabi-paper-2);
+}
+
+/* 地も輪郭も持たないので、文字とカーソルと hover を落とす */
+.rabi-cell-action:disabled {
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+.rabi-cell-action:disabled:hover {
+  background: var(--rabi-paper);
+}
+
+/* 強調したセル。内側の上罫で示し、セルの外周と容器は動かさ**ない**。
+ * 押せるセルの hover より後ろに置く —— 同詳細度なので、前に置くと地を潰される */
+.rabi-cell-featured,
+.rabi-cell-featured:hover {
+  background: var(--rabi-wash);
+  box-shadow: inset 0 2px 0 var(--rabi-accent);
+}
+
+/* ==== section-head。web・UI の節見出し。文書は `.rabi-heading` ==== */
+.rabi-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--rabi-gap-4);
+  flex-wrap: wrap;
+}
+
+.rabi-section-head h1,
+.rabi-section-head h2,
+.rabi-section-head h3 {
+  margin: 0;
+  font-size: var(--rabi-t-heading);
+  font-weight: 600;
+  line-height: var(--rabi-lh-heading);
+  color: var(--rabi-ink);
+}
+
+/* 節の番号。見出しと同じ段で組む */
+.rabi-section-index {
+  font-family: var(--rabi-mono);
+  font-size: var(--rabi-t-heading);
+  font-weight: 600;
+  line-height: var(--rabi-lh-heading);
+  color: var(--rabi-accent-text);
+}
+
+/* 右端へ寄せる注記 */
+.rabi-section-note {
+  margin-left: auto;
+  font-family: var(--rabi-mono);
+  font-size: var(--rabi-t-label-sm);
+  font-weight: 600;
+  line-height: var(--rabi-lh-label-sm);
+  color: var(--rabi-faint);
+}
+
+/* ==== price。数値は display の段を等幅で組む ==== */
+.rabi-price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--rabi-gap-1);
+  margin: 0;
+}
+
+/* 数値だけ 600 より太い。太字そのものが意匠（`DESIGN.md`「Typography」） */
+.rabi-price-val {
+  font-family: var(--rabi-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--rabi-t-display);
+  line-height: var(--rabi-lh-display);
+  font-weight: 700;
+  color: var(--rabi-ink);
+}
+
+.rabi-price-unit {
+  font-size: var(--rabi-t-label-sm);
+  font-weight: 600;
+  line-height: var(--rabi-lh-label-sm);
+  color: var(--rabi-faint);
+}
+
+/* ==== list。押せる一覧は paper の面に置く ==== */
+.rabi-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--rabi-paper);
+  border: 1px solid var(--rabi-line);
+  border-radius: var(--rabi-r-lg);
+  overflow: hidden;
+  filter: drop-shadow(var(--rabi-e1));
+}
+
+.rabi-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--rabi-gap-1);
+  width: 100%;
+  min-height: var(--rabi-control);
+  padding: 0 var(--rabi-gap-3);
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-body);
+  font-weight: 400;
+  line-height: 1;
+  text-align: left;
+  background: none;
+  color: var(--rabi-ink);
+  border: 0;
+  border-radius: var(--rabi-r-none);
+  border-bottom: 1px solid var(--rabi-line);
+  cursor: pointer;
+  transition: background var(--rabi-motion);
+}
+
+.rabi-list-item:last-child {
+  border-bottom: 0;
+}
+
+.rabi-list-item:hover {
+  background: var(--rabi-paper-2);
+}
+
+.rabi-list-item:disabled {
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+.rabi-list-item:disabled:hover {
+  background: var(--rabi-paper);
+}
+
+/* hover は paper-2、選択は wash + 左の帯。同じ面を両方に使わ**ない** */
+.rabi-list-item[aria-selected="true"],
+.rabi-list-item[aria-pressed="true"],
+.rabi-list-item[aria-selected="true"]:hover,
+.rabi-list-item[aria-pressed="true"]:hover {
+  background: var(--rabi-wash);
+  box-shadow: inset 3px 0 0 var(--rabi-accent);
+}
+
+/* ==== accordion。容器は `.rabi-grid` と併用する ==== */
+.rabi-accordion-item {
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+}
+
+/* 印を文の外の列へ出し、問いと答えの左端を 1 本に揃える */
+.rabi-accordion-summary,
+.rabi-accordion-body {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: var(--rabi-gap-2);
+}
+
+/* 印は + と −。縦棒を消して切り替える。回転で作ると × になる */
+.rabi-accordion-summary::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  background:
+    linear-gradient(var(--rabi-faint), var(--rabi-faint)) center / 11px 1.4px no-repeat,
+    linear-gradient(var(--rabi-faint), var(--rabi-faint)) center / 1.4px 11px no-repeat;
+}
+
+[open] > .rabi-accordion-summary::before {
+  background: linear-gradient(var(--rabi-accent), var(--rabi-accent)) center / 11px 1.4px no-repeat;
+}
+
+.rabi-accordion-summary {
+  list-style: none;
+  align-items: start;
+  padding: var(--rabi-gap-3);
+  font-size: var(--rabi-t-body);
+  line-height: var(--rabi-lh-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--rabi-motion);
+}
+
+.rabi-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.rabi-accordion-summary:hover {
+  background: var(--rabi-paper-2);
+}
+
+/* 印の列は空にして、答えを問いと同じ列から始める */
+.rabi-accordion-body::before {
+  content: "";
+}
+
+.rabi-accordion-body {
+  margin: 0;
+  padding: 0 var(--rabi-gap-3) var(--rabi-gap-3);
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: var(--rabi-lh-label);
+  color: var(--rabi-soft);
+}
+
+/* ==== statusbar。地と外周は置く面が持つ ==== */
+.rabi-statusbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  /* 折り返す面があるので min。丈は 1 行のときの高さ */
+  min-height: var(--rabi-control-sm);
+  font-family: var(--rabi-mono);
+  font-size: var(--rabi-t-label-sm);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--rabi-faint);
+}
+
+/* 区切りは面の内側の仕切りなので line。境の divider にし**ない** */
+.rabi-statusbar > * {
+  padding: 0 var(--rabi-gap-4);
+  border-left: 1px solid var(--rabi-line);
+  white-space: nowrap;
+}
+
+.rabi-statusbar > *:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+/* 折り返す幅では縦罫が意味を失う。区切りを外し、右へ詰める */
+@media (max-width: 600px) {
+  .rabi-statusbar > * {
+    padding: 0 var(--rabi-gap-3) 0 0;
+    border-left: 0;
+  }
+}
+
+/* 要素セレクタにすると、後段の `-on` が詳細度で負ける */
+.rabi-statusbar-value {
+  color: var(--rabi-soft);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rabi-statusbar-on {
+  color: var(--rabi-accent-text);
+}
+
+/* ==== tab。行は物体では**ない**ので半径は 0 ==== */
+.rabi-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--rabi-divider);
+}
+
+.rabi-tab {
+  white-space: nowrap;
+  height: var(--rabi-control);
+  padding: 0 var(--rabi-gap-3);
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-body);
+  font-weight: 400;
+  line-height: 1;
+  background: transparent;
+  color: var(--rabi-soft);
+  border: 0;
+  border-radius: var(--rabi-r-none);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+
+.rabi-tab:hover {
+  background: var(--rabi-paper-2);
+}
+
+.rabi-tab:disabled {
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+.rabi-tab:disabled:hover {
+  background: transparent;
+}
+
+.rabi-tab-sm {
+  height: var(--rabi-control-sm);
+  padding: 0 var(--rabi-gap-2_5);
+  font-size: var(--rabi-t-body-doc);
+  font-weight: 400;
+  line-height: 1;
+}
+
+/* 行として並ぶので outline で囲むと隣と衝突する。下罫で表す例外 */
+.rabi-tab[aria-selected="true"],
+.rabi-tab[aria-pressed="true"] {
+  color: var(--rabi-ink);
+  font-weight: 600;
+  border-bottom-color: var(--rabi-accent);
+}
+
+/* 無効でも選択は残す。文字と下罫を faint まで落とす。
+ * 選択の宣言より**後ろ**に置く —— 前だと文字色を取り戻される */
+.rabi-tab:disabled[aria-selected="true"],
+.rabi-tab:disabled[aria-pressed="true"] {
+  color: var(--rabi-faint);
+  border-bottom-color: var(--rabi-faint);
+}
+
+/* ==== segment。排他の選択肢。容器を沈め、選択したセルだけ浮かせる ==== */
+
+/* 丈の段に載るのは容器。中のセルは容器の内側に収まるだけ */
+.rabi-segment {
+  display: inline-flex;
+  height: var(--rabi-control-sm);
+  padding: 2px;
+  background: var(--rabi-paper-2);
+  border: 1px solid var(--rabi-line);
+  border-radius: var(--rabi-r-md);
+}
+
+.rabi-segment-sm {
+  height: var(--rabi-control-xs);
+}
+
+.rabi-segment-item {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rabi-gap-1);
+  height: 100%;
+  padding: 0 var(--rabi-gap-2_5);
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: 1;
+  background: transparent;
+  color: var(--rabi-soft);
+  border: 0;
+  /* 内側の半径は 外側 − 罫 − 余白。段では**ない**（`DESIGN.md`「Shapes」） */
+  border-radius: calc(var(--rabi-r-md) - 1px - 2px);
+  cursor: pointer;
+  transition: background var(--rabi-motion);
+}
+
+.rabi-segment-sm .rabi-segment-item {
+  padding: 0 var(--rabi-gap-2);
+}
+
+/* 沈んだ容器の上なので浮かせる。影と太さは動かさ**ない** —— 選択との差がそこ */
+.rabi-segment-item:hover {
+  background: var(--rabi-paper);
+}
+
+/* 選択したセルだけ paper で浮かせる。容器は動かさ**ない** */
+.rabi-segment-item[aria-selected="true"],
+.rabi-segment-item[aria-pressed="true"] {
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+  font-weight: 600;
+  filter: drop-shadow(var(--rabi-e1));
+}
+
+.rabi-segment-item:disabled {
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+.rabi-segment-item:disabled:hover {
+  background: transparent;
+}
+
+/* 無効でも選択は残す。浮きだけ落とす */
+.rabi-segment-item:disabled[aria-selected="true"],
+.rabi-segment-item:disabled[aria-pressed="true"] {
+  color: var(--rabi-faint);
+  filter: none;
+}
+
+/* ==== dropdown。浮く面。行は figure と文字と補足の 3 列 ==== */
+.rabi-dropdown {
+  min-width: 200px;
+  padding: var(--rabi-gap-1);
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+  border: 1px solid var(--rabi-line);
+  border-radius: var(--rabi-r-md);
+  filter: drop-shadow(var(--rabi-e2));
+}
+
+/* 見出しは行では**ない**ので押せない。hover させ**ない** */
+.rabi-dropdown-group {
+  display: flex;
+  align-items: center;
+  height: var(--rabi-control-xs);
+  padding: 0 var(--rabi-gap-2);
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--rabi-faint);
+}
+
+.rabi-dropdown-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--rabi-gap-1);
+  width: 100%;
+  height: var(--rabi-control-sm);
+  padding: 0 var(--rabi-gap-2_5);
+  font-family: var(--rabi-font);
+  font-size: var(--rabi-t-body-doc);
+  font-weight: 400;
+  line-height: 1;
+  text-align: left;
+  color: var(--rabi-ink);
+  background: transparent;
+  border: 0;
+  /* 内側の半径は 外側 − 罫 − 余白（`DESIGN.md`「Shapes」） */
+  border-radius: calc(var(--rabi-r-md) - 1px - var(--rabi-gap-1));
+  cursor: pointer;
+  transition: background var(--rabi-motion);
+}
+
+.rabi-dropdown-item:hover {
+  background: var(--rabi-paper-2);
+}
+
+.rabi-dropdown-item:disabled {
+  color: var(--rabi-faint);
+  cursor: not-allowed;
+}
+
+.rabi-dropdown-item:disabled:hover {
+  background: transparent;
+}
+
+/* figure を使うドロップダウンは全行で列を確保する。文字の左端が揃わ**ない**と読めない */
+.rabi-dropdown-icons .rabi-dropdown-item {
+  grid-template-columns: 14px 1fr auto;
+}
+
+/* figure が無い行でも列を空ける。自動配置に任せると左端がずれる */
+.rabi-dropdown-icons .rabi-dropdown-label {
+  grid-column: 2;
+}
+
+.rabi-dropdown-item svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.rabi-dropdown-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 補足（ショートカット・入れ子の印・チェック）は右端 */
+.rabi-dropdown-key {
+  font-family: var(--rabi-mono);
+  font-size: var(--rabi-t-label-sm);
+  font-weight: 600;
+  line-height: var(--rabi-lh-label-sm);
+  color: var(--rabi-faint);
+}
+
+/* checked の印はチェック。右端なので、無い行のために列を確保し**ない** */
+.rabi-dropdown-check {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--rabi-accent);
+}
+
+/* 入れ子があることを示す印。チェックとは別のもの */
+.rabi-dropdown-sub {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--rabi-faint);
+}
+
+/* 区切りは面を突っ切る。余白の外まで伸ばす */
+.rabi-dropdown-divider {
+  height: 1px;
+  margin: var(--rabi-gap-1) calc(-1 * var(--rabi-gap-1));
+  background: var(--rabi-line);
+  border: 0;
+}
+
+/* ==== panel。節を積む面 ==== */
+.rabi-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+  border: 1px solid var(--rabi-divider);
+  border-radius: var(--rabi-r-lg);
+  overflow: hidden;
+}
+
+.rabi-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rabi-gap-1);
+  height: var(--rabi-control);
+  padding: 0 var(--rabi-gap-3);
+  font-size: var(--rabi-t-subheading);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 図の寸法は枠が決める。描き方は図を引く側 */
+.rabi-panel-head svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* 節の見出し。右端にその節への操作を置く。境は帯だけで、罫を重ね**ない** */
+.rabi-panel-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rabi-gap-1);
+  height: var(--rabi-control-sm);
+  padding: 0 var(--rabi-gap-2_5);
+  white-space: nowrap;
+}
+
+/* 沈んだ帯の上には沈める先が**ない**。hover は浮かせて表す（`DESIGN.md`「状態」） */
+.rabi-cell-head .rabi-btn-ghost:hover,
+.rabi-panel-section-head .rabi-btn-ghost:hover {
+  background: var(--rabi-paper);
+}
+
+/* 見出しそのものを summary にすると節が開閉できる */
+summary.rabi-panel-section-head {
+  list-style: none;
+  cursor: pointer;
+}
+
+summary.rabi-panel-section-head::-webkit-details-marker {
+  display: none;
+}
+
+summary.rabi-panel-section-head:hover {
+  color: var(--rabi-ink);
+}
+
+/* 開閉の印。開いたら回す */
+.rabi-panel-section-mark {
+  transition: rotate var(--rabi-motion);
+}
+
+[open] > .rabi-panel-section-head .rabi-panel-section-mark {
+  rotate: 90deg;
+}
+
+.rabi-panel-section-head svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* 右端へ寄せる。補足と操作をまとめて置ける */
+.rabi-panel-action {
+  display: flex;
+  align-items: center;
+  gap: var(--rabi-gap-2);
+  margin-left: auto;
+}
+
+/* figure だけのボタンは当たり判定が図より広い。そのぶん右へ食い込ませて、
+ * 図の端を帯の余白の端へ揃える —— 揃えないと文字や badge と端が食い違う */
+.rabi-panel-action > .rabi-btn-icon:last-child,
+.rabi-panel-section-head > .rabi-btn-icon:last-child {
+  margin-right: calc((var(--rabi-btn-h) - var(--rabi-btn-icon)) / -2);
+}
+
+.rabi-panel-body {
+  display: grid;
+  gap: var(--rabi-gap-2);
+  padding: var(--rabi-gap-3);
+}
+
+/* ==== dialog。手前の層。背面は塗ら**ない** ==== */
+.rabi-dialog {
+  position: relative;
+  max-width: 440px;
+  padding: var(--rabi-gap-5);
+  background: var(--rabi-paper);
+  color: var(--rabi-ink);
+  border: 1px solid var(--rabi-divider);
+  border-radius: var(--rabi-r-lg);
+  filter: drop-shadow(var(--rabi-e3));
+}
+
+.rabi-dialog-head {
+  margin-bottom: var(--rabi-gap-4);
+  padding-right: var(--rabi-gap-6);
+}
+
+/* 疎な面（丈は `control`）なので 4 で積む。密な面は 2（`DESIGN.md`「Layout」） */
+.rabi-dialog-body {
+  display: grid;
+  gap: var(--rabi-gap-4);
+}
+
+.rabi-dialog-title {
+  margin: 0;
+  font-size: var(--rabi-t-heading);
+  font-weight: 600;
+  line-height: var(--rabi-lh-heading);
+}
+
+.rabi-dialog-lead {
+  margin: var(--rabi-gap-1) 0 0;
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: var(--rabi-lh-label);
+  color: var(--rabi-soft);
+}
+
+/* 閉じるは figure だけのボタン。右上の角へ寄せる */
+.rabi-dialog-close {
+  position: absolute;
+  top: var(--rabi-gap-2);
+  right: var(--rabi-gap-2);
+}
+
+/* 操作は下端に右寄せ。主操作は 1 つ */
+.rabi-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rabi-gap-2);
+  /* 罫は面を突っ切る。余白の外まで伸ばして、内側だけ戻す */
+  margin: var(--rabi-gap-4) calc(-1 * var(--rabi-gap-5)) calc(-1 * var(--rabi-gap-5));
+  padding: var(--rabi-gap-2_5) var(--rabi-gap-4);
+  border-top: 1px solid var(--rabi-line);
+}
+
+/* ==== alert。淡い面。ここには赤を意味として載せてよい ==== */
+.rabi-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--rabi-gap-1);
+  margin: 0;
+  padding: var(--rabi-gap-2_5) var(--rabi-gap-3);
+  font-size: var(--rabi-t-body);
+  font-weight: 400;
+  line-height: var(--rabi-lh-body);
+  background: var(--rabi-wash);
+  color: var(--rabi-accent-text);
+  border: 1px solid var(--rabi-wash-line);
+  border-radius: var(--rabi-r-md);
+}
+
+/* ==== tooltip。地は ink のベタ。面の段を使わ**ない** ==== */
+.rabi-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rabi-gap-1_5);
+  padding: var(--rabi-gap-1) var(--rabi-gap-2);
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: var(--rabi-lh-label);
+  background: var(--rabi-ink);
+  color: var(--rabi-paper);
+  border-radius: var(--rabi-r-md);
+  filter: drop-shadow(var(--rabi-e2));
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* 対象を指す矢印。既定は下向き（吹き出しが対象の上に出る） */
+.rabi-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  translate: -50% 0;
+  border: 5px solid transparent;
+  border-top-color: var(--rabi-ink);
+}
+
+.rabi-tooltip-up::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: var(--rabi-ink);
+}
+
+/* ショートカットは等幅で添える。地も枠も持た**ない** —— 展開先の `kbd` の既定に依らせない */
+.rabi-tooltip kbd {
+  padding: 0;
+  font-family: var(--rabi-mono);
+  font-size: var(--rabi-t-label-xs);
+  font-weight: 600;
+  line-height: var(--rabi-lh-label-xs);
+  color: var(--rabi-divider);
+  background: none;
+  border: 0;
+}
+
+/* ==== 動きを止める設定。部品の遷移をまとめて消す ==== */
+@media (prefers-reduced-motion: reduce) {
+  [class^="rabi-"],
+  [class*=" rabi-"],
+  [class^="rabi-"]::after,
+  [class*=" rabi-"]::after {
+    transition: none;
+  }
+}

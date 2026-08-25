@@ -12,17 +12,17 @@
 
       節の境は `paper-2` の帯か `divider` の罫で分ける（DESIGN.md「面と段」）。
 
-      アイコンは全部この面で引いたもの。18px グリッド・`stroke-width` 1.4・端は丸。
+      アイコンは全部この面で引いたもの。18px グリッド・`stroke-width` 1.2・端は丸。
       外部のアイコンセットを持ち込ま**ない**（ライセンスの表示義務がこの面まで付いてくる）。
     -->
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
     <style>
       /* ==== 版面の変数。密な面の密度 ==== */
       :root {
         --page-hdr: 48px; /* topbar の丈。操作部品では**ない**ので丈の段の外 */
         --sec-gap: var(--rabi-gap-5); /* 節見出しと中身の間。内部なので 5 以下 */
         --h1-size: clamp(var(--rabi-t-display), 4vw, var(--rabi-t-hero));
-        --sec-title: var(--rabi-t-heading);
       }
 
       /* ==== base ==== */
@@ -45,18 +45,13 @@
 
       body {
         font-size: var(--rabi-t-body);
-        line-height: 1.75;
+        line-height: var(--rabi-lh-body);
         overflow-x: hidden;
       }
 
       ::selection {
         background: var(--rabi-wash);
         color: var(--rabi-ink);
-      }
-
-      :focus-visible {
-        outline: 1px solid var(--rabi-accent);
-        outline-offset: 2px;
       }
 
       svg {
@@ -66,19 +61,6 @@
       .container {
         width: min(1080px, calc(100% - 40px));
         margin-inline: auto;
-      }
-
-      /*
-       * 見本であることの明示。外す**な** —— 架空の数値を載せているので、
-       * これが無いと本物のサイトとして読める。固定ヘッダーの下に置く
-       */
-      .disclosure {
-        margin-top: var(--page-hdr);
-        background: var(--rabi-wash);
-        border-bottom: 1px solid var(--rabi-wash-line);
-        color: var(--rabi-accent-text);
-        font-size: var(--rabi-t-label-sm);
-        padding-block: var(--rabi-gap-2);
       }
 
       /* ==== header。ロゴは持たない。ブランド名とナビだけ ==== */
@@ -100,8 +82,8 @@
 
       .brand-name {
         font-size: var(--rabi-t-subheading);
-        font-weight: 800;
-        letter-spacing: 0.02em;
+        line-height: var(--rabi-lh-subheading);
+        font-weight: 600;
         color: var(--rabi-ink);
         text-decoration: none;
       }
@@ -115,40 +97,21 @@
       .site-nav a {
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
         font-weight: 600;
         color: var(--rabi-soft);
         text-decoration: none;
-        letter-spacing: 0.04em;
       }
 
       .site-nav a:hover {
         color: var(--rabi-ink);
       }
 
-      /* トグルは落ちている物体。外周だけ丸める */
-      .theme-toggle {
-        width: var(--rabi-control);
-        height: var(--rabi-control);
-        display: grid;
-        place-items: center;
-        cursor: pointer;
-        background: var(--rabi-paper);
-        border: 1px solid var(--rabi-edge);
-        border-radius: var(--rabi-r-md);
-        color: var(--rabi-ink);
-        transition: background 0.15s;
-      }
-
-      .theme-toggle:hover {
-        background: var(--rabi-paper-2);
-      }
-
-      .theme-toggle svg {
-        width: 14px;
-        height: 14px;
+      /* 形と丈と図の寸法は .rabi-btn-icon が持つ。ここは線の引き方だけ */
+      .ico {
         fill: none;
         stroke: currentColor;
-        stroke-width: 1.8;
+        stroke-width: 1.2;
         stroke-linecap: round;
         stroke-linejoin: round;
       }
@@ -161,78 +124,29 @@
         display: none;
       }
 
-      /* ==== buttons ==== */
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: var(--rabi-gap-2);
-        height: var(--rabi-control);
-        padding: 0 var(--rabi-gap-3);
-        font-size: var(--rabi-t-body);
-        font-weight: 700;
-        font-family: var(--rabi-font);
-        text-decoration: none;
-        cursor: pointer;
-        border: 1px solid transparent;
-        border-radius: var(--rabi-r-md);
-        transition: background 0.15s;
-      }
-
-      /* 疎な面の主操作だけ丈を上げる。密な面に出さない（DESIGN.md「Layout」） */
-      .btn-lg {
-        height: var(--rabi-control-lg);
-      }
-
-      .btn-primary {
-        background: var(--rabi-accent);
-        color: var(--rabi-on-accent);
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-
-      .btn-primary:hover {
-        background: var(--rabi-accent-hover);
-      }
-
-      .btn-primary:active {
-        background: var(--rabi-accent-active);
-      }
-
-      .btn-secondary {
-        background: var(--rabi-paper);
-        color: var(--rabi-ink);
-        border-color: var(--rabi-edge);
-      }
-
-      .btn-secondary:hover {
-        background: var(--rabi-paper-2);
-      }
-
       /* ==== hero ==== */
       .hero-grid {
         display: grid;
         grid-template-columns: 1.05fr 0.95fr;
         gap: var(--rabi-gap-12);
         align-items: center;
-        /* disclosure の帯が固定ヘッダー分の高さを確保しているので対称でよい */
-        padding-block: var(--rabi-gap-14);
+        /* 固定ヘッダーの下に潜らせない */
+        padding-block: calc(var(--page-hdr) + var(--rabi-gap-14)) var(--rabi-gap-14);
       }
 
       .kicker {
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label-sm);
+        line-height: var(--rabi-lh-label-sm);
         font-weight: 600;
-        letter-spacing: 0.2em;
         color: var(--rabi-faint);
       }
 
       .hero h1 {
         font-size: var(--h1-size);
-        line-height: 1.3;
-        letter-spacing: -0.01em;
+        line-height: var(--rabi-lh-display);
         margin: var(--rabi-gap-4) 0 var(--rabi-gap-3);
-        font-weight: 800;
+        font-weight: 600;
       }
 
       .hero h1 em {
@@ -256,8 +170,8 @@
         margin-top: var(--rabi-gap-5);
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label-sm);
+        line-height: var(--rabi-lh-label-sm);
         color: var(--rabi-faint);
-        letter-spacing: 0.06em;
       }
 
       /* ==== terminal window。落ちている物体。
@@ -304,6 +218,7 @@
         background: var(--rabi-paper-2);
         color: var(--rabi-faint);
         font-size: var(--rabi-t-label-sm);
+        line-height: var(--rabi-lh-label-sm);
       }
 
       .term-dots {
@@ -311,10 +226,11 @@
         gap: var(--rabi-gap-1);
       }
 
-      /* 端末のドットは四角のまま。丸めるのは物体の外周だけ */
+      /* 点は円形の部品（DESIGN.md「Shapes」） */
       .term-dots i {
         width: 8px;
         height: 8px;
+        border-radius: var(--rabi-r-full);
         background: var(--rabi-edge);
       }
 
@@ -347,7 +263,7 @@
 
       .term-body b {
         color: var(--rabi-ink);
-        font-weight: 700;
+        font-weight: 600;
       }
 
       .cursor {
@@ -372,42 +288,10 @@
         border-bottom: 1px solid var(--rabi-divider);
       }
 
-      /* ==== statusline。paper の帯。hero との境は上罫 ==== */
+      /* ==== statusline。並びと文字は .rabi-statusbar。ここは地と上罫だけ ==== */
       .statusline {
         background: var(--rabi-paper);
         border-top: 1px solid var(--rabi-divider);
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-sm);
-        color: var(--rabi-faint);
-      }
-
-      .statusline .container {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 0;
-        height: var(--rabi-control-sm);
-      }
-
-      .statusline span {
-        padding: 0 var(--rabi-gap-4);
-        border-left: 1px solid var(--rabi-line);
-        white-space: nowrap;
-      }
-
-      .statusline span:first-child {
-        border-left: 0;
-        padding-left: 0;
-      }
-
-      .statusline b {
-        color: var(--rabi-soft);
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .statusline .on {
-        color: var(--rabi-accent-text);
       }
 
       /* ==== docs。3 つの節をくるむ paper の面。
@@ -426,50 +310,15 @@
       }
 
       .sec-head {
-        display: flex;
-        align-items: baseline;
-        gap: var(--rabi-gap-4);
         margin-bottom: var(--sec-gap);
-        flex-wrap: wrap;
       }
 
-      .sec-idx {
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-heading);
-        font-weight: 700;
-        color: var(--rabi-accent-text);
-      }
-
-      .sec-title {
-        font-size: var(--sec-title);
-        font-weight: 800;
-        letter-spacing: 0.01em;
-      }
-
-      .sec-note {
-        margin-left: auto;
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-sm);
-        color: var(--rabi-faint);
-        letter-spacing: 0.08em;
-      }
-
-      /* ==== features。結合グリッド（DESIGN.md「一覧の組み方」）。
-       * 密な面なので深さは使わない。罫は容器が引き、セルは枠を持たない ==== */
+      /* ==== features。形は .rabi-grid / .rabi-cell。ここは列数とセルの中身だけ ==== */
       .feature-grid {
-        display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 1px;
-        background: var(--rabi-line);
-        border: 1px solid var(--rabi-line);
-        border-radius: var(--rabi-r-md);
-        overflow: hidden;
-        filter: drop-shadow(var(--rabi-e1));
       }
 
       .fcell {
-        background: var(--rabi-paper);
-        padding: var(--rabi-gap-4);
         display: grid;
         grid-template-columns: 18px 1fr;
         gap: var(--rabi-gap-2);
@@ -483,7 +332,7 @@
         flex: none;
         fill: none;
         stroke: var(--rabi-accent);
-        stroke-width: 1.4;
+        stroke-width: 1.2;
         stroke-linecap: round;
         stroke-linejoin: round;
         /* 見出しの 1 行目の中心へ合わせる。行送りは font-size の半分だけ上に来る */
@@ -492,39 +341,25 @@
 
       .fcell h3 {
         font-size: var(--rabi-t-body);
-        font-weight: 800;
+        line-height: var(--rabi-lh-body);
+        font-weight: 600;
         margin-bottom: var(--rabi-gap-1);
       }
 
       .fcell p {
         font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
         color: var(--rabi-soft);
-        line-height: 1.7;
       }
 
-      /* ==== pricing。同じく結合グリッド。強調枠は wash + 内側の上罫 ==== */
+      /* ==== pricing。強調枠は wash + 内側の上罫 ==== */
       .plans {
-        display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 1px;
-        background: var(--rabi-line);
-        border: 1px solid var(--rabi-line);
-        border-radius: var(--rabi-r-md);
-        overflow: hidden;
-        filter: drop-shadow(var(--rabi-e1));
       }
 
       .plan {
-        background: var(--rabi-paper);
-        padding: var(--rabi-gap-5);
         display: flex;
         flex-direction: column;
-      }
-
-      .plan.featured,
-      .plan.featured:hover {
-        background: var(--rabi-wash);
-        box-shadow: inset 0 2px 0 var(--rabi-accent);
       }
 
       .plan-head {
@@ -537,38 +372,24 @@
       .plan-name {
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-body-doc);
-        font-weight: 700;
+        line-height: var(--rabi-lh-body-doc);
+        font-weight: 600;
       }
 
       .plan-badge {
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label-xs);
-        letter-spacing: 0.12em;
+        line-height: var(--rabi-lh-label-xs);
         color: var(--rabi-faint);
       }
 
       .plan-price {
-        display: flex;
-        align-items: baseline;
-        gap: var(--rabi-gap-1);
         margin: var(--rabi-gap-3) 0 var(--rabi-gap-1);
-      }
-
-      .plan-price .val {
-        font-family: var(--rabi-mono);
-        font-variant-numeric: tabular-nums;
-        font-size: var(--rabi-t-display);
-        font-weight: 700;
-        line-height: 1;
-      }
-
-      .plan-price .per {
-        font-size: var(--rabi-t-label-sm);
-        color: var(--rabi-faint);
       }
 
       .plan-desc {
         font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
         color: var(--rabi-soft);
         padding-bottom: var(--rabi-gap-3);
         border-bottom: 1px solid var(--rabi-line);
@@ -585,6 +406,7 @@
         display: flex;
         gap: var(--rabi-gap-2);
         font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
         color: var(--rabi-soft);
       }
 
@@ -594,27 +416,18 @@
         color: var(--rabi-faint);
       }
 
-      .plan .btn {
+      .plan .rabi-btn {
         margin-top: auto;
         align-self: flex-start;
       }
 
-      /* ==== rabi-table。表も結合グリッド。セルはこの密度だけ詰める ==== */
-      .rabi-table th,
-      .rabi-table td {
-        font-size: var(--rabi-t-label);
-      }
-
       .table-wrap {
-        border: 1px solid var(--rabi-line);
-        border-radius: var(--rabi-r-md);
-        overflow: hidden;
         margin-top: var(--sec-gap);
-        filter: drop-shadow(var(--rabi-e1));
       }
 
       .table-note {
         font-size: var(--rabi-t-label-sm);
+        line-height: var(--rabi-lh-label-sm);
         color: var(--rabi-faint);
         margin-top: var(--rabi-gap-3);
       }
@@ -623,73 +436,9 @@
       /* 押せる一覧は `paper` の面に置く。`paper-2` の帯に直接置くと hover が同値になる */
       .faq {
         max-width: 720px;
-        display: grid;
-        gap: 1px;
-        background: var(--rabi-line);
-        border: 1px solid var(--rabi-line);
-        border-radius: var(--rabi-r-md);
-        overflow: hidden;
-        filter: drop-shadow(var(--rabi-e1));
       }
 
-      .faq details {
-        background: var(--rabi-paper);
-      }
-
-      /* 印を本文の外へ出し、問いと答えの左端を 1 本に揃える */
-      .faq summary,
-      .faq .answer {
-        display: grid;
-        grid-template-columns: 18px 1fr;
-        gap: var(--rabi-gap-2);
-      }
-
-      .faq summary {
-        list-style: none;
-        cursor: pointer;
-        align-items: start;
-        padding: var(--rabi-gap-4);
-        font-weight: 700;
-        font-size: var(--rabi-t-body);
-        transition: background 0.15s;
-      }
-
-      .faq summary::-webkit-details-marker {
-        display: none;
-      }
-
-      .faq summary:hover {
-        background: var(--rabi-paper-2);
-      }
-
-      /* 開閉の印。縦棒を消して + を − にする。回転で作ると × になる */
-      .qicon {
-        width: 18px;
-        height: 18px;
-        fill: none;
-        stroke: var(--rabi-faint);
-        stroke-width: 1.4;
-        stroke-linecap: round;
-        margin-top: 2px;
-      }
-
-      .faq details[open] .qicon {
-        stroke: var(--rabi-accent);
-      }
-
-      .faq details[open] .qicon-v {
-        display: none;
-      }
-
-      /* 記号の列は空にして、答えを問いと同じ列から始める */
-      .faq .answer::before {
-        content: "";
-      }
-
-      .faq .answer {
-        padding: 0 var(--rabi-gap-4) var(--rabi-gap-4);
-        color: var(--rabi-soft);
-        font-size: var(--rabi-t-label);
+      .faq .rabi-accordion-body {
         max-width: 620px;
       }
 
@@ -701,148 +450,8 @@
         max-width: 720px;
       }
 
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--rabi-gap-1);
-      }
-
-      .field.wide {
+      .wide {
         grid-column: 1 / -1;
-      }
-
-      .field > label {
-        font-size: var(--rabi-t-label);
-        font-weight: 700;
-        color: var(--rabi-soft);
-      }
-
-      .field .note {
-        font-size: var(--rabi-t-label);
-        color: var(--rabi-faint);
-      }
-
-      .field .note.error {
-        color: var(--rabi-accent-text);
-      }
-
-      /* 入力は落ちている物体。枠は edge、丈は既定の段 */
-      .input,
-      .select,
-      .textarea {
-        font-family: var(--rabi-font);
-        font-size: var(--rabi-t-body);
-        color: var(--rabi-ink);
-        background: var(--rabi-paper);
-        border: 1px solid var(--rabi-edge);
-        border-radius: var(--rabi-r-md);
-        padding-inline: var(--rabi-gap-2_5);
-      }
-
-      .input,
-      .select {
-        height: var(--rabi-control);
-      }
-
-      /* ネイティブの矢印は右端に詰まる。自前で描いて余白を取る */
-      .select-wrap {
-        position: relative;
-        display: grid;
-      }
-
-      .select {
-        appearance: none;
-        padding-right: var(--rabi-gap-5);
-      }
-
-      .select-wrap::after {
-        content: "";
-        position: absolute;
-        right: var(--rabi-gap-3);
-        top: 50%;
-        width: 7px;
-        height: 7px;
-        margin-top: -5px;
-        border-right: 1.5px solid var(--rabi-soft);
-        border-bottom: 1.5px solid var(--rabi-soft);
-        rotate: 45deg;
-        pointer-events: none;
-      }
-
-      .textarea {
-        padding-block: var(--rabi-gap-1_5);
-        resize: vertical;
-        min-height: calc(var(--rabi-control) * 3);
-      }
-
-      /* 誤りは枠の色と説明文で表す。focus とは位置で分かれる —— focus は枠の外 */
-      .input[aria-invalid="true"] {
-        border-color: var(--rabi-accent);
-        color: var(--rabi-accent-text);
-      }
-
-      .input:disabled,
-      .select:disabled,
-      .textarea:disabled {
-        background: var(--rabi-paper-2);
-        border-color: var(--rabi-line);
-        color: var(--rabi-faint);
-        cursor: not-allowed;
-      }
-
-      /* ネイティブのままでは半径も地も効かない */
-      .check,
-      .radio {
-        appearance: none;
-        width: 16px;
-        height: 16px;
-        flex: none;
-        margin: 0;
-        background: var(--rabi-paper);
-        border: 1px solid var(--rabi-edge);
-        display: grid;
-        place-items: center;
-        cursor: pointer;
-      }
-
-      .check {
-        border-radius: var(--rabi-r-sm);
-      }
-
-      .radio {
-        border-radius: var(--rabi-r-full);
-      }
-
-      .check:checked,
-      .radio:checked {
-        background: var(--rabi-accent);
-        border-color: var(--rabi-accent);
-      }
-
-      /* checked の印はチェック。丸では**ない** */
-      .check:checked::after {
-        content: "";
-        width: 7px;
-        height: 4px;
-        border-left: 2px solid var(--rabi-on-accent);
-        border-bottom: 2px solid var(--rabi-on-accent);
-        transform: translateY(-1px) rotate(-45deg);
-      }
-
-      .radio:checked::after {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: var(--rabi-r-full);
-        background: var(--rabi-on-accent);
-      }
-
-      .choice {
-        display: flex;
-        align-items: center;
-        gap: var(--rabi-gap-2);
-        font-size: var(--rabi-t-body);
-        cursor: pointer;
       }
 
       .choices {
@@ -882,13 +491,15 @@
       }
 
       .cta h2 {
-        font-size: var(--sec-title);
-        font-weight: 800;
+        font-size: var(--rabi-t-heading);
+        line-height: var(--rabi-lh-heading);
+        font-weight: 600;
       }
 
       .cta p {
         color: var(--rabi-soft);
         font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
         margin-top: var(--rabi-gap-1);
       }
 
@@ -922,18 +533,20 @@
 
       .footer-brand p {
         font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
         color: var(--rabi-soft);
         margin-top: var(--rabi-gap-3);
       }
 
       .footer-brand .brand-name {
         font-size: var(--rabi-t-body);
+        line-height: var(--rabi-lh-body);
       }
 
       .footer-col h4 {
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label-xs);
-        letter-spacing: 0.18em;
+        line-height: var(--rabi-lh-label-xs);
         color: var(--rabi-faint);
         font-weight: 600;
         margin-bottom: var(--rabi-gap-3);
@@ -947,6 +560,7 @@
 
       .footer-col a {
         font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
       }
 
       .footer-bottom {
@@ -959,12 +573,14 @@
         border-top: 1px solid var(--rabi-line);
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label-sm);
+        line-height: var(--rabi-lh-label-sm);
         color: var(--rabi-faint);
       }
 
       kbd {
         font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label-xs);
+        line-height: var(--rabi-lh-label-xs);
         background: var(--rabi-paper-2);
         border: 1px solid var(--rabi-edge);
         padding: 0 var(--rabi-gap-1);
@@ -976,7 +592,7 @@
         .hero-grid {
           grid-template-columns: 1fr;
           gap: var(--rabi-gap-8);
-          padding-top: var(--rabi-gap-10);
+          padding-top: calc(var(--page-hdr) + var(--rabi-gap-10));
         }
 
         .term {
@@ -998,13 +614,9 @@
           grid-template-columns: 1fr;
         }
 
-        .statusline span {
-          padding: 0 var(--rabi-gap-3) 0 0;
-          border-left: 0;
-        }
-
         .term-body {
           font-size: var(--rabi-t-label-sm);
+          line-height: var(--rabi-lh-label-sm);
         }
       }
 
@@ -1025,23 +637,17 @@
           <a href="#pricing">pricing</a>
           <a href="#faq">faq</a>
         </nav>
-        <button class="theme-toggle" id="theme-toggle" aria-label="テーマを切り替え" aria-keyshortcuts="t" title="テーマを切り替え（T）">
-          <svg class="icon-sun" viewBox="0 0 18 18" aria-hidden="true">
+        <button class="rabi-btn rabi-btn-secondary rabi-btn-icon" id="theme-toggle" aria-label="テーマを切り替え" aria-keyshortcuts="t" title="テーマを切り替え（T）">
+          <svg class="ico icon-sun" viewBox="0 0 18 18" aria-hidden="true">
             <circle cx="9" cy="9" r="3.2" />
             <path d="M9 1.5v1.8M9 14.7v1.8M3.7 3.7l1.3 1.3M13 13l1.3 1.3M1.5 9h1.8M14.7 9h1.8M3.7 14.3l1.3-1.3M13 5l1.3-1.3" />
           </svg>
-          <svg class="icon-moon" viewBox="0 0 18 18" aria-hidden="true">
+          <svg class="ico icon-moon" viewBox="0 0 18 18" aria-hidden="true">
             <path d="M15.3 12.2A7 7 0 1 1 5.9 2.8 7.2 7.2 0 0 0 15.3 12.2z" />
           </svg>
         </button>
       </div>
     </header>
-
-    <div class="disclosure">
-      <div class="container">
-        DESIGN.md の検証用の見本です。文言・数値・社名はすべて置き換えで、実在するものを指しません。
-      </div>
-    </div>
 
     <main>
       <div class="intro">
@@ -1049,14 +655,14 @@
         <div class="container hero-grid">
           <div>
             <p class="kicker">SAMPLE / PLACEHOLDER</p>
-            <h1 class="rabi-heading">見出しの段。<br />強調が、<em>効く</em>。</h1>
+            <h1>見出しの段。<br />強調が、<em>効く</em>。</h1>
             <p class="hero-lead">
               置き換え用の本文。行の長さと折り返しを見るためだけに置いている。
               意味は持たず、実在するものを指さない。
             </p>
             <div class="hero-actions">
-              <a class="btn btn-lg btn-primary" href="#cta">主操作</a>
-              <a class="btn btn-lg btn-secondary" href="#features">二次操作</a>
+              <a class="rabi-btn rabi-btn-lg rabi-btn-primary" href="#cta">主操作</a>
+              <a class="rabi-btn rabi-btn-lg rabi-btn-secondary" href="#features">二次操作</a>
             </div>
             <p class="hero-meta">ダミー / ダミー / ダミー — 置き換え項目 — 見本</p>
           </div>
@@ -1078,13 +684,13 @@
       </section>
 
       <div class="statusline">
-        <div class="container">
-          <span>sample <b>v0.0.0</b></span>
-          <span>sync <b class="on">●</b> ok</span>
-          <span>flag <b class="on">●</b> on</span>
-          <span>metric <b>00.00%</b></span>
-          <span>count today <b>0,000</b></span>
-          <span>sample value <b>0</b></span>
+        <div class="container rabi-statusbar">
+          <span>sample <b class="rabi-statusbar-value">v0.0.0</b></span>
+          <span>sync <b class="rabi-statusbar-value rabi-statusbar-on">●</b> ok</span>
+          <span>flag <b class="rabi-statusbar-value rabi-statusbar-on">●</b> on</span>
+          <span>metric <b class="rabi-statusbar-value">00.00%</b></span>
+          <span>count today <b class="rabi-statusbar-value">0,000</b></span>
+          <span>sample value <b class="rabi-statusbar-value">0</b></span>
         </div>
       </div>
       </div>
@@ -1092,48 +698,48 @@
       <div class="docs">
       <section class="section band" id="features">
         <div class="container">
-          <div class="sec-head">
-            <span class="sec-idx">01</span>
-            <h2 class="sec-title">機能</h2>
-            <span class="sec-note">6 MODULES</span>
+          <div class="rabi-section-head sec-head">
+            <span class="rabi-section-index">01</span>
+            <h2>機能</h2>
+            <span class="rabi-section-note">6 MODULES</span>
           </div>
-          <div class="feature-grid">
-            <div class="fcell">
+          <div class="rabi-grid feature-grid">
+            <div class="rabi-cell fcell">
               <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="1.5" width="15" height="15" /><path d="M1.5 6.5h15M6.5 6.5v10" /></svg>
               <div>
                 <h3>項目 A</h3>
                 <p>置き換え用の説明文。長さを見るために置く</p>
               </div>
             </div>
-            <div class="fcell">
+            <div class="rabi-cell fcell">
               <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="3.5" width="15" height="13" /><path d="M1.5 7.5h15M5.5 1.5v4M12.5 1.5v4" /></svg>
               <div>
                 <h3>項目 B</h3>
                 <p>置き換え用の説明文。意味は持たせない</p>
               </div>
             </div>
-            <div class="fcell">
+            <div class="rabi-cell fcell">
               <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="4" r="2.5" /><circle cx="14" cy="6" r="2.5" /><circle cx="8" cy="14" r="2.5" /><path d="M6 5l5.6 1M5 6.3l2.2 5.4M12.6 8.2L9.6 12" /></svg>
               <div>
                 <h3>項目 C</h3>
                 <p>置き換え用の説明文。2 行になる長さの見本</p>
               </div>
             </div>
-            <div class="fcell">
+            <div class="rabi-cell fcell">
               <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><path d="M1.5 4.5h11M1.5 9h11M1.5 13.5h7" /><path d="M13.5 12l2 2 3-3.5" /></svg>
               <div>
                 <h3>項目 D</h3>
                 <p>置き換え用の説明文。短い側の見本</p>
               </div>
             </div>
-            <div class="fcell">
+            <div class="rabi-cell fcell">
               <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l1.8 4.7L15.5 8l-4.7 1.8L9 14.5l-1.8-4.7L2.5 8l4.7-1.8z" /><path d="M14.5 13v3.5M12.8 14.8h3.5" /></svg>
               <div>
                 <h3>項目 E</h3>
                 <p>置き換え用の説明文。長い側の見本にする</p>
               </div>
             </div>
-            <div class="fcell">
+            <div class="rabi-cell fcell">
               <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="3.5" y="7.5" width="11" height="8" /><path d="M6 7.5V5a3 3 0 016 0v2.5" /></svg>
               <div>
                 <h3>項目 F</h3>
@@ -1146,49 +752,49 @@
 
       <section class="section" id="pricing">
         <div class="container">
-          <div class="sec-head">
-            <span class="sec-idx">02</span>
-            <h2 class="sec-title">料金</h2>
-            <span class="sec-note">3 PLANS</span>
+          <div class="rabi-section-head sec-head">
+            <span class="rabi-section-index">02</span>
+            <h2>料金</h2>
+            <span class="rabi-section-note">3 PLANS</span>
           </div>
-          <div class="plans">
-            <div class="plan">
+          <div class="rabi-grid plans">
+            <div class="rabi-cell plan">
               <div class="plan-head"><span class="plan-name">プラン A</span></div>
-              <p class="plan-price"><span class="val">¥0</span><span class="per">／永久</span></p>
+              <p class="rabi-price plan-price"><span class="rabi-price-val">¥0</span><span class="rabi-price-unit">／永久</span></p>
               <p class="plan-desc">置き換えの説明 1</p>
               <ul>
                 <li>置き換え項目 1</li>
                 <li>置き換え項目 2</li>
                 <li>置き換え項目 3</li>
               </ul>
-              <a class="btn btn-secondary" href="#cta">プラン A を選ぶ</a>
+              <a class="rabi-btn rabi-btn-secondary" href="#cta">プラン A を選ぶ</a>
             </div>
-            <div class="plan featured">
+            <div class="rabi-cell rabi-cell-featured plan">
               <div class="plan-head"><span class="plan-name">プラン B</span><span class="plan-badge">定番</span></div>
-              <p class="plan-price"><span class="val">¥800</span><span class="per">／月・税込</span></p>
+              <p class="rabi-price plan-price"><span class="rabi-price-val">¥800</span><span class="rabi-price-unit">／月・税込</span></p>
               <p class="plan-desc">置き換えの説明 2</p>
               <ul>
                 <li>プラン A のすべて</li>
                 <li>置き換え項目 4</li>
                 <li>置き換え項目 5</li>
               </ul>
-              <a class="btn btn-primary" href="#cta">プラン B を選ぶ</a>
+              <a class="rabi-btn rabi-btn-primary" href="#cta">プラン B を選ぶ</a>
             </div>
-            <div class="plan">
+            <div class="rabi-cell plan">
               <div class="plan-head"><span class="plan-name">プラン C</span></div>
-              <p class="plan-price"><span class="val">¥1,400</span><span class="per">／人・月</span></p>
+              <p class="rabi-price plan-price"><span class="rabi-price-val">¥1,400</span><span class="rabi-price-unit">／人・月</span></p>
               <p class="plan-desc">置き換えの説明 3</p>
               <ul>
                 <li>プラン B のすべて</li>
                 <li>置き換え項目 6</li>
                 <li>置き換え項目 7</li>
               </ul>
-              <a class="btn btn-secondary" href="#cta">問い合わせる</a>
+              <a class="rabi-btn rabi-btn-secondary" href="#cta">問い合わせる</a>
             </div>
           </div>
 
-          <div class="table-wrap">
-            <table class="rabi-table">
+          <div class="rabi-list table-wrap">
+            <table class="rabi-table rabi-table-sm">
               <thead>
                 <tr>
                   <th>項目</th>
@@ -1229,51 +835,35 @@
 
       <section class="section band" id="faq">
         <div class="container">
-          <div class="sec-head">
-            <span class="sec-idx">03</span>
-            <h2 class="sec-title">FAQ</h2>
-            <span class="sec-note">4 ITEMS</span>
+          <div class="rabi-section-head sec-head">
+            <span class="rabi-section-index">03</span>
+            <h2>FAQ</h2>
+            <span class="rabi-section-note">4 ITEMS</span>
           </div>
-          <div class="faq">
-            <details>
-              <summary>
-                <svg class="qicon" viewBox="0 0 18 18" aria-hidden="true">
-                  <path d="M3.5 9h11" />
-                  <path class="qicon-v" d="M9 3.5v11" />
-                </svg>
+          <div class="rabi-grid faq">
+            <details class="rabi-accordion-item">
+              <summary class="rabi-accordion-summary">
                 <span>置き換えの問い 1 はここに入る？</span>
               </summary>
-              <p class="answer">置き換えの答え 1。折り返しと行送りを見るためだけの文で、意味は持たない。</p>
+              <p class="rabi-accordion-body">置き換えの答え 1。折り返しと行送りを見るためだけの文で、意味は持たない。</p>
             </details>
-            <details>
-              <summary>
-                <svg class="qicon" viewBox="0 0 18 18" aria-hidden="true">
-                  <path d="M3.5 9h11" />
-                  <path class="qicon-v" d="M9 3.5v11" />
-                </svg>
+            <details class="rabi-accordion-item">
+              <summary class="rabi-accordion-summary">
                 <span>置き換えの問い 2 はここ？</span>
               </summary>
-              <p class="answer">置き換えの答え 2。短い側の見本にする。</p>
+              <p class="rabi-accordion-body">置き換えの答え 2。短い側の見本にする。</p>
             </details>
-            <details>
-              <summary>
-                <svg class="qicon" viewBox="0 0 18 18" aria-hidden="true">
-                  <path d="M3.5 9h11" />
-                  <path class="qicon-v" d="M9 3.5v11" />
-                </svg>
+            <details class="rabi-accordion-item">
+              <summary class="rabi-accordion-summary">
                 <span>置き換えの問い 3 は？</span>
               </summary>
-              <p class="answer">置き換えの答え 3。長い側の見本で、2 行に折り返る長さにしてある。</p>
+              <p class="rabi-accordion-body">置き換えの答え 3。長い側の見本で、2 行に折り返る長さにしてある。</p>
             </details>
-            <details>
-              <summary>
-                <svg class="qicon" viewBox="0 0 18 18" aria-hidden="true">
-                  <path d="M3.5 9h11" />
-                  <path class="qicon-v" d="M9 3.5v11" />
-                </svg>
+            <details class="rabi-accordion-item">
+              <summary class="rabi-accordion-summary">
                 <span>置き換えの問い 4 は？</span>
               </summary>
-              <p class="answer">置き換えの答え 4。中くらいの長さの見本。</p>
+              <p class="rabi-accordion-body">置き換えの答え 4。中くらいの長さの見本。</p>
             </details>
           </div>
         </div>
@@ -1281,54 +871,54 @@
 
       <section class="section" id="contact">
         <div class="container">
-          <div class="sec-head">
-            <span class="sec-idx">04</span>
-            <h2 class="sec-title">問い合わせ</h2>
-            <span class="sec-note">2 営業日以内</span>
+          <div class="rabi-section-head sec-head">
+            <span class="rabi-section-index">04</span>
+            <h2>問い合わせ</h2>
+            <span class="rabi-section-note">2 営業日以内</span>
           </div>
           <form class="form-grid" onsubmit="return false">
-            <div class="field">
+            <div class="rabi-field">
               <label for="f-name">お名前</label>
-              <input class="input" id="f-name" type="text" value="山田 太郎" />
+              <input class="rabi-input" id="f-name" type="text" value="山田 太郎" />
             </div>
-            <div class="field">
+            <div class="rabi-field">
               <label for="f-mail">メールアドレス</label>
-              <input class="input" id="f-mail" type="email" value="example.com" aria-invalid="true" aria-describedby="f-mail-note" />
-              <span class="note error" id="f-mail-note">@ を含む形式で入力してください</span>
+              <input class="rabi-input" id="f-mail" type="email" value="example.com" aria-invalid="true" aria-describedby="f-mail-note" />
+              <span class="rabi-field-note rabi-field-note-error" id="f-mail-note">@ を含む形式で入力してください</span>
             </div>
-            <div class="field">
+            <div class="rabi-field">
               <label for="f-plan">検討中のプラン</label>
-              <div class="select-wrap">
-                <select class="select" id="f-plan">
+              <div class="rabi-select-wrap">
+                <select class="rabi-select" id="f-plan">
                   <option>プラン A</option>
                   <option selected>プラン B</option>
                   <option>プラン C</option>
                 </select>
               </div>
             </div>
-            <div class="field">
+            <div class="rabi-field">
               <label for="f-seats">席数</label>
-              <input class="input" id="f-seats" type="text" value="プラン C のみ" disabled />
-              <span class="note">プラン C を選ぶと入力できます</span>
+              <input class="rabi-input" id="f-seats" type="text" value="プラン C のみ" disabled />
+              <span class="rabi-field-note">プラン C を選ぶと入力できます</span>
             </div>
-            <div class="field wide">
+            <div class="rabi-field wide">
               <label id="f-role-label">お立場</label>
               <div class="choices" role="radiogroup" aria-labelledby="f-role-label">
-                <label class="choice"><input class="radio" type="radio" name="role" checked />個人</label>
-                <label class="choice"><input class="radio" type="radio" name="role" />チーム</label>
-                <label class="choice"><input class="radio" type="radio" name="role" />法人</label>
+                <label class="rabi-choice"><input class="rabi-radio" type="radio" name="role" checked />個人</label>
+                <label class="rabi-choice"><input class="rabi-radio" type="radio" name="role" />チーム</label>
+                <label class="rabi-choice"><input class="rabi-radio" type="radio" name="role" />法人</label>
               </div>
             </div>
-            <div class="field wide">
+            <div class="rabi-field wide">
               <label for="f-body">ご相談の内容</label>
-              <textarea class="textarea" id="f-body" rows="4">置き換えの入力例。複数行の入力欄の見本として置いている。</textarea>
+              <textarea class="rabi-textarea" id="f-body" rows="4">置き換えの入力例。複数行の入力欄の見本として置いている。</textarea>
             </div>
             <div class="form-actions">
-              <label class="choice"><input class="check" type="checkbox" checked /><span>プライバシーポリシーに同意する</span></label>
+              <label class="rabi-choice"><input class="rabi-check" type="checkbox" checked /><span>プライバシーポリシーに同意する</span></label>
             </div>
             <div class="form-actions">
-              <button class="btn btn-primary" type="submit">送信する</button>
-              <button class="btn btn-secondary" type="reset">入力を消す</button>
+              <button class="rabi-btn rabi-btn-primary" type="submit">送信する</button>
+              <button class="rabi-btn rabi-btn-secondary" type="reset">入力を消す</button>
             </div>
           </form>
         </div>
@@ -1344,8 +934,8 @@
             <p>置き換えの補足文。実在の条件を指さない。</p>
           </div>
           <div class="cta-actions">
-            <a class="btn btn-lg btn-primary" href="#">置き換えの主操作</a>
-            <a class="btn btn-lg btn-secondary" href="#features">二次操作</a>
+            <a class="rabi-btn rabi-btn-lg rabi-btn-primary" href="#">置き換えの主操作</a>
+            <a class="rabi-btn rabi-btn-lg rabi-btn-secondary" href="#features">二次操作</a>
           </div>
         </div>
       </section>
@@ -1355,7 +945,7 @@
           <div class="footer-grid">
             <div class="footer-brand">
               <span class="brand-name">SAMPLE</span>
-              <p>思考を残す。ノートが動く。</p>
+              <p>置き換えの短い一文。実在の製品を指さない。</p>
             </div>
             <div class="footer-col">
               <h4>PRODUCT</h4>
@@ -1383,35 +973,6 @@
       </footer>
     </div>
 
-    <script>
-      (function () {
-        "use strict";
-        // Light / Dark の 2 択。既定は OS の設定に従い、選択は保存しない
-        var root = document.documentElement;
-        var os = matchMedia("(prefers-color-scheme: dark)");
-        var pinned = false;
-        var follow = function () {
-          if (!pinned) root.dataset.theme = os.matches ? "dark" : "light";
-        };
-        follow();
-        os.addEventListener("change", follow);
-
-        function toggle() {
-          pinned = true;
-          root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
-        }
-
-        document.getElementById("theme-toggle").addEventListener("click", toggle);
-        document.addEventListener("keydown", function (e) {
-          if (e.isComposing) return;
-          if ((e.key === "t" || e.key === "T") && !e.metaKey && !e.ctrlKey && !e.altKey) {
-            var t = e.target;
-            if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-            e.preventDefault();
-            toggle();
-          }
-        });
-      })();
-    </script>
+    <script src="theme-toggle.js"></script>
   </body>
 </html>

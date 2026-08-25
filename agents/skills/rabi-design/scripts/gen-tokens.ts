@@ -90,9 +90,7 @@ function ownedByFrontMatter(path: readonly string[]): boolean {
   if (["version", "name", "description"].includes(group)) return true;
   if (group === "components") return true;
   if (DERIVED.has(path.join("."))) return true;
-  return (
-    group === "typography" && ["fontWeight", "lineHeight", "letterSpacing"].includes(property ?? "")
-  );
+  return group === "typography" && ["fontWeight", "letterSpacing"].includes(property ?? "");
 }
 
 /**
@@ -111,6 +109,7 @@ const ROUNDED_VARS: Record<string, string> = {
   none: "r-none",
   sm: "r-sm",
   md: "r-md",
+  lg: "r-lg",
   full: "r-full",
 };
 
@@ -127,6 +126,7 @@ function cssVarName(path: readonly string[]): string | undefined {
   if (group === "rounded") return ROUNDED_VARS[key];
   if (group === "typography") {
     if (property === "fontSize") return `t-${key}`;
+    if (property === "lineHeight") return `lh-${key}`;
     if (property === "fontFamily") return key === "mono" ? "mono" : "font";
   }
   return undefined;
@@ -173,7 +173,9 @@ function rewrite(front: YAMLMap, css: Map<string, string>): Set<string> {
       if (declared === undefined) {
         throw new Error(`${label} に対応する --rabi-${name} が rabi.css に無い`);
       }
-      value.value = expand(css, declared);
+      const expanded = expand(css, declared);
+      // 単位を持たない値（行送り）は数値のまま保つ。文字列にすると読む側が型で分岐する
+      value.value = /^-?\d+(\.\d+)?$/.test(expanded) ? Number(expanded) : expanded;
       delete value.type; // 引用の要否は値から決め直させる
       used.add(name);
     }
@@ -206,9 +208,9 @@ function checkTokenRefs(front: YAMLMap): void {
 /**
  * front matter へ写されない CSS 変数。ここに載らない `--rabi-*` は必ず写す。
  *
- * 影は spec に token group が無く、`shade` は混色の入力で単体では使わない。
+ * 影と速さは spec に token group が無く、`shade` は混色の入力で単体では使わない。
  */
-const CSS_ONLY = new Set(["shade", "e1", "e2", "e3", "e2-accent", "e3-accent"]);
+const CSS_ONLY = new Set(["shade", "e1", "e2", "e3", "e2-accent", "e3-accent", "motion"]);
 
 /** CSS 側に足した変数が front matter から漏れていないことを見る。 */
 function checkCssCoverage(css: Map<string, string>, used: Set<string>): void {

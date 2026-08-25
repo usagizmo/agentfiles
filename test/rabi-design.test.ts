@@ -53,19 +53,37 @@ const DESIGN_DIR = join(import.meta.dir, "../design");
 /** `design/` の面は全部見る。1 枚だけ見ると 2 枚目が無検査で入る。 */
 const surfaces = readdirSync(DESIGN_DIR).filter((name) => name.endsWith(".html"));
 
-/** `assets/` の html も展開されて面になる。design/ だけ見ると asset が無検査で入る。 */
-const assets = readdirSync(join(SKILL, "assets")).filter((name) => /\.(html|js)$/.test(name));
+/** 面から切り出した実体。面と同じ規則で検査する。 */
+const surfaceAssets = readdirSync(DESIGN_DIR).filter((name) => name.endsWith(".js"));
 
-/** rabi.css が宣言していない `var(--rabi-…)` を返す。 */
+/** `assets/` の js / css も展開されて面になる。design/ だけ見ると asset が無検査で入る。 */
+const assets = readdirSync(join(SKILL, "assets")).filter((name) => /\.(html|js|css)$/.test(name));
+
+/** 値の SSOT。ここだけが 16 進値と `--rabi-*` の宣言を持てる。 */
+const TOKEN_SSOT = "rabi.css";
+
+/** 値の SSOT を除いた asset。写しを持ってはいけない側。 */
+const derivedAssets = assets.filter((name) => name !== TOKEN_SSOT);
+
+/**
+ * どこにも宣言が無い `var(--rabi-…)` を返す。
+ *
+ * 引ける先は 2 つ —— `rabi.css` の値のトークンと、そのファイルが自分で宣言した
+ * 部品のローカル変数（`DESIGN.md`「Components」）。
+ */
 function undeclaredTokens(path: string): string[] {
+  const source = readFileSync(path, "utf8");
   const declared = declarations(readFileSync(join(SKILL, "assets/rabi.css"), "utf8"));
-  const referenced = [...readFileSync(path, "utf8").matchAll(/var\(--rabi-([a-z0-9_-]+)\)/g)].map(
+  const local = new Set(
+    [...source.matchAll(/(?:^|[;{\s])--rabi-([a-z0-9_-]+)\s*:/g)].map((m) => m[1] as string),
+  );
+  const referenced = [...source.matchAll(/var\(--rabi-([a-z0-9_-]+)\)/g)].map(
     (m) => m[1] as string,
   );
-  return [...new Set(referenced.filter((n) => !declared.has(n)))];
+  return [...new Set(referenced.filter((n) => !declared.has(n) && !local.has(n)))];
 }
 
-test.each(surfaces)("%s が引くトークンは rabi.css に在る", (name) => {
+test.each([...surfaces, ...surfaceAssets])("%s が引くトークンは rabi.css に在る", (name) => {
   expect(undeclaredTokens(join(DESIGN_DIR, name))).toEqual([]);
 });
 
@@ -73,14 +91,414 @@ test.each(assets)("assets/%s が引くトークンは rabi.css に在る", (name
   expect(undeclaredTokens(join(SKILL, "assets", name))).toEqual([]);
 });
 
-test("assets/ に展開する html が 1 枚以上ある", () => {
-  expect(assets.length).toBeGreaterThan(0);
+// 拡張子ごとに数える。まとめて数えると、片方が 0 枚でも通って無検査で入る
+test.each([
+  [".css", 2],
+  [".js", 1],
+])("assets/ の %s が %i 枚以上ある", (ext, least) => {
+  expect(assets.filter((name) => name.endsWith(ext)).length).toBeGreaterThanOrEqual(least);
 });
 
 // DESIGN.md「Colors」の「16 進値を写さず、常にトークンを参照する」を asset 自身にも効かせる
-test.each(assets)("assets/%s は 16 進値を写していない", (name) => {
+test.each(derivedAssets)("assets/%s は 16 進値を写していない", (name) => {
   const html = readFileSync(join(SKILL, "assets", name), "utf8");
   expect(html.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
+});
+
+/**
+ * `:root` で宣言された `--rabi-<name>` を返す。
+ *
+ * 値のトークンは `:root` に立つ。部品クラスのスコープで宣言するローカル変数は、
+ * その部品の中でしか効かないので値の SSOT を割ら**ない**。
+ */
+function declaredTokens(source: string): string[] {
+  return [...source.matchAll(/:root[^{}]*\{([^{}]*)\}/g)].flatMap((block) =>
+    [...(block[1] as string).matchAll(/(?:^|[;\s])(--rabi-[a-z0-9_-]+)\s*:/g)].map(
+      (m) => m[1] as string,
+    ),
+  );
+}
+
+// 値のトークンを宣言してよいのは値の SSOT だけ。他が宣言すると値が 2 か所になる
+test.each(derivedAssets)("assets/%s は --rabi-* を宣言しない", (name) => {
+  expect(declaredTokens(readFileSync(join(SKILL, "assets", name), "utf8"))).toEqual([]);
+});
+
+test.each([...surfaces, ...surfaceAssets])("%s は --rabi-* を宣言しない", (name) => {
+  expect(declaredTokens(readFileSync(join(DESIGN_DIR, name), "utf8"))).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 値のトークンとローカル変数の線を実測する
+test("`:root` の宣言は値のトークンとして落ちる", () => {
+  expect(declaredTokens(":root {\n  --rabi-nope: 1px;\n}")).toEqual(["--rabi-nope"]);
+});
+
+test("部品クラスの中の宣言はローカル変数として通る", () => {
+  expect(declaredTokens(".rabi-btn {\n  --rabi-btn-h: 32px;\n}")).toEqual([]);
+});
+
+/**
+ * 部品クラスの全体。`rabi-components.css` の UI 部品と、`rabi.css` の文書の部品。
+ * 面が組み直せるのはどちらも同じなので、`rabi.css` 側も対象に入れる。
+ */
+/**
+ * asset が宣言する `.rabi-*` のクラス名。
+ *
+ * 複合セレクタ（`.rabi-cell.rabi-cell-row`）の 2 つ目以降も拾う。
+ * コメントは先に落とす —— 説明文の中のクラス名は宣言では**ない**。
+ */
+const classesIn = (rel: string): string[] =>
+  [
+    ...readFileSync(join(SKILL, rel), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .matchAll(/\.(rabi-[a-z0-9-]+)/g),
+  ].map((m) => m[1] as string);
+
+const uiClasses = classesIn("assets/rabi-components.css");
+const componentClasses = new Set([...uiClasses, ...classesIn("assets/rabi.css")]);
+
+// 合成集合で見ると、UI 部品が空でも文書部品だけで通る
+test("rabi-components.css が部品クラスを宣言している", () => {
+  expect(uiClasses.length).toBeGreaterThan(0);
+});
+
+/**
+ * `font-size` を宣言していて、`font-weight` か `line-height` を持たないセレクタ。
+ *
+ * 段は size / weight / lineHeight の 3 つで 1 組（`DESIGN.md`「Typography」）。
+ * 1 つでも欠けると、展開先の既定や UA の値が混ざって front matter とずれる。
+ */
+function incompleteSteps(css: string): string[] {
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
+    .filter(
+      (m) =>
+        (m[2] as string).includes("font-size") &&
+        (!(m[2] as string).includes("font-weight") || !(m[2] as string).includes("line-height")),
+    )
+    .map((m) => (m[1] as string).trim().replace(/\s+/g, " "));
+}
+
+test.each(["assets/rabi-components.css", "assets/rabi.css"])(
+  "%s は字の段を size / weight / line-height で揃える",
+  (rel) => {
+    expect(incompleteSteps(readFileSync(join(SKILL, rel), "utf8"))).toEqual([]);
+  },
+);
+
+/**
+ * 丈から決まる左右の余白。`DESIGN.md`「Layout」の対応表**から導く**。
+ * 表を写すと同じ値が 2 か所になり、片方だけ直る。
+ */
+const PADDING_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
+  [
+    ...readFileSync(designPath(SKILL), "utf8").matchAll(
+      /^\| `(control[a-z-]*)`\s*\|[^|]*\|\s*`([0-9.]+)`\s*\|/gm,
+    ),
+  ].map((m) => [m[1] as string, `gap-${(m[2] as string).replace(".", "_")}`]),
+);
+
+test("丈と余白の対応表を DESIGN.md から引けている", () => {
+  expect(Object.keys(PADDING_FOR_HEIGHT).sort()).toEqual([
+    "control",
+    "control-lg",
+    "control-sm",
+    "control-xs",
+  ]);
+});
+
+/** 丈と左右の余白が対応表からずれているセレクタを返す。 */
+function heightPaddingMismatch(css: string): string[] {
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
+    .filter((m) => {
+      const height = /height: var\(--rabi-(control[a-z-]*)\)/.exec(m[2] as string)?.[1];
+      const pad = /padding(?:-inline)?: (?:0 )?var\(--rabi-(gap-[0-9_]+)\)/.exec(
+        m[2] as string,
+      )?.[1];
+      if (height === undefined || pad === undefined) return false;
+      const want = PADDING_FOR_HEIGHT[height];
+      return want !== undefined && want !== pad;
+    })
+    .map((m) => (m[1] as string).trim().replace(/\s+/g, " "));
+}
+
+// 丈が決まれば左右の余白も決まる（`DESIGN.md`「Layout」）
+test("rabi-components.css の丈と左右の余白が対応表と揃っている", () => {
+  expect(
+    heightPaddingMismatch(readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8")),
+  ).toEqual([]);
+});
+
+/** front matter の `components` で、丈と左右の余白が対応表からずれているキー。 */
+function frontMatterHeightPaddingMismatch(design: string): string[] {
+  const block = design.match(/\ncomponents:\n([\s\S]*?)\n---\n/)?.[1];
+  if (block === undefined) throw new Error("front matter に components が無い");
+  const step = (v: string) => v.replace(/^\{spacing\.(.+)\}$/, "$1");
+  return [...block.matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.+\n)+)/gm)]
+    .filter(([, , body]) => {
+      const height = /^ {4}height: "(\{spacing\.control[a-z-]*\})"$/m.exec(body as string)?.[1];
+      const pad = /^ {4}padding: "(\{spacing\.[0-9.]+\})"$/m.exec(body as string)?.[1];
+      if (height === undefined || pad === undefined) return false;
+      const want = PADDING_FOR_HEIGHT[step(height)];
+      return want !== undefined && want !== `gap-${step(pad).replace(".", "_")}`;
+    })
+    .map(([, key]) => key as string);
+}
+
+// front matter 側も同じ表に従う。CSS だけ見ると写しが取り残される
+test("front matter の丈と左右の余白が対応表と揃っている", () => {
+  expect(frontMatterHeightPaddingMismatch(readFileSync(designPath(SKILL), "utf8"))).toEqual([]);
+});
+
+test("front matter でずれると落ちる", () => {
+  const design =
+    '\ncomponents:\n  x:\n    height: "{spacing.control-sm}"\n    padding: "{spacing.3}"\n\n---\n';
+  expect(frontMatterHeightPaddingMismatch(design)).toEqual(["x"]);
+});
+
+// **通ることは何も証明しない** —— ずれたら落ちることを実測する
+test("丈と余白がずれると落ちる", () => {
+  const css = ".x {\n  height: var(--rabi-control-sm);\n  padding: 0 var(--rabi-gap-3);\n}";
+  expect(heightPaddingMismatch(css)).toEqual([".x"]);
+});
+
+// **通ることは何も証明しない** —— 欠けたら落ちることを実測する
+test.each([
+  ["weight が無い", ".x { font-size: 12px; line-height: 1.4; }"],
+  ["line-height が無い", ".x { font-size: 12px; font-weight: 500; }"],
+])("字の段で %s と落ちる", (_label, css) => {
+  expect(incompleteSteps(css)).toEqual([".x"]);
+});
+
+/**
+ * front matter の `components` が持つ literal —— `{group.key}` の参照では**ない**値。
+ *
+ * 参照は `--check` が rabi.css との一致を守る。literal だけが front matter と
+ * 実装の 2 か所に生で書かれるので、ここが乖離の唯一の穴になる。
+ */
+function componentLiterals(design: string): string[] {
+  const block = design.match(/\ncomponents:\n([\s\S]*?)\n---\n/)?.[1];
+  if (block === undefined) throw new Error("front matter に components が無い");
+  return [
+    ...new Set(
+      [...block.matchAll(/^ {4}[a-zA-Z]+: (.+)$/gm)]
+        .map((m) => (m[1] as string).trim())
+        .filter((v) => !v.startsWith('"{')),
+    ),
+  ];
+}
+
+const literals = componentLiterals(readFileSync(designPath(SKILL), "utf8"));
+
+test("components に literal が在る", () => {
+  expect(literals.length).toBeGreaterThan(0);
+});
+
+// front matter だけ直して実装を忘れると、値が 2 つになったまま気づけない。
+// 見るのは「その値がどこかで使われている」ことまでで、部品ごとの対応は見**ない** ——
+// 同じ値を別の部品が持っていれば通る。部品単位の照合は目視。
+test.each(literals)("components の literal %s を rabi-components.css が使っている", (value) => {
+  const css = readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8");
+  expect(css).toContain(value);
+});
+
+/**
+ * 面が部品へ書いては**いけない**プロパティ —— 部品自身の見た目を決めるもの。
+ *
+ * 面が持てるのは配置（`margin` / `align-self` / `grid-column` …）と、
+ * 部品の中身の並べ方（`display` / `grid-template-columns` / `gap` …）だけ。
+ * 密度を変えたいなら `-sm` のような variant を部品側に置く（`DESIGN.md`「Components」）。
+ */
+const COMPONENT_PROPERTIES = [
+  /^padding/,
+  /^height$/,
+  /^min-height$/,
+  /^max-height$/,
+  /^background/,
+  /^color$/,
+  /^border/,
+  /^font/,
+  /^line-height$/,
+  /^letter-spacing$/,
+  /^text-shadow$/,
+  /^text-transform$/,
+  /^box-shadow$/,
+  /^filter$/,
+  /^outline/,
+  /^opacity$/,
+  /^visibility$/,
+  /^all$/,
+];
+
+/**
+ * `<style>` を宣言ブロックへ割る。返すのは [セレクタ, 宣言本文] の組。
+ *
+ * 直前の `}` を**消費しない** —— 消費すると連続するブロックが 1 つおきにしか当たらない。
+ * `@media` はセレクタ側が `{` の直後に `}` を持たないので、外側は拾われず中のルールだけが出る。
+ */
+function rules(html: string): Array<[string, string]> {
+  return [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)]
+    .map((m) => (m[1] as string).replace(/\/\*[\s\S]*?\*\//g, ""))
+    .flatMap((style) => [...style.matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)])
+    .filter((m) => !(m[1] as string).trimStart().startsWith("@"))
+    .map((m) => [m[1] as string, m[2] as string]);
+}
+
+/** セレクタの末尾 compound —— 最後の結合子より後ろ。そこが指す先が対象。 */
+function trailingCompound(selector: string): string {
+  let depth = 0;
+  let last = 0;
+  for (let i = 0; i < selector.length; i += 1) {
+    const c = selector[i] as string;
+    if (c === "(" || c === "[") depth += 1;
+    else if (c === ")" || c === "]") depth -= 1;
+    else if (depth === 0 && /[\s>+~]/.test(c)) last = i + 1;
+  }
+  return selector.slice(last);
+}
+
+/**
+ * 面の `<style>` が**部品そのものの見た目を書いている**セレクタを返す。
+ *
+ * 対象は末尾 compound が部品を指すセレクタ **だけ**。`.fcell h3` のように
+ * 末尾が部品の中身なら当たら**ない**（中身の組み方は面の裁量）。
+ *
+ * 併記クラス（HTML で部品クラスと同じ要素に置かれた面のクラス）も部品を指す。
+ */
+function componentOverrides(html: string, siblings: ReadonlySet<string>): string[] {
+  const hits: string[] = [];
+  for (const [selectorList, body] of rules(html)) {
+    const offending = [...body.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)]
+      .map((m) => m[1] as string)
+      .filter((prop) => COMPONENT_PROPERTIES.some((re) => re.test(prop)));
+    if (offending.length === 0) continue;
+    for (const selector of selectorList.split(",")) {
+      // `:has()` / `:not()` は部品を**条件**に使うだけ。subject では**ない**ので外す。
+      // `:is()` / `:where()` は subject そのものなので残す
+      const tail = trailingCompound(selector.trim()).replace(/:(?:has|not)\([^()]*\)/g, "");
+      const touched = [...tail.matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1] as string);
+      if (touched.some((cls) => componentClasses.has(cls) || siblings.has(cls))) {
+        hits.push(selector.trim());
+      }
+    }
+  }
+  return [...new Set(hits)];
+}
+
+/**
+ * `style` 属性が部品の見た目を書いている要素の class。
+ *
+ * `<style>` の外なので、セレクタの gate では当たら**ない**。
+ */
+function inlineOverrides(html: string): string[] {
+  const hits: string[] = [];
+  for (const tag of html.matchAll(/<[a-z][^>]*>/gi)) {
+    const source = tag[0];
+    const classes = source.match(/\sclass=["']([^"']+)["']/)?.[1];
+    const style = source.match(/\sstyle=["']([^"']*)["']/)?.[1];
+    if (classes === undefined || style === undefined) continue;
+    if (!classes.split(/\s+/).some((cls) => componentClasses.has(cls))) continue;
+    const offending = [...style.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)]
+      .map((m) => m[1] as string)
+      .filter((prop) => COMPONENT_PROPERTIES.some((re) => re.test(prop)));
+    if (offending.length > 0) hits.push(classes);
+  }
+  return [...new Set(hits)];
+}
+
+/** HTML の `class` 属性で部品クラスと同じ要素に併記されている面のクラス。 */
+function siblingClasses(html: string): Set<string> {
+  const found = new Set<string>();
+  for (const m of html.matchAll(/class=["']([^"']+)["']/g)) {
+    const classes = (m[1] as string).split(/\s+/).filter(Boolean);
+    if (!classes.some((cls) => componentClasses.has(cls))) continue;
+    for (const cls of classes) if (!componentClasses.has(cls)) found.add(cls);
+  }
+  return found;
+}
+
+/**
+ * 面が使っている `.rabi-*` のうち、部品に実体が無いもの。
+ *
+ * `<style>` の宣言と、HTML の `class` 属性の**両方**を見る。
+ * 宣言だけ見ると、CSS に無いクラスを HTML が名乗る形が素通りする。
+ */
+function unknownRabiClasses(html: string): string[] {
+  const declared = rules(html).flatMap(([selectorList]) =>
+    selectorList
+      .split(",")
+      .flatMap((sel) => [...sel.matchAll(/\.(rabi-[a-z0-9-]*)/g)].map((m) => m[1] as string)),
+  );
+  const used = [...html.matchAll(/class=["']([^"']+)["']/g)].flatMap((m) =>
+    (m[1] as string).split(/\s+/).filter((cls) => cls.startsWith("rabi-")),
+  );
+  return [...new Set([...declared, ...used])].filter((cls) => !componentClasses.has(cls));
+}
+
+// `.rabi-` は部品の名前空間。面が名乗ると、部品に無い実体がその名前で増える
+test.each([...surfaces, ...surfaceAssets])("%s は部品に無い .rabi-* を使わない", (name) => {
+  expect(unknownRabiClasses(readFileSync(join(DESIGN_DIR, name), "utf8"))).toEqual([]);
+});
+
+test.each([
+  ["style で宣言", "<style>\n.rabi-nope { color: red; }\n</style>"],
+  ["class で名乗る", '<div class="rabi-nope"></div>'],
+])("面が部品に無い .rabi-* を %s すると落ちる", (_label, html) => {
+  expect(unknownRabiClasses(html)).toEqual(["rabi-nope"]);
+});
+
+// 面が部品の見た目を書いたら実装が 2 つになる。面が持てるのは配置と中身の並べ方だけ
+test.each(surfaces)("%s は部品の見た目を書かない", (name) => {
+  const html = readFileSync(join(DESIGN_DIR, name), "utf8");
+  expect(componentOverrides(html, siblingClasses(html))).toEqual([]);
+});
+
+// `style` 属性は `<style>` の外なので、セレクタの gate では当たらない
+test.each(surfaces)("%s は style 属性で部品の見た目を書かない", (name) => {
+  expect(inlineOverrides(readFileSync(join(DESIGN_DIR, name), "utf8"))).toEqual([]);
+});
+
+test("style 属性で部品の見た目を書くと落ちる", () => {
+  expect(inlineOverrides('<div class="rabi-cell" style="padding: 40px"></div>')).toEqual([
+    "rabi-cell",
+  ]);
+});
+
+test("style 属性の配置は落ちない", () => {
+  expect(inlineOverrides('<div class="rabi-cell" style="margin-top: 4px"></div>')).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 書き方を変えても落ちることを実測する
+test.each([
+  ["素のクラス", '<div class="rabi-btn"></div>', ".rabi-btn { height: 40px; }"],
+  ["要素との複合", '<div class="rabi-btn"></div>', "button.rabi-btn { height: 40px; }"],
+  ["擬似クラス", '<div class="rabi-btn"></div>', ".rabi-btn:hover { background: red; }"],
+  [":is() の中", '<div class="rabi-btn"></div>', ":is(.rabi-btn) { height: 40px; }"],
+  ["文脈セレクタ", '<div class="rabi-btn"></div>', ".plan .rabi-btn { height: 40px; }"],
+  ["併記クラス", '<div class="rabi-cell fcell"></div>', ".fcell { padding: 40px; }"],
+  ["併記クラスの子孫", '<div class="rabi-cell fcell"></div>', ".x .fcell { font-size: 40px; }"],
+  ["字間", '<div class="rabi-cell fcell"></div>', ".fcell { letter-spacing: 0.2em; }"],
+  ["一括上書き", '<div class="rabi-cell fcell"></div>', ".fcell { all: unset; }"],
+  ["単一引用符の併記", "<div class='rabi-cell fcell'></div>", ".fcell { padding: 40px; }"],
+])("面が %s で部品の見た目を書くと落ちる", (_label, markup, rule) => {
+  const html = `<style>\n${rule}\n</style>${markup}`;
+  expect(componentOverrides(html, siblingClasses(html)).length).toBeGreaterThan(0);
+});
+
+// 2 つ目の `<style>` へ逃がしても落ちる
+test("2 つ目の style で部品の見た目を書いても落ちる", () => {
+  const html = `<style>\n.x { color: red; }\n</style><style>\n.rabi-btn { height: 40px; }\n</style>`;
+  expect(componentOverrides(html, new Set())).toEqual([".rabi-btn"]);
+});
+
+// 配置と、中身の組み方は当たら**ない**
+test.each([
+  ["配置", ".plan .rabi-btn { margin-top: auto; align-self: flex-start; }"],
+  ["列数", ".rabi-grid { grid-template-columns: repeat(3, 1fr); }"],
+  ["中身の要素", ".fcell h3 { font-size: 14px; }"],
+  [":has() の条件", ".surface:has(.rabi-btn) { background: red; }"],
+])("面の %s は落ちない", (_label, rule) => {
+  const html = `<style>\n${rule}\n</style><div class="rabi-cell fcell"></div>`;
+  expect(componentOverrides(html, siblingClasses(html))).toEqual([]);
 });
 
 test("design/ に面が 1 枚以上ある", () => {
@@ -136,6 +554,15 @@ test.each(FLOORS)("%s は面のどれに載せても %f:1 を割らない", (fg,
 });
 
 // 赤ベタの上に載る唯一の文字。両テーマ共通の素の hex どうしで測る
+// 吹き出しは地が ink の唯一の面。そこだけ divider が文字になる（`DESIGN.md`「Components」）
+test("divider は ink の上で 4.5:1 を割らない", () => {
+  const css = readFileSync(join(SKILL, "assets/rabi.css"), "utf8");
+  const [fgLight, fgDark] = themes(css, "divider");
+  const [bgLight, bgDark] = themes(css, "ink");
+  expect(contrast(fgLight, bgLight)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(fgDark, bgDark)).toBeGreaterThanOrEqual(4.5);
+});
+
 test("on-accent は accent の上で 4.5:1 を割らない", () => {
   const css = readFileSync(join(SKILL, "assets/rabi.css"), "utf8");
   expect(contrast(themes(css, "on-accent")[0], themes(css, "accent")[0])).toBeGreaterThanOrEqual(

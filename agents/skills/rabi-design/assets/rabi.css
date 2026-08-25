@@ -42,7 +42,8 @@
   /* 半径。`DESIGN.md`「Shapes」 */
   --rabi-r-none: 0px;
   --rabi-r-sm: 3px;
-  --rabi-r-md: 6px;
+  --rabi-r-md: 10px;
+  --rabi-r-lg: 14px;
   --rabi-r-full: 999px;
 
   /* 余白。`DESIGN.md`「Layout」 */
@@ -79,6 +80,21 @@
   --rabi-t-label-xs: 10px;
   --rabi-t-mono: 13px;
 
+  /* 行送り。`DESIGN.md`「Typography」 */
+  --rabi-lh-hero: 1.15;
+  --rabi-lh-display: 1.2;
+  --rabi-lh-heading: 1.3;
+  --rabi-lh-subheading: 1.4;
+  --rabi-lh-body: 1.5;
+  --rabi-lh-body-doc: 1.6;
+  --rabi-lh-label: 1.4;
+  --rabi-lh-label-sm: 1.4;
+  --rabi-lh-label-xs: 1.4;
+  --rabi-lh-mono: 1.5;
+
+  /* 状態が変わる速さ。`DESIGN.md`「状態」 */
+  --rabi-motion: 0.1s;
+
   /* Web フォントを読ま**ない** */
   --rabi-font:
     -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN",
@@ -103,10 +119,18 @@
   }
 }
 
+/* 丈と枠を同時に持つ部品が多い。列挙は漏れるので、要素の既定として敷く */
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
+
 body {
   background: var(--rabi-ground);
   color: var(--rabi-ink);
   font-family: var(--rabi-font);
+  line-height: var(--rabi-lh-body);
 }
 button,
 input,
@@ -126,7 +150,7 @@ a:hover {
 /* サイズを持た**ない**。`DESIGN.md`「Typography」 */
 .rabi-heading {
   color: var(--rabi-ink);
-  font-weight: 800;
+  font-weight: 600;
   border-bottom: 2px solid var(--rabi-accent);
   padding-bottom: var(--rabi-gap-1);
 }
@@ -149,7 +173,14 @@ a:hover {
 }
 .rabi-table thead th {
   border-bottom: 1px solid var(--rabi-edge);
-  font-weight: 700;
+  font-weight: 600;
+}
+/* 詰めた面のセル。密度は variant で表す（`DESIGN.md`「Components」） */
+.rabi-table-sm th,
+.rabi-table-sm td {
+  font-size: var(--rabi-t-label);
+  font-weight: 500;
+  line-height: var(--rabi-lh-label);
 }
 /* 読んでいる行を示す。group / total は独自の地を持つので除く */
 .rabi-table tbody tr:not(.group):not(.total):hover td {
@@ -157,12 +188,12 @@ a:hover {
 }
 .rabi-table tr.group td {
   background: var(--rabi-paper-2);
-  font-weight: 700;
+  font-weight: 600;
 }
 .rabi-table tr.total td {
   background: var(--rabi-wash);
   border-top: 2px solid var(--rabi-accent);
   border-bottom: 0; /* 合計行で表は終わる。下罫は引かない */
   color: var(--rabi-ink);
-  font-weight: 800;
+  font-weight: 600;
 }

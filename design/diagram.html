@@ -14,11 +14,9 @@
       色は `assets/rabi-mermaid.js` が持つ。ここには 16 進値も役の割り当ても書かない。
     -->
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
     <style>
       body {
-        background: var(--rabi-ground);
-        color: var(--rabi-ink);
-        font-family: var(--rabi-font);
         margin: 0;
         padding: var(--rabi-gap-8) var(--rabi-gap-5);
       }
@@ -28,14 +26,10 @@
         max-width: 60rem;
       }
 
+      /* 面と影と余白は .rabi-card が持つ。ここは並びと横溢れだけ */
       .card {
-        background: var(--rabi-paper);
-        border: 1px solid var(--rabi-divider);
-        border-radius: var(--rabi-r-md);
-        box-shadow: var(--rabi-e1);
         margin-bottom: var(--rabi-gap-6);
         overflow-x: auto;
-        padding: var(--rabi-gap-6);
       }
 
       pre.mermaid {
@@ -48,7 +42,7 @@
     <div class="wrap">
       <h1 class="rabi-heading">図</h1>
 
-      <div class="card">
+      <div class="rabi-card card">
         <pre class="mermaid">
 flowchart LR
   subgraph now["いま"]
@@ -62,7 +56,7 @@ flowchart LR
         </pre>
       </div>
 
-      <div class="card">
+      <div class="rabi-card card">
         <pre class="mermaid">
 sequenceDiagram
   participant Agent
@@ -73,7 +67,7 @@ sequenceDiagram
         </pre>
       </div>
 
-      <div class="card">
+      <div class="rabi-card card">
         <pre class="mermaid">
 stateDiagram-v2
   [*] --> 下書き

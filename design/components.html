@@ -1,0 +1,1309 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>Rabi 部品カタログ</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!--
+      `rabi-components.css` が実装している部品を、全部の状態と並べて出す面。**手書き**で、生成物ではない。
+
+      site.html が「組み合わせたときに破綻しないか」を見るのに対し、ここは
+      「部品ひとつが全状態で正しいか」を見る。新しい面を組むときはここから拾う。
+
+      面そのものは密（一覧）なので、深さを使わず外縁も `5` 以下に収める
+      （DESIGN.md「深さを使わない面」「Layout」）。
+
+      各行の左は `rabi-components.css` のクラス名と、front matter `components` のキーか、
+      その行が何を見せるかの一言。値を確かめるのは DESIGN.md 側で、この面は形と状態だけを見る。
+    -->
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
+    <style>
+      /* ==== 版面の変数。密な面の密度 ==== */
+      :root {
+        --page-hdr: 48px; /* topbar の丈。操作部品では**ない**ので丈の段の外 */
+        --toc-w: 180px;
+      }
+
+      /* ==== base ==== */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: calc(var(--page-hdr) + var(--rabi-gap-4));
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      body {
+        font-size: var(--rabi-t-body);
+        line-height: var(--rabi-lh-body);
+      }
+
+      ::selection {
+        background: var(--rabi-wash);
+        color: var(--rabi-ink);
+      }
+
+      svg {
+        display: block;
+      }
+
+      .container {
+        width: min(1180px, calc(100% - 40px));
+        margin-inline: auto;
+      }
+
+      /* ==== header ==== */
+      .site-header {
+        position: fixed;
+        inset: 0 0 auto 0;
+        z-index: 100;
+        height: var(--page-hdr);
+        background: var(--rabi-paper);
+        border-bottom: 1px solid var(--rabi-divider);
+      }
+
+      .header-inner {
+        display: flex;
+        align-items: center;
+        gap: var(--rabi-gap-4);
+        height: 100%;
+      }
+
+      .brand-name {
+        font-size: var(--rabi-t-subheading);
+        line-height: var(--rabi-lh-subheading);
+        font-weight: 600;
+        color: var(--rabi-ink);
+        text-decoration: none;
+      }
+
+      .header-note {
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
+        color: var(--rabi-faint);
+        margin-left: auto;
+      }
+
+      /* 形と丈と図の寸法は .rabi-btn-icon が持つ。ここは線の引き方だけ */
+      .ico {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      :root[data-theme="light"] .icon-sun {
+        display: none;
+      }
+
+      :root[data-theme="dark"] .icon-moon {
+        display: none;
+      }
+
+      /* ==== page。索引 + 本体の 2 列 ==== */
+      .page {
+        display: grid;
+        grid-template-columns: var(--toc-w) 1fr;
+        gap: var(--rabi-gap-5);
+        /* 固定ヘッダーの下に潜らせない */
+        padding-block: calc(var(--page-hdr) + var(--rabi-gap-5)) var(--rabi-gap-5);
+        align-items: start;
+      }
+
+      .toc {
+        position: sticky;
+        top: calc(var(--page-hdr) + var(--rabi-gap-5));
+        font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
+      }
+
+      .toc h2 {
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label-xs);
+        line-height: var(--rabi-lh-label-xs);
+        font-weight: 600;
+        color: var(--rabi-faint);
+        margin-bottom: var(--rabi-gap-2);
+      }
+
+      .toc ul {
+        list-style: none;
+        display: grid;
+      }
+
+      .toc a {
+        display: block;
+        padding-block: var(--rabi-gap-1);
+        color: var(--rabi-soft);
+        text-decoration: none;
+      }
+
+      .toc a:hover {
+        color: var(--rabi-ink);
+      }
+
+      /* ==== 節 ==== */
+      .sec {
+        margin-bottom: var(--rabi-gap-5);
+      }
+
+      .sec-head {
+        margin-bottom: var(--rabi-gap-2);
+      }
+
+      .sec-head p {
+        font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
+        color: var(--rabi-soft);
+      }
+
+      /* ==== 部品の行。結合グリッドで組む（DESIGN.md「一覧の組み方」）==== */
+      .rows {
+        grid-template-columns: 240px 1fr;
+      }
+
+      /* 複数のクラスを `/` で並べる行があるので、区切りと同じ行に流す */
+      .rows .k code {
+        display: inline-block;
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
+        color: var(--rabi-ink);
+        font-weight: 600;
+      }
+
+      .rows .k span {
+        display: block;
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label-xs);
+        line-height: var(--rabi-lh-label-xs);
+        color: var(--rabi-faint);
+      }
+
+      /* 見本は横に流す。折り返しても縦の間隔が保つように gap を両方向へ */
+      .rows .v {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--rabi-gap-3);
+        flex-wrap: wrap;
+      }
+
+      /* 中身が縦に積む見本（一覧・タブ・カード）は流さない */
+      .rows .v.stack {
+        display: block;
+      }
+
+      .note {
+        font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
+        color: var(--rabi-faint);
+      }
+
+      .swatch {
+        display: grid;
+        gap: var(--rabi-gap-1);
+        justify-items: start;
+      }
+
+      .swatch > .cap {
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label-xs);
+        line-height: var(--rabi-lh-label-xs);
+        color: var(--rabi-faint);
+      }
+
+      /* 3 列の結合グリッドの見本 */
+      .demo-grid {
+        grid-template-columns: repeat(3, 1fr);
+        width: 100%;
+      }
+
+      /* 一覧の容器は .rabi-list が持つ。ここは幅だけ */
+      .demo-list {
+        max-width: 320px;
+      }
+
+      .demo-card {
+        max-width: 260px;
+      }
+
+      .demo-card p {
+        font-size: var(--rabi-t-label);
+        line-height: var(--rabi-lh-label);
+      }
+
+      /* カードのタイトルに入れる図。寸法は .rabi-card-title が決める */
+      .ico18 {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* 吹き出しは矢印が外へ出るので、見本の側で余白を取る */
+      .tips > .rabi-tooltip {
+        margin-block: var(--rabi-gap-2);
+      }
+
+      /* 見本の欄。並べ方だけ */
+      .demo-field {
+        min-width: 220px;
+      }
+
+      .demo-panel {
+        max-width: 320px;
+      }
+
+      /* キーと値と消す操作。狭い面なので値を優先して縮める */
+      .demo-kv {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+        gap: var(--rabi-gap-2);
+        align-items: center;
+      }
+
+      .demo-kv .rabi-input {
+        min-width: 0;
+      }
+
+      /* 設定画面の見本。幅と、節の中の並べ方だけ */
+      .demo-settings {
+        max-width: 380px;
+      }
+
+      .demo-section-head {
+        margin-top: var(--rabi-gap-4);
+      }
+
+      /* 右端に複数の操作を並べる */
+      .demo-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--rabi-gap-2);
+        flex-wrap: wrap;
+      }
+
+      .demo-setting-wide {
+        width: 100%;
+      }
+
+      .demo-number {
+        max-width: 96px;
+      }
+
+      /* ステータスバーを置く面。地と上罫は面が持つ */
+      .demo-statusbar {
+        background: var(--rabi-paper);
+        border: 1px solid var(--rabi-line);
+        border-radius: var(--rabi-r-md);
+        padding-inline: var(--rabi-gap-3);
+      }
+
+      .demo-heading h3 {
+        font-size: var(--rabi-t-subheading);
+        line-height: var(--rabi-lh-subheading);
+      }
+
+      .footer-bottom {
+        display: flex;
+        gap: var(--rabi-gap-4);
+        flex-wrap: wrap;
+        align-items: center;
+        padding-block: var(--rabi-gap-4);
+        border-top: 1px solid var(--rabi-divider);
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label-sm);
+        line-height: var(--rabi-lh-label-sm);
+        color: var(--rabi-faint);
+      }
+
+      kbd {
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label-xs);
+        line-height: var(--rabi-lh-label-xs);
+        background: var(--rabi-paper-2);
+        border: 1px solid var(--rabi-edge);
+        padding: 0 var(--rabi-gap-1);
+        color: var(--rabi-ink);
+      }
+
+      @media (max-width: 860px) {
+        .page {
+          grid-template-columns: 1fr;
+        }
+
+        .toc {
+          position: static;
+        }
+
+        .rows {
+          grid-template-columns: 1fr;
+        }
+
+        .demo-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand-name" href="#">Rabi 部品カタログ</a>
+        <span class="header-note">rabi-components.css</span>
+        <button class="rabi-btn rabi-btn-secondary rabi-btn-icon" id="theme-toggle" aria-label="テーマを切り替え" aria-keyshortcuts="t" title="テーマを切り替え（T）">
+          <svg class="ico icon-sun" viewBox="0 0 18 18" aria-hidden="true">
+            <circle cx="9" cy="9" r="3.2" />
+            <path d="M9 1.5v1.8M9 14.7v1.8M3.7 3.7l1.3 1.3M13 13l1.3 1.3M1.5 9h1.8M14.7 9h1.8M3.7 14.3l1.3-1.3M13 5l1.3-1.3" />
+          </svg>
+          <svg class="ico icon-moon" viewBox="0 0 18 18" aria-hidden="true">
+            <path d="M15.3 12.2A7 7 0 1 1 5.9 2.8 7.2 7.2 0 0 0 15.3 12.2z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="container page">
+      <aside class="toc">
+        <h2>COMPONENTS</h2>
+        <ul>
+          <li><a href="#button">Button</a></li>
+          <li><a href="#chip">Chip / Badge</a></li>
+          <li><a href="#section-head">Section head</a></li>
+          <li><a href="#input">Input</a></li>
+          <li><a href="#choice">Check / Radio / Switch</a></li>
+          <li><a href="#grid">Grid</a></li>
+          <li><a href="#list">List</a></li>
+          <li><a href="#card">Card</a></li>
+          <li><a href="#tab">Tab</a></li>
+          <li><a href="#segment">Segment</a></li>
+          <li><a href="#price">Price</a></li>
+          <li><a href="#dropdown">Dropdown</a></li>
+          <li><a href="#panel">Panel</a></li>
+          <li><a href="#dialog">Dialog</a></li>
+          <li><a href="#settings">Settings 面</a></li>
+          <li><a href="#accordion">Accordion</a></li>
+          <li><a href="#statusbar">Status bar</a></li>
+          <li><a href="#alert">Alert / Tooltip</a></li>
+          <li><a href="#doc">Heading / Table</a></li>
+        </ul>
+      </aside>
+
+      <main>
+        <section class="sec" id="button">
+          <div class="rabi-section-head sec-head">
+            <h2>Button</h2>
+            <p>丈は 4 段から選ぶ。主操作は意味のまとまりに 1 つだけ</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-primary</code><span>button-primary</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <button class="rabi-btn rabi-btn-primary" type="button">主操作</button>
+              <button class="rabi-btn rabi-btn-primary" type="button" disabled>無効</button>
+              <span class="note">hover は accent-hover、active は accent-active</span>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-secondary</code><span>button-secondary</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <button class="rabi-btn rabi-btn-secondary" type="button">二次操作</button>
+              <button class="rabi-btn rabi-btn-secondary" type="button" disabled>無効</button>
+              <span class="note">hover は地だけ沈める。枠と文字は動かさない</span>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-ghost</code><span>button-ghost</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <button class="rabi-btn rabi-btn-ghost" type="button">三次操作</button>
+              <button class="rabi-btn rabi-btn-ghost" type="button" disabled>無効</button>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-xs</code> / <code>.rabi-btn-sm</code> / 既定 / <code>.rabi-btn-lg</code><span>丈と文字の段は対で決まる</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="swatch">
+                <button class="rabi-btn rabi-btn-xs rabi-btn-secondary" type="button">24px</button>
+                <span class="cap">xs — ツールバー / 12px</span>
+              </div>
+              <div class="swatch">
+                <button class="rabi-btn rabi-btn-sm rabi-btn-secondary" type="button">28px</button>
+                <span class="cap">sm — 詰めた面 / 13px</span>
+              </div>
+              <div class="swatch">
+                <button class="rabi-btn rabi-btn-secondary" type="button">32px</button>
+                <span class="cap">既定 / 14px</span>
+              </div>
+              <div class="swatch">
+                <button class="rabi-btn rabi-btn-lg rabi-btn-primary" type="button">36px</button>
+                <span class="cap">lg — 疎な面の主操作 / 14px</span>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn</code> + figure<span>図の側だけ 1 段詰める</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <button class="rabi-btn rabi-btn-secondary" type="button">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
+                <span>図が先</span>
+              </button>
+              <button class="rabi-btn rabi-btn-secondary" type="button">
+                <span>図が後</span>
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 3.5L12 9l-5.5 5.5" /></svg>
+              </button>
+              <button class="rabi-btn rabi-btn-secondary" type="button">文字だけ</button>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-icon</code><span>幅を丈と同値にする</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <button class="rabi-btn rabi-btn-xs rabi-btn-secondary rabi-btn-icon" type="button" aria-label="見本">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
+              </button>
+              <button class="rabi-btn rabi-btn-sm rabi-btn-secondary rabi-btn-icon" type="button" aria-label="見本">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
+              </button>
+              <button class="rabi-btn rabi-btn-secondary rabi-btn-icon" type="button" aria-label="見本">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
+              </button>
+              <button class="rabi-btn rabi-btn-lg rabi-btn-primary rabi-btn-icon" type="button" aria-label="見本">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="chip">
+          <div class="rabi-section-head sec-head">
+            <h2>Chip / Badge</h2>
+            <p>チップは分類の色分けをしない。文言で区別する</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chip</code><span>chip / chip-selected</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <button class="rabi-chip" type="button" aria-pressed="false">すべて</button>
+              <button class="rabi-chip" type="button" aria-pressed="true">進行中</button>
+              <button class="rabi-chip" type="button" aria-pressed="false">完了</button>
+              <button class="rabi-chip" type="button" disabled>無効</button>
+              <button class="rabi-chip" type="button" aria-pressed="true" disabled>無効かつ選択</button>
+              <span class="note">outline を使わない選択はチップ・タブ・リスト行・セグメントだけ</span>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-badge</code><span>badge / badge-accent</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <span class="rabi-badge">下書き</span>
+              <span class="rabi-badge rabi-badge-outline">輪郭</span>
+              <span class="rabi-badge rabi-badge-accent">要対応</span>
+              <span class="note">押せない印。沈んだ帯の上では輪郭の版にする</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="section-head">
+          <div class="rabi-section-head sec-head">
+            <h2>Section head</h2>
+            <p>web・UI の節見出し。文書は .rabi-heading（下罫つき）で、同じ面で両方を使わない</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-section-head</code> / <code>.rabi-section-index</code> / <code>.rabi-section-note</code><span>section-head / section-index / section-note</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-section-head">
+                <span class="rabi-section-index">01</span>
+                <h3>置き換えの節</h3>
+                <span class="rabi-section-note">6 ITEMS</span>
+              </div>
+              <div class="rabi-section-head demo-section-head">
+                <h3>番号と注記を持たない形</h3>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="input">
+          <div class="rabi-section-head sec-head">
+            <h2>Input</h2>
+            <p>誤りは枠そのものの色。focus は枠の外の outline で、位置で分かれる</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input</code><span>input / input-invalid / input-disabled</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-field demo-field">
+                <label for="c-ok">既定</label>
+                <input class="rabi-input" id="c-ok" type="text" value="置き換えの入力" />
+              </div>
+              <div class="rabi-field demo-field">
+                <label for="c-ng">誤り</label>
+                <input class="rabi-input" id="c-ng" type="email" value="example.com" aria-invalid="true" aria-describedby="c-ng-msg" />
+                <span class="rabi-field-note rabi-field-note-error" id="c-ng-msg">@ を含む形式で入力してください</span>
+              </div>
+              <div class="rabi-field demo-field">
+                <label for="c-off">無効</label>
+                <input class="rabi-input" id="c-off" type="text" value="編集できません" disabled />
+                <span class="rabi-field-note">条件を満たすと入力できます</span>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-select</code> / <code>.rabi-select-wrap</code><span>select</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-field demo-field">
+                <label for="c-sel">既定</label>
+                <div class="rabi-select-wrap">
+                  <select class="rabi-select" id="c-sel">
+                    <option>選択肢 A</option>
+                    <option selected>選択肢 B</option>
+                    <option>選択肢 C</option>
+                  </select>
+                </div>
+              </div>
+              <div class="rabi-field demo-field">
+                <label for="c-sel-off">無効</label>
+                <div class="rabi-select-wrap">
+                  <select class="rabi-select" id="c-sel-off" disabled>
+                    <option>選択肢 A</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-textarea</code><span>textarea</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-field demo-field">
+                <label for="c-ta">既定</label>
+                <textarea class="rabi-textarea" id="c-ta" rows="3">置き換えの入力例。複数行の入力欄の見本。</textarea>
+              </div>
+              <div class="rabi-field demo-field">
+                <label for="c-ta-off">無効</label>
+                <textarea class="rabi-textarea" id="c-ta-off" rows="3" disabled>編集できません</textarea>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input-sm</code> / <code>.rabi-select-sm</code><span>control-sm</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <input class="rabi-input rabi-input-sm" type="text" value="詰めた面" aria-label="詰めた面の入力見本" />
+              <div class="rabi-select-wrap">
+                <select class="rabi-select rabi-select-sm" aria-label="詰めた面の選択見本">
+                  <option>選択肢 A</option>
+                  <option selected>選択肢 B</option>
+                </select>
+              </div>
+              <span class="note">一覧・ツールバーの中</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="choice">
+          <div class="rabi-section-head sec-head">
+            <h2>Check / Radio / Switch</h2>
+            <p>印の寸法は丈の段に載せない。checked の印はチェックで、丸ではない</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-check</code><span>checkbox / checkbox-checked</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <label class="rabi-choice"><input class="rabi-check" type="checkbox" />未チェック</label>
+              <label class="rabi-choice"><input class="rabi-check" type="checkbox" checked />チェック済み</label>
+              <label class="rabi-choice"><input class="rabi-check" type="checkbox" disabled />無効</label>
+              <label class="rabi-choice"><input class="rabi-check" type="checkbox" checked disabled />無効かつチェック済み</label>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-radio</code><span>radio / radio-checked</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <label class="rabi-choice"><input class="rabi-radio" type="radio" name="c-role" checked />個人</label>
+              <label class="rabi-choice"><input class="rabi-radio" type="radio" name="c-role" />チーム</label>
+              <label class="rabi-choice"><input class="rabi-radio" type="radio" name="c-role" disabled />無効</label>
+              <label class="rabi-choice"><input class="rabi-radio" type="radio" name="c-role2" checked disabled />無効かつ選択済み</label>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-switch</code><span>switch / switch-on</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <label class="rabi-choice"><input class="rabi-switch" type="checkbox" />オフ</label>
+              <label class="rabi-choice"><input class="rabi-switch" type="checkbox" checked />オン</label>
+              <label class="rabi-choice"><input class="rabi-switch" type="checkbox" disabled />無効</label>
+              <label class="rabi-choice"><input class="rabi-switch" type="checkbox" checked disabled />無効かつオン</label>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="grid">
+          <div class="rabi-section-head sec-head">
+            <h2>Grid</h2>
+            <p>同種のものを並べる面は結合グリッドで組む。部品を個別の枠で浮かせて並べない</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-grid</code> / <code>.rabi-cell</code><span>列数は使う側が決める</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-grid demo-grid">
+                <div class="rabi-cell">セル A</div>
+                <div class="rabi-cell">セル B</div>
+                <div class="rabi-cell">セル C</div>
+                <div class="rabi-cell">セル D</div>
+                <div class="rabi-cell">セル E</div>
+                <div class="rabi-cell">セル F</div>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cell-action</code><span>押せるセル</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-grid demo-grid">
+                <button class="rabi-cell rabi-cell-action" type="button">押せるセル</button>
+                <button class="rabi-cell rabi-cell-action" type="button" disabled>無効なセル</button>
+                <div class="rabi-cell">押せないセル</div>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cell-featured</code><span>cell-featured</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-grid demo-grid">
+                <div class="rabi-cell">通常のセル</div>
+                <div class="rabi-cell rabi-cell-featured">強調したセル</div>
+                <div class="rabi-cell">通常のセル</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="list">
+          <div class="rabi-section-head sec-head">
+            <h2>List</h2>
+            <p>hover は paper-2、選択は wash の面 + 左の帯。同じ面を両方に使わない</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-list</code> / <code>.rabi-list-item</code><span>list-item / list-item-hover</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="demo-list">
+                <div class="rabi-list" aria-label="一覧の見本">
+                  <button class="rabi-list-item" type="button" aria-pressed="false">行 A</button>
+                  <button class="rabi-list-item" type="button" aria-pressed="true">行 B（選択）</button>
+                  <button class="rabi-list-item" type="button" aria-pressed="false">行 C</button>
+                  <button class="rabi-list-item" type="button" disabled>行 D（無効）</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="card">
+          <div class="rabi-section-head sec-head">
+            <h2>Card</h2>
+            <p>強調は赤ベタ。赤が地の面の上では使えない</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card</code><span>card</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-card demo-card">
+                <h3 class="rabi-card-title">
+                  <svg class="ico18" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="1.5" width="15" height="15" /><path d="M1.5 6.5h15M6.5 6.5v10" /></svg>
+                  見出し
+                </h3>
+                <p>置き換えの本文。図の列に揃えず、面の左端から始める。</p>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card-accent</code><span>card-accent</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-card rabi-card-accent demo-card">
+                <h3 class="rabi-card-title">
+                  <svg class="ico18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l1.8 4.7L15.5 8l-4.7 1.8L9 14.5l-1.8-4.7L2.5 8l4.7-1.8z" /></svg>
+                  見出し
+                </h3>
+                <p>この面の中で赤を意味に使わない。状態も操作も on-accent と輪郭で表す。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="tab">
+          <div class="rabi-section-head sec-head">
+            <h2>Tab</h2>
+            <p>行は物体ではないので半径は 0。行として並ぶので、選択は下罫で示す例外</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tabs</code> / <code>.rabi-tab</code><span>tab / tab-hover / tab-selected</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-tabs" aria-label="タブの見本">
+                <button class="rabi-tab" type="button" aria-pressed="true">概要</button>
+                <button class="rabi-tab" type="button" aria-pressed="false">明細</button>
+                <button class="rabi-tab" type="button" aria-pressed="false">履歴</button>
+                <button class="rabi-tab" type="button" aria-pressed="false" disabled>無効</button>
+              </div>
+              <div class="rabi-tabs" aria-label="無効かつ選択の見本">
+                <button class="rabi-tab" type="button" aria-pressed="true" disabled>無効かつ選択</button>
+                <button class="rabi-tab" type="button" aria-pressed="false" disabled>無効</button>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tab-sm</code><span>control-sm</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-tabs" aria-label="詰めた面のタブの見本">
+                <button class="rabi-tab rabi-tab-sm" type="button" aria-pressed="true">概要</button>
+                <button class="rabi-tab rabi-tab-sm" type="button" aria-pressed="false">明細</button>
+                <button class="rabi-tab rabi-tab-sm" type="button" aria-pressed="false">履歴</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="segment">
+          <div class="rabi-section-head sec-head">
+            <h2>Segment</h2>
+            <p>排他の選択肢。タブは現在地、セグメントは値</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-segment</code> / <code>.rabi-segment-item</code><span>segment / segment-selected</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-segment" role="group" aria-label="表示形式">
+                <button class="rabi-segment-item" type="button" aria-pressed="true">一覧</button>
+                <button class="rabi-segment-item" type="button" aria-pressed="false">図</button>
+                <button class="rabi-segment-item" type="button" aria-pressed="false">表</button>
+              </div>
+              <div class="rabi-segment" role="group" aria-label="無効を含む見本">
+                <button class="rabi-segment-item" type="button" aria-pressed="true">選択</button>
+                <button class="rabi-segment-item" type="button" disabled>無効</button>
+              </div>
+              <div class="rabi-segment" role="group" aria-label="無効かつ選択済みの見本">
+                <button class="rabi-segment-item" type="button" aria-pressed="true" disabled>無効かつ選択</button>
+                <button class="rabi-segment-item" type="button" disabled>無効</button>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-segment-sm</code><span>control-sm</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-segment rabi-segment-sm" role="group" aria-label="詰めた面のセグメント">
+                <button class="rabi-segment-item" type="button" aria-pressed="true">日</button>
+                <button class="rabi-segment-item" type="button" aria-pressed="false">週</button>
+                <button class="rabi-segment-item" type="button" aria-pressed="false">月</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="price">
+          <div class="rabi-section-head sec-head">
+            <h2>Price</h2>
+            <p>数値は display の段を等幅で組み、単位は label-sm の faint</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-price</code><span>price</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <p class="rabi-price"><span class="rabi-price-val">¥0</span><span class="rabi-price-unit">／永久</span></p>
+              <p class="rabi-price"><span class="rabi-price-val">¥1,400</span><span class="rabi-price-unit">／人・月</span></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="dropdown">
+          <div class="rabi-section-head sec-head">
+            <h2>Dropdown</h2>
+            <p>figure は左端、補足は右端。区切りは line の横罫</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-dropdown</code> / <code>.rabi-dropdown-item</code> / <code>.rabi-dropdown-divider</code><span>dropdown / dropdown-item / dropdown-divider</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-dropdown" aria-label="メニューの見本">
+                <button class="rabi-dropdown-item" type="button">
+                  <span class="rabi-dropdown-label">戻る</span>
+                  <span class="rabi-dropdown-key">⌘[</span>
+                </button>
+                <button class="rabi-dropdown-item" type="button" disabled>
+                  <span class="rabi-dropdown-label">進む</span>
+                  <span class="rabi-dropdown-key">⌘]</span>
+                </button>
+                <button class="rabi-dropdown-item" type="button">
+                  <span class="rabi-dropdown-label">再読み込み</span>
+                  <span class="rabi-dropdown-key">⌘R</span>
+                </button>
+                <button class="rabi-dropdown-item" type="button" aria-haspopup="true">
+                  <span class="rabi-dropdown-label">その他の道具</span>
+                  <svg class="rabi-dropdown-sub ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 3.5L12 9l-5.5 5.5" /></svg>
+                </button>
+                <hr class="rabi-dropdown-divider" />
+                <button class="rabi-dropdown-item" type="button" aria-pressed="false">
+                  <span class="rabi-dropdown-label">しおりを表示</span>
+                </button>
+                <button class="rabi-dropdown-item" type="button" aria-pressed="true">
+                  <span class="rabi-dropdown-label">完全な URL を表示</span>
+                  <svg class="rabi-dropdown-check ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 9.5l3.5 3.5 7.5-8" /></svg>
+                </button>
+              </div>
+
+              <div class="rabi-dropdown rabi-dropdown-icons" aria-label="figure と見出しを持つ見本">
+                <p class="rabi-dropdown-group">候補</p>
+                <button class="rabi-dropdown-item" type="button">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="3.5" width="15" height="13" /><path d="M1.5 7.5h15M5.5 1.5v4M12.5 1.5v4" /></svg>
+                  <span class="rabi-dropdown-label">予定</span>
+                </button>
+                <button class="rabi-dropdown-item" type="button">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" /><path d="M9 5v4l2.5 2" /></svg>
+                  <span class="rabi-dropdown-label">履歴</span>
+                </button>
+                <hr class="rabi-dropdown-divider" />
+                <p class="rabi-dropdown-group">設定</p>
+                <button class="rabi-dropdown-item" type="button">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="6" r="3" /><path d="M3 16c0-3.3 2.7-5 6-5s6 1.7 6 5" /></svg>
+                  <span class="rabi-dropdown-label">プロフィール</span>
+                  <span class="rabi-dropdown-key">⌘P</span>
+                </button>
+                <button class="rabi-dropdown-item" type="button">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="2.5" /><path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M3.7 14.3l1.4-1.4M12.9 5.1l1.4-1.4" /></svg>
+                  <span class="rabi-dropdown-label">設定</span>
+                  <span class="rabi-dropdown-key">⌘S</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="panel">
+          <div class="rabi-section-head sec-head">
+            <h2>Panel</h2>
+            <p>節を積む面。節の見出しは paper-2 の帯で、右端にその節への操作を置く</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-panel</code> / <code>.rabi-panel-head</code> / <code>.rabi-panel-section-head</code> / <code>.rabi-panel-body</code><span>panel / panel-head / panel-section-head / panel-body</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-panel demo-panel">
+                <div class="rabi-panel-head">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 15.5l6-6M11 3l4 4-2.5 2.5-4-4z" /></svg>
+                  設定
+                </div>
+
+                <div class="demo-panel-section">
+                  <div class="rabi-panel-section-head">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="2.5" width="13" height="13" /><path d="M2.5 6.5h13" /></svg>
+                    置き換えの節 1
+                  </div>
+                  <div class="rabi-panel-body">
+                    <div class="rabi-field demo-field">
+                      <label for="p-id">置き換えの ID</label>
+                      <input class="rabi-input rabi-input-sm" id="p-id" type="text" value="id_0000000000" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="demo-panel-section">
+                  <div class="rabi-panel-section-head">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 4.5h11M3.5 9h11M3.5 13.5h7" /></svg>
+                    置き換えの節 2
+                    <button class="rabi-btn rabi-btn-xs rabi-btn-ghost rabi-btn-icon rabi-panel-action" type="button" aria-label="開く">
+                      <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 3.5L12 9l-5.5 5.5" /></svg>
+                    </button>
+                  </div>
+                  <div class="rabi-panel-body">
+                    <p class="note">置き換えの空状態。登録されているものはありません。</p>
+                  </div>
+                </div>
+
+                <div class="demo-panel-section">
+                  <div class="rabi-panel-section-head">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="9" r="3" /><path d="M9 9h6.5v3M13 9v2.5" /></svg>
+                    置き換えの節 3
+                    <button class="rabi-btn rabi-btn-xs rabi-btn-ghost rabi-btn-icon rabi-panel-action" type="button" aria-label="足す">
+                      <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
+                    </button>
+                  </div>
+                  <div class="rabi-panel-body">
+                    <div class="demo-kv">
+                      <input class="rabi-input rabi-input-sm" type="text" value="KEY" aria-label="キー" />
+                      <input class="rabi-input rabi-input-sm" type="text" value="value" aria-label="値" />
+                      <button class="rabi-btn rabi-btn-sm rabi-btn-ghost rabi-btn-icon" type="button" aria-label="消す">
+                        <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M4.5 4.5l9 9M13.5 4.5l-9 9" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="dialog">
+          <div class="rabi-section-head sec-head">
+            <h2>Dialog</h2>
+            <p>手前の層。影は e3、背面は塗らない。操作は下端に右寄せで主操作は 1 つ</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-dialog</code> / <code>.rabi-dialog-head</code> / <code>.rabi-dialog-foot</code><span>dialog / dialog-title / dialog-lead / dialog-foot</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-dialog" role="dialog" aria-labelledby="d-title">
+                <div class="rabi-dialog-head">
+                  <div>
+                    <h3 class="rabi-dialog-title" id="d-title">プロフィールを編集</h3>
+                    <p class="rabi-dialog-lead">置き換えの説明文。変更は保存を押すまで反映されません。</p>
+                  </div>
+                  <button class="rabi-btn rabi-btn-sm rabi-btn-ghost rabi-btn-icon rabi-dialog-close" type="button" aria-label="閉じる">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M4.5 4.5l9 9M13.5 4.5l-9 9" /></svg>
+                  </button>
+                </div>
+
+                <div class="rabi-dialog-body">
+                  <div class="rabi-field">
+                    <label for="d-name">名前</label>
+                    <input class="rabi-input" id="d-name" type="text" value="山田 太郎" />
+                  </div>
+                  <div class="rabi-field">
+                    <label for="d-note">置き換えの欄</label>
+                    <input class="rabi-input" id="d-note" type="text" value="置き換えの値" />
+                  </div>
+                </div>
+
+                <div class="rabi-dialog-foot">
+                  <button class="rabi-btn rabi-btn-secondary" type="button">やめる</button>
+                  <button class="rabi-btn rabi-btn-primary" type="button">保存する</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="settings">
+          <div class="rabi-section-head sec-head">
+            <h2>Settings 面</h2>
+            <p>部品を組んで設定画面にする例。節の帯で区切り、欄は縦か横に並べる</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">組み合わせ</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-panel</code> + <code>.rabi-field-row</code> + <code>.rabi-field</code><span>節 = 帯 + 欄</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-panel demo-settings">
+                <div class="rabi-panel-head">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="2.5" /><path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M3.7 14.3l1.4-1.4M12.9 5.1l1.4-1.4" /></svg>
+                  設定
+                </div>
+
+                <div class="rabi-tabs">
+                  <button class="rabi-tab rabi-tab-sm" type="button" aria-pressed="false">項目 A</button>
+                  <button class="rabi-tab rabi-tab-sm" type="button" aria-pressed="false">項目 B</button>
+                  <button class="rabi-tab rabi-tab-sm" type="button" aria-pressed="true">項目 C</button>
+                </div>
+
+                <div class="rabi-panel-body">
+                  <p class="rabi-field-note">置き換えの補足文。節の外に置く注記の見本。</p>
+                </div>
+
+                <div>
+                  <div class="rabi-panel-section-head">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5l1.6 4.2 4.4 0.3-3.4 2.8 1.1 4.3L9 11.8l-3.7 2.3 1.1-4.3-3.4-2.8 4.4-0.3z" /></svg>
+                    置き換えの節 1
+                    <span class="rabi-panel-action">
+                      <span class="rabi-badge rabi-badge-outline">補足</span>
+                      <button class="rabi-btn rabi-btn-xs rabi-btn-ghost rabi-btn-icon" type="button" aria-label="足す">
+                        <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
+                      </button>
+                    </span>
+                  </div>
+                  <div class="rabi-panel-body">
+                    <div class="rabi-field-row">
+                      <div>
+                        <p class="rabi-field-row-label">置き換えの項目 1</p>
+                        <p class="rabi-field-note">置き換えの説明文</p>
+                      </div>
+                      <div class="rabi-segment" role="group" aria-label="置き換えの選択">
+                        <button class="rabi-segment-item" type="button" aria-pressed="true">選択肢 A</button>
+                        <button class="rabi-segment-item" type="button" aria-pressed="false">選択肢 B</button>
+                        <button class="rabi-segment-item" type="button" aria-pressed="false">選択肢 C</button>
+                      </div>
+                    </div>
+
+                    <div class="rabi-field-row">
+                      <div>
+                        <p class="rabi-field-row-label">置き換えの項目 2</p>
+                        <p class="rabi-field-note">置き換えの説明文</p>
+                      </div>
+                      <button class="rabi-btn rabi-btn-sm rabi-btn-primary" type="button">主操作</button>
+                    </div>
+
+                    <div class="rabi-field">
+                      <label for="s-send">置き換えの選択</label>
+                      <div class="rabi-select-wrap">
+                        <select class="rabi-select rabi-select-sm" id="s-send">
+                          <option selected>選択肢 A（補足つき）</option>
+                          <option>選択肢 B</option>
+                        </select>
+                      </div>
+                      <span class="rabi-field-note">置き換えの補足文</span>
+                    </div>
+                  </div>
+                </div>
+
+                <details open>
+                  <summary class="rabi-panel-section-head">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 15.5l6-6M11 3l4 4-2.5 2.5-4-4z" /></svg>
+                    置き換えの節 2
+                    <span class="rabi-panel-action">
+                      <span class="rabi-badge rabi-badge-outline">置き換え</span>
+                      <svg class="ico rabi-panel-section-mark" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 3.5L12 9l-5.5 5.5" /></svg>
+                    </span>
+                  </summary>
+                  <div class="rabi-panel-body">
+                    <div class="rabi-field-row">
+                      <p class="rabi-field-row-label">置き換えの切り替え 1</p>
+                      <input class="rabi-switch" type="checkbox" aria-label="置き換えの切り替え 1" />
+                    </div>
+                    <div class="rabi-field-row">
+                      <p class="rabi-field-row-label">置き換えの切り替え 2</p>
+                      <input class="rabi-switch" type="checkbox" checked aria-label="置き換えの切り替え 2" />
+                    </div>
+                    <div class="rabi-field-row">
+                      <label class="rabi-field-row-label" for="s-radius">置き換えの数値</label>
+                      <input class="rabi-input rabi-input-sm demo-number" id="s-radius" type="number" value="16" />
+                    </div>
+                    <div class="rabi-field-row">
+                      <div>
+                        <p class="rabi-field-row-label">置き換えの項目 3</p>
+                        <p class="rabi-field-note">状態を印で示す欄の見本</p>
+                      </div>
+                      <div class="demo-actions">
+                        <span class="rabi-badge rabi-badge-accent">要対応</span>
+                        <button class="rabi-btn rabi-btn-sm rabi-btn-secondary" type="button">操作</button>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+
+                <details>
+                  <summary class="rabi-panel-section-head">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="4.5" width="13" height="10" /><path d="M2.5 7.5h13" /></svg>
+                    置き換えの節 3
+                    <span class="rabi-panel-action">
+                      <span class="rabi-badge rabi-badge-outline">0.0 GB</span>
+                      <svg class="ico rabi-panel-section-mark" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 3.5L12 9l-5.5 5.5" /></svg>
+                    </span>
+                  </summary>
+                  <div class="rabi-panel-body">
+                    <p class="rabi-field-note">閉じている節の中身。開くまで出ない。</p>
+                  </div>
+                </details>
+
+                <div>
+                  <div class="rabi-panel-section-head">
+                    <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 4.5h11M3.5 9h11M3.5 13.5h7" /></svg>
+                    置き換えの節 4
+                  </div>
+                  <div class="rabi-panel-body">
+                    <div class="rabi-field-row">
+                      <p class="rabi-field-row-label">置き換えの値</p>
+                      <span class="rabi-field-note">0.0.0</span>
+                    </div>
+                    <div class="rabi-field-row">
+                      <div>
+                        <p class="rabi-field-row-label">置き換えの項目 4</p>
+                        <p class="rabi-field-note">説明文と操作を並べる見本</p>
+                      </div>
+                      <button class="rabi-btn rabi-btn-sm rabi-btn-secondary" type="button">開く</button>
+                    </div>
+                    <div class="demo-actions">
+                      <button class="rabi-btn rabi-btn-sm rabi-btn-secondary" type="button">操作 A</button>
+                      <button class="rabi-btn rabi-btn-sm rabi-btn-secondary" type="button">操作 B</button>
+                    </div>
+                    <button class="rabi-btn rabi-btn-sm rabi-btn-primary demo-setting-wide" type="button">置き換えの主操作</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="accordion">
+          <div class="rabi-section-head sec-head">
+            <h2>Accordion</h2>
+            <p>容器は結合グリッド。印は文の外の列へ出し、問いと答えの左端を 1 本に揃える</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-accordion-item</code> / <code>.rabi-accordion-summary</code> / <code>.rabi-accordion-body</code><span>accordion-summary / accordion-body</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-grid demo-accordion">
+                <details class="rabi-accordion-item" open>
+                  <summary class="rabi-accordion-summary">
+                    <span>開いている問い</span>
+                  </summary>
+                  <p class="rabi-accordion-body">置き換えの答え。折り返しと行送りを見るための文で、意味は持たない。</p>
+                </details>
+                <details class="rabi-accordion-item">
+                  <summary class="rabi-accordion-summary">
+                    <span>閉じている問い</span>
+                  </summary>
+                  <p class="rabi-accordion-body">置き換えの答え。短い側の見本。</p>
+                </details>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="statusbar">
+          <div class="rabi-section-head sec-head">
+            <h2>Status bar</h2>
+            <p>地と外周は置く面が持つ。区切りは line の縦罫</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-statusbar</code><span>statusbar / statusbar-on</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="demo-statusbar">
+                <div class="rabi-statusbar">
+                  <span>sample <b class="rabi-statusbar-value">v0.0.0</b></span>
+                  <span>sync <b class="rabi-statusbar-value rabi-statusbar-on">●</b> ok</span>
+                  <span>metric <b class="rabi-statusbar-value">00.00%</b></span>
+                  <span>count today <b class="rabi-statusbar-value">0,000</b></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="alert">
+          <div class="rabi-section-head sec-head">
+            <h2>Alert / Tooltip</h2>
+            <p>吹き出しの地は ink のベタ。広い面を ink で塗ってよい唯一の例外</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-alert</code><span>alert-warn</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <p class="rabi-alert" role="status">置き換えの警告文。淡い面の上なので、赤を意味として載せてよい。</p>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tooltip</code><span>tooltip</span></div>
+            <div class="rabi-cell rabi-cell-row v tips">
+              <span class="rabi-tooltip">置き換えの補足</span>
+              <span class="rabi-tooltip">置き換えの操作 <kbd>⌘⌥2</kbd></span>
+              <span class="rabi-tooltip rabi-tooltip-up">対象が上にあるとき <kbd>⇧⌘K</kbd></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="doc">
+          <div class="rabi-section-head sec-head">
+            <h2>Heading / Table</h2>
+            <p>文書の部品。実体は rabi.css にある（文書は部品 CSS を読まない）</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-heading</code><span>rabi.css</span></div>
+            <div class="rabi-cell rabi-cell-row v stack demo-heading">
+              <h3 class="rabi-heading">見出しの見本</h3>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-table</code><span>rabi.css</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <table class="rabi-table">
+                <thead>
+                  <tr>
+                    <th>項目</th>
+                    <th class="num">金額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="group">
+                    <td colspan="2">置き換えの小計</td>
+                  </tr>
+                  <tr>
+                    <td>置き換え行 1</td>
+                    <td class="num">420,000</td>
+                  </tr>
+                  <tr>
+                    <td>置き換え行 2</td>
+                    <td class="num">1,140,000</td>
+                  </tr>
+                  <tr class="total">
+                    <td>合計</td>
+                    <td class="num">1,560,000</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-table-sm</code><span>詰めた面の密度</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <table class="rabi-table rabi-table-sm">
+                <thead>
+                  <tr>
+                    <th>項目</th>
+                    <th class="num">金額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>置き換え行 1</td>
+                    <td class="num">420,000</td>
+                  </tr>
+                  <tr>
+                    <td>置き換え行 2</td>
+                    <td class="num">1,140,000</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <div class="footer-bottom">
+          <span><kbd>T</kbd> テーマ切替</span>
+          <span>実装は rabi-components.css</span>
+          <span>値と規則は DESIGN.md</span>
+        </div>
+      </main>
+    </div>
+
+    <script src="theme-toggle.js"></script>
+  </body>
+</html>
