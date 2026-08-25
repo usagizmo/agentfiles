@@ -2,10 +2,10 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <title>DESIGN.md 検証面</title>
+    <title>Rabi 宣伝の面</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <!--
-      DESIGN.md の規則だけで 1 ページ組んだ参考サイト。**手書き**で、生成物ではない。
+      疎な面。1 桁で組む表紙。**手書き**で、生成物ではない。
 
       「組み合わせたときに破綻しないか」を見る —— 赤の総量、面の段の使い分け、
       余白のリズム、文字の段が実際に足りているか。
@@ -17,10 +17,13 @@
     -->
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
+    <link rel="stylesheet" href="surfaces.css" />
     <style>
       /* ==== 版面の変数。密な面の密度 ==== */
       :root {
-        --page-hdr: 48px; /* topbar の丈。操作部品では**ない**ので丈の段の外 */
+        /* 天を貼り付けたときに本文が潜らない距離。天の丈の写しでは**なく**、
+           それを超える余白の段（`DESIGN.md`「Layout」） */
+        --page-clear: var(--rabi-gap-14);
         --sec-gap: var(--rabi-gap-5); /* 節見出しと中身の間。内部なので 5 以下 */
         --h1-size: clamp(var(--rabi-t-display), 4vw, var(--rabi-t-hero));
       }
@@ -34,7 +37,7 @@
 
       html {
         scroll-behavior: smooth;
-        scroll-padding-top: calc(var(--page-hdr) + var(--rabi-gap-3));
+        scroll-padding-top: var(--page-clear);
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -63,57 +66,21 @@
         margin-inline: auto;
       }
 
-      /* ==== header。ロゴは持たない。ブランド名とナビだけ ==== */
+      /* ==== header。天そのものは .rabi-appbar。ここは面への留め方だけ ==== */
       .site-header {
-        position: fixed;
-        inset: 0 0 auto 0;
+        position: sticky;
+        top: 0;
         z-index: 100;
-        height: var(--page-hdr);
-        background: var(--rabi-paper);
-        border-bottom: 1px solid var(--rabi-divider);
       }
 
+      /* 天は全幅、中身は版面の幅。外の余白は .rabi-appbar が持つ */
       .header-inner {
         display: flex;
         align-items: center;
         gap: var(--rabi-gap-5);
+        width: min(1080px, 100%);
         height: 100%;
-      }
-
-      .brand-name {
-        font-size: var(--rabi-t-subheading);
-        line-height: var(--rabi-lh-subheading);
-        font-weight: 600;
-        color: var(--rabi-ink);
-        text-decoration: none;
-      }
-
-      .site-nav {
-        display: flex;
-        gap: var(--rabi-gap-5);
-        margin-left: auto;
-      }
-
-      .site-nav a {
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label);
-        line-height: var(--rabi-lh-label);
-        font-weight: 600;
-        color: var(--rabi-soft);
-        text-decoration: none;
-      }
-
-      .site-nav a:hover {
-        color: var(--rabi-ink);
-      }
-
-      /* 形と丈と図の寸法は .rabi-btn-icon が持つ。ここは線の引き方だけ */
-      .ico {
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
+        margin-inline: auto;
       }
 
       :root[data-theme="light"] .icon-sun {
@@ -130,8 +97,7 @@
         grid-template-columns: 1.05fr 0.95fr;
         gap: var(--rabi-gap-12);
         align-items: center;
-        /* 固定ヘッダーの下に潜らせない */
-        padding-block: calc(var(--page-hdr) + var(--rabi-gap-14)) var(--rabi-gap-14);
+        padding-block: var(--rabi-gap-14);
       }
 
       .kicker {
@@ -514,13 +480,7 @@
         border-top: 1px solid var(--rabi-divider);
       }
 
-      /* ==== footer。ロゴは持たない。リンクの列だけ。cta との境は上罫 ==== */
-      .site-footer {
-        border-top: 1px solid var(--rabi-divider);
-        background: var(--rabi-paper);
-        padding: var(--rabi-gap-10) 0 var(--rabi-gap-6);
-      }
-
+      /* ==== footer。地そのものは .rabi-footer。ここは列の並べ方だけ ==== */
       .footer-grid {
         display: flex;
         gap: var(--rabi-gap-12);
@@ -528,63 +488,11 @@
       }
 
       .footer-brand {
-        margin-right: auto;
-      }
-
-      .footer-brand p {
-        font-size: var(--rabi-t-label);
-        line-height: var(--rabi-lh-label);
-        color: var(--rabi-soft);
-        margin-top: var(--rabi-gap-3);
-      }
-
-      .footer-brand .brand-name {
-        font-size: var(--rabi-t-body);
-        line-height: var(--rabi-lh-body);
-      }
-
-      .footer-col h4 {
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-xs);
-        line-height: var(--rabi-lh-label-xs);
-        color: var(--rabi-faint);
-        font-weight: 600;
-        margin-bottom: var(--rabi-gap-3);
-      }
-
-      .footer-col ul {
-        list-style: none;
         display: grid;
         gap: var(--rabi-gap-2);
-      }
-
-      .footer-col a {
-        font-size: var(--rabi-t-label);
-        line-height: var(--rabi-lh-label);
-      }
-
-      .footer-bottom {
-        display: flex;
-        gap: var(--rabi-gap-5);
-        flex-wrap: wrap;
-        align-items: center;
-        margin-top: var(--rabi-gap-8);
-        padding-top: var(--rabi-gap-4);
-        border-top: 1px solid var(--rabi-line);
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-sm);
-        line-height: var(--rabi-lh-label-sm);
-        color: var(--rabi-faint);
-      }
-
-      kbd {
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-xs);
-        line-height: var(--rabi-lh-label-xs);
-        background: var(--rabi-paper-2);
-        border: 1px solid var(--rabi-edge);
-        padding: 0 var(--rabi-gap-1);
-        color: var(--rabi-ink);
+        align-content: start;
+        margin-right: auto;
+        max-width: 22rem;
       }
 
       /* ==== responsive ==== */
@@ -592,7 +500,7 @@
         .hero-grid {
           grid-template-columns: 1fr;
           gap: var(--rabi-gap-8);
-          padding-top: calc(var(--page-hdr) + var(--rabi-gap-10));
+          padding-top: var(--rabi-gap-10);
         }
 
         .term {
@@ -629,23 +537,30 @@
   </head>
 
   <body>
-    <header class="site-header">
-      <div class="container header-inner">
-        <a class="brand-name" href="#">SAMPLE</a>
-        <nav class="site-nav" aria-label="Main">
-          <a href="#features">features</a>
-          <a href="#pricing">pricing</a>
-          <a href="#faq">faq</a>
-        </nav>
-        <button class="rabi-btn rabi-btn-secondary rabi-btn-icon" id="theme-toggle" aria-label="テーマを切り替え" aria-keyshortcuts="t" title="テーマを切り替え（T）">
-          <svg class="ico icon-sun" viewBox="0 0 18 18" aria-hidden="true">
-            <circle cx="9" cy="9" r="3.2" />
-            <path d="M9 1.5v1.8M9 14.7v1.8M3.7 3.7l1.3 1.3M13 13l1.3 1.3M1.5 9h1.8M14.7 9h1.8M3.7 14.3l1.3-1.3M13 5l1.3-1.3" />
-          </svg>
-          <svg class="ico icon-moon" viewBox="0 0 18 18" aria-hidden="true">
-            <path d="M15.3 12.2A7 7 0 1 1 5.9 2.8 7.2 7.2 0 0 0 15.3 12.2z" />
-          </svg>
-        </button>
+    <header class="rabi-appbar site-header">
+      <div class="header-inner">
+        <a class="rabi-brand" href="#">SAMPLE</a>
+        <div class="rabi-appbar-action">
+          <nav class="rabi-appbar-nav" aria-label="Main">
+            <a href="#features">features</a>
+            <a href="#pricing">pricing</a>
+            <a href="#faq">faq</a>
+          </nav>
+          <button
+            type="button"
+            class="rabi-btn rabi-btn-secondary rabi-btn-icon"
+            data-theme-toggle
+            aria-keyshortcuts="t"
+          >
+            <svg class="ico icon-sun" viewBox="0 0 18 18" aria-hidden="true">
+              <circle cx="9" cy="9" r="3.2" />
+              <path d="M9 1.5v1.8M9 14.7v1.8M3.7 3.7l1.3 1.3M13 13l1.3 1.3M1.5 9h1.8M14.7 9h1.8M3.7 14.3l1.3-1.3M13 5l1.3-1.3" />
+            </svg>
+            <svg class="ico icon-moon" viewBox="0 0 18 18" aria-hidden="true">
+              <path d="M15.3 12.2A7 7 0 1 1 5.9 2.8 7.2 7.2 0 0 0 15.3 12.2z" />
+            </svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -940,23 +855,23 @@
         </div>
       </section>
 
-      <footer class="site-footer">
+      <footer class="rabi-footer">
         <div class="container">
           <div class="footer-grid">
             <div class="footer-brand">
-              <span class="brand-name">SAMPLE</span>
+              <a class="rabi-brand" href="#">SAMPLE</a>
               <p>置き換えの短い一文。実在の製品を指さない。</p>
             </div>
-            <div class="footer-col">
-              <h4>PRODUCT</h4>
+            <div class="rabi-footer-col">
+              <h3>PRODUCT</h3>
               <ul>
                 <li><a href="#features">機能</a></li>
                 <li><a href="#pricing">料金</a></li>
                 <li><a href="#faq">FAQ</a></li>
               </ul>
             </div>
-            <div class="footer-col">
-              <h4>RESOURCES</h4>
+            <div class="rabi-footer-col">
+              <h3>RESOURCES</h3>
               <ul>
                 <li><a href="#">ドキュメント</a></li>
                 <li><a href="#">セキュリティ</a></li>
@@ -964,15 +879,15 @@
               </ul>
             </div>
           </div>
-          <div class="footer-bottom">
+          <div class="rabi-footer-bottom">
             <span>© 2026 SAMPLE</span>
-            <span><kbd>T</kbd> テーマ切替</span>
+            <span><kbd class="rabi-kbd">T</kbd> テーマ切替</span>
             <span>DESIGN.md の検証面 — 文言・数値はすべて置き換え</span>
           </div>
         </div>
       </footer>
     </div>
 
-    <script src="theme-toggle.js"></script>
+    <script src="surfaces.js"></script>
   </body>
 </html>

@@ -54,7 +54,12 @@ const DESIGN_DIR = join(import.meta.dir, "../design");
 const surfaces = readdirSync(DESIGN_DIR).filter((name) => name.endsWith(".html"));
 
 /** 面から切り出した実体。面と同じ規則で検査する。 */
-const surfaceAssets = readdirSync(DESIGN_DIR).filter((name) => name.endsWith(".js"));
+const surfaceScripts = readdirSync(DESIGN_DIR).filter((name) => name.endsWith(".js"));
+
+/** 面から切り出した style。`<style>` の gate をここへ逃がせないよう、面と同じ規則で検査する。 */
+const surfaceStyles = readdirSync(DESIGN_DIR).filter((name) => name.endsWith(".css"));
+
+const surfaceAssets = [...surfaceScripts, ...surfaceStyles];
 
 /** `assets/` の js / css も展開されて面になる。design/ だけ見ると asset が無検査で入る。 */
 const assets = readdirSync(join(SKILL, "assets")).filter((name) => /\.(html|js|css)$/.test(name));
@@ -329,15 +334,24 @@ const COMPONENT_PROPERTIES = [
   /^all$/,
 ];
 
+/** 解析の種別。面の `.html` と `.js` は `html`、切り出した `.css` は `css`。 */
+type SourceKind = "html" | "css";
+
 /**
  * `<style>` を宣言ブロックへ割る。返すのは [セレクタ, 宣言本文] の組。
+ * 面の `.css` は全体が 1 つの `<style>` に当たる。
  *
  * 直前の `}` を**消費しない** —— 消費すると連続するブロックが 1 つおきにしか当たらない。
  * `@media` はセレクタ側が `{` の直後に `}` を持たないので、外側は拾われず中のルールだけが出る。
  */
-function rules(html: string): Array<[string, string]> {
-  return [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)]
-    .map((m) => (m[1] as string).replace(/\/\*[\s\S]*?\*\//g, ""))
+function rules(source: string, kind: SourceKind): Array<[string, string]> {
+  // 種別は呼び出し側が渡す。中身から当てると、`<style` を含む css で分岐が変わって gate を抜けられる
+  const blocks =
+    kind === "html"
+      ? [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1] as string)
+      : [source];
+  return blocks
+    .map((style) => style.replace(/\/\*[\s\S]*?\*\//g, ""))
     .flatMap((style) => [...style.matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)])
     .filter((m) => !(m[1] as string).trimStart().startsWith("@"))
     .map((m) => [m[1] as string, m[2] as string]);
@@ -364,9 +378,13 @@ function trailingCompound(selector: string): string {
  *
  * 併記クラス（HTML で部品クラスと同じ要素に置かれた面のクラス）も部品を指す。
  */
-function componentOverrides(html: string, siblings: ReadonlySet<string>): string[] {
+function componentOverrides(
+  source: string,
+  siblings: ReadonlySet<string>,
+  kind: SourceKind,
+): string[] {
   const hits: string[] = [];
-  for (const [selectorList, body] of rules(html)) {
+  for (const [selectorList, body] of rules(source, kind)) {
     const offending = [...body.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)]
       .map((m) => m[1] as string)
       .filter((prop) => COMPONENT_PROPERTIES.some((re) => re.test(prop)));
@@ -422,34 +440,69 @@ function siblingClasses(html: string): Set<string> {
  * `<style>` の宣言と、HTML の `class` 属性の**両方**を見る。
  * 宣言だけ見ると、CSS に無いクラスを HTML が名乗る形が素通りする。
  */
-function unknownRabiClasses(html: string): string[] {
-  const declared = rules(html).flatMap(([selectorList]) =>
+function unknownRabiClasses(source: string, kind: SourceKind): string[] {
+  const declared = rules(source, kind).flatMap(([selectorList]) =>
     selectorList
       .split(",")
       .flatMap((sel) => [...sel.matchAll(/\.(rabi-[a-z0-9-]*)/g)].map((m) => m[1] as string)),
   );
-  const used = [...html.matchAll(/class=["']([^"']+)["']/g)].flatMap((m) =>
+  const used = [...source.matchAll(/class=["']([^"']+)["']/g)].flatMap((m) =>
     (m[1] as string).split(/\s+/).filter((cls) => cls.startsWith("rabi-")),
   );
   return [...new Set([...declared, ...used])].filter((cls) => !componentClasses.has(cls));
 }
 
+/** 面と、面から切り出した実体。`.css` だけ解析の種別が違う。 */
+const surfaceSources: Array<[string, SourceKind]> = [
+  ...[...surfaces, ...surfaceScripts].map((name) => [name, "html"] as [string, SourceKind]),
+  ...surfaceStyles.map((name) => [name, "css"] as [string, SourceKind]),
+];
+
 // `.rabi-` は部品の名前空間。面が名乗ると、部品に無い実体がその名前で増える
-test.each([...surfaces, ...surfaceAssets])("%s は部品に無い .rabi-* を使わない", (name) => {
-  expect(unknownRabiClasses(readFileSync(join(DESIGN_DIR, name), "utf8"))).toEqual([]);
+test.each(surfaceSources)("%s は部品に無い .rabi-* を使わない", (name, kind) => {
+  expect(unknownRabiClasses(readFileSync(join(DESIGN_DIR, name), "utf8"), kind)).toEqual([]);
 });
 
 test.each([
-  ["style で宣言", "<style>\n.rabi-nope { color: red; }\n</style>"],
-  ["class で名乗る", '<div class="rabi-nope"></div>'],
-])("面が部品に無い .rabi-* を %s すると落ちる", (_label, html) => {
-  expect(unknownRabiClasses(html)).toEqual(["rabi-nope"]);
-});
+  ["style で宣言", "<style>\n.rabi-nope { color: red; }\n</style>", "html"],
+  ["class で名乗る", '<div class="rabi-nope"></div>', "html"],
+  ["切り出した css で宣言", ".rabi-nope {\n  color: red;\n}\n", "css"],
+] as Array<[string, string, SourceKind]>)(
+  "面が部品に無い .rabi-* を %s すると落ちる",
+  (_label, source, kind) => {
+    expect(unknownRabiClasses(source, kind)).toEqual(["rabi-nope"]);
+  },
+);
+
+/** 面の `<style>` と、面から切り出した `.css` に置かれた併記クラス。 */
+const surfaceSiblings = new Set(
+  surfaces.flatMap((name) => [...siblingClasses(readFileSync(join(DESIGN_DIR, name), "utf8"))]),
+);
 
 // 面が部品の見た目を書いたら実装が 2 つになる。面が持てるのは配置と中身の並べ方だけ
 test.each(surfaces)("%s は部品の見た目を書かない", (name) => {
   const html = readFileSync(join(DESIGN_DIR, name), "utf8");
-  expect(componentOverrides(html, siblingClasses(html))).toEqual([]);
+  expect(componentOverrides(html, siblingClasses(html), "html")).toEqual([]);
+});
+
+// 切り出した `.css` は `<style>` の外なので、面だけ見ると gate をそちらへ逃がせる。
+// 併記クラスは面の HTML 側にしか出ないので、全部の面から集めて渡す
+test.each(surfaceStyles)("%s は部品の見た目を書かない", (name) => {
+  const css = readFileSync(join(DESIGN_DIR, name), "utf8");
+  expect(componentOverrides(css, surfaceSiblings, "css")).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— `<style>` を持たない実体でも当たることを実測する
+test.each([
+  ["素の css", ".rabi-btn {\n  height: 40px;\n}\n"],
+  // 中身から種別を当てると、この 1 行で解析が空になって gate を抜けられる
+  ["`<style` を含むコメント", "/* <style */\n.rabi-btn {\n  height: 40px;\n}\n"],
+])("css の %s で部品の見た目を書くと落ちる", (_label, css) => {
+  expect(componentOverrides(css, new Set(), "css")).toEqual([".rabi-btn"]);
+});
+
+test("css の配置は落ちない", () => {
+  expect(componentOverrides(".rabi-btn {\n  margin-top: 4px;\n}\n", new Set(), "css")).toEqual([]);
 });
 
 // `style` 属性は `<style>` の外なので、セレクタの gate では当たらない
@@ -481,13 +534,13 @@ test.each([
   ["単一引用符の併記", "<div class='rabi-cell fcell'></div>", ".fcell { padding: 40px; }"],
 ])("面が %s で部品の見た目を書くと落ちる", (_label, markup, rule) => {
   const html = `<style>\n${rule}\n</style>${markup}`;
-  expect(componentOverrides(html, siblingClasses(html)).length).toBeGreaterThan(0);
+  expect(componentOverrides(html, siblingClasses(html), "html").length).toBeGreaterThan(0);
 });
 
 // 2 つ目の `<style>` へ逃がしても落ちる
 test("2 つ目の style で部品の見た目を書いても落ちる", () => {
   const html = `<style>\n.x { color: red; }\n</style><style>\n.rabi-btn { height: 40px; }\n</style>`;
-  expect(componentOverrides(html, new Set())).toEqual([".rabi-btn"]);
+  expect(componentOverrides(html, new Set(), "html")).toEqual([".rabi-btn"]);
 });
 
 // 配置と、中身の組み方は当たら**ない**
@@ -498,11 +551,26 @@ test.each([
   [":has() の条件", ".surface:has(.rabi-btn) { background: red; }"],
 ])("面の %s は落ちない", (_label, rule) => {
   const html = `<style>\n${rule}\n</style><div class="rabi-cell fcell"></div>`;
-  expect(componentOverrides(html, siblingClasses(html))).toEqual([]);
+  expect(componentOverrides(html, siblingClasses(html), "html")).toEqual([]);
 });
 
-test("design/ に面が 1 枚以上ある", () => {
-  expect(surfaces.length).toBeGreaterThan(0);
+// 拡張子ごとに数える。まとめて数えると、片方が 0 枚でも通って無検査で入る。
+// ラベルを先頭に置く —— 受け取らない引数は `%s` に載ら**ない**
+test.each([
+  ["面", surfaces],
+  ["script", surfaceScripts],
+  ["style", surfaceStyles],
+] as const)("design/ に %s が 1 枚以上ある", (_label, names) => {
+  expect(names.length).toBeGreaterThan(0);
+});
+
+// 面を足しても gate は落ちないが、切替バーには出ない。索引と面を突き合わせる
+test("surfaces.js の索引が design/ の面と一致する", () => {
+  const js = readFileSync(join(DESIGN_DIR, "surfaces.js"), "utf8");
+  const block = js.match(/var SURFACES = \[([\s\S]*?)\];/)?.[1];
+  if (block === undefined) throw new Error("surfaces.js に SURFACES が無い");
+  const listed = [...block.matchAll(/\["([^"]+\.html)"/g)].map((m) => m[1] as string);
+  expect(listed.slice().sort()).toEqual(surfaces.slice().sort());
 });
 
 /** sRGB の相対輝度（WCAG 2.x）。 */
