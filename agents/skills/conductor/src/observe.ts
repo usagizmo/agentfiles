@@ -217,13 +217,14 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
 };
 
 /**
- * `sessions` 行の leftover トークン。harness の `--sessions-cmd` が書く。
- * トークンが無い行は leftover にしない。
+ * `sessions` 行の leftover / refused トークン。harness の `--sessions-cmd` が書く。
+ * トークンが無い行は leftover にも refused にもしない。
  */
 type ParsedSessionRow = {
   readonly name: string;
   readonly status: string;
   readonly leftover: boolean;
+  readonly refused: boolean;
   readonly cwd: string;
 };
 
@@ -241,16 +242,27 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   const status = parts[1] ?? "";
   const leftoverToken = parts[2];
   // **トークンの位置で見分ける。**`leftover` / `-` はこの位置にしか来ないので、
-  // トークンを持たない行の cwd（絶対 path）と衝突しない。
+  // トークンを持たない行の cwd（絶対 path）と衝突しない。refused も leftover の隣だけ。
   if (leftoverToken === "leftover" || leftoverToken === "-") {
+    const refusedToken = parts[3];
+    if (refusedToken === "refused" || refusedToken === "-") {
+      return {
+        name,
+        status,
+        leftover: leftoverToken === "leftover",
+        refused: refusedToken === "refused",
+        cwd: parts.slice(4).join(" ").trim(),
+      };
+    }
     return {
       name,
       status,
       leftover: leftoverToken === "leftover",
+      refused: false,
       cwd: parts.slice(3).join(" ").trim(),
     };
   }
-  return { name, status, leftover: false, cwd: parts.slice(2).join(" ").trim() };
+  return { name, status, leftover: false, refused: false, cwd: parts.slice(2).join(" ").trim() };
 };
 
 type OwnedClassification = {
@@ -270,6 +282,19 @@ const classifyOwned = (rows: readonly string[], name: string): OwnedClassificati
   const parsed = parseSessionRow(row);
   if (parsed === undefined) return noneOwned;
   return { session: sessionFromStatus(parsed.status), leftover: parsed.leftover };
+};
+
+/** leftover は受信可能の正の証拠。どれか 1 本でもあれば拒否を解く。 */
+export const executorRefused = (rows: readonly string[]): boolean => {
+  let refused = false;
+  let leftover = false;
+  for (const row of rows) {
+    const parsed = parseSessionRow(row);
+    if (parsed === undefined) continue;
+    if (parsed.leftover) leftover = true;
+    if (parsed.refused) refused = true;
+  }
+  return refused && !leftover;
 };
 
 const OWNED_SESSION = /^(refine|resolve)-\d+$/;
@@ -346,6 +371,7 @@ export const observeTick = async (
   const statuses = projectStatus(snapshot);
   const issueRows = new Map(decodeIssues(snapshot).map((r) => [r.issue, r]));
   const sessionRows = decodeSessions(snapshot);
+  const receiveRefused = executorRefused(sessionRows);
   const worktreeRows = decodeWorktrees(snapshot);
   const prRows = pullRequests(snapshot);
   const tips = landingTips(snapshot);
@@ -513,6 +539,7 @@ export const observeTick = async (
 
       session: owned.session,
       leftover: owned.leftover,
+      refused: receiveRefused,
       refineSession: refine.session,
       worktreeBusy: worktreeBusy(
         sessionRows,

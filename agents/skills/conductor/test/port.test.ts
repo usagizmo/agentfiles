@@ -140,6 +140,8 @@ describe("設定の fail-closed", () => {
     const cmd = parseConfig(without).sessionsCmd;
     expect(cmd).toBe(extractHarnessCmd(harnessMd(), "sessions-cmd"));
     expect(cmd).toContain("leftover=leftover");
+    expect(cmd).toContain("refused=refused");
+    expect(cmd).toContain("refused=-");
     expect(cmd).not.toContain("workspace list");
   });
 

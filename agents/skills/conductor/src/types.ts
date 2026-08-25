@@ -234,6 +234,11 @@ export type Decision = {
   readonly conflicts: readonly Conflict[];
   /** 当たった課題を選出対象外にしない。1 手を選べた周でも落とさ**ない**。応答への出し方は `SKILL.md` */
   readonly stalls: readonly Stall[];
+  /**
+   * 実行器が入力を受け取らない。**Conflict ではない。選出対象外にしない。**
+   * 応答への出し方は `SKILL.md`
+   */
+  readonly receiveRefusal: boolean;
   readonly outcome: Outcome;
   readonly usage: Usage;
 };

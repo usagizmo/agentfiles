@@ -297,6 +297,8 @@ herdr agent list | jq -cS '.result.agents[]? | select(.name != null)' | while IF
   owned=0
   printf '%s' "$name" | grep -Eq '^(refine|resolve)-[0-9]+$' && owned=1
   leftover=-
+  refused=-
+  snippet=""
   if [ "$status" = "working" ]; then
     snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
     still=0
@@ -305,10 +307,18 @@ herdr agent list | jq -cS '.result.agents[]? | select(.name != null)' | while IF
     printf '%s' "$snippet" | tail -n 12 | grep -Eiq 'Worked for|Baked for|Cogitated for' && ended=1
     if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi
   fi
-  if [ "$owned" = 1 ]; then
-    printf '%s %s %s\n' "$name" "$status" "$leftover"
+  if [ "$leftover" = "leftover" ]; then
+    refused=-
   else
-    printf '%s %s %s %s\n' "$name" "$status" "$leftover" "$cwd"
+    if [ -z "$snippet" ]; then
+      snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
+    fi
+    printf '%s' "$snippet" | grep -Eiq 'Weekly limit left: 0%|hit your limit|hit your weekly limit' && refused=refused
+  fi
+  if [ "$owned" = 1 ]; then
+    printf '%s %s %s %s\n' "$name" "$status" "$leftover" "$refused"
+  else
+    printf '%s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$cwd"
   fi
 done | sort | grep .
 
@@ -335,7 +345,10 @@ done | sort | grep .
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
 - **生値をそのまま出す**。分類は `src/observe.ts` の `sessionFromStatus` が持つ
 - **leftover は所有セッションと foreign の行に載せる**。トークンは `leftover` / `-` で、位置は状態の次
-- leftover は turn が終わり入力が通る正の証拠がある `working` だけ。終了行は detection の末尾だけを見る。証拠が無い `working` は genuine。信号が無いことを `Conflict` にしない。`working` 以外は detection を読ま**ない**
+- leftover は turn が終わり入力が通る正の証拠がある `working` だけ。終了行は detection の末尾だけを見る。証拠が無い `working` は genuine。信号が無いことを `Conflict` にしない。`working` 以外は leftover の detection を読ま**ない**
+- **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄、foreign は 5 欄（cwd が末尾）
+- leftover でなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
+- トークンが無い行は拒否ではない。kind は行に載せない
 - **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（cwd つき）
 
 worktree 一覧は面ごとの checkout から取る（スクリプトが `--repo` と `--landing` から行う）。

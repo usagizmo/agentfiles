@@ -489,15 +489,14 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7g: write を渡された直後にターンが終わった", () => {
-    expectLease(
-      [
-        implementing({
-          surfaces: [surface({ hasCheckout: present(true) })],
-          session: session.idle,
-        }),
-      ],
-      "write",
-    );
+    const obs = [
+      implementing({
+        surfaces: [surface({ hasCheckout: present(true) })],
+        session: session.idle,
+      }),
+    ];
+    expectLease(obs, "write");
+    expect(tick(obs).receiveRefusal).toBe(false);
   });
 
   test("7h: 人待ちの記録が waiting だが本文が無く、同じ対象に休止の記録がある", () => {
@@ -520,7 +519,9 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7m: write を保持したままターンが終わった", () => {
-    expectLease([implementing({ session: session.idle })], "write");
+    const obs = [implementing({ session: session.idle })];
+    expectLease(obs, "write");
+    expect(tick(obs).receiveRefusal).toBe(false);
   });
 
   test("7u: leftover の working。runtime は 稼働中 のまま write を渡す", () => {
@@ -556,6 +557,82 @@ describe("実行器が消える / 止まる", () => {
     ]);
     expect(d.outcome.kind).toBe("idle");
     expect(d.stalls).toEqual([{ issues: [1], progress: "実装中", runtime: "稼働中" }]);
+    expect(d.receiveRefusal).toBe(false);
+  });
+
+  test("7v: 行 7m と同じく待機だが、sessions に refused がある", () => {
+    const obs = [implementing({ session: session.idle, refused: true })];
+    const d = tick(obs);
+    expectIdle(obs);
+    expect(d.receiveRefusal).toBe(true);
+    expect(d.conflicts).toEqual([]);
+    expect(d.stalls).toEqual([{ issues: [1], progress: "実装中", runtime: "待機" }]);
+  });
+
+  test("7v2: 行 7v と同じ拒否だが leftover がある", () => {
+    const obs = [
+      implementing({
+        session: session.running,
+        leftover: true,
+      }),
+    ];
+    expectLease(obs, "write");
+    expect(tick(obs).receiveRefusal).toBe(false);
+    expectEmptyCycle(obs, true);
+  });
+
+  test("7v3: 行 7v と同じ拒否だが leftover でない稼働中", () => {
+    const obs = [implementing({ session: session.running, refused: true })];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
+    expect(tick(obs).conflicts).toEqual([]);
+  });
+
+  test("7v4: 行 7v と同じ拒否だが本文が計画と食い違う", () => {
+    const obs = [
+      implementing({
+        bodyMatchesPlan: present(false),
+        session: session.idle,
+        refused: true,
+      }),
+    ];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
+  });
+
+  test("refused のときセッションが消えても解決を起こし直さない", () => {
+    const obs = [implementing({ session: session.none, refused: true })];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
+  });
+
+  test("7v5: 行 7v と同じ拒否だが未計画の課題が並んでいる", () => {
+    const obs = [
+      implementing({ session: session.idle, refused: true }),
+      observation({ issue: 2, ledger: present("未計画"), refused: true }),
+    ];
+    const d = tick(obs);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.receiveRefusal).toBe(true);
+    expect(d.conflicts).toEqual([]);
+  });
+
+  test("7v6: leftover の着地待ちは refused があっても integration を渡し、空周回は除外のまま", () => {
+    const obs = [
+      awaitingLanding({
+        session: session.running,
+        leftover: true,
+      }),
+    ];
+    expectLease(obs, "integration");
+    expectEmptyCycle(obs, false);
+    expect(tick(obs).receiveRefusal).toBe(false);
+  });
+
+  test("7v7: 着地待ち × 待機でも refused なら integration を渡さない", () => {
+    const obs = [awaitingLanding({ session: session.idle, refused: true })];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
   });
 
   test("7r: 起こし直しのあと、記録は cleared でセッションは 稼働中", () => {

@@ -129,6 +129,11 @@ export type IssueObservation = {
    */
   readonly leftover: boolean;
   /**
+   * 実行器が入力を受け取らない正の証拠。leftover の隣の `refused` トークンから立つ。
+   * **`runtime` には写さない。**kind が行に無いので sessions 全体から lift する。
+   */
+  readonly refused: boolean;
+  /**
    * `refine-<番号>` のセッション（完全一致）。**存在の有無ではなく状態で持つ** ——
    * `session` は `resolve-<番号>` を見るので計画中は常に `none` になり、
    * 有無だけでは「走っているものを畳まない」を書けない。

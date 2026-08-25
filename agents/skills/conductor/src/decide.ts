@@ -112,7 +112,7 @@ const links = (o: IssueObservation): readonly number[] =>
  *
  * **Issue 単位のまま残すもの**: 台帳・open / closed・Issue 契約・本文から引くもの・
  * 在庫の鮮度・`refine` のセッション（どれも成員ごとに別々に在る）。
- * `session` と leftover は同じ分類器の出口なので揃える。
+ * `session` と leftover は同じ分類器の出口なので揃える。`refused` は実行器全体の lift。
  *
  * **claim 前には当てない。**記録は各課題自身に在る。
  */
@@ -133,6 +133,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         submissionEvidence: lead.submissionEvidence,
         session: lead.session,
         leftover: lead.leftover,
+        refused: lead.refused,
         worktreeBusy: lead.worktreeBusy,
         worktreeOccupied: lead.worktreeOccupied,
         waitRecord: lead.waitRecord,
@@ -298,13 +299,21 @@ const validWaiting = (o: IssueObservation): boolean =>
 
 const sessionAlive = (g: Group): boolean => g.leadObservation.session.kind !== "none";
 
+/**
+ * 実行器が入力を受け取らない。leftover 解除は観測の lift 済み。
+ * kind が行に無いので、どれか 1 本の `refused` が所有全体へ立つ。
+ */
+const receiveRefusedOf = (groups: readonly Group[]): boolean =>
+  groups.some((g) => g.leadObservation.refused);
+
 /** 枠を渡すの受け手。leftover は `稼働中` とだけ組む。`人待ち` の最上段を leftover で破らない。 */
-const receivable = (runtime: Runtime, leftover: boolean): boolean =>
-  runtime === "待機" || runtime === "休止" || (leftover && runtime === "稼働中");
+const receivable = (runtime: Runtime, leftover: boolean, groups: readonly Group[]): boolean =>
+  !receiveRefusedOf(groups) &&
+  (runtime === "待機" || runtime === "休止" || (leftover && runtime === "稼働中"));
 
 /** checks / 意図の確認 / 伝える 2 つ。`休止` は「枠を渡す」へ譲る。 */
-const canPrompt = (runtime: Runtime, leftover: boolean): boolean =>
-  runtime === "待機" || (leftover && runtime === "稼働中");
+const canPrompt = (runtime: Runtime, leftover: boolean, groups: readonly Group[]): boolean =>
+  !receiveRefusedOf(groups) && (runtime === "待機" || (leftover && runtime === "稼働中"));
 
 const failure = (g: Group) =>
   value(g.leadObservation.failureRecord) ?? { count: 0, lastAction: null };
@@ -577,6 +586,7 @@ const byPriority = (groups: readonly Group[]) => (a: Group, b: Group) => {
  * 飽和の述語はこれを複製せず、この関数を共有する。
  */
 const planStartable = (g: Group, ctx: Context): boolean => {
+  if (receiveRefusedOf(ctx.groups)) return false;
   if (isShelved(g)) return false;
   if (g.lead.ledger !== "未計画" || g.lead.progress !== "未着手") return false;
   if (g.leadObservation.refineSession.kind !== "none") return false;
@@ -630,6 +640,7 @@ const olderWait = (a: Group, b: Group): number => {
 };
 
 const promptPlanSlotRetreat = (g: Group, ctx: Context): boolean => {
+  if (receiveRefusedOf(ctx.groups)) return false;
   const solos = ctx.groups.flatMap(asSolo);
   if (incompleteRetreat(g)) {
     const open = solos.filter(incompleteRetreat);
@@ -897,20 +908,20 @@ const LADDER: readonly Rung[] = [
   {
     params: () => ({ action: "本文の変更を伝える" }),
     why: "本文が計画の記録と食い違っている",
-    match: (g) =>
+    match: (g, ctx) =>
       !isShelved(g) &&
       g.observations.some((o) => value(o.bodyMatchesPlan) === false) &&
       sessionAlive(g) &&
-      canPrompt(g.lead.runtime, g.leadObservation.leftover),
+      canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups),
   },
   {
     params: () => ({ action: "計画の失効を伝える" }),
     why: "統合先の変更が計画の資源キーに交差した",
-    match: (g) =>
+    match: (g, ctx) =>
       !isShelved(g) &&
       value(g.leadObservation.planInvalidated) === true &&
       sessionAlive(g) &&
-      canPrompt(g.lead.runtime, g.leadObservation.leftover) &&
+      canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups) &&
       // **着地待ちの非保持者には伝えない。** 枠を渡す本文が再 plan を載せる。
       // 保持者は着地だけ止める。実装中は書いている前提が古くなるので残す。
       // 発火条件に受け手の有無を入れない。
@@ -930,13 +941,14 @@ const LADDER: readonly Rung[] = [
       g.lead.ledger === "未計画" &&
       g.lead.runtime === "人待ち" &&
       g.leadObservation.refineSession.kind === "none" &&
-      ctx.planSlotsUsed < ctx.config.planSlots,
+      ctx.planSlotsUsed < ctx.config.planSlots &&
+      !receiveRefusedOf(ctx.groups),
   },
   {
     params: () => ({ action: "解決を起こし直す" }),
     why: "実行器が消えたまま成果物が途中で止まっている",
     match: (g, ctx) => {
-      if (isShelved(g)) return false;
+      if (isShelved(g) || receiveRefusedOf(ctx.groups)) return false;
       const r = g.lead;
       const inFlight: readonly Progress[] = ["準備中", "準備済み", "実装中", "提出中", "着地待ち"];
       if (!inFlight.includes(r.progress)) return false;
@@ -994,9 +1006,12 @@ const LADDER: readonly Rung[] = [
   {
     params: () => ({ action: "checks を引き直させる" }),
     why: "実行中の checks が 1 つも無く、緑でもない",
-    match: (g) => {
+    match: (g, ctx) => {
       if (isShelved(g)) return false;
-      if (g.lead.progress !== "提出中" || !canPrompt(g.lead.runtime, g.leadObservation.leftover))
+      if (
+        g.lead.progress !== "提出中" ||
+        !canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups)
+      )
         return false;
       const checks = value(g.leadObservation.checks);
       // **「緑でもない」を落とすと、混在する課題でキューが止まる。**
@@ -1006,10 +1021,10 @@ const LADDER: readonly Rung[] = [
   {
     params: () => ({ action: "意図の確認を促す" }),
     why: "意図の確認の記録が観測できない",
-    match: (g) => {
+    match: (g, ctx) => {
       if (isShelved(g) || !alreadyClaimed(g)) return false;
       if (g.lead.progress !== "着地待ち") return false;
-      if (!canPrompt(g.lead.runtime, g.leadObservation.leftover)) return false;
+      if (!canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups)) return false;
       const record = g.leadObservation.intentRecord;
       // **`pending` には当たらない** —— そちらは確認が始まっている。
       return record.kind === "absent" || record.kind === "broken";
@@ -1024,7 +1039,7 @@ const LADDER: readonly Rung[] = [
     why: "受信可能な実行器へ lease を渡せる",
     match: (g, ctx) => {
       if (isShelved(g)) return false;
-      if (!receivable(g.lead.runtime, g.leadObservation.leftover)) return false;
+      if (!receivable(g.lead.runtime, g.leadObservation.leftover, ctx.groups)) return false;
       // **consult の子が同じ worktree で working なら write を渡さない。**integration は別資源。
       if (g.lead.progress !== "着地待ち" && g.leadObservation.worktreeBusy) return false;
       if (g.lead.progress === "着地待ち") {
@@ -1037,7 +1052,7 @@ const LADDER: readonly Rung[] = [
       // **`休止` は交差の再開で、claim へ譲ると再開が後回しになる。**leftover の `稼働中` は譲る
       // （譲らないと毎 tick の唯一の action になり、空周回で退避先へ落ちる）。
       if (
-        canPrompt(g.lead.runtime, g.leadObservation.leftover) &&
+        canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups) &&
         needsSubmissionReport(g) &&
         ctx.groups.some(
           (other) => other.representative !== g.representative && canClaim(other, ctx),
@@ -1128,7 +1143,7 @@ const nextIntegrationReceiver = (ctx: Context): Group | undefined => {
     if (g.members.some((n) => ctx.excluded.has(n))) return false;
     if (g.lead.progress !== "着地待ち") return false;
     if (!alreadyClaimed(g)) return false;
-    if (!receivable(g.lead.runtime, g.leadObservation.leftover)) return false;
+    if (!receivable(g.lead.runtime, g.leadObservation.leftover, ctx.groups)) return false;
     if (holdsIntegration(g.leadObservation)) return false;
     if (g.observations.some((o) => value(o.bodyMatchesPlan) === false)) return false;
     const intent = g.leadObservation.intentRecord;
@@ -1226,6 +1241,7 @@ export const decide = (input: TickInput): Decision => {
   const pack = (outcome: Outcome, stalls: readonly Stall[] = []): Decision => ({
     conflicts: foldConflicts(conflicts),
     stalls,
+    receiveRefusal: receiveRefusedOf(groups),
     outcome,
     usage,
   });
