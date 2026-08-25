@@ -1096,6 +1096,84 @@ describe("外から状態が動く", () => {
     );
   });
 
+  const paused = (issue: number, over: Partial<IssueObservation> = {}): IssueObservation =>
+    writer(issue, {
+      pauseRecordExists: true,
+      session: session.idle,
+      ...over,
+    });
+
+  test("9z2: 保持者の yield が write を離した休止相手も現況の共有キーで記述している", () => {
+    expectIdle([
+      writer(1),
+      paused(2),
+      writer(3, {
+        yieldRecord: present({
+          issues: [3],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 2, keys: ["skills"] },
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  // characterization: crossing 非所属を extra にする定義でも落ちない。共有キー空が extra。
+  test("9z3: 共有キーが空になった相手の行が残っている", () => {
+    expectAction(
+      [
+        writer(1),
+        paused(2, { resourceKeys: present(["other"]) }),
+        writer(3, {
+          yieldRecord: present({
+            issues: [3],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 2, keys: ["other"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
+  });
+
+  test("9z4: キーが present でない休止相手の行は extra にしない", () => {
+    expectIdle([
+      writer(1),
+      paused(2, { resourceKeys: unobservable("コメント一覧を読めない") }),
+      writer(3, {
+        yieldRecord: present({
+          issues: [3],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 2, keys: ["skills"] },
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  test("9z5: 休止相手の行の keys が現況の共有キーと一致しない", () => {
+    expectAction(
+      [
+        writer(1),
+        paused(2),
+        writer(3, {
+          yieldRecord: present({
+            issues: [3],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 2, keys: ["old"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
+  });
+
   test("9e: 先発が着地し、休止していた後発と交差する保持者が居なくなった", () => {
     // **記録は「枠を渡す」の実行が先に消す。**解除を独立した action にすると、
     // `休止` が write の保持者から外れるぶん、休止と解除を往復する。

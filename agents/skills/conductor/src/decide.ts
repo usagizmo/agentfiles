@@ -744,6 +744,9 @@ const sameKeySet = (a: readonly string[], b: readonly string[]): boolean => {
 const yieldRowFor = (rec: YieldRecord, partner: Group): YieldPartner | undefined =>
   rec.partners.find((p) => p.to === partner.representative || partner.members.includes(p.to));
 
+const groupForRow = (row: YieldPartner, groups: readonly Group[]): Group | undefined =>
+  groups.find((g) => row.to === g.representative || g.members.includes(row.to));
+
 /** 記録のその相手の行の `keys` が、この 2 者のいまの交差を記述しているか。 */
 const yieldDescribesPair = (holder: Group, partner: Group): boolean => {
   const rec = holder.leadObservation.yieldRecord;
@@ -758,29 +761,49 @@ const yieldDescribesPair = (holder: Group, partner: Group): boolean => {
   return sameKeySet(row.keys, shared);
 };
 
-/** 解けた相手の行が残っている。現況の交差に居ない `to` は記述済みと読まない。 */
-const yieldHasExtraPartners = (g: Group, crossing: readonly Group[]): boolean => {
+/**
+ * 書いてよい行でない相手が残っている。書いてよい行はキーを共有する実在の相手。
+ * 観測に居ない `to` と共有キーが空の行は extra。キーが present でない相手は extra にしない。
+ */
+const yieldHasExtraPartners = (g: Group, groups: readonly Group[]): boolean => {
   const rec = g.leadObservation.yieldRecord;
   if (rec.kind !== "present") return false;
-  return rec.value.partners.some(
-    (row) => !crossing.some((p) => row.to === p.representative || p.members.includes(row.to)),
-  );
+  return rec.value.partners.some((row) => {
+    const partner = groupForRow(row, groups);
+    if (partner === undefined) return true;
+    const shared = sharedKeys(g.leadObservation.resourceKeys, partner.leadObservation.resourceKeys);
+    if (shared === undefined) return false;
+    return shared.length === 0;
+  });
 };
 
 /**
- * 交差相手のすべてについて、いまの交差を記述しているか。
+ * 書かねばならない行（write 保持者）が揃い、書いてよい行の `keys` が現況と集合一致するか。
  * 自前に余分な行があれば偽。自前にその相手の行があれば自前の `keys` だけ。
- * 行が無い相手は相手側でも足りる。
+ * 行が無い write 保持者は相手側でも足りる。
  */
-const crossingDescribed = (g: Group, crossing: readonly Group[]): boolean => {
-  if (yieldHasExtraPartners(g, crossing)) return false;
-  return crossing.every((partner) => {
-    const rec = g.leadObservation.yieldRecord;
-    if (rec.kind === "present" && yieldRowFor(rec.value, partner) !== undefined) {
-      return yieldDescribesPair(g, partner);
+const crossingDescribed = (
+  g: Group,
+  crossing: readonly Group[],
+  groups: readonly Group[],
+): boolean => {
+  if (yieldHasExtraPartners(g, groups)) return false;
+  const rec = g.leadObservation.yieldRecord;
+  if (rec.kind === "present") {
+    for (const row of rec.value.partners) {
+      const partner = groupForRow(row, groups);
+      if (partner === undefined) continue;
+      const shared = sharedKeys(
+        g.leadObservation.resourceKeys,
+        partner.leadObservation.resourceKeys,
+      );
+      if (shared === undefined) continue;
+      if (!yieldDescribesPair(g, partner)) return false;
     }
-    return yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g);
-  });
+  }
+  return crossing.every(
+    (partner) => yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g),
+  );
 };
 
 /**
@@ -999,8 +1022,8 @@ const LADDER: readonly Rung[] = [
       // 直列化（`intersect` の `unknown`）は残す。
       if (g.leadObservation.resourceKeys.kind !== "present") return false;
       if (crossing.some((p) => p.leadObservation.resourceKeys.kind !== "present")) return false;
-      // **記録の有無だけでは見ない。**`partners` の各行が現況と一致しているあいだは送らない。
-      return !crossingDescribed(g, crossing);
+      // **記録の有無だけでは見ない。**書いてよい行と書かねばならない行が現況と一致しているあいだは送らない。
+      return !crossingDescribed(g, crossing, ctx.groups);
     },
   },
   {
