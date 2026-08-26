@@ -1308,7 +1308,7 @@ summary.rabi-panel-section-head:hover {
   border-top: 1px solid var(--rabi-line);
 }
 
-/* ==== alert。淡い面。ここには赤を意味として載せてよい ==== */
+/* ==== alert。淡い面。危険はここ。情報ロールは DESIGN.md「情報層」と「Components」の添え物 ==== */
 .rabi-alert {
   display: flex;
   align-items: flex-start;
@@ -1789,7 +1789,8 @@ summary.rabi-nav-group::-webkit-details-marker {
   color: var(--rabi-soft);
 }
 
-/* ==== callout。図と見出しを持つ添え物。1 行の状態は `.rabi-alert` ==== */
+/* ==== callout。図と見出しを持つ添え物。1 行の状態は `.rabi-alert`。
+ * 赤も情報ロールも意味として載せ**ない**。情報層は `.rabi-note` ==== */
 .rabi-callout {
   display: grid;
   grid-template-columns: 18px 1fr;

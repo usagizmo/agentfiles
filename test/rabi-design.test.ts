@@ -65,20 +65,27 @@ const surfaceAssets = [...surfaceScripts, ...surfaceStyles];
 const assets = readdirSync(join(SKILL, "assets")).filter((name) => /\.(html|js|css)$/.test(name));
 
 /** 値の SSOT。ここだけが 16 進値と `--rabi-*` の宣言を持てる。 */
-const TOKEN_SSOT = "rabi.css";
+const TOKEN_SSOT = new Set(["rabi.css", "rabi-role.css"]);
+
+const ROLE_CSS = join(SKILL, "assets/rabi-role.css");
 
 /** 値の SSOT を除いた asset。写しを持ってはいけない側。 */
-const derivedAssets = assets.filter((name) => name !== TOKEN_SSOT);
+const derivedAssets = assets.filter((name) => !TOKEN_SSOT.has(name));
 
 /**
  * どこにも宣言が無い `var(--rabi-…)` を返す。
  *
- * 引ける先は 2 つ —— `rabi.css` の値のトークンと、そのファイルが自分で宣言した
- * 部品のローカル変数（`DESIGN.md`「Components」）。
+ * 引ける先はブランド層の `rabi.css`、情報層を読んだ面では `rabi-role.css`、
+ * そのファイルが自分で宣言した部品のローカル変数（`DESIGN.md`「Components」）。
  */
 function undeclaredTokens(path: string): string[] {
   const source = readFileSync(path, "utf8");
   const declared = declarations(readFileSync(join(SKILL, "assets/rabi.css"), "utf8"));
+  if (path.endsWith("rabi-role.css") || source.includes("rabi-role.css")) {
+    for (const [name, value] of declarations(readFileSync(ROLE_CSS, "utf8"))) {
+      declared.set(name, value);
+    }
+  }
   const local = new Set(
     [...source.matchAll(/(?:^|[;{\s])--rabi-([a-z0-9_-]+)\s*:/g)].map((m) => m[1] as string),
   );
@@ -88,17 +95,17 @@ function undeclaredTokens(path: string): string[] {
   return [...new Set(referenced.filter((n) => !declared.has(n) && !local.has(n)))];
 }
 
-test.each([...surfaces, ...surfaceAssets])("%s が引くトークンは rabi.css に在る", (name) => {
+test.each([...surfaces, ...surfaceAssets])("%s が引くトークンは値の SSOT に在る", (name) => {
   expect(undeclaredTokens(join(DESIGN_DIR, name))).toEqual([]);
 });
 
-test.each(assets)("assets/%s が引くトークンは rabi.css に在る", (name) => {
+test.each(assets)("assets/%s が引くトークンは値の SSOT に在る", (name) => {
   expect(undeclaredTokens(join(SKILL, "assets", name))).toEqual([]);
 });
 
 // 拡張子ごとに数える。まとめて数えると、片方が 0 枚でも通って無検査で入る
 test.each([
-  [".css", 2],
+  [".css", 3],
   [".js", 1],
 ])("assets/ の %s が %i 枚以上ある", (ext, least) => {
   expect(assets.filter((name) => name.endsWith(ext)).length).toBeGreaterThanOrEqual(least);
@@ -143,10 +150,6 @@ test("部品クラスの中の宣言はローカル変数として通る", () =>
 });
 
 /**
- * 部品クラスの全体。`rabi-components.css` の UI 部品と、`rabi.css` の文書の部品。
- * 面が組み直せるのはどちらも同じなので、`rabi.css` 側も対象に入れる。
- */
-/**
  * asset が宣言する `.rabi-*` のクラス名。
  *
  * 複合セレクタ（`.rabi-cell.rabi-cell-row`）の 2 つ目以降も拾う。
@@ -160,7 +163,11 @@ const classesIn = (rel: string): string[] =>
   ].map((m) => m[1] as string);
 
 const uiClasses = classesIn("assets/rabi-components.css");
-const componentClasses = new Set([...uiClasses, ...classesIn("assets/rabi.css")]);
+const componentClasses = new Set([
+  ...uiClasses,
+  ...classesIn("assets/rabi.css"),
+  ...classesIn("assets/rabi-role.css"),
+]);
 
 // 合成集合で見ると、UI 部品が空でも文書部品だけで通る
 test("rabi-components.css が部品クラスを宣言している", () => {
@@ -183,7 +190,7 @@ function incompleteSteps(css: string): string[] {
     .map((m) => (m[1] as string).trim().replace(/\s+/g, " "));
 }
 
-test.each(["assets/rabi-components.css", "assets/rabi.css"])(
+test.each(["assets/rabi-components.css", "assets/rabi.css", "assets/rabi-role.css"])(
   "%s は字の段を size / weight / line-height で揃える",
   (rel) => {
     expect(incompleteSteps(readFileSync(join(SKILL, rel), "utf8"))).toEqual([]);
@@ -958,4 +965,68 @@ test("罫は濃い順に edge > divider > line", () => {
 test("accent は両テーマで同値", () => {
   const [light, dark] = themes(CSS(), "accent");
   expect(light).toBe(dark);
+});
+
+const ROLE_CSS_TEXT = () => readFileSync(ROLE_CSS, "utf8");
+
+const ROLE_NAMES = ["info", "success", "attention"] as const;
+
+test("情報層のトークン SSOT が 3 ロールの fill / line / text を持つ", () => {
+  const names = [...declarations(ROLE_CSS_TEXT()).keys()];
+  expect(names.filter((n) => n.startsWith("role-")).sort()).toEqual(
+    ROLE_NAMES.flatMap((role) => [`role-${role}`, `role-${role}-line`, `role-${role}-text`]).sort(),
+  );
+});
+
+test("ブランド層は情報層のトークンを持たない", () => {
+  expect(CSS()).not.toContain("--rabi-role-");
+});
+
+test("情報層は危険ロールを持たない", () => {
+  expect(ROLE_CSS_TEXT()).not.toMatch(/--rabi-role-(danger|error|warning|critical)/);
+});
+
+test("rabi-components.css は情報層のトークンを引かない", () => {
+  expect(readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8")).not.toContain(
+    "--rabi-role-",
+  );
+});
+
+test("docs.html は情報層を読まない", () => {
+  expect(readFileSync(join(DESIGN_DIR, "docs.html"), "utf8")).not.toContain("rabi-role");
+});
+
+test("components.html は情報層を読み 3 ロールを並べる", () => {
+  const html = readFileSync(join(DESIGN_DIR, "components.html"), "utf8");
+  expect(html).toContain("rabi-role.css");
+  expect(html).toContain("rabi-note-info");
+  expect(html).toContain("rabi-note-success");
+  expect(html).toContain("rabi-note-attention");
+});
+
+test("rabi-role.css が .rabi-note の 3 ロールを宣言している", () => {
+  expect(new Set(classesIn("assets/rabi-role.css"))).toEqual(
+    new Set(["rabi-note", "rabi-note-info", "rabi-note-success", "rabi-note-attention"]),
+  );
+});
+
+test.each([...ROLE_NAMES])("%s の text は自分の fill の上で 4.5:1 を割らない", (role) => {
+  const css = ROLE_CSS_TEXT();
+  for (const theme of [0, 1] as const) {
+    expect(
+      contrast(themes(css, `role-${role}-text`)[theme], themes(css, `role-${role}`)[theme]),
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+test.each([...ROLE_NAMES])("%s の line は隣接面のどれに対しても 3:1 を割らない", (role) => {
+  const css = ROLE_CSS_TEXT();
+  const brand = CSS();
+  for (const theme of [0, 1] as const) {
+    for (const bg of SURFACES) {
+      expect(
+        contrast(themes(css, `role-${role}-line`)[theme], themes(brand, bg)[theme]),
+      ).toBeGreaterThanOrEqual(3);
+    }
+  }
 });

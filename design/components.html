@@ -5,7 +5,7 @@
     <title>Rabi 部品カタログ</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <!--
-      `rabi-components.css` が実装している部品を、全部の状態と並べて出す面。**手書き**で、生成物ではない。
+      `rabi-components.css` と `rabi-role.css` が実装している部品を、全部の状態と並べて出す面。**手書き**で、生成物ではない。
 
       組み合わせの面（landing / docs / app）が「組み合わせたときに破綻しないか」を見るのに対し、ここは
       「部品ひとつが全状態で正しいか」を見る。新しい面を組むときはここから拾う。
@@ -13,11 +13,12 @@
       面そのものは密（一覧）なので、深さを使わず外縁も `5` 以下に収める
       （DESIGN.md「深さを使わない面」「Layout」）。
 
-      各行の左は `rabi-components.css` のクラス名と、front matter `components` のキーか、
+      各行の左は部品のクラス名と、front matter `components` のキーか、
       その行が何を見せるかの一言。値を確かめるのは DESIGN.md 側で、この面は形と状態だけを見る。
     -->
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-role.css" />
     <link rel="stylesheet" href="surfaces.css" />
     <style>
       /* ==== 版面の変数。密な面の密度 ==== */
@@ -347,7 +348,7 @@
     <header class="rabi-appbar site-header">
       <div class="header-inner">
         <a class="rabi-brand" href="#">Rabi 部品カタログ</a>
-        <span class="header-note">rabi-components.css</span>
+        <span class="header-note">rabi-components.css + rabi-role.css</span>
       </div>
     </header>
 
@@ -373,6 +374,7 @@
           <li><a href="#accordion">Accordion</a></li>
           <li><a href="#statusbar">Status bar</a></li>
           <li><a href="#alert">Alert / Tooltip</a></li>
+          <li><a href="#note">Note</a></li>
           <li><a href="#doc">Heading / Table</a></li>
           <li><a href="#appbar">Appbar / Footer</a></li>
           <li><a href="#nav">Nav / Crumbs</a></li>
@@ -1227,6 +1229,24 @@
           </div>
         </section>
 
+        <section class="sec" id="note">
+          <div class="rabi-section-head sec-head">
+            <h2>Note</h2>
+            <p>情報層。同一面に 3 ロールを並べる。危険は .rabi-alert のまま</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note</code><span>note-info / note-success / note-attention</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <p class="rabi-note rabi-note-info" role="status">保存せずに閉じると、未反映の入力は残らない。</p>
+              <p class="rabi-note rabi-note-success" role="status">公開設定を保存した。</p>
+              <p class="rabi-note rabi-note-attention" role="status">この操作は取り消しできない。</p>
+            </div>
+          </div>
+        </section>
+
         <section class="sec" id="doc">
           <div class="rabi-section-head sec-head">
             <h2>Heading / Table</h2>
@@ -1599,7 +1619,7 @@
 
         <div class="footer-bottom">
           <span><kbd class="rabi-kbd">T</kbd> テーマ切替</span>
-          <span>実装は rabi-components.css</span>
+          <span>実装は rabi-components.css と rabi-role.css</span>
           <span>値と規則は DESIGN.md</span>
         </div>
       </main>

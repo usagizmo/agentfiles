@@ -652,11 +652,11 @@ components:
 
 # Rabi DESIGN.md
 
-値の SSOT は `rabi.css`。front matter は写しで、直し方は `../SKILL.md`。
+ブランド層の値の SSOT は `rabi.css`。情報層は `rabi-role.css`。front matter はブランド層の写しで、直し方は `../SKILL.md`。
 
 CSS 変数名は `--rabi-` + 段の名。`colors` は同名、`typography` のサイズは `t-`・行送りは `lh-`、`rounded` は `r-`、`spacing` の余白は `gap-` を冠する。丈と `spacing.control-*` は同名。例外は `1.5` → `gap-1_5` **だけ**（`.` を CSS の識別子に置けない）。
 
-front matter に出せないものは `rabi.css` だけが持つ —— 影、混色の入力、状態が変わる速さ（一覧は `../scripts/gen-tokens.ts` の `CSS_ONLY`）と、各 token の dark 値。
+front matter に出せないものは `rabi.css` だけが持つ —— 影、混色の入力、状態が変わる速さ（一覧は `../scripts/gen-tokens.ts` の `CSS_ONLY`）と、各 token の dark 値。情報層は front matter に出さ**ない**。
 
 ## Overview
 
@@ -664,7 +664,7 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 
 基調はモノトーン + クリムゾン。白兎が light、黒兎が dark、赤い目がアクセント。
 
-**道具の面**として組む。地は `ground`、文字は `ink`、有彩色はクリムゾンのみ。階層は重なり・罫・影で作り、色数では作ら**ない**。
+**道具の面**として組む。地は `ground`、文字は `ink`。階層は重なり・罫・影で作り、色数では作ら**ない**。色そのものが意味である面は情報層。
 
 読み手は取引先と社内の実務者。作るのは web・見積・譜面・スライド・業務 UI。
 
@@ -680,7 +680,7 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 
 16 進値を写さず、常にトークンを参照する（light / dark で値が切り替わる）。CSS を持たない媒体（docx・スライド）だけは、ライト値を直接指定する。
 
-有彩色はクリムゾンのみ。第 2 の色を足さ**ない**。
+ブランド層の有彩色はクリムゾンのみ。第 2 の色を足さ**ない**。情報層は別名前空間（「情報層」）。
 
 `accent` は両テーマで同じ値を使う。テーマや外観設定で差し替え**ない**。上に載る文字は両テーマとも `on-accent`。
 
@@ -714,13 +714,27 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 
 地との比の下限は、文字（`ink` `soft` `faint` `accent-text` `on-accent`）が 4.5:1、操作部品の輪郭 `edge` が 3:1。薄く見せたくても割ら**ない**。
 
-下限を持たないのは、罫の `wash-line` と `line`、および面そのもの（`ground` `paper` `paper-2` `wash` `accent`）**だけ**。`divider` は罫だが吹き出しの上で文字になるので、`ink` の面で 4.5:1 を持つ（「Components」）。`accent-hover` / `accent-active` は `accent` の派生で、同じく面。
+下限を持たないのは、罫の `wash-line` と `line`、および面そのもの（`ground` `paper` `paper-2` `wash` `accent` と情報層の fill）**だけ**。情報層の line は下限を持つ（「情報層」）。`divider` は罫だが吹き出しの上で文字になるので、`ink` の面で 4.5:1 を持つ（「Components」）。`accent-hover` / `accent-active` は `accent` の派生で、同じく面。
 
 下限は**その色が載りうる面のうち、地との差が最小の面**で測る。`paper` の上だけで測ら**ない**。文字と `edge` が載りうる面は `ground` `paper` `paper-2` `wash` の 4 つ、`on-accent` は `accent` **だけ**。
 
 節と節の境は `paper-2` の帯か `divider` の罫で分ける。同じ境で両方を使わ**ない**。
 
 本文・ラベル・リンクは面の上に置く。地の上には置か**ない**。
+
+### 情報層
+
+情報層は情報・成功・注意の 3 ロール。危険はブランドの警告部品のまま。情報層に危険ロールを置か**ない**。
+
+トークンは `--rabi-role-<name>` / `-line` / `-text`。値の SSOT は `../assets/rabi-role.css`。front matter の `colors` には出さ**ない**。
+
+fill は `wash` と同等の明度。line は fill より 1 段。text は自分の fill の上で 4.5:1。line は隣接面と 3:1。隣接面は文字と `edge` が載りうる面と同じ 4 つ。
+
+見積・譜面・PDF は読ま**ない**。同一面に意味ロールが 2 つ以上並ぶ面だけが読む。意味ロールが 1 つだけの注意書きは情報層を読ま**ない**。媒体の切り分けは「Components」。
+
+色だけで意味を伝え**ない**。役割名、文言、アイコンのいずれかを必ず添える。
+
+情報層の fill の上にブランドの影（`e1`〜`e3` / `e2-accent` / `e3-accent`）を落とさ**ない**。情報層専用の影系統は作ら**ない**。
 
 ### 赤を出す場所
 
@@ -768,6 +782,8 @@ flowchart LR
 | 完了   | 赤ベタと反転した印                                                                                                                     |
 | 警告   | 面と文字。入力欄は枠を `accent` にして説明文を添える                                                                                   |
 | 無効   | 地・文字・輪郭の 3 つとも下げる                                                                                                        |
+
+情報・成功・注意は警告の行に載せ**ない**。部品の選びは「Components」の添え物。
 
 選択で地を赤にし**ない**。
 
@@ -980,7 +996,7 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 
 赤の面の上は `e2-accent` / `e3-accent` を使う。
 
-影の色はこの 2 系統**だけ**。赤以外の彩度のある面を作ら**ない**。
+ブランド層の影の色はこの 2 系統**だけ**。ブランド層に赤以外の彩度のある面を作ら**ない**。情報層の面は「情報層」。
 
 ## Shapes
 
@@ -1019,11 +1035,11 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 
 ## Components
 
-値は front matter の `components`、実装は `../assets/rabi-components.css`。ここにはどちらにも置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持ち、front matter に値を持た**ない**。
+値は front matter の `components`、実装は `../assets/rabi-components.css`。ここにはどちらにも置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持ち、front matter に値を持た**ない**。情報層の部品（`.rabi-note`）は `../assets/rabi-role.css` が実装を持ち、front matter に値を持た**ない**。
 
-部品が自分の中でだけ使う値（丈から幅や寄せを導くなど）は、**部品クラスのスコープ**で `--rabi-<部品>-<名>` を宣言してよい。`:root` に立てるのは値のトークン**だけ**で、そこは `rabi.css` の持ち分。
+部品が自分の中でだけ使う値（丈から幅や寄せを導くなど）は、**部品クラスのスコープ**で `--rabi-<部品>-<名>` を宣言してよい。`:root` に立てるのは値のトークン**だけ**。ブランド層は `rabi.css`、情報層は `rabi-role.css`。
 
-UI を組む媒体では `rabi-components.css` のクラスを使う。部品の一覧はそのファイルの節見出し。
+UI を組む媒体では `rabi-components.css` のクラスを使う。部品の一覧はそのファイルの節見出し。情報層の部品は `rabi-role.css`。
 
 front matter のキーは class 名と 1 対 1 では**ない**。
 
@@ -1047,6 +1063,8 @@ front matter のキーは class 名と 1 対 1 では**ない**。
 | `price` の単位        | `.rabi-price-unit`                       |
 | `footer-col-title`    | `.rabi-footer-col` の `h2` / `h3`        |
 | それ以外              | `rabi-` を冠すだけ                       |
+
+`.rabi-note` は front matter にキーを持たない。値は `../assets/rabi-role.css`。
 
 単体では効か**ない**クラスがある。variant は土台と、内側の部品は容器と併記する。
 
@@ -1076,15 +1094,16 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 
 丈を持つ variant は「Layout」の丈の表の行をそのまま下げる。丈を持たない面（セル・表）の密度は位置の表の段から選び、値は `../assets/rabi-components.css` が持つ。
 
-無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` と front matter へ足してから使う。
+無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` と front matter へ足してから使う。情報層の部品は `../assets/rabi-role.css` へ足す。
 
 媒体で読むものが変わる。
 
-| 媒体                             | 読むもの                           | 使える部品                            |
-| -------------------------------- | ---------------------------------- | ------------------------------------- |
-| UI（web の面・業務 UI）          | `rabi.css` + `rabi-components.css` | すべて                                |
-| 文書（見積・譜面・PDF）          | `rabi.css` だけ                    | `.rabi-heading` と `.rabi-table` のみ |
-| CSS を持たない（docx・スライド） | 読めない                           | 無し。段と余白を表から読んで当てる    |
+| 媒体                             | 読むもの                                             | 使える部品                            |
+| -------------------------------- | ---------------------------------------------------- | ------------------------------------- |
+| UI。意味ロールが 2 つ以上並ぶ面  | `rabi.css` + `rabi-components.css` + `rabi-role.css` | すべて                                |
+| UI。それ以外                     | `rabi.css` + `rabi-components.css`                   | `.rabi-note` を除く                   |
+| 文書（見積・譜面・PDF）          | `rabi.css` だけ                                      | `.rabi-heading` と `.rabi-table` のみ |
+| CSS を持たない（docx・スライド） | 読めない                                             | 無し。段と余白を表から読んで当てる    |
 
 文書では表に `.rabi-table` を必ず使う。ナビと操作と状態を持つ面は文書では**ない** —— web の docs は UI に当たり、長文は `.rabi-prose` で組む。
 
@@ -1156,7 +1175,7 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 - 長文: 積む間隔は `.rabi-prose` が 1 か所で持つ。要素ごとの margin で積ま**ない**
 - 長文が組むのは**直下の、class を持たない要素だけ**
 - 長文の行送りは `body-doc`。字の段は `body` のまま
-- 添え物: 見出しを持つなら `.rabi-callout`、1 行の状態なら `.rabi-alert`。callout には赤を意味として載せ**ない**
+- 添え物: 見出しを持つなら `.rabi-callout`、1 行の状態なら `.rabi-alert`。callout には赤を意味として載せ**ない**。情報・成功・注意が同一面に 2 つ以上並ぶときは `.rabi-note`。`.rabi-alert` を多色化し**ない**。
 - コードの塊: 横に流さず折り返す。読む幅は面が決める
 - キー: 紙の面は `.rabi-kbd`（枠つき）、吹き出しの中は `kbd`（枠なし）。1 つにまとめ**ない**
 - 何も無い面: 押せる面と枠の形で区別する

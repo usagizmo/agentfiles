@@ -1,0 +1,71 @@
+/* Rabi 情報層 — 意味ロールのトークンと部品。`rabi.css` の後に読む。
+ * 規則は `../references/DESIGN.md`「情報層」。危険は `.rabi-alert`。ここへ置か**ない**。 */
+
+:root {
+  --rabi-role-info: light-dark(#edf2f8, #0e1925);
+  --rabi-role-info-line: light-dark(#5c8fc1, #3c6e9f);
+  --rabi-role-info-text: light-dark(#1b6ec0, #2482e0);
+
+  --rabi-role-success: light-dark(#e5f5ec, #0b1e13);
+  --rabi-role-success-line: light-dark(#3b9b63, #2e7a4e);
+  --rabi-role-success-text: light-dark(#127d3e, #16984c);
+
+  --rabi-role-attention: light-dark(#f7f2e9, #1e170b);
+  --rabi-role-attention-line: light-dark(#aa8341, #856732);
+  --rabi-role-attention-text: light-dark(#936515, #ae7719);
+}
+
+/* 役割名を必ず出す。色だけで意味を伝え**ない** */
+.rabi-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--rabi-gap-2);
+  margin: 0;
+  padding: var(--rabi-gap-2_5) var(--rabi-gap-3);
+  font-size: var(--rabi-t-body);
+  font-weight: 400;
+  line-height: var(--rabi-lh-body);
+  border: 1px solid;
+  border-radius: var(--rabi-r-md);
+}
+
+.rabi-note::before {
+  font-size: var(--rabi-t-label);
+  font-weight: 600;
+  line-height: var(--rabi-lh-label);
+  flex: none;
+}
+
+.rabi-note-info {
+  background: var(--rabi-role-info);
+  color: var(--rabi-role-info-text);
+  border-color: var(--rabi-role-info-line);
+}
+
+.rabi-note-info::before {
+  content: "情報";
+}
+
+.rabi-note-success {
+  background: var(--rabi-role-success);
+  color: var(--rabi-role-success-text);
+  border-color: var(--rabi-role-success-line);
+}
+
+.rabi-note-success::before {
+  content: "成功";
+}
+
+.rabi-note-attention {
+  background: var(--rabi-role-attention);
+  color: var(--rabi-role-attention-text);
+  border-color: var(--rabi-role-attention-line);
+}
+
+.rabi-note-attention::before {
+  content: "注意";
+}
+
+.rabi-note + .rabi-note {
+  margin-top: var(--rabi-gap-2);
+}
