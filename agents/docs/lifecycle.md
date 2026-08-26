@@ -168,7 +168,7 @@ sequenceDiagram
     Note over C: action の優先では片付けが台帳前進より上。<br/>手順では完了を先に書いてから実体を消す。
 ```
 
-**片付けの前に必ず成果を確認する**。worktree とセッションを消すとセッションまとめが一緒に消え、git にも Issue にも残らない。PR に載っていなければ pane から回収し、どこにも無ければ片付けずに報告する。**例外は** PR が `merged` で claim の remote branch が無いとき。手順は `conductor/references/protocols.md`。
+**片付けの前に必ず成果を確認する**。worktree とセッションを消すとセッションまとめが一緒に消え、git にも Issue にも残らない。PR に載っていなければ pane から回収し、どこにも無ければ片付けずに報告する。**例外は** 片付けの記録があるとき（記録が「通った」ことの証跡）。手順は `../skills/conductor/references/protocols.md`。
 
 ## 計画済みになるまで
 
@@ -214,12 +214,7 @@ sequenceDiagram
             F->>F: 同じセッションでその相手を手順の先頭から流す
         end
         C->>C: 観測 → 計画セッションが終わっている
-
-        alt done（未 seen のまま終わった）
-            C->>C: pane を閉じる（計画枠を空ける）
-        else idle（人が入力を書いている最中かもしれない）
-            C->>C: retired-refine-#N へ rename する
-            Note over C: 枠は返るが、その Issue の再計画は塞いだまま。<br/>解けるのは人が pane を閉じたときだけ
-        end
+        C->>C: tab を閉じる（計画枠を空ける）
+        Note over C: 計画の成果は Status・ready・Issue 本文へ外部化されている。<br/>閉じる → 起こす の往復は周回の記録が上限で止める
     end
 ```

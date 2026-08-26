@@ -1,0 +1,40 @@
+/* design/ の面が共有する実体。見本その**もの**では**ない**。
+
+   置けるのは面の chrome と、面が図を引く規則まで。部品の見た目は書か**ない** ——
+   書いたら実装が 2 つになる（`test/rabi-design.test.ts`）。 */
+
+/* 図の線は文字のステムに合わせる（`DESIGN.md`「図の置き方」）。
+   寸法は載せる部品が持つので、ここは線の引き方だけ */
+.ico {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 上に積む図は線を 1 段太くする（`DESIGN.md`「図の置き方」）。寸法は載せる部品が持つ */
+.ico-stacked {
+  stroke-width: 1.5;
+}
+
+/* 面を横断する chrome。下端に貼り付く —— 流れの中に居るので、
+   面が `body` の余白をどう書いても見本を覆わ**ない** */
+.surface-bar {
+  position: sticky;
+  z-index: 200;
+  bottom: var(--rabi-gap-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--rabi-gap-2);
+  margin: var(--rabi-gap-4);
+}
+
+/* 見本を印刷したときに chrome を混ぜ**ない** */
+@media print {
+  .surface-bar {
+    display: none;
+  }
+}

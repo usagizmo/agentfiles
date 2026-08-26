@@ -100,6 +100,7 @@ flowchart LR
         AS["advisors.sh<br/><small>起動・回収の実行</small>"]
         GM["gitmoji.md<br/><small>gitmoji 一覧</small>"]
         SD["sync-local-default.sh<br/><small>ローカル default の ff</small>"]
+        EI["ensure-integration-ref.sh<br/><small>統合先 ref の ensure</small>"]
     end
     subgraph sharedq["agents/shared/queue/ — キュー機構専用"]
         SB["same-branch.md<br/><small>1 本で直す宣言・group</small>"]
@@ -133,6 +134,8 @@ flowchart LR
     RF --> RR
     RS --> RR
     ME --> GM
+    CO --> EI
+    ME --> EI
     RF --> BD
     RS --> SB
     RS --> WR
@@ -172,37 +175,41 @@ flowchart LR
 
 skill 固有の `references/`:
 
-| skill       | 実体                                                                                      | 何を持つか                                                                                                                                   |
-| ----------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `conductor` | `harness.md` / `protocols.md` / `intake.md` / `tick.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 正規化と action の論証 / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
-| `resolve`   | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `written-record.md`              | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
-| `docs`      | `review-prompt.md`                                                                        | 更新判定用                                                                                                                                   |
+| skill         | 実体                                                                                      | 何を持つか                                                                                                                                   |
+| ------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `conductor`   | `harness.md` / `protocols.md` / `intake.md` / `tick.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 正規化と action の論証 / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
+| `resolve`     | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `written-record.md`              | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
+| `docs`        | `review-prompt.md`                                                                        | 更新判定用                                                                                                                                   |
+| `rabi-design` | `DESIGN.md`                                                                               | ブランドと情報層の仕様。front matter はブランド層の写し、本文が適用の規則                                                                    |
 
 skill 固有の `scripts/`:
 
-| skill         | 実体                                                                                                                                                                                                                                                                                                                                                                     | 何をするか                                                                                                                                                                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `conductor`   | `watch.sh` + `watch.test.sh` / `ensure-integration-ref.sh` + `ensure-integration-ref.test.sh` / `pr-list.jq` / `comment-fingerprint.jq` / `issue-fingerprint.py` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                                                                           | 起床監視・PR を使わない面の統合先 ref の ensure・checks 抽出・コメント指紋・本文 digest・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなく、観測は `watch.sh`、統合先 ref の作成は `ensure-integration-ref.sh` が SSOT** |
-| `docs`        | `audit-skills.sh` / `check-emphasis.ts` / `check-hard-wrap.ts`                                                                                                                                                                                                                                                                                                           | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                                                                                                                                                        |
-| `resolve`     | `serialize-plan.ts`                                                                                                                                                                                                                                                                                                                                                      | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                                                                                                                                                |
-| `rabi-design` | `gen-tokens.ts`                                                                                                                                                                                                                                                                                                                                                          | `rabi.css` から `DESIGN.md` の front matter を書き戻す（`--check` は差分を落とす）                                                                                                                                                      |
-| `pr`          | `sync-and-push.sh` + `sync-and-push.test.sh`                                                                                                                                                                                                                                                                                                                             | base への追随と origin の同名への push（素の `git push` を使わせない）                                                                                                                                                                  |
-| 共有          | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink）+ `shared/queue/standalone-line.ts`（`conductor/src` と `resolve/scripts/` から symlink）+ `shared/sync-local-default.sh`（`pr` / `ship` の `scripts/` から symlink） | 候補表・JSONC・選出・起動と回収・固定 marker の単独行・ローカル default の ff                                                                                                                                                           |
+| skill         | 実体                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 何をするか                                                                                                                                                                      |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `conductor`   | `watch.sh` + `watch.test.sh` / `ensure-integration-ref.test.sh`（共有実体の検査。回すのは `conductor` だけ） / `pr-list.jq` / `comment-fingerprint.jq` / `issue-fingerprint.py` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                                                                                                                                                     | 起床監視・共有の統合先 ref ensure の検査・checks 抽出・コメント指紋・本文 digest・成果の指紋・台帳クエリ・issues を board へ絞る。**手順書ではなく、観測は `watch.sh` が SSOT** |
+| `docs`        | `audit-skills.sh` / `check-emphasis.ts` / `check-hard-wrap.ts`                                                                                                                                                                                                                                                                                                                                                                                                    | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                                                                                                |
+| `resolve`     | `serialize-plan.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                               | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                                                                                        |
+| `rabi-design` | `gen-tokens.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `rabi.css` から `DESIGN.md` の front matter を書き戻す（`--check` は差分を落とす）                                                                                              |
+| `pr`          | `sync-and-push.sh` + `sync-and-push.test.sh`                                                                                                                                                                                                                                                                                                                                                                                                                      | base への追随と origin の同名への push（素の `git push` を使わせない）                                                                                                          |
+| 共有          | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink）+ `shared/queue/standalone-line.ts`（`conductor/src` と `resolve/scripts/` から symlink）+ `shared/sync-local-default.sh`（`pr` / `ship` の `scripts/` から symlink） + `shared/ensure-integration-ref.sh`（`conductor` / `merge` の `scripts/` から symlink） | 候補表・JSONC・選出・起動と回収・固定 marker の単独行・ローカル default の ff・統合先 ref の ensure                                                                             |
 
 skill 固有の `assets/`:
 
-| skill         | 実体       | 何を持つか          |
-| ------------- | ---------- | ------------------- |
-| `rabi-design` | `rabi.css` | ブランドの値の SSOT |
+| skill         | 実体                  | 何を持つか                                   |
+| ------------- | --------------------- | -------------------------------------------- |
+| `rabi-design` | `rabi.css`            | ブランド層の値の SSOT と文書の部品           |
+| `rabi-design` | `rabi-components.css` | UI 部品の実装。値はトークンを引く            |
+| `rabi-design` | `rabi-role.css`       | 情報層の値の SSOT と 3 ロールの variant      |
+| `rabi-design` | `rabi-mermaid.js`     | mermaid をトークンで塗る初期化（CDN を引く） |
 
 ## skill を参照する repo 側の実体
 
 skill の外に在り、skill 側からは参照し**ない**。役割は [`../../AGENTS.md`](../../AGENTS.md) の配置方針。
 
-| 実体         | 何を参照するか                                          |
-| ------------ | ------------------------------------------------------- |
-| `../design/` | `rabi-design` の `assets/`                              |
-| `../test/`   | 各 skill の `scripts/`・`../design/`・tracked な `*.md` |
+| 実体         | 何を参照するか                                                  |
+| ------------ | --------------------------------------------------------------- |
+| `../design/` | `rabi-design` の `assets/`                                      |
+| `../test/`   | `bun test` の gate。範囲は [`../../AGENTS.md`](../../AGENTS.md) |
 
 置き場の判定は [`../../AGENTS.md`](../../AGENTS.md) の配置方針。
 

@@ -4,7 +4,7 @@
 // `references/protocols.md` に従って行う。ここが返すのは「何をするか」だけ。
 //
 // 使い方:
-//   bun run src/cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...
+//   bun run <skills root>/conductor/src/cli.ts --config <path> --snapshot-out <path> --surface-path <name>=<path>...
 //     [--spec-gap-issue <n> --spec-gap-fact <text>]
 //
 // 終了コード:

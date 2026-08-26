@@ -13,7 +13,7 @@ import { holdsIntegration, holdsWrite } from "../src/resources.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { Capacity, ConflictReason, Ledger, Progress, Runtime } from "../src/types.ts";
 import { absent, present, unobservable } from "../src/types.ts";
-import { intent, observation, session, surface, wait } from "./fixtures.ts";
+import { cleanup, intent, observation, session, surface, wait } from "./fixtures.ts";
 
 type Fields = {
   readonly progress: Progress;
@@ -269,7 +269,7 @@ describe("実行器が消える / 止まる", () => {
       planCommentExists: present(true),
       surfaces: [workingSurface()],
       session: session.none,
-      worktreeOccupied: true,
+      worktreeOccupied: present(true),
     });
     expectConflict(o, "同じ worktree に所有外セッションがある");
     expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("証跡が矛盾している");
@@ -283,10 +283,35 @@ describe("実行器が消える / 止まる", () => {
       surfaces: [workingSurface()],
       session: session.none,
       worktreeBusy: true,
-      worktreeOccupied: true,
+      worktreeOccupied: present(true),
     });
     expectConflict(o, "同じ worktree に所有外セッションがある");
     expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("証跡が矛盾している");
+  });
+
+  test("7t5: occupancy が読めない in-flight は観測できない。7t には相乗りしない", () => {
+    const o = observation({
+      ledger: present("進行中"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      surfaces: [workingSurface()],
+      session: session.none,
+      worktreeOccupied: unobservable("pane census / detection を読めない"),
+    });
+    expectConflict(o, "観測できない");
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain(
+      "同じ worktree に所有外セッションがある",
+    );
+  });
+
+  test("7t6: occupancy が読めなくても未着手なら観測できないを立てない", () => {
+    const o = observation({
+      ledger: present("計画済み"),
+      session: session.none,
+      worktreeOccupied: unobservable("pane census / detection を読めない"),
+    });
+    expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain("観測できない");
+    expectFields(o, { progress: "未着手", runtime: "無し", capacity: "無し", ledger: "計画済み" });
   });
 
   test("7n: board に居るのに issues 節に無く、open / closed を読めない", () => {
@@ -375,7 +400,6 @@ describe("実行器が消える / 止まる", () => {
         surfaces: [workingSurface()],
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
       { progress: "実装中", runtime: "稼働中", capacity: "あり", ledger: "進行中" },
     );
@@ -861,6 +885,40 @@ describe("着地面が制御面と違う", () => {
     });
     expect(normalize(o).conflicts.map((c) => c.reason)).not.toContain(
       "着地済みだが提出の証跡が無い",
+    );
+  });
+
+  test("17d3: 記録あり。progress は終端から退行しても成果物 Conflict は立てない", () => {
+    const o = observation({
+      ledger: present("完了"),
+      claimBranchExists: present(true),
+      planCommentExists: present(false),
+      issueContractComplete: present(false),
+      cleanupRecord: cleanup(),
+      surfaces: [workingSurface()],
+    });
+    expectFields(o, { progress: "実装中", runtime: "無し", capacity: "あり", ledger: "完了" });
+    const reasons = normalize(o).conflicts.map((c) => c.reason);
+    expect(reasons).not.toContain("計画コメントが無いまま実装の証跡がある");
+    expect(reasons).not.toContain("Issue 契約が欠けたまま成果物がある");
+    expect(reasons).not.toContain("着地済みだが提出の証跡が無い");
+  });
+
+  test("17d5: 記録ありでも面が読めなければ着地面が解決できない", () => {
+    expectConflict(
+      observation({
+        ledger: present("完了"),
+        claimBranchExists: present(true),
+        cleanupRecord: cleanup(),
+        surfaces: [
+          workingSurface({
+            terminal: unobservable("面の観測が読めない"),
+            landable: unobservable("面の観測が読めない"),
+          }),
+        ],
+        submissionEvidence: present(true),
+      }),
+      "着地面が解決できない",
     );
   });
 

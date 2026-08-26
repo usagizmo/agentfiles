@@ -10,7 +10,8 @@ import type {
   SurfaceObservation,
   WaitRecord,
 } from "../src/observation.ts";
-import { absent, present } from "../src/types.ts";
+import type { CleanupRecord } from "../src/records.ts";
+import { absent, present, type Observed } from "../src/types.ts";
 
 /**
  * 面 1 つぶんの既定。**worktree が無い面の `dirty` は `present(false)`**
@@ -54,6 +55,17 @@ export const wait = {
   broken: (reason: string): WaitRecord => ({ kind: "broken", reason }),
 };
 
+export const cleanup = (over: Partial<CleanupRecord> = {}): Observed<CleanupRecord> =>
+  present({
+    kind: "着地",
+    members: [1],
+    landing: ["control"],
+    claimBranch: "fix/1-x",
+    branches: { control: "fix/1-x" },
+    tips: { control: "aaa" },
+    ...over,
+  });
+
 export const intent = {
   absent: { kind: "absent" } as const satisfies IntentRecord,
   pending: { kind: "pending" } as const satisfies IntentRecord,
@@ -72,6 +84,7 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   planCommentExists: present(false),
   issueContractComplete: present(true),
   claimRecord: absent(),
+  cleanupRecord: absent(),
 
   surfaces: [surface()],
 
@@ -84,11 +97,8 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
 
   session: session.none,
   leftover: false,
-  activity: "判定不能",
-  retiredRefineExists: false,
+  refused: false,
   refineSession: { kind: "none" },
-  refineLeftover: false,
-  refineActivity: "判定不能",
 
   waitRecord: wait.absent,
   waitRecordCreatedAt: absent(),
@@ -119,6 +129,6 @@ export const observation = (over: Partial<IssueObservation> = {}): IssueObservat
   boardOrder: 0,
   claimedAt: absent(),
   worktreeBusy: false,
-  worktreeOccupied: false,
+  worktreeOccupied: present(false),
   ...over,
 });

@@ -3,10 +3,11 @@
 // **`select` だけを切り出さない。**記録の精算は action の選択より前に走り、書いたら
 // 観測からやり直す順序制約を持つ。そこを外に置くと、順序が prose に残る。
 //
-// **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。
+// **1 周 1 action。**上から最初に当たった rung を 1 つだけ返す。
 
 import type { IssueObservation } from "./observation.ts";
 import { sessionActive } from "./observation.ts";
+import type { YieldPartner, YieldRecord } from "./records.ts";
 import {
   blocks,
   checkoutCount,
@@ -26,6 +27,7 @@ import {
   ledgerBehind,
   normalize,
 } from "./normalize.ts";
+import { IN_FLIGHT } from "./types.ts";
 import type {
   ActionName,
   ActionParams,
@@ -36,6 +38,7 @@ import type {
   MarkMatch,
   NormalizedIssue,
   Observed,
+  OccupancyEvidence,
   Outcome,
   Progress,
   Runtime,
@@ -46,6 +49,12 @@ import type {
 } from "./types.ts";
 
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
+
+const occupancyEvidence = (o: Observed<boolean>): OccupancyEvidence => {
+  if (o.kind === "unobservable" || o.kind === "invalid") return "unreadable";
+  if (o.kind === "present" && o.value) return "present";
+  return "absent";
+};
 
 /** 硬い上限。**暴走は「賢さ」で防がない。外部の数値で止める。** */
 export type TickConfig = {
@@ -111,7 +120,7 @@ const links = (o: IssueObservation): readonly number[] =>
  *
  * **Issue 単位のまま残すもの**: 台帳・open / closed・Issue 契約・本文から引くもの・
  * 在庫の鮮度・`refine` のセッション（どれも成員ごとに別々に在る）。
- * `session` と leftover / activity は同じ分類器の出口なので揃える。
+ * `session` と leftover は同じ分類器の出口なので揃える。`refused` は実行器全体の lift。
  *
  * **claim 前には当てない。**記録は各課題自身に在る。
  */
@@ -123,6 +132,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         claimBranchExists: lead.claimBranchExists,
         planCommentExists: lead.planCommentExists,
         claimRecord: lead.claimRecord,
+        cleanupRecord: lead.cleanupRecord,
         surfaces: lead.surfaces,
         openPr: lead.openPr,
         checks: lead.checks,
@@ -131,7 +141,7 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         submissionEvidence: lead.submissionEvidence,
         session: lead.session,
         leftover: lead.leftover,
-        activity: lead.activity,
+        refused: lead.refused,
         worktreeBusy: lead.worktreeBusy,
         worktreeOccupied: lead.worktreeOccupied,
         waitRecord: lead.waitRecord,
@@ -271,8 +281,12 @@ export const countsEmptyCycle = (input: EmptyCycleInput): boolean => {
 /**
  * この action が成功したあと、失敗の記録の `count` を +1 するか。
  *
- * 伝える 2 つは常に真。送る周は `canPrompt` だけなので、再開しうる / 判定不能を免除しない。
+ * 伝える 2 つは常に真。送る周は `canPrompt` だけなので、受け手の状態で免除しない。
  * `計画枠の逼迫を伝える` は常に真。
+ *
+ * **`計画セッションを片付ける` は入れない。**閉じる → 起こす → 閉じるの往復は、起こす周が
+ * 成功するたびに `count` を 0 へ戻すので、ここで数えても上限へ届かない。往復を止めるのは
+ * 周回の記録（起こす周の `countsEmptyCycle`）。
  */
 const countsFailure = (action: ActionName): boolean =>
   action === "本文の変更を伝える" ||
@@ -293,13 +307,21 @@ const validWaiting = (o: IssueObservation): boolean =>
 
 const sessionAlive = (g: Group): boolean => g.leadObservation.session.kind !== "none";
 
+/**
+ * 実行器が入力を受け取らない。leftover 解除は観測の lift 済み。
+ * kind が行に無いので、どれか 1 本の `refused` が所有全体へ立つ。
+ */
+const receiveRefusedOf = (groups: readonly Group[]): boolean =>
+  groups.some((g) => g.leadObservation.refused);
+
 /** 枠を渡すの受け手。leftover は `稼働中` とだけ組む。`人待ち` の最上段を leftover で破らない。 */
-const receivable = (runtime: Runtime, leftover: boolean): boolean =>
-  runtime === "待機" || runtime === "休止" || (leftover && runtime === "稼働中");
+const receivable = (runtime: Runtime, leftover: boolean, groups: readonly Group[]): boolean =>
+  !receiveRefusedOf(groups) &&
+  (runtime === "待機" || runtime === "休止" || (leftover && runtime === "稼働中"));
 
 /** checks / 意図の確認 / 伝える 2 つ。`休止` は「枠を渡す」へ譲る。 */
-const canPrompt = (runtime: Runtime, leftover: boolean): boolean =>
-  runtime === "待機" || (leftover && runtime === "稼働中");
+const canPrompt = (runtime: Runtime, leftover: boolean, groups: readonly Group[]): boolean =>
+  !receiveRefusedOf(groups) && (runtime === "待機" || (leftover && runtime === "稼働中"));
 
 const failure = (g: Group) =>
   value(g.leadObservation.failureRecord) ?? { count: 0, lastAction: null };
@@ -350,10 +372,15 @@ const budgetRevertTarget = (g: Group, config: TickConfig): "退避先" | undefin
   // **正規化後の `runtime` では引かない** —— 人待ちの記録があると生きたセッションでも
   // `人待ち` に写るので、起こした直後の実行器を結果が出る前に落とす。
   // leftover は空周回の退避の対象（`sessionActive` だけでは外れる）。
+  // **計画セッションも同じく外す。**`o.session` は `resolve-<番号>` を見るので計画中は必ず
+  // `none` になり、見ないと最後に起こした `refine` が結果を出す前に `退避先` へ落ちる。
+  // **`ledger` で絞らない** —— `refine` は Status を進めてから終わるので `計画済み` の窓も
+  // 毎回通る（行 7d3）。`未計画` 限定にすると、その窓で稼働中のまま落ちる。
   if (
     cycle(g).count >= config.emptyCycleBudget &&
     markUnchanged(g) &&
     !validWaiting(o) &&
+    !sessionActive(o.refineSession) &&
     (!sessionActive(o.session) || o.leftover)
   ) {
     return "退避先";
@@ -491,7 +518,6 @@ const countsAsSupply = (
 ): boolean => {
   if (g.members.some((n) => excluded.has(n))) return false;
   if (g.lead.ledger === "退避先") return false;
-  if (g.observations.some((o) => o.retiredRefineExists)) return false;
   if (g.observations.some((o) => o.refineSession.kind !== "none" && validWaiting(o))) {
     return false;
   }
@@ -568,10 +594,10 @@ const byPriority = (groups: readonly Group[]) => (a: Group, b: Group) => {
  * 飽和の述語はこれを複製せず、この関数を共有する。
  */
 const planStartable = (g: Group, ctx: Context): boolean => {
+  if (receiveRefusedOf(ctx.groups)) return false;
   if (isShelved(g)) return false;
   if (g.lead.ledger !== "未計画" || g.lead.progress !== "未着手") return false;
-  if (g.leadObservation.refineSession.kind !== "none" || g.leadObservation.retiredRefineExists)
-    return false;
+  if (g.leadObservation.refineSession.kind !== "none") return false;
   if (g.leadObservation.waitRecord.kind === "waiting") return false;
   return ctx.supply < ctx.supplyTarget;
 };
@@ -622,6 +648,7 @@ const olderWait = (a: Group, b: Group): number => {
 };
 
 const promptPlanSlotRetreat = (g: Group, ctx: Context): boolean => {
+  if (receiveRefusedOf(ctx.groups)) return false;
   const solos = ctx.groups.flatMap(asSolo);
   if (incompleteRetreat(g)) {
     const open = solos.filter(incompleteRetreat);
@@ -722,24 +749,70 @@ const sameKeySet = (a: readonly string[], b: readonly string[]): boolean => {
   return true;
 };
 
-/** 記録の `to` / `keys` が、この 2 者のいまの交差を記述しているか。 */
+const yieldRowFor = (rec: YieldRecord, partner: Group): YieldPartner | undefined =>
+  rec.partners.find((p) => p.to === partner.representative || partner.members.includes(p.to));
+
+const groupForRow = (row: YieldPartner, groups: readonly Group[]): Group | undefined =>
+  groups.find((g) => row.to === g.representative || g.members.includes(row.to));
+
+/** 記録のその相手の行の `keys` が、この 2 者のいまの交差を記述しているか。 */
 const yieldDescribesPair = (holder: Group, partner: Group): boolean => {
   const rec = holder.leadObservation.yieldRecord;
   if (rec.kind !== "present") return false;
-  if (rec.value.to !== partner.representative && !partner.members.includes(rec.value.to)) {
-    return false;
-  }
+  const row = yieldRowFor(rec.value, partner);
+  if (row === undefined) return false;
   const shared = sharedKeys(
     holder.leadObservation.resourceKeys,
     partner.leadObservation.resourceKeys,
   );
   if (shared === undefined) return false;
-  return sameKeySet(rec.value.keys, shared);
+  return sameKeySet(row.keys, shared);
 };
 
-/** 交差相手のすべてについて、どちらかの yield が現況を記述しているか。 */
-const crossingDescribed = (g: Group, crossing: readonly Group[]): boolean =>
-  crossing.every((partner) => yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g));
+/**
+ * 書いてよい行でない相手が残っている。書いてよい行はキーを共有する実在の相手。
+ * 観測に居ない `to` と共有キーが空の行は extra。キーが present でない相手は extra にしない。
+ */
+const yieldHasExtraPartners = (g: Group, groups: readonly Group[]): boolean => {
+  const rec = g.leadObservation.yieldRecord;
+  if (rec.kind !== "present") return false;
+  return rec.value.partners.some((row) => {
+    const partner = groupForRow(row, groups);
+    if (partner === undefined) return true;
+    const shared = sharedKeys(g.leadObservation.resourceKeys, partner.leadObservation.resourceKeys);
+    if (shared === undefined) return false;
+    return shared.length === 0;
+  });
+};
+
+/**
+ * 書かねばならない行（write 保持者）が揃い、書いてよい行の `keys` が現況と集合一致するか。
+ * 自前に余分な行があれば偽。自前にその相手の行があれば自前の `keys` だけ。
+ * 行が無い write 保持者は相手側でも足りる。
+ */
+const crossingDescribed = (
+  g: Group,
+  crossing: readonly Group[],
+  groups: readonly Group[],
+): boolean => {
+  if (yieldHasExtraPartners(g, groups)) return false;
+  const rec = g.leadObservation.yieldRecord;
+  if (rec.kind === "present") {
+    for (const row of rec.value.partners) {
+      const partner = groupForRow(row, groups);
+      if (partner === undefined) continue;
+      const shared = sharedKeys(
+        g.leadObservation.resourceKeys,
+        partner.leadObservation.resourceKeys,
+      );
+      if (shared === undefined) continue;
+      if (!yieldDescribesPair(g, partner)) return false;
+    }
+  }
+  return crossing.every(
+    (partner) => yieldDescribesPair(g, partner) || yieldDescribesPair(partner, g),
+  );
+};
 
 /**
  * 位置に依らない Conflict。**ラダーへ乗せない** —— どの rung より先に、その group を
@@ -793,6 +866,8 @@ const LADDER: readonly Rung[] = [
     match: (g) => {
       const r = g.lead;
       const o = g.leadObservation;
+      // **再開の入口は記録。**終端から退行していても、記録だけが残っていても当たる。
+      if (o.cleanupRecord.kind === "present") return true;
       const done = TERMINAL.includes(r.progress);
       if (!done) return false;
       // **片付ける対象が全部消えるまで当たり続ける述語にする**（branch も入れる）。
@@ -820,6 +895,10 @@ const LADDER: readonly Rung[] = [
       // 一度も止められない。`refine` は Status を進めてから終わるので `計画済み` の窓も通る ——
       // 絞ると、起こす → 次の tick で畳む → また起こす、の往復から出られない。
       if (sessionActive(o.refineSession)) return false;
+      // **止まったことを確かめずに閉じる。**計画の成果は Status と `ready` の記録と Issue 本文へ
+      // 外部化されるので、pane にしか無いものを持たない —— 途中で殺したときの最悪は `ready` が
+      // 壊れることで、壊れた記録は陳腐化として読まれ再計画へ倒れる。`resolve` は未コミットの
+      // 成果を持つので、この緩和を広げ**ない**。
       // **`count` 条件は `ledger` が `未計画` のときだけ掛かる。**
       if (g.lead.ledger === "未計画" && failure(g).count >= ctx.config.retryBudget) return false;
       return true;
@@ -860,20 +939,20 @@ const LADDER: readonly Rung[] = [
   {
     params: () => ({ action: "本文の変更を伝える" }),
     why: "本文が計画の記録と食い違っている",
-    match: (g) =>
+    match: (g, ctx) =>
       !isShelved(g) &&
       g.observations.some((o) => value(o.bodyMatchesPlan) === false) &&
       sessionAlive(g) &&
-      canPrompt(g.lead.runtime, g.leadObservation.leftover),
+      canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups),
   },
   {
     params: () => ({ action: "計画の失効を伝える" }),
     why: "統合先の変更が計画の資源キーに交差した",
-    match: (g) =>
+    match: (g, ctx) =>
       !isShelved(g) &&
       value(g.leadObservation.planInvalidated) === true &&
       sessionAlive(g) &&
-      canPrompt(g.lead.runtime, g.leadObservation.leftover) &&
+      canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups) &&
       // **着地待ちの非保持者には伝えない。** 枠を渡す本文が再 plan を載せる。
       // 保持者は着地だけ止める。実装中は書いている前提が古くなるので残す。
       // 発火条件に受け手の有無を入れない。
@@ -893,19 +972,17 @@ const LADDER: readonly Rung[] = [
       g.lead.ledger === "未計画" &&
       g.lead.runtime === "人待ち" &&
       g.leadObservation.refineSession.kind === "none" &&
-      !g.leadObservation.retiredRefineExists &&
-      ctx.planSlotsUsed < ctx.config.planSlots,
+      ctx.planSlotsUsed < ctx.config.planSlots &&
+      !receiveRefusedOf(ctx.groups),
   },
   {
     params: () => ({ action: "解決を起こし直す" }),
     why: "実行器が消えたまま成果物が途中で止まっている",
     match: (g, ctx) => {
-      if (isShelved(g)) return false;
+      if (isShelved(g) || receiveRefusedOf(ctx.groups)) return false;
       const r = g.lead;
-      const inFlight: readonly Progress[] = ["準備中", "準備済み", "実装中", "提出中", "着地待ち"];
-      if (!inFlight.includes(r.progress)) return false;
+      if (!IN_FLIGHT.includes(r.progress)) return false;
       if (sessionAlive(g)) return false;
-      if (r.runtime !== "無し" && r.runtime !== "人待ち" && r.runtime !== "休止") return false;
       if (g.records.some(ledgerBehind)) return false;
       // **checkout が無く、作ると数える本数が目安以上になるなら選ばない** ——
       // ただし論理 lease を保持しているなら、目安を超えても起こす（回収なので）。
@@ -951,16 +1028,19 @@ const LADDER: readonly Rung[] = [
       // 直列化（`intersect` の `unknown`）は残す。
       if (g.leadObservation.resourceKeys.kind !== "present") return false;
       if (crossing.some((p) => p.leadObservation.resourceKeys.kind !== "present")) return false;
-      // **記録の有無だけでは見ない。**`to` / `keys` が現況と一致しているあいだは送らない。
-      return !crossingDescribed(g, crossing);
+      // **記録の有無だけでは見ない。**書いてよい行と書かねばならない行が現況と一致しているあいだは送らない。
+      return !crossingDescribed(g, crossing, ctx.groups);
     },
   },
   {
     params: () => ({ action: "checks を引き直させる" }),
     why: "実行中の checks が 1 つも無く、緑でもない",
-    match: (g) => {
+    match: (g, ctx) => {
       if (isShelved(g)) return false;
-      if (g.lead.progress !== "提出中" || !canPrompt(g.lead.runtime, g.leadObservation.leftover))
+      if (
+        g.lead.progress !== "提出中" ||
+        !canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups)
+      )
         return false;
       const checks = value(g.leadObservation.checks);
       // **「緑でもない」を落とすと、混在する課題でキューが止まる。**
@@ -970,10 +1050,10 @@ const LADDER: readonly Rung[] = [
   {
     params: () => ({ action: "意図の確認を促す" }),
     why: "意図の確認の記録が観測できない",
-    match: (g) => {
+    match: (g, ctx) => {
       if (isShelved(g) || !alreadyClaimed(g)) return false;
       if (g.lead.progress !== "着地待ち") return false;
-      if (!canPrompt(g.lead.runtime, g.leadObservation.leftover)) return false;
+      if (!canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups)) return false;
       const record = g.leadObservation.intentRecord;
       // **`pending` には当たらない** —— そちらは確認が始まっている。
       return record.kind === "absent" || record.kind === "broken";
@@ -988,7 +1068,7 @@ const LADDER: readonly Rung[] = [
     why: "受信可能な実行器へ lease を渡せる",
     match: (g, ctx) => {
       if (isShelved(g)) return false;
-      if (!receivable(g.lead.runtime, g.leadObservation.leftover)) return false;
+      if (!receivable(g.lead.runtime, g.leadObservation.leftover, ctx.groups)) return false;
       // **consult の子が同じ worktree で working なら write を渡さない。**integration は別資源。
       if (g.lead.progress !== "着地待ち" && g.leadObservation.worktreeBusy) return false;
       if (g.lead.progress === "着地待ち") {
@@ -1001,7 +1081,7 @@ const LADDER: readonly Rung[] = [
       // **`休止` は交差の再開で、claim へ譲ると再開が後回しになる。**leftover の `稼働中` は譲る
       // （譲らないと毎 tick の唯一の action になり、空周回で退避先へ落ちる）。
       if (
-        canPrompt(g.lead.runtime, g.leadObservation.leftover) &&
+        canPrompt(g.lead.runtime, g.leadObservation.leftover, ctx.groups) &&
         needsSubmissionReport(g) &&
         ctx.groups.some(
           (other) => other.representative !== g.representative && canClaim(other, ctx),
@@ -1092,7 +1172,7 @@ const nextIntegrationReceiver = (ctx: Context): Group | undefined => {
     if (g.members.some((n) => ctx.excluded.has(n))) return false;
     if (g.lead.progress !== "着地待ち") return false;
     if (!alreadyClaimed(g)) return false;
-    if (!receivable(g.lead.runtime, g.leadObservation.leftover)) return false;
+    if (!receivable(g.lead.runtime, g.leadObservation.leftover, ctx.groups)) return false;
     if (holdsIntegration(g.leadObservation)) return false;
     if (g.observations.some((o) => value(o.bodyMatchesPlan) === false)) return false;
     const intent = g.leadObservation.intentRecord;
@@ -1148,7 +1228,7 @@ const collectStalls = (
     ];
   });
 
-/** **1 tick 1 action。**上から最初に当たった rung を 1 つだけ返す。 */
+/** **1 周 1 action。**上から最初に当たった rung を 1 つだけ返す。 */
 export const decide = (input: TickInput): Decision => {
   const groups = buildGroups(input.observations);
   const all = groups.flatMap((g) => g.records);
@@ -1190,6 +1270,7 @@ export const decide = (input: TickInput): Decision => {
   const pack = (outcome: Outcome, stalls: readonly Stall[] = []): Decision => ({
     conflicts: foldConflicts(conflicts),
     stalls,
+    receiveRefusal: receiveRefusedOf(groups),
     outcome,
     usage,
   });
@@ -1297,6 +1378,8 @@ export const decide = (input: TickInput): Decision => {
           capacity: g.lead.capacity,
           ledger: g.lead.ledger,
           why: rung.why,
+          sessionKind: g.leadObservation.session.kind,
+          occupancy: occupancyEvidence(g.leadObservation.worktreeOccupied),
         },
       });
     }

@@ -6,7 +6,7 @@ import type { Ledger, Observed } from "./types.ts";
 
 /**
  * セッションの生の状態。**`分類不能` を `稼働中` にも `待機` にも丸めない**
- * （丸めると、人が入力を書いている最中の pane を閉じる action が `done` と区別できない）。
+ * （丸めると閉じる rung が選ぶのに、実行直前は生値で弾かれる。`normalize` が `Conflict` にする）。
  * **`blocked` も丸めない**（承認・質問 UI。人待ちの印であって、記録の人待ちではない）。
  */
 export type SessionObservation =
@@ -15,13 +15,6 @@ export type SessionObservation =
   | { readonly kind: "blocked" }
   | { readonly kind: "none" }
   | { readonly kind: "unclassifiable"; readonly raw: string };
-
-/**
- * 活動の 3 値。**`SessionObservation` の variant ではない。**同じ分類器の別出口。
- * `agent_status` の 5 値を活動の証明に使わない。
- */
-export const SESSION_ACTIVITIES = ["再開しうる", "停止確認", "判定不能"] as const;
-export type SessionActivity = (typeof SESSION_ACTIVITIES)[number];
 
 /** 実行器がまだ動いている（書いている、または承認・質問で止まっている）。 */
 export const sessionActive = (s: SessionObservation): boolean =>
@@ -102,6 +95,18 @@ export type IssueObservation = {
     readonly members: readonly number[];
     readonly landing: readonly string[];
   }>;
+  /**
+   * 片付ける意図。**あるあいだ「片付ける」が当たり続ける。**
+   * 無い `完了` × 非終端は `Conflict` のまま。
+   */
+  readonly cleanupRecord: Observed<{
+    readonly kind: "着地" | "取り下げ";
+    readonly members: readonly number[];
+    readonly landing: readonly string[];
+    readonly claimBranch: string;
+    readonly branches: Readonly<Record<string, string>>;
+    readonly tips: Readonly<Record<string, string>>;
+  }>;
 
   readonly surfaces: readonly SurfaceObservation[];
 
@@ -123,25 +128,24 @@ export type IssueObservation = {
    * **`runtime` には写さない**（leftover のときも `稼働中`）。
    */
   readonly leftover: boolean;
-  /** 所有セッションの活動 3 値。殺す・割り込む・write を取り上げる側が読む。 */
-  readonly activity: SessionActivity;
-  /** `retired-refine-<番号>` が残っているか。**`runtime` には写さない**（`無し` として扱う） */
-  readonly retiredRefineExists: boolean;
+  /**
+   * 実行器が入力を受け取らない正の証拠。leftover の隣の `refused` トークンから立つ。
+   * **`runtime` には写さない。**kind が行に無いので sessions 全体から lift する。
+   */
+  readonly refused: boolean;
   /**
    * `refine-<番号>` のセッション（完全一致）。**存在の有無ではなく状態で持つ** ——
    * `session` は `resolve-<番号>` を見るので計画中は常に `none` になり、
    * 有無だけでは「走っているものを畳まない」を書けない。
    */
   readonly refineSession: SessionObservation;
-  readonly refineLeftover: boolean;
-  readonly refineActivity: SessionActivity;
 
   readonly waitRecord: WaitRecord;
   /** 人待ちコメントの `createdAt`。促す相手の順序キー。**`updatedAt` で代用しない** */
   readonly waitRecordCreatedAt: Observed<number>;
   /** 休止の記録。**「記録あり」だけでは `休止` にならない**（非稼働も要る） */
   readonly pauseRecordExists: boolean;
-  /** 休止の記録の本体。交差の記述（`to` / `keys`）を突き合わせるときだけ読む */
+  /** 休止の記録の本体。交差の記述（`partners` の各行）を突き合わせるときだけ読む */
   readonly yieldRecord: Observed<YieldRecord>;
   readonly intentRecord: IntentRecord;
   /** merge の枠の渡しの記録。2 件以上は `Conflict` */
@@ -198,6 +202,7 @@ export type IssueObservation = {
   /**
    * 同じ worktree に `refine` / `resolve` / `conductor` 以外の agent が居るか。
    * **状態は問わない。**`working` だけの `worktreeBusy` とは別。
+   * **census / detection の失敗を `present(false)` へ畳まない。**
    */
-  readonly worktreeOccupied: boolean;
+  readonly worktreeOccupied: Observed<boolean>;
 };

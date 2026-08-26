@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>DESIGN.md 図の検証面</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!--
+      DESIGN.md「図」の規則だけで図を並べた面。**手書き**で、生成物ではない。
+
+      見るのは「図が本文の面と段に馴染むか」—— 地とノードとクラスタの濃淡が
+      light / dark の両方で分かれるか、赤が強調ノードと注記だけに出ているか、
+      文字が本文と同じ書体で組まれているか。
+
+      色は `assets/rabi-mermaid.js` が持つ。ここには 16 進値も役の割り当ても書かない。
+    -->
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
+    <link rel="stylesheet" href="surfaces.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--rabi-gap-8) var(--rabi-gap-5);
+      }
+
+      .wrap {
+        margin: 0 auto;
+        max-width: 60rem;
+      }
+
+      /* 面と影と余白は .rabi-card が持つ。ここは並びと横溢れだけ */
+      .card {
+        margin-bottom: var(--rabi-gap-6);
+        overflow-x: auto;
+      }
+
+      pre.mermaid {
+        margin: 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <h1 class="rabi-heading">図</h1>
+
+      <div class="rabi-card card">
+        <pre class="mermaid">
+flowchart LR
+  subgraph now["いま"]
+    A["読む"] --> B["決める"]
+  end
+  subgraph after["あと"]
+    C["読む"] --> D["決める"]
+  end
+  now --> after
+  class D accent
+        </pre>
+      </div>
+
+      <div class="rabi-card card">
+        <pre class="mermaid">
+sequenceDiagram
+  participant Agent
+  participant Human
+  Agent->>Human: 譜面を open
+  Note over Human: 判断
+  Human-->>Agent: GO
+        </pre>
+      </div>
+
+      <div class="rabi-card card">
+        <pre class="mermaid">
+stateDiagram-v2
+  [*] --> 下書き
+  下書き --> 提示
+  提示 --> 実装: GO
+  提示 --> 下書き: 差し戻し
+        </pre>
+      </div>
+    </div>
+
+    <script src="../agents/skills/rabi-design/assets/rabi-mermaid.js"></script>
+    <script src="surfaces.js"></script>
+  </body>
+</html>

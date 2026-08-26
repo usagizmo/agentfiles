@@ -124,6 +124,7 @@ describe("checkout path の解決", () => {
 });
 
 const harnessMd = () => readFileSync(join(import.meta.dir, "../references/harness.md"), "utf8");
+const skillMd = () => readFileSync(join(import.meta.dir, "../SKILL.md"), "utf8");
 
 describe("設定の fail-closed", () => {
   test("面の名前が重複したら止まる", () => {
@@ -140,7 +141,11 @@ describe("設定の fail-closed", () => {
     const cmd = parseConfig(without).sessionsCmd;
     expect(cmd).toBe(extractHarnessCmd(harnessMd(), "sessions-cmd"));
     expect(cmd).toContain("leftover=leftover");
-    expect(cmd).toContain("activity=may-resume");
+    expect(cmd).toContain("refused=refused");
+    expect(cmd).toContain("refused=-");
+    expect(cmd).not.toContain("select(.name != null)");
+    expect(cmd).toContain("occupancy-unreadable");
+    expect(cmd).toContain("herdr pane list");
     expect(cmd).not.toContain("workspace list");
   });
 
@@ -157,6 +162,104 @@ describe("設定の fail-closed", () => {
 
   test("workspacesCmd が空文字なら止まる", () => {
     expect(() => parseConfig({ ...raw, workspacesCmd: "" })).toThrow("workspacesCmd");
+  });
+});
+
+describe("既に working への agent prompt", () => {
+  test("確認は agent_prompted。seq 非変化を失敗にしない", () => {
+    const md = harnessMd();
+    expect(md).toContain("agent_prompted");
+    expect(md).not.toContain("state_change_seq` が動いたことを確認する。動かなければ失敗");
+  });
+
+  test("張り直しと実行器だけ止めるの seq 確認は残る", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/実行器だけ止める[\s\S]*state_change_seq/);
+    expect(md).toMatch(/失われた resolve を張り直す[\s\S]*state_change_seq/);
+  });
+});
+
+const composerSection = () => {
+  const md = harnessMd();
+  const start = md.indexOf("### composer の受け入れ");
+  const end = md.indexOf("### 失われた resolve を張り直す");
+  return md.slice(start, end);
+};
+
+describe("composer が受け付ける状態での agent prompt", () => {
+  test("契約表に受け付ける状態で submit できたことの観測がある", () => {
+    expect(harnessMd()).toContain("composer が受け付ける状態で submit できたことを観測できる");
+  });
+
+  test("前段は visible のフッターで、入力欄は見ない", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/agent read[\s\S]*--source visible/);
+    expect(md).toContain("Space:prompt");
+    expect(md).toContain("j/k:nav");
+    expect(md).toContain("Tab/Space: question");
+  });
+
+  test("Tab は使わない。復帰は space", () => {
+    const md = composerSection();
+    expect(md).toMatch(/Tab は使わ/);
+    expect(md).toMatch(/send-keys <名前> space/);
+  });
+
+  test("質問カードへ park しているあいだは送らない", () => {
+    expect(composerSection()).toMatch(/Tab\/Space: question[\s\S]*送ら/);
+  });
+
+  test("質問カードがキーボードを持っているあいだは送らない", () => {
+    expect(composerSection()).toMatch(
+      /Tab:next answer[\s\S]*質問カードがキーボードを持つ[\s\S]*送ら/,
+    );
+  });
+
+  test("Esc:scrollback は送らない。復帰のキーにしない", () => {
+    const md = composerSection();
+    expect(md).toMatch(/Esc:scrollback[\s\S]*ブロッキングカードがキーボードを持つ[\s\S]*送ら/);
+    expect(md).toMatch(/`Space:prompt` または `j\/k:nav`/);
+    expect(md).not.toMatch(/Esc:scrollback` または/);
+    expect(md).not.toMatch(/または `Esc:scrollback/);
+  });
+
+  test("送らない字面は scrollback 復帰より先に並ぶ", () => {
+    const md = composerSection();
+    const resume = md.indexOf("Space:prompt");
+    expect(resume).toBeGreaterThanOrEqual(0);
+    for (const surface of ["Tab:next answer", "Esc:scrollback", "Tab/Space: question"]) {
+      const at = md.indexOf(surface);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(resume);
+    }
+  });
+
+  test("chrome が読めない、または表に無い字面は fail-open", () => {
+    expect(harnessMd()).toMatch(/表に無い字面[\s\S]*fail-open/);
+  });
+
+  test("leftover 成功は受け付ける状態での agent_prompted", () => {
+    expect(harnessMd()).toMatch(/受け付ける状態での `agent_prompted`/);
+  });
+
+  test("送れなかった周は成功でも失敗でもない", () => {
+    expect(harnessMd()).toContain("成功でも失敗でもない");
+  });
+
+  test("戻れず送れなかった周は retry に数えない", () => {
+    expect(skillMd()).toMatch(/retry に数え\*\*ない\*\*/);
+    expect(skillMd()).toContain(
+      "送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった）は実行していない",
+    );
+  });
+
+  test("live chrome が残る stalled は張り直しに当てない", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/live な composer \/ nav chrome[\s\S]*張り直しに当てない/);
+  });
+
+  test("張り直しの agent prompt も同じ前段を通す", () => {
+    expect(harnessMd()).toMatch(/張り直しの `agent prompt` も同じ/);
   });
 });
 

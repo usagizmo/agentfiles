@@ -3,6 +3,7 @@
 // 実体の advisors.json 自身も対象。fixture だけ通して実体を外すと、
 // 宣言 file が壊れていても緑のまま残る。
 
+import { readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -206,6 +207,8 @@ test("JSONC のコメントと末尾カンマは枠にならない", () => {
   expect(slots[1]?.args).toEqual(["--model", "x // not a comment"]);
 });
 
+const ROOT = new URL("..", import.meta.url).pathname;
+
 const MARKER = "ADVISOR-DONE-test";
 
 const PREAMBLE = `あなたはコードレビュアーです。コードは変更しないでください。
@@ -250,6 +253,10 @@ test("指令行はマーカーと一致しない", () => {
   expect(advisorComplete(text, MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
 });
 
+test("marker を本文の行末へ続けても完走", () => {
+  expect(advisorComplete(`指摘なし ${MARKER}`, MARKER)).toEqual({ ok: true });
+});
+
 test("マーカーのあとに本文が続くと未完", () => {
   expect(advisorComplete(`指摘なし\n${MARKER}\n追加`, MARKER)).toEqual({
     ok: false,
@@ -271,6 +278,12 @@ test("枠行の判定は繰り返し呼んでも同じ", () => {
   for (let i = 0; i < 5; i++) {
     expect(isChromeLine(footer)).toBe(true);
   }
+});
+
+// 手で書いた snapshot は TUI の実物とずれる。実行器から取った pane をそのまま置く
+test.each(["codex", "grok"] as const)("%s の pane から marker を読める", (kind) => {
+  const pane = readFileSync(`${ROOT}test/fixtures/advisor-pane/${kind}`, "utf8");
+  expect(advisorComplete(pane, "ADVISOR-DONE-heaaqd")).toEqual({ ok: true });
 });
 
 test("TUI 枠だけは出力なし", () => {

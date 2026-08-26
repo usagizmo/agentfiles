@@ -9,7 +9,7 @@ import type { TickInput } from "../src/decide.ts";
 import type { IssueObservation } from "../src/observation.ts";
 import type { ActionName, ConflictReason, LeaseKind, RevertTarget } from "../src/types.ts";
 import { absent, invalid, present, unobservable } from "../src/types.ts";
-import { intent, observation, session, surface, wait } from "./fixtures.ts";
+import { cleanup, intent, observation, session, surface, wait } from "./fixtures.ts";
 
 const surfaceNamesOf = (observations: readonly IssueObservation[]): readonly string[] => {
   const names: string[] = [];
@@ -263,14 +263,39 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("6b: refine が Status も人待ちの記録も残さずに終わった", () => {
-    expectAction(
+    const rows = [observation({ ledger: present("未計画"), refineSession: session.idle })];
+    expectAction(rows, "計画セッションを片付ける");
+    // **失敗の記録では数えない。**次の周の「計画を起こす」が成功すると `count` は 0 へ戻るので、
+    // ここで数えても上限へ届かない。往復を止めるのは行 6d の周回の記録。
+    expectFailureCount(rows, false);
+  });
+
+  test("6c: 未計画の計画セッションで retry budget が尽きた", () => {
+    // **上限に達した周は片付ける行が順位を譲る。**譲らないと差し戻しに永久に到達せず、
+    // 計画の失敗が `退避先` にも応答にも出ないまま計画枠が 1 つ焼け続ける。
+    expectRevert(
       [
         observation({
           ledger: present("未計画"),
           refineSession: session.idle,
+          failureRecord: present({ count: 3, lastAction: "計画セッションを片付ける" }),
         }),
       ],
-      "計画セッションを片付ける",
+      "退避先",
+    );
+  });
+
+  test("6d: 閉じる → 起こす の往復が空周回の上限に達した", () => {
+    // 計画の周の指紋は Issue 本文と `ledger` だけなので、往復では動かない。
+    expectRevert(
+      [
+        observation({
+          ledger: present("未計画"),
+          cycleRecord: present({ count: 3, mark: "mark-0" }),
+          currentMark: present("mark-0"),
+        }),
+      ],
+      "退避先",
     );
   });
 
@@ -286,6 +311,19 @@ describe("実行器が消える / 止まる", () => {
   test("7f3: セッションが blocked。人待ちの記録が無い", () => {
     expectConflict([implementing({ session: session.blocked })], "証跡が矛盾している");
     expectIdle([implementing({ session: session.blocked })]);
+  });
+
+  test("7f6: 計画セッションの生の状態が分類できない", () => {
+    // 立てないと、閉じる rung は `sessionActive` が偽なので選ぶのに、実行直前は生値が
+    // 分類できないので実行しない —— 選んで実行しない周が続き、計画枠が空かない。
+    const rows = [
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.unclassifiable("weird"),
+      }),
+    ];
+    expectConflict(rows, "観測できない");
+    expectIdle(rows);
   });
 
   test("7f4: 計画セッションが blocked。人待ちの記録が無い", () => {
@@ -370,15 +408,10 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7d: 計画工程が自分で 退避先 へ移して終えた（pane は残っている）", () => {
-    expectAction(
-      [
-        observation({
-          ledger: present("退避先"),
-          refineSession: session.idle,
-        }),
-      ],
-      "計画セッションを片付ける",
-    );
+    const rows = [observation({ ledger: present("退避先"), refineSession: session.idle })];
+    expectAction(rows, "計画セッションを片付ける");
+    // Status が動いているので往復は起きない。数えると `退避先` の精算と押し合う。
+    expectFailureCount(rows, false);
   });
 
   test("7d2: 起こした直後で、計画セッションが動いている", () => {
@@ -386,6 +419,32 @@ describe("実行器が消える / 止まる", () => {
     // 見るので計画中は常に `none` になり、`refine` の稼働で引かないと保護が一度も効かない ——
     // 起こす → 次の tick で畳む → また起こす、の往復から出られなくなる。
     expectIdle([observation({ ledger: present("未計画"), refineSession: session.running })]);
+    // **空周回の退避も同じ保護を要る。**行 6d の停止はこの分岐なので、`refine` の稼働で
+    // 引かないと最後に起こした計画セッションが結果を出す前に `退避先` へ落ちる（行 10k と同じ）。
+    expectIdle([
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.running,
+        cycleRecord: present({ count: 3, mark: "mark-0" }),
+        currentMark: present("mark-0"),
+      }),
+    ]);
+  });
+
+  test("7d5: 空周回の上限に達したが、計画セッションはまだ稼働中", () => {
+    // **行 10k と同じ。**回っている最中の周は結果が出ていないので差し戻さない。
+    // **`stalls` にも出さない** —— `runtime` は `resolve-<番号>` から導くので `無し` になり、
+    // 稼働中の実行器を「実行器なし」として報告することになる。解決側も `selfAdvancing` で外す。
+    const d = tick([
+      observation({
+        ledger: present("未計画"),
+        refineSession: session.running,
+        cycleRecord: present({ count: 3, mark: "mark-0" }),
+        currentMark: present("mark-0"),
+      }),
+    ]);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.stalls).toEqual([]);
   });
 
   test("7d3: 台帳が進んだ後でも、計画セッションが動いているうちは畳まない", () => {
@@ -396,32 +455,10 @@ describe("実行器が消える / 止まる", () => {
     );
   });
 
-  test("7d4: retired-refine は片付けの対象ではなく、計画を塞ぐ印として残る", () => {
-    // rename 済みなので「計画セッションを片付ける」は当たらない（対象は `refine-<番号>` の完全一致）。
-    // **塞ぎは残る** —— 当てて消すと、次の tick で二重計画になる。
-    expectIdle([observation({ ledger: present("未計画"), retiredRefineExists: true })]);
-  });
-
-  test("retired-refine があるあいだ計画を起こし直さない", () => {
-    expectIdle([
-      observation({
-        ledger: present("未計画"),
-        retiredRefineExists: true,
-        waitRecord: wait.waiting,
-      }),
-    ]);
-  });
-
   test("7e: 計画セッションが idle", () => {
-    expectAction(
-      [
-        observation({
-          ledger: present("計画済み"),
-          refineSession: session.idle,
-        }),
-      ],
-      "計画セッションを片付ける",
-    );
+    const rows = [observation({ ledger: present("計画済み"), refineSession: session.idle })];
+    expectAction(rows, "計画セッションを片付ける");
+    expectFailureCount(rows, false);
   });
 
   test("7k: claim 済み・branch は clean・計画コメント無し。prepare の途中", () => {
@@ -452,15 +489,14 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7g: write を渡された直後にターンが終わった", () => {
-    expectLease(
-      [
-        implementing({
-          surfaces: [surface({ hasCheckout: present(true) })],
-          session: session.idle,
-        }),
-      ],
-      "write",
-    );
+    const obs = [
+      implementing({
+        surfaces: [surface({ hasCheckout: present(true) })],
+        session: session.idle,
+      }),
+    ];
+    expectLease(obs, "write");
+    expect(tick(obs).receiveRefusal).toBe(false);
   });
 
   test("7h: 人待ちの記録が waiting だが本文が無く、同じ対象に休止の記録がある", () => {
@@ -483,7 +519,9 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7m: write を保持したままターンが終わった", () => {
-    expectLease([implementing({ session: session.idle })], "write");
+    const obs = [implementing({ session: session.idle })];
+    expectLease(obs, "write");
+    expect(tick(obs).receiveRefusal).toBe(false);
   });
 
   test("7u: leftover の working。runtime は 稼働中 のまま write を渡す", () => {
@@ -491,7 +529,6 @@ describe("実行器が消える / 止まる", () => {
       implementing({
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
     ];
     expectLease(obs, "write");
@@ -504,7 +541,6 @@ describe("実行器が消える / 止まる", () => {
         awaitingLanding({
           session: session.running,
           leftover: true,
-          activity: "再開しうる",
         }),
       ],
       "integration",
@@ -516,36 +552,87 @@ describe("実行器が消える / 止まる", () => {
       implementing({
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
         worktreeBusy: true,
       }),
     ]);
     expect(d.outcome.kind).toBe("idle");
     expect(d.stalls).toEqual([{ issues: [1], progress: "実装中", runtime: "稼働中" }]);
+    expect(d.receiveRefusal).toBe(false);
   });
 
-  test("7v: 計画セッションが done で活動は 再開しうる", () => {
-    expectAction(
-      [
-        observation({
-          ledger: present("未計画"),
-          refineSession: session.idle,
-          refineActivity: "再開しうる",
-        }),
-      ],
-      "計画セッションを片付ける",
-    );
+  test("7v: 行 7m と同じく待機だが、sessions に refused がある", () => {
+    const obs = [implementing({ session: session.idle, refused: true })];
+    const d = tick(obs);
+    expectIdle(obs);
+    expect(d.receiveRefusal).toBe(true);
+    expect(d.conflicts).toEqual([]);
+    expect(d.stalls).toEqual([{ issues: [1], progress: "実装中", runtime: "待機" }]);
   });
 
-  test("7v2: 計画セッションが leftover の working", () => {
-    expectIdle([
-      observation({
-        ledger: present("未計画"),
-        refineSession: session.running,
-        refineLeftover: true,
-        refineActivity: "再開しうる",
+  test("7v2: 行 7v と同じ拒否だが leftover がある", () => {
+    const obs = [
+      implementing({
+        session: session.running,
+        leftover: true,
       }),
-    ]);
+    ];
+    expectLease(obs, "write");
+    expect(tick(obs).receiveRefusal).toBe(false);
+    expectEmptyCycle(obs, true);
+  });
+
+  test("7v3: 行 7v と同じ拒否だが leftover でない稼働中", () => {
+    const obs = [implementing({ session: session.running, refused: true })];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
+    expect(tick(obs).conflicts).toEqual([]);
+  });
+
+  test("7v4: 行 7v と同じ拒否だが本文が計画と食い違う", () => {
+    const obs = [
+      implementing({
+        bodyMatchesPlan: present(false),
+        session: session.idle,
+        refused: true,
+      }),
+    ];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
+  });
+
+  test("refused のときセッションが消えても解決を起こし直さない", () => {
+    const obs = [implementing({ session: session.none, refused: true })];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
+  });
+
+  test("7v5: 行 7v と同じ拒否だが未計画の課題が並んでいる", () => {
+    const obs = [
+      implementing({ session: session.idle, refused: true }),
+      observation({ issue: 2, ledger: present("未計画"), refused: true }),
+    ];
+    const d = tick(obs);
+    expect(d.outcome.kind).toBe("idle");
+    expect(d.receiveRefusal).toBe(true);
+    expect(d.conflicts).toEqual([]);
+  });
+
+  test("7v6: leftover の着地待ちは refused があっても integration を渡し、空周回は除外のまま", () => {
+    const obs = [
+      awaitingLanding({
+        session: session.running,
+        leftover: true,
+      }),
+    ];
+    expectLease(obs, "integration");
+    expectEmptyCycle(obs, false);
+    expect(tick(obs).receiveRefusal).toBe(false);
+  });
+
+  test("7v7: 着地待ち × 待機でも refused なら integration を渡さない", () => {
+    const obs = [awaitingLanding({ session: session.idle, refused: true })];
+    expectIdle(obs);
+    expect(tick(obs).receiveRefusal).toBe(true);
   });
 
   test("7r: 起こし直しのあと、記録は cleared でセッションは 稼働中", () => {
@@ -563,43 +650,74 @@ describe("実行器が消える / 止まる", () => {
   });
 
   test("7t: session が none で所有外が idle。起こし直さない", () => {
-    const obs = [implementing({ session: session.none, worktreeOccupied: true })];
+    const obs = [implementing({ session: session.none, worktreeOccupied: present(true) })];
     expectConflict(obs, "同じ worktree に所有外セッションがある");
     expectIdle(obs);
   });
 
   test("7t2: 所有外が working でも起こし直さない", () => {
     const obs = [
-      implementing({ session: session.none, worktreeBusy: true, worktreeOccupied: true }),
+      implementing({
+        session: session.none,
+        worktreeBusy: true,
+        worktreeOccupied: present(true),
+      }),
     ];
     expectConflict(obs, "同じ worktree に所有外セッションがある");
     expectIdle(obs);
   });
 
   test("7t3: 所有外が消えれば解決を起こし直す", () => {
-    expectAction(
-      [implementing({ session: session.none, worktreeOccupied: false })],
-      "解決を起こし直す",
-    );
+    const obs = [implementing({ session: session.none, worktreeOccupied: present(false) })];
+    expectAction(obs, "解決を起こし直す");
+    const o = tick(obs).outcome;
+    expect(o.kind === "action" ? o.evidence.sessionKind : o.kind).toBe("none");
+    expect(o.kind === "action" ? o.evidence.occupancy : o.kind).toBe("absent");
   });
 
   test("7t4: 着地済みでも所有外が居るあいだは片付けない", () => {
-    const obs = [
-      implementing({
-        surfaces: [
-          surface({
-            aheadOfIntegration: present(true),
-            hasCheckout: present(true),
-            terminal: present(true),
-          }),
-        ],
-        submissionEvidence: present(true),
-        session: session.none,
-        worktreeOccupied: true,
-      }),
-    ];
+    const base = {
+      surfaces: [
+        surface({
+          aheadOfIntegration: present(true),
+          hasCheckout: present(true),
+          terminal: present(true),
+        }),
+      ],
+      submissionEvidence: present(true),
+      session: session.none,
+      worktreeOccupied: present(true),
+    } as const;
+    const obs = [implementing(base)];
     expectConflict(obs, "同じ worktree に所有外セッションがある");
     expectIdle(obs);
+    const recorded = [implementing({ ...base, cleanupRecord: cleanup() })];
+    expectConflict(recorded, "同じ worktree に所有外セッションがある");
+    expectIdle(recorded);
+  });
+
+  test("7t5: occupancy が読めない in-flight は起こし直さない", () => {
+    const obs = [
+      implementing({
+        session: session.none,
+        worktreeOccupied: unobservable("pane census / detection を読めない"),
+      }),
+    ];
+    expectConflict(obs, "観測できない");
+    expectIdle(obs);
+  });
+
+  test("7t6: occupancy が読めない未着手は claim する", () => {
+    expectAction(
+      [
+        observation({
+          ledger: present("計画済み"),
+          session: session.none,
+          worktreeOccupied: unobservable("pane census / detection を読めない"),
+        }),
+      ],
+      "claim する",
+    );
   });
 });
 
@@ -619,7 +737,6 @@ describe("外から状態が動く", () => {
         ...heldIntegration(1),
         planInvalidated: present(true),
         session: session.running,
-        activity: "再開しうる",
       }),
     ]);
     const leftover = [
@@ -628,7 +745,6 @@ describe("外から状態が動く", () => {
         planInvalidated: present(true),
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
     ];
     expectAction(leftover, "計画の失効を伝える");
@@ -639,7 +755,6 @@ describe("外から状態が動く", () => {
           ...heldIntegration(1),
           planInvalidated: present(true),
           session: session.idle,
-          activity: "停止確認",
         }),
       ],
       true,
@@ -725,13 +840,12 @@ describe("外から状態が動く", () => {
   });
 
   test("9b: 行 9 を伝えたが、受け手が計画の記録を更新しないまま tick が進む", () => {
-    // 再送は冪等。活動は 停止確認。加算は Decision の countsFailure。
+    // 再送は冪等。加算は Decision の countsFailure。
     expectAction(
       [
         implementing({
           bodyMatchesPlan: present(false),
           session: session.idle,
-          activity: "停止確認",
         }),
       ],
       "本文の変更を伝える",
@@ -741,7 +855,6 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.idle,
-          activity: "停止確認",
         }),
       ],
       true,
@@ -753,90 +866,28 @@ describe("外から状態が動く", () => {
       implementing({
         bodyMatchesPlan: present(false),
         session: session.running,
-        activity: "再開しうる",
       }),
     ]);
   });
 
-  test("9b3: 行 9 を伝えたが、受け手は idle で活動は 再開しうる", () => {
-    expectAction(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "再開しうる",
-        }),
-      ],
-      "本文の変更を伝える",
-    );
-    expectFailureCount(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "再開しうる",
-        }),
-      ],
-      true,
-    );
-  });
-
-  test("9b4: 行 9 を伝えたが、受け手は idle で活動は 判定不能", () => {
-    expectAction(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "判定不能",
-        }),
-      ],
-      "本文の変更を伝える",
-    );
-    expectFailureCount(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.idle,
-          activity: "判定不能",
-        }),
-      ],
-      true,
-    );
-  });
-
-  test("9b5: leftover の 稼働中 で活動は 再開しうる。伝える 2 つは数える", () => {
+  test("9b5: leftover の 稼働中。伝える 2 つは数える", () => {
     const obs = [
       implementing({
         bodyMatchesPlan: present(false),
         session: session.running,
         leftover: true,
-        activity: "再開しうる",
       }),
     ];
     expectAction(obs, "本文の変更を伝える");
     expectFailureCount(obs, true);
   });
 
-  test("9b6: leftover の 稼働中 で活動は 停止確認。伝える 2 つは数える", () => {
-    const obs = [
-      implementing({
-        bodyMatchesPlan: present(false),
-        session: session.running,
-        leftover: true,
-        activity: "停止確認",
-      }),
-    ];
-    expectAction(obs, "本文の変更を伝える");
-    expectFailureCount(obs, true);
-  });
-
-  test("伝える 2 つの lastAction が上限なら、活動が 再開しうる でも退避先へ落とす", () => {
+  test("伝える 2 つの lastAction が上限なら、受け手が 稼働中 でも退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           planInvalidated: present(true),
           session: session.running,
-          activity: "再開しうる",
           failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
         }),
       ],
@@ -847,7 +898,6 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.running,
-          activity: "再開しうる",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -855,29 +905,13 @@ describe("外から状態が動く", () => {
     );
   });
 
-  test("9b7: leftover の 稼働中 で活動は 再開しうる。上限なら退避先へ落とす", () => {
+  test("9b7: leftover の 稼働中。上限なら退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           bodyMatchesPlan: present(false),
           session: session.running,
           leftover: true,
-          activity: "再開しうる",
-          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
-        }),
-      ],
-      "退避先",
-    );
-  });
-
-  test("leftover の 稼働中 で活動は 停止確認。上限なら退避先へ落とす", () => {
-    expectRevert(
-      [
-        implementing({
-          bodyMatchesPlan: present(false),
-          session: session.running,
-          leftover: true,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -897,13 +931,12 @@ describe("外から状態が動く", () => {
     );
   });
 
-  test("伝える 2 つの lastAction が上限で、活動が 停止確認 なら退避先へ落とす", () => {
+  test("伝える 2 つの lastAction が上限なら、受け手が 待機 でも退避先へ落とす", () => {
     expectRevert(
       [
         implementing({
           planInvalidated: present(true),
           session: session.idle,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "計画の失効を伝える" }),
         }),
       ],
@@ -914,7 +947,6 @@ describe("外から状態が動く", () => {
         implementing({
           bodyMatchesPlan: present(false),
           session: session.idle,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -928,21 +960,6 @@ describe("外から状態が動く", () => {
         implementing({
           pauseRecordExists: true,
           session: session.idle,
-          activity: "再開しうる",
-          failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
-        }),
-      ],
-      "退避先",
-    );
-  });
-
-  test("休止中で活動が 停止確認 なら上限で退避先へ落とす", () => {
-    expectRevert(
-      [
-        implementing({
-          pauseRecordExists: true,
-          session: session.idle,
-          activity: "停止確認",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -955,7 +972,6 @@ describe("外から状態が動く", () => {
       [
         implementing({
           session: session.none,
-          activity: "判定不能",
           failureRecord: present({ count: 3, lastAction: "本文の変更を伝える" }),
         }),
       ],
@@ -978,7 +994,7 @@ describe("外から状態が動く", () => {
     expectAction([a, b], "交差を解消する");
   });
 
-  test("9d: 休止の記録の to / keys が現在の交差と一致し、セッションは動き続けている", () => {
+  test("9d: 休止の記録の partners が現在の交差と一致し、セッションは動き続けている", () => {
     const a = implementing({
       issue: 1,
       resourceKeys: present(["skills"]),
@@ -989,13 +1005,13 @@ describe("外から状態が動く", () => {
       claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       pauseRecordExists: true,
-      yieldRecord: present({ issues: [2], to: 1, keys: ["skills"] }),
+      yieldRecord: present({ issues: [2], partners: [{ to: 1, keys: ["skills"] }] }),
       session: session.running,
     });
     expectIdle([a, b]);
   });
 
-  test("9k: 休止の記録はあるが、to か keys が現在の交差と一致しない", () => {
+  test("9k: 休止の記録はあるが、相手の行か keys が現在の交差と一致しない", () => {
     const a = implementing({
       issue: 1,
       resourceKeys: present(["skills"]),
@@ -1006,10 +1022,185 @@ describe("外から状態が動く", () => {
       claimRecord: present({ representative: 2, members: [2], landing: ["control"] }),
       resourceKeys: present(["skills"]),
       pauseRecordExists: true,
-      yieldRecord: present({ issues: [2], to: 1, keys: ["old"] }),
+      yieldRecord: present({ issues: [2], partners: [{ to: 1, keys: ["old"] }] }),
       session: session.running,
     });
     expectAction([a, b], "交差を解消する");
+  });
+
+  const writer = (issue: number, over: Partial<IssueObservation> = {}): IssueObservation =>
+    implementing({
+      issue,
+      claimRecord: present({ representative: issue, members: [issue], landing: ["control"] }),
+      resourceKeys: present(["skills"]),
+      session: session.running,
+      ...over,
+    });
+
+  test("9w: 3 者交差で休止の記録が 1 相手しか書いていない", () => {
+    expectAction(
+      [
+        writer(1),
+        writer(2, {
+          pauseRecordExists: true,
+          yieldRecord: present({ issues: [2], partners: [{ to: 1, keys: ["skills"] }] }),
+        }),
+        writer(3),
+      ],
+      "交差を解消する",
+    );
+  });
+
+  test("9x: 3 者交差で各後発の記録が相手の全員を記述している", () => {
+    expectIdle([
+      writer(1),
+      writer(2, {
+        pauseRecordExists: true,
+        yieldRecord: present({
+          issues: [2],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 3, keys: ["skills"] },
+          ],
+        }),
+      }),
+      writer(3, {
+        pauseRecordExists: true,
+        yieldRecord: present({
+          issues: [3],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 2, keys: ["skills"] },
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  test("9y: 3 者交差で 1 相手の keys が現況と一致しない", () => {
+    expectAction(
+      [
+        writer(1),
+        writer(2, {
+          pauseRecordExists: true,
+          yieldRecord: present({
+            issues: [2],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 3, keys: ["old"] },
+            ],
+          }),
+        }),
+        writer(3, {
+          pauseRecordExists: true,
+          yieldRecord: present({
+            issues: [3],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 2, keys: ["skills"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
+  });
+
+  test("9z: 解けた相手の行が残っている", () => {
+    expectAction(
+      [
+        writer(1),
+        writer(2, {
+          pauseRecordExists: true,
+          yieldRecord: present({
+            issues: [2],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 3, keys: ["skills"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
+  });
+
+  const paused = (issue: number, over: Partial<IssueObservation> = {}): IssueObservation =>
+    writer(issue, {
+      pauseRecordExists: true,
+      session: session.idle,
+      ...over,
+    });
+
+  test("9z2: 保持者の yield が write を離した休止相手も現況の共有キーで記述している", () => {
+    expectIdle([
+      writer(1),
+      paused(2),
+      writer(3, {
+        yieldRecord: present({
+          issues: [3],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 2, keys: ["skills"] },
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  // characterization: crossing 非所属を extra にする定義でも落ちない。共有キー空が extra。
+  test("9z3: 共有キーが空になった相手の行が残っている", () => {
+    expectAction(
+      [
+        writer(1),
+        paused(2, { resourceKeys: present(["other"]) }),
+        writer(3, {
+          yieldRecord: present({
+            issues: [3],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 2, keys: ["other"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
+  });
+
+  test("9z4: キーが present でない休止相手の行は extra にしない", () => {
+    expectIdle([
+      writer(1),
+      paused(2, { resourceKeys: unobservable("コメント一覧を読めない") }),
+      writer(3, {
+        yieldRecord: present({
+          issues: [3],
+          partners: [
+            { to: 1, keys: ["skills"] },
+            { to: 2, keys: ["skills"] },
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  test("9z5: 休止相手の行の keys が現況の共有キーと一致しない", () => {
+    expectAction(
+      [
+        writer(1),
+        paused(2),
+        writer(3, {
+          yieldRecord: present({
+            issues: [3],
+            partners: [
+              { to: 1, keys: ["skills"] },
+              { to: 2, keys: ["old"] },
+            ],
+          }),
+        }),
+      ],
+      "交差を解消する",
+    );
   });
 
   test("9e: 先発が着地し、休止していた後発と交差する保持者が居なくなった", () => {
@@ -2495,6 +2686,163 @@ describe("着地面が制御面と違う（action）", () => {
     );
   });
 
+  test("17d3: 記録あり。progress は終端から退行。残骸あり", () => {
+    expectAction(
+      [
+        implementing({
+          cleanupRecord: cleanup(),
+          ledger: present("完了"),
+          submissionEvidence: present(true),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d4: 記録あり。残る worktree が dirty", () => {
+    expectAction(
+      [
+        implementing({
+          cleanupRecord: cleanup(),
+          ledger: present("完了"),
+          submissionEvidence: present(true),
+          surfaces: [
+            surface({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              dirty: present(true),
+            }),
+          ],
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d5: 記録あり。面が読めない。残骸あり", () => {
+    const obs = [
+      implementing({
+        cleanupRecord: cleanup(),
+        ledger: present("完了"),
+        submissionEvidence: present(true),
+        surfaces: [
+          surface({
+            aheadOfIntegration: present(true),
+            hasCheckout: present(true),
+            terminal: unobservable("面の観測が読めない"),
+            landable: unobservable("面の観測が読めない"),
+          }),
+        ],
+      }),
+    ];
+    expectIdle(obs);
+    expectConflict(obs, "着地面が解決できない");
+  });
+
+  test("17d6: 記録あり。実体は全部消えた。記録だけ残る", () => {
+    expectAction(
+      [
+        observation({
+          ledger: present("完了"),
+          claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
+          cleanupRecord: cleanup(),
+          surfaces: [surface({ terminal: present(true) })],
+          submissionEvidence: present(true),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d7: group。記録あり。途中停止", () => {
+    const lead = implementing({
+      cleanupRecord: cleanup({ members: [1, 2] }),
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+      ledger: present("完了"),
+      submissionEvidence: present(true),
+    });
+    const member = observation({ issue: 2, ledger: present("完了"), sameBranchAs: [1] });
+    expectAction([lead, member], "片付ける");
+    const o = tick([lead, member]).outcome;
+    expect(o.kind === "action" ? o.target.members : []).toEqual([1, 2]);
+  });
+
+  test("17d8: PR を使う面と使わない面が混在。記録あり。途中停止", () => {
+    expectAction(
+      [
+        landed({
+          cleanupRecord: cleanup({
+            landing: ["control", "skills"],
+            branches: { control: "fix/1-x", skills: "fix/1-x" },
+            tips: { control: "aaa", skills: "bbb" },
+          }),
+          ledger: present("完了"),
+          submissionEvidence: present(true),
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17d9: 取り下げの列。記録あり。途中停止", () => {
+    expectAction(
+      [
+        landed({
+          open: present(false),
+          cleanupRecord: cleanup({ kind: "取り下げ" }),
+          surfaces: [
+            control(),
+            secondary({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+          ],
+          session: session.none,
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17p: 片付け開始後に再 open / 再 claim。記録に無い仕事が現れた", () => {
+    expectAction(
+      [
+        implementing({
+          cleanupRecord: cleanup(),
+          surfaces: [
+            surface({ aheadOfIntegration: present(true), hasCheckout: present(true) }),
+            surface({
+              name: "skills",
+              usesPr: false,
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+            }),
+          ],
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17p2: 記録を書く直前に落ちた。終端 progress のまま記録は無い", () => {
+    expectAction(
+      [
+        implementing({
+          surfaces: [
+            surface({
+              aheadOfIntegration: present(true),
+              hasCheckout: present(true),
+              terminal: present(true),
+            }),
+          ],
+          submissionEvidence: present(true),
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
   test("17d2: 提出の証跡がある 完了 の残骸。非 PR 面は終端でなく、live / 計画 / 契約が欠ける", () => {
     const remnants = (over: Partial<ReturnType<typeof secondary>> = {}) =>
       secondary({
@@ -2972,11 +3320,6 @@ describe("容量と供給", () => {
   test("19k: 退避先の計画済みは供給に数えない", () => {
     const shelved = planned(1, { ledger: present("退避先") });
     expect(tick([shelved]).usage.supply).toBe(0);
-  });
-
-  test("19l: retired-refine が残っているものは供給に数えない", () => {
-    const retired = planned(1, { retiredRefineExists: true });
-    expect(tick([retired]).usage.supply).toBe(0);
   });
 
   test("19m: 依存が未解決の group は供給に数えない", () => {

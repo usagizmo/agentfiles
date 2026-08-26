@@ -18,6 +18,25 @@
       "skillFolderHash": "037e8078db4b20b4aa25c04f21c6de7d335ec449",
       "installedAt": "2026-05-05T08:23:42.455Z",
       "updatedAt": "2026-07-23T12:35:14.829Z"
+    },
+    "show-me": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/humanlayer/skills.git",
+      "skillPath": "plugins/show-me/skills/show-me/SKILL.md",
+      "skillFolderHash": "0bdb821a21e793a4f6f82a7078c052154447e5cc",
+      "installedAt": "2026-08-24T15:48:04.325Z",
+      "updatedAt": "2026-08-24T15:48:04.325Z"
+    },
+    "eli5": {
+      "source": "anthropics/claude-plugins-community",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/anthropics/claude-plugins-community.git",
+      "ref": "main",
+      "skillPath": "eli5/skills/eli5/SKILL.md",
+      "skillFolderHash": "d16165120b7658216c79601b0ee568f42e540961",
+      "installedAt": "2026-08-24T19:46:51.920Z",
+      "updatedAt": "2026-08-24T19:46:51.920Z"
     }
   },
   "dismissed": {
