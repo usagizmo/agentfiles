@@ -164,7 +164,11 @@ partners:
 
 `partners` の欠落・空配列・行の空 `keys` は無効。変換しない。`runtime` への写り方は本文「正規化」が SSOT。
 
-先に伝えてから書く。submit 成功のあと書く（成否は `harness.md`「コマンドの使い方」の既に `working`）。書けなければ次の tick で同じ action が再送する。書いてから伝え**ない**。
+submit 成功のあと書く（成否は `harness.md`「composer の受け入れ」）。
+
+- 送れなかった周は書かない
+- 書けなければ次の tick で同じ action が再送する
+- 書いてから伝え**ない**
 
 ## 計画セッションを片付ける
 

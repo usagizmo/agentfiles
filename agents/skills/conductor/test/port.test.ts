@@ -124,6 +124,7 @@ describe("checkout path の解決", () => {
 });
 
 const harnessMd = () => readFileSync(join(import.meta.dir, "../references/harness.md"), "utf8");
+const skillMd = () => readFileSync(join(import.meta.dir, "../SKILL.md"), "utf8");
 
 describe("設定の fail-closed", () => {
   test("面の名前が重複したら止まる", () => {
@@ -175,6 +176,58 @@ describe("既に working への agent prompt", () => {
     const md = harnessMd();
     expect(md).toMatch(/実行器だけ止める[\s\S]*state_change_seq/);
     expect(md).toMatch(/失われた resolve を張り直す[\s\S]*state_change_seq/);
+  });
+});
+
+describe("composer が受け付ける状態での agent prompt", () => {
+  test("契約表に受け付ける状態で submit できたことの観測がある", () => {
+    expect(harnessMd()).toContain("composer が受け付ける状態で submit できたことを観測できる");
+  });
+
+  test("前段は visible のフッターで、入力欄は見ない", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/agent read[\s\S]*--source visible/);
+    expect(md).toContain("Space:prompt");
+    expect(md).toContain("j/k:nav");
+    expect(md).toContain("Tab/Space: question");
+  });
+
+  test("Tab はトグルなので使わない。復帰は space", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/Tab はトグルなので使わ/);
+    expect(md).toMatch(/send-keys <名前> space/);
+  });
+
+  test("質問カードへ park しているあいだは送らない", () => {
+    expect(harnessMd()).toMatch(/Tab\/Space: question[\s\S]*送ら/);
+  });
+
+  test("chrome が読めない、または表に無い字面は fail-open", () => {
+    expect(harnessMd()).toMatch(/表に無い字面[\s\S]*fail-open/);
+  });
+
+  test("leftover 成功は受け付ける状態での agent_prompted", () => {
+    expect(harnessMd()).toMatch(/受け付ける状態での `agent_prompted`/);
+  });
+
+  test("送れなかった周は成功でも失敗でもない", () => {
+    expect(harnessMd()).toContain("成功でも失敗でもない");
+  });
+
+  test("戻れず送れなかった周は retry に数えない", () => {
+    expect(skillMd()).toMatch(/retry に数え\*\*ない\*\*/);
+    expect(skillMd()).toContain(
+      "送れなかった周（質問カードへ park、scrollback から戻れなかった）は実行していない",
+    );
+  });
+
+  test("live chrome が残る stalled は張り直しに当てない", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/live な composer \/ nav chrome[\s\S]*張り直しに当てない/);
+  });
+
+  test("張り直しの agent prompt も同じ前段を通す", () => {
+    expect(harnessMd()).toMatch(/張り直しの `agent prompt` も同じ/);
   });
 });
 

@@ -6,16 +6,17 @@ conductor が terminal multiplexer に対して行う操作。**差し替える�
 
 手段によらず必要なもの。**差し替えるときは、この表を満たせるかで判定する。**
 
-| 契約                                                                         | 満たせないと                                           |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 名乗る（起動したら自分のセッションへ固定名）                                 | 自分を一覧から見つけられず、2 つ目が走っても気づけない |
-| 人待ちを中断と区別して返す                                                   | 人待ちを中断と読んで再開を送り続ける                   |
-| 停止中のセッションが自走しない（外部入力なしに書き始めない）                 | write を返したはずの課題が勝手に再開して交差を作る     |
-| 稼働に移ったことを観測できる                                                 | 起こした・渡したことを確認できないまま tick を終える   |
-| snapshot を取り、tick が action を決めるのに使った観測と違ったときだけ起こす | ポーリングか待ちっぱなしになる                         |
-| 実行器だけ止める（worktree・workspace・branch・未コミットの変更は残す）      | 書き続ける実行器と新しい借り手が衝突する               |
-| 起動が非同期（親が子の完了をブロックしない）                                 | tick が子の完了まで返らない                            |
-| 稼働中のセッションを一覧で観測できる                                         | tick が現実を読めない                                  |
+| 契約                                                                         | 満たせないと                                                                                   |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 名乗る（起動したら自分のセッションへ固定名）                                 | 自分を一覧から見つけられず、2 つ目が走っても気づけない                                         |
+| 人待ちを中断と区別して返す                                                   | 人待ちを中断と読んで再開を送り続ける                                                           |
+| 停止中のセッションが自走しない（外部入力なしに書き始めない）                 | write を返したはずの課題が勝手に再開して交差を作る                                             |
+| 稼働に移ったことを観測できる                                                 | 起こした・渡したことを確認できないまま tick を終える                                           |
+| snapshot を取り、tick が action を決めるのに使った観測と違ったときだけ起こす | ポーリングか待ちっぱなしになる                                                                 |
+| 実行器だけ止める（worktree・workspace・branch・未コミットの変更は残す）      | 書き続ける実行器と新しい借り手が衝突する                                                       |
+| 起動が非同期（親が子の完了をブロックしない）                                 | tick が子の完了まで返らない                                                                    |
+| 稼働中のセッションを一覧で観測できる                                         | tick が現実を読めない                                                                          |
+| composer が受け付ける状態で submit できたことを観測できる                    | PTY へ書いただけの `agent_prompted` を成功にして、scrollback フォーカスへ渡し続け retry を焼く |
 
 - **「前回」は時点ではなく実体**。tick が読んだ観測そのものを起床側へ渡し、起床側は取り直さない
 - 人待ちの印は無くてもよい（SSOT は Issue の記録で、印は即時観測用のキャッシュ）。食い違ったときの判定は `../SKILL.md`
@@ -63,7 +64,7 @@ action でない中断（API エラー等）だけ、ここで決める —— �
 **稼働に移ったことを観測できる手段が要る**（使い道は `../SKILL.md`）。
 
 セッションが一覧に無いなら新規に起こす（既にある worktree なら pane だけ。起こす表）。
-一覧に `idle` / `done` で載っていて「失われた resolve を張り直す」の述語に当たるなら、張り直してから起こす表の本文を送る。worktree は作り直さ**ない**。
+一覧に `idle` / `done` で載っていて「失われた resolve を張り直す」の述語に当たるなら、張り直す。本文はそこの手順 7。worktree は作り直さ**ない**。
 文脈は Issue コメントの計画と人待ちの記録から**復元させる**（セッション文脈はキャッシュ、外部化した記録が復旧契約）。conductor が中身を解釈して渡す必要は**ない**。
 
 失われたセッションの張り直しが当たるのは、conductor が所有する `resolve-*` へ渡すすべての実行である。
@@ -168,11 +169,11 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **`herdr worktree list` に `--cwd` を必ず付ける**。省くと返るのは「UI がフォーカスしている workspace の repo」
 - `worktree create` は worktree・workspace・root pane を一度に作る。pane を別途 split し**ない**
 - **`--json` を付けない**。socket API 経由のコマンドは既定で JSON を返す（`agent start` に付けると exit 2）
-- **入力欄への送信は `agent prompt` 以外を使わない**。`pane send-keys <id> enter` も `pane send-text` の改行も submit しない。未送信の下書きは `agent prompt` が捨てるので、事前に消そうとしなくてよい
+- 入力欄への送信は `agent prompt` 以外を使わない。**例外は focus 復帰キーだけ**。`pane send-keys <id> enter` も `pane send-text` の改行も submit しない。未送信の下書きは `agent prompt` が捨てるので、事前に消そうとしなくてよい
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は `agent prompt` には無い
-- 稼働の確認（`idle` / `done` から起こす）は `agent prompt <名前> <本文> --wait --until working`
-- 既に `working` の受け手（leftover も genuine の休止促しも）は `--wait` / `--until` を付けない。CLI が `agent_prompted` を返したら成功。`state_change_seq` が動かないことを**失敗にしない**
-- 既に `working` への失敗は非 0 / `agent_not_found` / `agent_not_ready` / `agent_prompt_stalled` **だけ**
+- `agent prompt` の前段は下の「composer の受け入れ」。張り直しの `agent prompt` も同じ
+- 稼働の確認（`idle` / `done` から起こす）は、前段のあと `agent prompt <名前> <本文> --wait --until working`
+- 既に `working` の受け手（leftover も genuine の休止促しも）は `--wait` / `--until` を付けない。成否は下の「composer の受け入れ」
 - `--until working` の timeout は、既に `working` のセッションに使ったとき成功にも失敗にも**しない**。付けると返らず timeout する。`idle` / `done` からの稼働確認の timeout は失敗
 - `agent prompt` / `agent rename` は認識済み agent が要る。`pane current` に `agent` が無ければ `agent_not_found` か `agent_not_ready`。未認識の指定 pane には prompt せず、pane を割って `agent start` する
 - 張り直しの `pane split` は `--pane <対象の pane_id>`。`--current` は使わ**ない**
@@ -205,9 +206,36 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 `HERDR_ENV` が 1 でなければ herdr の外なので、conductor は起動できない。その旨を報告して止まる。
 
+### composer の受け入れ
+
+`agent prompt` するすべての実行の前段。kind 名では分岐しない。字面の写しは下の表に閉じる。
+
+観測は `herdr agent read <名前> --source visible --format text` の末尾（フッター / focus hint）。入力欄は上の「入力欄の文字列は観測材料ではない」。
+
+| 末尾に含まれる字面              | 状態                  | すること                                                                                 |
+| ------------------------------- | --------------------- | ---------------------------------------------------------------------------------------- |
+| `Tab/Space: question`           | 質問カードへ park     | 復帰も `agent prompt` も送ら**ない**                                                     |
+| `Space:prompt` または `j/k:nav` | scrollback フォーカス | `herdr agent send-keys <名前> space`。再観測して受け付けるなら送る。戻らなければ送らない |
+| 読めない、または表に無い字面    | —                     | fail-open。送る                                                                          |
+
+Tab はトグルなので使わ**ない**。既に prompt なら scrollback へ戻る。
+
+表で送らないと決めた周は成功でも失敗でもない。数え方は `../SKILL.md`「数えない失敗」。
+
+成功:
+
+- leftover / 既に `working`: composer が受け付ける状態での `agent_prompted`（表に無い字面と読めない chrome の fail-open を含む）
+- leftover / 既に `working` で scrollback フォーカスのままの `agent_prompted` は成功にしない
+- leftover / 既に `working`: `state_change_seq` が動かないことを**失敗にしない**
+- `idle` / `done`: 前段のあと `--wait --until working` で稼働へ移ったこと
+
+失敗（送った周）は非 0 / `agent_not_found` / `agent_not_ready` / `agent_prompt_stalled` **だけ**。
+
+`agent_prompt_stalled` でも、live な composer / nav chrome が残るなら失われた resolve ではない。張り直しに当てない。chrome が読めないときだけ下の「失われた resolve を張り直す」で判定する。
+
 ### 失われた resolve を張り直す
 
-`agent prompt` が次をすべて満たすとき、その `resolve-*` は失われている。
+`agent prompt` が次をすべて満たすとき、その `resolve-*` は失われている。例外は上の「composer の受け入れ」。
 
 | 観測                | 値                            |
 | ------------------- | ----------------------------- |
@@ -227,7 +255,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 4. `agent_status` が `idle` / `done` のまま、かつ `state_change_seq` が 1 で取った値と同じなら `herdr pane close <pane_id>`。外れていたら閉じずその tick を終える
 5. `herdr pane list --workspace <workspace_id>` と `herdr agent list` で旧 pane と旧 agent の消滅を観測する
 6. 「セッションを起こす」と同じ。新 pane へ
-7. 「起こす」表の本文を `herdr agent prompt` で送る。`交差を解消する` では送らず、元の渡す内容を送る
+7. 前段を通してから「起こす」表の本文を `herdr agent prompt` で送る。`交差を解消する` では送らず、元の渡す内容を送る。
 
 ### 起こされる仕組み
 

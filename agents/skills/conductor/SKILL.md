@@ -216,13 +216,20 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 ### 数えない失敗
 
-`receiveRefusal` は観測の付帯で、実行した action の成否ではない。立っているあいだ prompt 系は選ばれない（条件は `src/decide.ts`）。下の箇条は実行した action の成否だけに掛かる。
+`receiveRefusal` は観測の付帯で、実行した action の成否ではない。立っているあいだ prompt 系は選ばれない（条件は `src/decide.ts`）。環境起因の箇条は実行した action の成否だけに掛かる。送れなかった周は実行していない。
 
 実行環境が操作そのものを拒否した失敗は、retry budget に数え**ない**（`count` を進めず、`lastAction` も書かない）。判定は API へ到達したかどうか —— 応答が返ったなら（4xx / 5xx も含む）通常の失敗、コマンドが起動しない・permission で弾かれて応答が無いなら環境起因。
 
 - action 上限にも数えず、観測もやり直さ**ない**
 - 次の tick でも同じ action を選び続ける
 - 応答へ出す。**時間切れで解除しない**
+
+送れなかった周（質問カードへ park、scrollback から戻れなかった）は実行していない。判定は `references/harness.md`「composer の受け入れ」。
+
+- retry の `count` も `lastAction` も進めない。retry に数え**ない**
+- action 上限に数えない
+- この tick を終える。`cli.ts` を呼び直さない。次の tick で同じ action が当たる
+- 環境起因の箇条は掛けない
 
 失われたセッションへの渡しが観測上の変化を生まなかった失敗は、通常の失敗として 1 回数える。
 
@@ -271,7 +278,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 コードに無い規約:
 
 - 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）
-- 既に `working` への `agent prompt` の成否は `references/harness.md`
+- `agent prompt` の成否（前段・送れなかった周・張り直し除外を含む）は `references/harness.md`
 - `tab close` を行う入口は計画セッションと計画枠の逼迫の上限到達**だけ**
 - 「実行器だけ止める」は止まったことを `state_change_seq` で確かめてから資源を解放する。**確かめられなければ `Conflict`**。`agent_status` の 5 値を停止の証明に使わない
 - 意図して稼働中へ送るのは休止を促し直す。伝える 2 つは `canPrompt`。枠を渡すは受信可能を読む
