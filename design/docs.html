@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>Rabi 読み物の面</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!--
+      長文を読む面。**手書き**で、生成物ではない。
+
+      見るのは「頁の層が本文と噛み合うか」—— 天とナビと目次と頁の顔が同じ密度で並ぶか、
+      `.rabi-prose` の段が読める間隔で積まれるか、手順と添え物が本文の流れを切らないか。
+
+      文言・数値はすべて置き換えの例示で、実在の製品を指さ**ない**。
+      部品の見た目はここに書かない（`assets/rabi-components.css` が持つ）。
+    -->
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
+    <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
+    <link rel="stylesheet" href="surfaces.css" />
+    <style>
+      /* ==== base ==== */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* 天を貼り付けたときに飛び先が潜らない距離。天の丈の写しでは**なく**、
+         それを超える余白の段（`DESIGN.md`「Layout」） */
+      :root {
+        --page-clear: var(--rabi-gap-14);
+      }
+
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: var(--page-clear);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      svg {
+        display: block;
+      }
+
+      /* 図の型紙を隠す。svg の display を敷いたので [hidden] を後に置く */
+      [hidden] {
+        display: none;
+      }
+
+      /* 天は面の上端に貼る。丈と地と罫は .rabi-appbar が持つ */
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+
+      .header-inner {
+        display: flex;
+        align-items: center;
+        gap: var(--rabi-gap-5);
+        width: min(1240px, 100%);
+        height: 100%;
+        margin-inline: auto;
+      }
+
+      /* ==== 桁割り。3 桁と 2 桁。列幅は面が決める ==== */
+      .shell {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr) 210px;
+        align-items: start;
+        gap: var(--rabi-gap-8);
+        width: min(1240px, calc(100% - 40px));
+        margin-inline: auto;
+        padding: var(--rabi-gap-8) 0 var(--rabi-gap-14);
+      }
+
+      .shell-2 {
+        grid-template-columns: 220px minmax(0, 1fr);
+      }
+
+      /* 左のナビを持たない 2 桁。目次だけを右に置き、読む桁は幅を絞る */
+      .shell-toc {
+        grid-template-columns: minmax(0, 720px) 210px;
+        justify-content: start;
+      }
+
+      .side {
+        position: sticky;
+        top: var(--page-clear);
+        display: grid;
+        gap: var(--rabi-gap-3);
+        align-content: start;
+      }
+
+      .doc {
+        display: grid;
+        gap: var(--rabi-gap-8);
+      }
+
+      /* 目次の見出し。ナビの群と同じ列に揃える */
+      .toc-title {
+        padding: 0 var(--rabi-gap-2);
+        font-size: var(--rabi-t-label);
+        font-weight: 600;
+        line-height: var(--rabi-lh-label);
+        color: var(--rabi-faint);
+      }
+
+      .side-foot {
+        display: flex;
+        align-items: center;
+        gap: var(--rabi-gap-2);
+        padding: var(--rabi-gap-3) var(--rabi-gap-2) 0;
+        border-top: 1px solid var(--rabi-line);
+        font-size: var(--rabi-t-label);
+        font-weight: 500;
+        line-height: var(--rabi-lh-label);
+        color: var(--rabi-faint);
+      }
+
+      .band {
+        padding: var(--rabi-gap-8) 0 0;
+        border-top: 1px solid var(--rabi-divider);
+      }
+
+      .foot-inner {
+        width: min(1240px, 100%);
+        margin-inline: auto;
+      }
+
+      .band-note {
+        width: min(1240px, calc(100% - 40px));
+        margin-inline: auto;
+        font-family: var(--rabi-mono);
+        font-size: var(--rabi-t-label-sm);
+        font-weight: 600;
+        line-height: var(--rabi-lh-label-sm);
+        color: var(--rabi-faint);
+      }
+
+      /* 狭い面では 1 桁へ落とす。ナビは本文の前、目次は後ろ */
+      @media (max-width: 1040px) {
+        .shell,
+        .shell-2,
+        .shell-toc {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .side {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <svg hidden aria-hidden="true">
+      <symbol id="i-play" viewBox="0 0 18 18">
+        <circle cx="9" cy="9" r="6.2" />
+        <path d="M7.6 6.6 11.4 9l-3.8 2.4z" />
+      </symbol>
+      <symbol id="i-doc" viewBox="0 0 18 18">
+        <path d="M4.5 2.5h6L14 6v9.5H4.5z" />
+        <path d="M10.4 2.6V6H14" />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 18 18">
+        <circle cx="8" cy="8" r="4.6" />
+        <path d="m11.4 11.4 3 3" />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 18 18">
+        <rect x="6.5" y="6.5" width="8" height="8" rx="1.6" />
+        <path d="M11.5 4.2A1.7 1.7 0 0 0 9.9 3H4.7A1.7 1.7 0 0 0 3 4.7v5.2c0 .8.5 1.4 1.2 1.6" />
+      </symbol>
+      <symbol id="i-chevron" viewBox="0 0 18 18">
+        <path d="m7 5 4 4-4 4" />
+      </symbol>
+      <symbol id="i-bulb" viewBox="0 0 18 18">
+        <path d="M9 2.5a4.4 4.4 0 0 1 2.6 7.9c-.4.3-.6.8-.6 1.3H7c0-.5-.2-1-.6-1.3A4.4 4.4 0 0 1 9 2.5z" />
+        <path d="M7.4 13.6h3.2M8 15.5h2" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 18 18">
+        <circle cx="9" cy="9" r="6.4" />
+        <path d="M9 8.2v4M9 5.8v.6" />
+      </symbol>
+    </svg>
+
+    <header class="rabi-appbar site-header">
+      <div class="header-inner">
+        <a class="rabi-brand" href="landing.html">SAMPLE</a>
+        <nav class="rabi-appbar-nav" aria-label="Main">
+          <a href="#doc" aria-current="page">ドキュメント</a>
+          <a href="#log">更新履歴</a>
+          <a href="#policy">方針</a>
+          <a href="app.html">操作</a>
+        </nav>
+        <div class="rabi-appbar-action">
+          <button
+            type="button"
+            class="rabi-btn rabi-btn-sm rabi-btn-secondary"
+            data-theme-toggle
+            aria-keyshortcuts="t"
+          >
+            <span>テーマ</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="doc" class="shell">
+      <!-- 左のナビ。群は details で畳み、現在地は aria-current="page" -->
+      <aside class="side">
+        <div class="rabi-input-wrap">
+          <svg class="ico"><use href="#i-search" /></svg>
+          <input
+            class="rabi-input rabi-input-sm"
+            type="search"
+            aria-label="ドキュメントを検索"
+            placeholder="キーワードで検索"
+          />
+        </div>
+
+        <nav class="rabi-nav rabi-nav-icons" aria-label="ドキュメント">
+          <ul>
+            <li>
+              <details open>
+                <summary class="rabi-nav-group">
+                  <svg class="ico rabi-nav-mark"><use href="#i-chevron" /></svg>
+                  <span>はじめに</span>
+                </summary>
+                <ul>
+                  <li>
+                    <a href="#doc"><svg class="ico"><use href="#i-doc" /></svg><span>概要</span></a>
+                  </li>
+                  <li>
+                    <a href="#doc"><svg class="ico"><use href="#i-doc" /></svg><span>はじめかた</span></a>
+                  </li>
+                  <li>
+                    <a href="#doc"><span>用語</span></a>
+                  </li>
+                </ul>
+              </details>
+            </li>
+            <li>
+              <details open>
+                <summary class="rabi-nav-group">
+                  <svg class="ico rabi-nav-mark"><use href="#i-chevron" /></svg>
+                  <span>使い方</span>
+                </summary>
+                <ul>
+                  <li>
+                    <a href="#doc" aria-current="page">
+                      <svg class="ico"><use href="#i-play" /></svg><span>最初の一歩</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="#doc"><span>組み立てる</span></a>
+                  </li>
+                  <li>
+                    <a href="#doc"><span>共有する</span></a>
+                  </li>
+                </ul>
+              </details>
+            </li>
+            <li>
+              <p class="rabi-nav-group"><span>リファレンス</span></p>
+              <ul>
+                <li><a href="#doc"><span>設定</span></a></li>
+                <li>
+                  <a href="#doc"><span>コマンド</span></a>
+                  <ul>
+                    <li><a href="#doc"><span>入れ子の行</span></a></li>
+                    <li><a href="#doc"><span>もう 1 段の行</span></a></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </nav>
+
+        <p class="side-foot">English / 日本語</p>
+      </aside>
+
+      <!-- 本文 -->
+      <article class="doc">
+        <header class="rabi-page-head">
+          <p class="rabi-page-kicker">使い方</p>
+          <h1>最初の一歩</h1>
+          <p class="rabi-page-lead">
+            置き換えの導入文。何ができるかを 2 行で述べ、次に読む場所へ渡す。
+            この面は規則の組み合わせを見るためのもので、実在の手順を書きません。
+          </p>
+        </header>
+
+        <div class="rabi-prose">
+          <p>
+            まずは <a href="#doc">最小の構成</a> を作ります。設定は
+            <code>config.sample</code> の 1 ファイルに集まっていて、
+            <kbd class="rabi-kbd">Cmd</kbd> + <kbd class="rabi-kbd">K</kbd> で開けます。
+          </p>
+
+          <h2 id="steps">3 つの手順</h2>
+
+          <ol class="rabi-steps">
+            <li>
+              <h3 class="rabi-step-title">置き場を決める</h3>
+              <p>
+                空の場所を 1 つ選びます。まとまっていなくて構いません。
+                後から動かせるので、最初の置き場に時間をかけません。
+              </p>
+            </li>
+            <li>
+              <h3 class="rabi-step-title">中身を入れる</h3>
+              <p>
+                入れたものには時刻が残ります。並び替えの手掛かりになるので、
+                整える前の状態のままで置いておきます。
+              </p>
+            </li>
+            <li>
+              <h3 class="rabi-step-title">問いを置く</h3>
+              <p>手が止まったら問いを 1 つ置いて、その先を書き継ぎます。</p>
+            </li>
+          </ol>
+
+          <div class="rabi-callout">
+            <svg class="ico"><use href="#i-bulb" /></svg>
+            <p class="rabi-callout-title">その場で足す</p>
+            <p>
+              書けないときは <kbd class="rabi-kbd">Ctrl</kbd> + <kbd class="rabi-kbd">Space</kbd>
+              で、今の置き場へその場で足せます。
+            </p>
+          </div>
+
+          <h2 id="hand-off">まとめて渡す</h2>
+
+          <p>まとまりごとに切り出して渡すと、次の工程がそのまま受け取れます。</p>
+
+          <pre class="rabi-code">いま置いてあるものを読んで、まとまりごとに分けて、
+それぞれを別の置き場として元の隣へ出してください。
+元の置き場と各置き場を線で繋いで。</pre>
+
+          <p>切り出されたものは、別の場所の既存のものとも繋げられます。</p>
+
+          <ul>
+            <li>意味が近ければ線で繋ぐ</li>
+            <li>まとまりが見えたら囲う</li>
+            <li>要らなくなったら外す —— 消さずに外へ出しておく</li>
+          </ul>
+
+          <div class="rabi-callout">
+            <svg class="ico"><use href="#i-info" /></svg>
+            <p class="rabi-callout-title">細かく切ると使い回せる</p>
+            <p>細かく切り出したものは、他の場所からも参照できます。</p>
+          </div>
+
+          <h2 id="settings">設定の対応</h2>
+
+          <table class="rabi-table">
+            <thead>
+              <tr>
+                <th>キー</th>
+                <th>既定</th>
+                <th class="num">上限</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="group">
+                <td colspan="3">表示</td>
+              </tr>
+              <tr>
+                <td><code>density</code></td>
+                <td>normal</td>
+                <td class="num">3</td>
+              </tr>
+              <tr>
+                <td><code>columns</code></td>
+                <td>auto</td>
+                <td class="num">12</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>注意</h3>
+
+          <p class="rabi-alert">上限を超えた値は保存されず、既定へ戻ります。</p>
+        </div>
+      </article>
+
+      <!-- 頁内の目次。詰めた版で、現在地は aria-current="location" -->
+      <aside class="side">
+        <button type="button" class="rabi-btn rabi-btn-sm rabi-btn-secondary">
+          <svg class="ico"><use href="#i-copy" /></svg>
+          <span>ページをコピー</span>
+        </button>
+        <p class="toc-title">このページの内容</p>
+        <nav class="rabi-nav rabi-nav-sm" aria-label="このページの内容">
+          <ul>
+            <li>
+              <a href="#doc" aria-current="location">最初の一歩</a>
+              <ul>
+                <li><a href="#steps">3 つの手順</a></li>
+                <li><a href="#hand-off">まとめて渡す</a></li>
+                <li><a href="#settings">設定の対応</a></li>
+              </ul>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+    </main>
+
+    <section class="band">
+      <p class="band-note">2 桁 —— 更新履歴。目次を持たず、左は年で畳む</p>
+
+      <div id="log" class="shell shell-2">
+        <aside class="side">
+          <nav class="rabi-nav" aria-label="更新履歴">
+            <ul>
+              <li>
+                <details open>
+                  <summary class="rabi-nav-group">
+                    <svg class="ico rabi-nav-mark"><use href="#i-chevron" /></svg>
+                    <span>2026</span>
+                  </summary>
+                  <ul>
+                    <li><a href="#log" aria-current="page">v0.4.0</a></li>
+                    <li><a href="#log">v0.3.2</a></li>
+                    <li><a href="#log">v0.3.0</a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details>
+                  <summary class="rabi-nav-group">
+                    <svg class="ico rabi-nav-mark"><use href="#i-chevron" /></svg>
+                    <span>2025</span>
+                  </summary>
+                  <ul>
+                    <li><a href="#log">v0.2.0</a></li>
+                    <li><a href="#log">v0.1.0</a></li>
+                  </ul>
+                </details>
+              </li>
+            </ul>
+          </nav>
+          <p class="side-foot">English / 日本語</p>
+        </aside>
+
+        <article class="doc">
+          <header class="rabi-page-head">
+            <h2>v0.4.0</h2>
+            <p class="rabi-page-meta">2026-06-11</p>
+            <p class="rabi-page-lead">置き換えの要約。この版で何が変わったかを 1 行で述べる。</p>
+          </header>
+
+          <div class="rabi-prose">
+            <h3>足したもの</h3>
+            <ul>
+              <li>置き場を 6 種類にした</li>
+              <li>線で繋いだ関係をまとめて畳めるようにした</li>
+              <li>並べ替えの手掛かりを時刻から引けるようにした</li>
+            </ul>
+
+            <h3>直したもの</h3>
+            <ul>
+              <li>狭い面で桁が落ちないことがあるのを直した</li>
+              <li>畳んだ群の中の現在地が読めないのを直した</li>
+            </ul>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="band">
+      <p class="band-note">2 桁 —— 目次だけ。左のナビを持たない長文の面</p>
+
+      <div id="policy" class="shell shell-toc">
+        <article class="doc">
+          <header class="rabi-page-head">
+            <h2>置き換えの方針</h2>
+            <p class="rabi-page-meta">2026-08-25</p>
+          </header>
+
+          <div class="rabi-prose">
+            <p>
+              置き換えの導入文。長い文章を 1 桁で読ませる面で、左のナビを持たない。
+              頁の中の位置は右の目次だけが示す。
+            </p>
+
+            <h2 id="policy-scope">扱う範囲</h2>
+            <p>置き換えの本文。範囲を 2〜3 行で述べる。</p>
+            <ul>
+              <li>置き換えの項目</li>
+              <li>置き換えの項目</li>
+            </ul>
+
+            <h2 id="policy-use">使い方</h2>
+            <p>置き換えの本文。ここでは長さを見るために 2 段落置く。</p>
+            <p>2 段落目。行の長さと折り返しを見るためだけに置いている。</p>
+
+            <h2 id="policy-contact">問い合わせ</h2>
+            <p>置き換えの本文。</p>
+          </div>
+        </article>
+
+        <aside class="side">
+          <button type="button" class="rabi-btn rabi-btn-sm rabi-btn-secondary">
+            <svg class="ico"><use href="#i-copy" /></svg>
+            <span>ページをコピー</span>
+          </button>
+          <p class="toc-title">このページの内容</p>
+          <nav class="rabi-nav rabi-nav-sm" aria-label="置き換えの方針の目次">
+            <ul>
+              <li><a href="#policy-scope" aria-current="location">扱う範囲</a></li>
+              <li><a href="#policy-use">使い方</a></li>
+              <li><a href="#policy-contact">問い合わせ</a></li>
+            </ul>
+          </nav>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="rabi-footer">
+      <div class="rabi-footer-bottom foot-inner">
+        <span>© 2026 SAMPLE</span>
+        <span>DESIGN.md の検証面 — 文言・数値はすべて置き換え</span>
+      </div>
+    </footer>
+
+    <script src="surfaces.js"></script>
+  </body>
+</html>

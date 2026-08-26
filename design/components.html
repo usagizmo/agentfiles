@@ -7,7 +7,7 @@
     <!--
       `rabi-components.css` が実装している部品を、全部の状態と並べて出す面。**手書き**で、生成物ではない。
 
-      site.html が「組み合わせたときに破綻しないか」を見るのに対し、ここは
+      組み合わせの面（landing / docs / app）が「組み合わせたときに破綻しないか」を見るのに対し、ここは
       「部品ひとつが全状態で正しいか」を見る。新しい面を組むときはここから拾う。
 
       面そのものは密（一覧）なので、深さを使わず外縁も `5` 以下に収める
@@ -18,10 +18,13 @@
     -->
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
+    <link rel="stylesheet" href="surfaces.css" />
     <style>
       /* ==== 版面の変数。密な面の密度 ==== */
       :root {
-        --page-hdr: 48px; /* topbar の丈。操作部品では**ない**ので丈の段の外 */
+        /* 天を貼り付けたときに本文が潜らない距離。天の丈の写しでは**なく**、
+           それを超える余白の段（`DESIGN.md`「Layout」） */
+        --page-clear: var(--rabi-gap-14);
         --toc-w: 180px;
       }
 
@@ -34,7 +37,7 @@
 
       html {
         scroll-behavior: smooth;
-        scroll-padding-top: calc(var(--page-hdr) + var(--rabi-gap-4));
+        scroll-padding-top: var(--page-clear);
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -62,29 +65,20 @@
         margin-inline: auto;
       }
 
-      /* ==== header ==== */
+      /* ==== header。天そのものは .rabi-appbar。ここは面への留め方だけ ==== */
       .site-header {
-        position: fixed;
-        inset: 0 0 auto 0;
+        position: sticky;
+        top: 0;
         z-index: 100;
-        height: var(--page-hdr);
-        background: var(--rabi-paper);
-        border-bottom: 1px solid var(--rabi-divider);
       }
 
       .header-inner {
         display: flex;
         align-items: center;
         gap: var(--rabi-gap-4);
+        width: min(1180px, 100%);
         height: 100%;
-      }
-
-      .brand-name {
-        font-size: var(--rabi-t-subheading);
-        line-height: var(--rabi-lh-subheading);
-        font-weight: 600;
-        color: var(--rabi-ink);
-        text-decoration: none;
+        margin-inline: auto;
       }
 
       .header-note {
@@ -95,36 +89,18 @@
         margin-left: auto;
       }
 
-      /* 形と丈と図の寸法は .rabi-btn-icon が持つ。ここは線の引き方だけ */
-      .ico {
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-
-      :root[data-theme="light"] .icon-sun {
-        display: none;
-      }
-
-      :root[data-theme="dark"] .icon-moon {
-        display: none;
-      }
-
       /* ==== page。索引 + 本体の 2 列 ==== */
       .page {
         display: grid;
         grid-template-columns: var(--toc-w) 1fr;
         gap: var(--rabi-gap-5);
-        /* 固定ヘッダーの下に潜らせない */
-        padding-block: calc(var(--page-hdr) + var(--rabi-gap-5)) var(--rabi-gap-5);
+        padding-block: var(--rabi-gap-5);
         align-items: start;
       }
 
       .toc {
         position: sticky;
-        top: calc(var(--page-hdr) + var(--rabi-gap-5));
+        top: var(--page-clear);
         font-size: var(--rabi-t-label);
         line-height: var(--rabi-lh-label);
       }
@@ -239,18 +215,9 @@
         max-width: 260px;
       }
 
-      .demo-card p {
+      .demo-card > p {
         font-size: var(--rabi-t-label);
         line-height: var(--rabi-lh-label);
-      }
-
-      /* カードのタイトルに入れる図。寸法は .rabi-card-title が決める */
-      .ico18 {
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
       }
 
       /* 吹き出しは矢印が外へ出るので、見本の側で余白を取る */
@@ -312,6 +279,32 @@
         padding-inline: var(--rabi-gap-3);
       }
 
+      /* 頁の層の見本。幅と、中身の並べ方だけ */
+      .demo-stage {
+        width: 100%;
+      }
+
+      .demo-footer-cols {
+        display: flex;
+        gap: var(--rabi-gap-8);
+        flex-wrap: wrap;
+        margin-bottom: var(--rabi-gap-4);
+      }
+
+      .demo-nav {
+        width: 100%;
+        max-width: 260px;
+      }
+
+      .demo-prose {
+        width: 100%;
+        max-width: 420px;
+      }
+
+      .demo-stat {
+        min-width: 140px;
+      }
+
       .demo-heading h3 {
         font-size: var(--rabi-t-subheading);
         line-height: var(--rabi-lh-subheading);
@@ -328,16 +321,6 @@
         font-size: var(--rabi-t-label-sm);
         line-height: var(--rabi-lh-label-sm);
         color: var(--rabi-faint);
-      }
-
-      kbd {
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-xs);
-        line-height: var(--rabi-lh-label-xs);
-        background: var(--rabi-paper-2);
-        border: 1px solid var(--rabi-edge);
-        padding: 0 var(--rabi-gap-1);
-        color: var(--rabi-ink);
       }
 
       @media (max-width: 860px) {
@@ -361,19 +344,10 @@
   </head>
 
   <body>
-    <header class="site-header">
-      <div class="container header-inner">
-        <a class="brand-name" href="#">Rabi 部品カタログ</a>
+    <header class="rabi-appbar site-header">
+      <div class="header-inner">
+        <a class="rabi-brand" href="#">Rabi 部品カタログ</a>
         <span class="header-note">rabi-components.css</span>
-        <button class="rabi-btn rabi-btn-secondary rabi-btn-icon" id="theme-toggle" aria-label="テーマを切り替え" aria-keyshortcuts="t" title="テーマを切り替え（T）">
-          <svg class="ico icon-sun" viewBox="0 0 18 18" aria-hidden="true">
-            <circle cx="9" cy="9" r="3.2" />
-            <path d="M9 1.5v1.8M9 14.7v1.8M3.7 3.7l1.3 1.3M13 13l1.3 1.3M1.5 9h1.8M14.7 9h1.8M3.7 14.3l1.3-1.3M13 5l1.3-1.3" />
-          </svg>
-          <svg class="ico icon-moon" viewBox="0 0 18 18" aria-hidden="true">
-            <path d="M15.3 12.2A7 7 0 1 1 5.9 2.8 7.2 7.2 0 0 0 15.3 12.2z" />
-          </svg>
-        </button>
       </div>
     </header>
 
@@ -400,6 +374,11 @@
           <li><a href="#statusbar">Status bar</a></li>
           <li><a href="#alert">Alert / Tooltip</a></li>
           <li><a href="#doc">Heading / Table</a></li>
+          <li><a href="#appbar">Appbar / Footer</a></li>
+          <li><a href="#nav">Nav / Crumbs</a></li>
+          <li><a href="#page-head">Page head</a></li>
+          <li><a href="#prose">Prose / Steps</a></li>
+          <li><a href="#state">Empty / Stat</a></li>
         </ul>
       </aside>
 
@@ -453,7 +432,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn</code> + figure<span>図の側だけ 1 段詰める</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn</code> + figure<span>図は 14px。図の側だけ 1 段詰める</span></div>
             <div class="rabi-cell rabi-cell-row v">
               <button class="rabi-btn rabi-btn-secondary" type="button">
                 <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
@@ -723,10 +702,29 @@
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-card demo-card">
                 <h3 class="rabi-card-title">
-                  <svg class="ico18" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="1.5" width="15" height="15" /><path d="M1.5 6.5h15M6.5 6.5v10" /></svg>
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="1.5" width="15" height="15" /><path d="M1.5 6.5h15M6.5 6.5v10" /></svg>
                   見出し
                 </h3>
                 <p>置き換えの本文。図の列に揃えず、面の左端から始める。</p>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card-head / -body / -foot</code><span>card-head / card-foot</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-card demo-card">
+                <div class="rabi-card-head">
+                  <h3>見出し</h3>
+                  <div class="rabi-card-action"><span class="rabi-badge">状態</span></div>
+                </div>
+                <div class="rabi-card-body">
+                  <p>頭か脚を持つと、余白は中の 3 つが持つ。</p>
+                </div>
+                <div class="rabi-card-foot">
+                  <span>添える情報</span>
+                  <div class="rabi-card-action">
+                    <button type="button" class="rabi-btn rabi-btn-xs rabi-btn-secondary">操作</button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -734,7 +732,7 @@
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-card rabi-card-accent demo-card">
                 <h3 class="rabi-card-title">
-                  <svg class="ico18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l1.8 4.7L15.5 8l-4.7 1.8L9 14.5l-1.8-4.7L2.5 8l4.7-1.8z" /></svg>
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l1.8 4.7L15.5 8l-4.7 1.8L9 14.5l-1.8-4.7L2.5 8l4.7-1.8z" /></svg>
                   見出し
                 </h3>
                 <p>この面の中で赤を意味に使わない。状態も操作も on-accent と輪郭で表す。</p>
@@ -913,7 +911,7 @@
                   設定
                 </div>
 
-                <div class="demo-panel-section">
+                <div>
                   <div class="rabi-panel-section-head">
                     <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="2.5" width="13" height="13" /><path d="M2.5 6.5h13" /></svg>
                     置き換えの節 1
@@ -926,7 +924,7 @@
                   </div>
                 </div>
 
-                <div class="demo-panel-section">
+                <div>
                   <div class="rabi-panel-section-head">
                     <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 4.5h11M3.5 9h11M3.5 13.5h7" /></svg>
                     置き換えの節 2
@@ -939,7 +937,7 @@
                   </div>
                 </div>
 
-                <div class="demo-panel-section">
+                <div>
                   <div class="rabi-panel-section-head">
                     <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="9" r="3" /><path d="M9 9h6.5v3M13 9v2.5" /></svg>
                     置き換えの節 3
@@ -1165,7 +1163,7 @@
 
             <div class="rabi-cell rabi-cell-row k"><code>.rabi-accordion-item</code> / <code>.rabi-accordion-summary</code> / <code>.rabi-accordion-body</code><span>accordion-summary / accordion-body</span></div>
             <div class="rabi-cell rabi-cell-row v stack">
-              <div class="rabi-grid demo-accordion">
+              <div class="rabi-grid">
                 <details class="rabi-accordion-item" open>
                   <summary class="rabi-accordion-summary">
                     <span>開いている問い</span>
@@ -1296,14 +1294,317 @@
           </div>
         </section>
 
+
+        <section class="sec" id="appbar">
+          <div class="rabi-section-head sec-head">
+            <h2>Appbar / Footer</h2>
+            <p>頁の天と地。現在地は太さと文字色で示し、地は動かさない</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-appbar</code><span>appbar</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-appbar demo-stage">
+                <a class="rabi-brand" href="#appbar">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="2.5" width="13" height="13" rx="3" /><path d="M6 9h6" /></svg>
+                  SAMPLE
+                </a>
+                <nav class="rabi-appbar-nav" aria-label="見本">
+                  <a href="#appbar" aria-current="page">現在地</a>
+                  <a href="#appbar">ほか</a>
+                </nav>
+                <div class="rabi-appbar-action">
+                  <button type="button" class="rabi-btn rabi-btn-sm rabi-btn-secondary">操作</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-footer</code><span>footer / footer-col / footer-bottom</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-footer demo-stage">
+                <div class="demo-footer-cols">
+                  <div class="rabi-footer-col">
+                    <h3>GROUP A</h3>
+                    <ul>
+                      <li><a href="#appbar">項目</a></li>
+                      <li><a href="#appbar">項目</a></li>
+                    </ul>
+                  </div>
+                  <div class="rabi-footer-col">
+                    <h3>GROUP B</h3>
+                    <ul>
+                      <li><a href="#appbar">項目</a></li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="rabi-footer-bottom">
+                  <span>© 2026 SAMPLE</span>
+                  <span>English / 日本語</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="nav">
+          <div class="rabi-section-head sec-head">
+            <h2>Nav / Crumbs</h2>
+            <p>左のナビも頁内の目次も同じ部品。字下げは入れ子の深さで決まる</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-nav</code><span>nav-item / nav-group</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <nav class="rabi-nav rabi-nav-icons demo-nav" aria-label="見本">
+                <ul>
+                  <li>
+                    <details open>
+                      <summary class="rabi-nav-group">
+                        <svg class="ico rabi-nav-mark" viewBox="0 0 18 18" aria-hidden="true"><path d="m7 5 4 4-4 4" /></svg>
+                        <span>畳める群</span>
+                      </summary>
+                      <ul>
+                        <li><a href="#nav"><svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M4.5 2.5h6L14 6v9.5H4.5z" /></svg><span>行</span></a></li>
+                        <li><a href="#nav" aria-current="page"><span>現在地</span></a></li>
+                      </ul>
+                    </details>
+                  </li>
+                  <li>
+                    <p class="rabi-nav-group"><span>畳めない群</span></p>
+                    <ul>
+                      <li>
+                        <a href="#nav"><span>行</span></a>
+                        <ul>
+                          <li><a href="#nav"><span>入れ子の行</span></a></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-nav-sm</code><span>nav-item-sm</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <nav class="rabi-nav rabi-nav-sm demo-nav" aria-label="目次の見本">
+                <ul>
+                  <li>
+                    <a href="#nav" aria-current="location">この頁の見出し</a>
+                    <ul>
+                      <li><a href="#nav">小見出し</a></li>
+                      <li><a href="#nav">小見出し</a></li>
+                    </ul>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-crumbs</code><span>crumbs</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <ol class="rabi-crumbs">
+                <li><a href="#nav">上の階層</a></li>
+                <li><a href="#nav">その下</a></li>
+                <li><span aria-current="page">いまここ</span></li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="page-head">
+          <div class="rabi-section-head sec-head">
+            <h2>Page head</h2>
+            <p>頁の顔。頁に 1 つだけ。節の見出しとは別物</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-page-head</code><span>page-kicker / page-title / page-lead</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <header class="rabi-page-head">
+                <p class="rabi-page-kicker">分類</p>
+                <h3>頁の題</h3>
+                <p class="rabi-page-lead">置き換えのリード。頁が何かを 1〜2 行で述べる。</p>
+              </header>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-page-meta</code><span>page-meta</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <header class="rabi-page-head">
+                <h3>日付を添える題</h3>
+                <p class="rabi-page-meta">2026-08-26</p>
+              </header>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="prose">
+          <div class="rabi-section-head sec-head">
+            <h2>Prose / Steps / Callout</h2>
+            <p>長文の面。積む間隔は .rabi-prose が 1 か所で持つ</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-prose</code><span>prose / prose-code</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-prose demo-prose">
+                <p>本文。<a href="#prose">リンク</a>は下線を必ず添える。短いコードは <code>inline</code> で埋める。</p>
+                <h3>小見出し</h3>
+                <ul>
+                  <li>印だけ赤。文字は本文の段のまま</li>
+                  <li>2 行目</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-steps</code><span>steps / step-title</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <ol class="rabi-steps demo-prose">
+                <li>
+                  <h3 class="rabi-step-title">最初</h3>
+                  <p>連結線は次の丸まで伸びる。</p>
+                </li>
+                <li>
+                  <h3 class="rabi-step-title">次</h3>
+                  <p>最後の手順からは伸ばさない。</p>
+                </li>
+              </ol>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-callout</code><span>callout / callout-title</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-callout demo-prose">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="6.4" /><path d="M9 8.2v4M9 5.8v.6" /></svg>
+                <p class="rabi-callout-title">見出しを持つ添え物</p>
+                <p>2 行目以降は見出しの左端へ揃う。地は paper-2 で、赤を意味として載せない。</p>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-code</code><span>code</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <pre class="rabi-code demo-prose">1 行目
+2 行目 —— 横に流さず折り返す</pre>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-kbd</code><span>kbd</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <span><kbd class="rabi-kbd">Cmd</kbd> + <kbd class="rabi-kbd">K</kbd></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="sec" id="state">
+          <div class="rabi-section-head sec-head">
+            <h2>Empty / Stat / Avatar</h2>
+            <p>読むだけの面。押せる面と形で区別する</p>
+          </div>
+          <div class="rabi-grid rows">
+            <div class="rabi-cell rabi-cell-head">CLASS</div>
+            <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-empty</code><span>empty / empty-title</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-empty demo-stage">
+                <svg class="ico ico-stacked" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /><path d="M11 7h4a2 2 0 0 1 2 2v4" /></svg>
+                <p class="rabi-empty-title">まだ何もありません</p>
+                <p>置き換えの説明。次に何をすればよいかを 1 行で述べる。</p>
+                <div class="rabi-empty-actions">
+                  <button type="button" class="rabi-btn rabi-btn-primary">主操作</button>
+                  <button type="button" class="rabi-btn rabi-btn-secondary">二次操作</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-stat</code><span>stat / stat-label</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-stat demo-stat">
+                <p class="rabi-stat-label">読むだけの値</p>
+                <p class="rabi-price"><span class="rabi-price-val">¥0</span></p>
+              </div>
+              <div class="rabi-stat demo-stat">
+                <p class="rabi-stat-label">単位を添える</p>
+                <p class="rabi-price">
+                  <span class="rabi-price-val">10</span><span class="rabi-price-unit">GB</span>
+                </p>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-avatar</code><span>avatar / avatar-lg</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <span class="rabi-avatar">S</span>
+              <span class="rabi-avatar rabi-avatar-lg">S</span>
+              <span class="rabi-avatar rabi-avatar-lg">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="6.6" r="2.8" /><path d="M3.6 15c.7-2.6 2.8-4 5.4-4s4.7 1.4 5.4 4" /></svg>
+              </span>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-checklist</code><span>checklist</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <ul class="rabi-checklist">
+                <li>読むだけのチェック</li>
+                <li>入力の .rabi-check とは別物。押せない</li>
+              </ul>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input-wrap</code><span>input-figure</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-input-wrap demo-field">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="4.6" /><path d="m11.4 11.4 3 3" /></svg>
+                <input class="rabi-input" type="search" aria-label="通常の版" placeholder="検索" />
+              </div>
+              <div class="rabi-input-wrap demo-field">
+                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="4.6" /><path d="m11.4 11.4 3 3" /></svg>
+                <input class="rabi-input rabi-input-sm" type="search" aria-label="詰めた版" placeholder="詰めた版" />
+              </div>
+              <div class="rabi-field demo-field">
+                <div class="rabi-input-wrap">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="4.6" /><path d="m11.4 11.4 3 3" /></svg>
+                  <input
+                    class="rabi-input"
+                    type="search"
+                    aria-label="誤りのある版"
+                    value="誤り"
+                    aria-invalid="true"
+                    aria-describedby="wrap-invalid-note"
+                  />
+                </div>
+                <p id="wrap-invalid-note" class="rabi-field-note rabi-field-note-error">
+                  誤りは説明文を必ず添える。
+                </p>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-stack</code><span>btn-stack</span></div>
+            <div class="rabi-cell rabi-cell-row v">
+              <div class="rabi-btn-stack">
+                <button type="button" class="rabi-btn rabi-btn-xs rabi-btn-icon rabi-btn-ghost" aria-label="足す">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 4.5v9M4.5 9h9" /></svg>
+                </button>
+                <button type="button" class="rabi-btn rabi-btn-xs rabi-btn-icon rabi-btn-ghost" aria-label="引く">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M4.5 9h9" /></svg>
+                </button>
+                <button type="button" class="rabi-btn rabi-btn-xs rabi-btn-icon rabi-btn-ghost" aria-label="全体">
+                  <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 6.5v-3h3M14.5 6.5v-3h-3M3.5 11.5v3h3M14.5 11.5v3h-3" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div class="footer-bottom">
-          <span><kbd>T</kbd> テーマ切替</span>
+          <span><kbd class="rabi-kbd">T</kbd> テーマ切替</span>
           <span>実装は rabi-components.css</span>
           <span>値と規則は DESIGN.md</span>
         </div>
       </main>
     </div>
 
-    <script src="theme-toggle.js"></script>
+    <script src="surfaces.js"></script>
   </body>
 </html>

@@ -21,7 +21,7 @@ description: >-
 
 CSS を書く媒体では `assets/rabi.css` を先頭にインライン展開する。
 
-UI を組む媒体では続けて `assets/rabi-components.css` を入れる。**`assets/rabi.css` より後に置く**。どの媒体が文書に当たるかと、そこで入れ**ない**理由は `references/DESIGN.md`「Components」。
+UI を組む媒体では続けて `assets/rabi-components.css` を入れる。**`assets/rabi.css` より後に置く**。どの媒体が文書に当たるかは `references/DESIGN.md`「Components」。
 
 図を描く媒体では `assets/rabi-mermaid.js` も入れる。**`assets/rabi.css` より後に置く**。
 
@@ -33,8 +33,8 @@ UI を組む媒体では続けて `assets/rabi-components.css` を入れる。**
 bun <skills root>/rabi-design/scripts/gen-tokens.ts
 ```
 
-**path は skill 側の実体を指す。**
+**path は skill 側の実体を指す**。
 
 front matter だけが持つ値は `references/DESIGN.md` を直接直す。どの path がそれに当たるかは `scripts/gen-tokens.ts` の `ownedByFrontMatter`。
 
-`components` の値は書き戻しの対象外。**front matter と `assets/rabi-components.css` の両方を直す。**
+`components` の値は書き戻しの対象外。**front matter と `assets/rabi-components.css` の両方を直す**。
