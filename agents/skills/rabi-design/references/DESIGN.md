@@ -92,7 +92,7 @@ spacing:
   control-lg: 36px
 rounded:
   none: 0px
-  sm: 3px
+  sm: 4px
   md: 10px
   lg: 14px
   full: 999px
@@ -405,7 +405,7 @@ components:
     typography: "{typography.label}"
   dialog-foot:
     borderColor: "{colors.line}"
-    paddingBlock: "{spacing.2.5}"
+    paddingBlock: "{spacing.2}"
     paddingInline: "{spacing.4}"
   accordion-summary:
     backgroundColor: "{colors.paper}"
@@ -630,7 +630,7 @@ components:
     borderColor: "{colors.line}"
     typography: "{typography.label}"
     fontWeight: 500
-    paddingBlock: "{spacing.2.5}"
+    paddingBlock: "{spacing.2}"
     paddingInline: "{spacing.4}"
   footer:
     textColor: "{colors.soft}"
@@ -1007,12 +1007,12 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 | 値     | 何に付くか                                                             |
 | ------ | ---------------------------------------------------------------------- |
 | 0      | 既定。セル・行・帯・区切り・文書。一覧に無いものもここ                 |
-| `sm`   | 印 —— チェック                                                         |
+| `sm`   | 印と、文字丈の小さな面 —— チェック・キー・本文中のコード               |
 | `md`   | 部品と、浮く操作面 —— ボタン・入力・チップ・ドロップダウン・セグメント |
 | `lg`   | 枠になる面 —— カード・パネル・ダイアログ・結合グリッド・一覧           |
 | `full` | 円形と丸端の部品 —— ラジオ・点（ステータス・窓）・スイッチ・バッジ     |
 
-`md` を印には使わ**ない**。半径が丈の 1/4 を超えると弧が辺の半分を覆い、ラジオと読み分けられ**ない**。印だけが `sm` を持つ理由はここ**だけ**。
+`md` を印には使わ**ない**。半径が丈の 1/4 を超えると弧が辺の半分を覆い、ラジオと読み分けられ**ない**。`sm` を取るのは表のその行に挙げたものだけで、理由はここ**だけ**。
 
 `md` と `lg` は**中身を持つかどうか**で分ける —— 単体の部品と浮く操作面は `md`、その中に部品を並べる枠は `lg`。
 

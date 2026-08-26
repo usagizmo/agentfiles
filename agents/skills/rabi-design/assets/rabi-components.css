@@ -328,7 +328,7 @@
   cursor: pointer;
 }
 
-/* 印だけが sm を持つ。md では弧が辺の半分を覆いラジオと読み分けられ**ない** */
+/* 半径の段の選びは `DESIGN.md`「Shapes」 */
 .rabi-check {
   border-radius: var(--rabi-r-sm);
 }
@@ -592,7 +592,7 @@
   display: flex;
   align-items: center;
   gap: var(--rabi-gap-2);
-  padding: var(--rabi-gap-2_5) var(--rabi-gap-4);
+  padding: var(--rabi-gap-2) var(--rabi-gap-4);
   font-size: var(--rabi-t-label);
   font-weight: 500;
   line-height: var(--rabi-lh-label);
@@ -1304,7 +1304,7 @@ summary.rabi-panel-section-head:hover {
   gap: var(--rabi-gap-2);
   /* 罫は面を突っ切る。余白の外まで伸ばして、内側だけ戻す */
   margin: var(--rabi-gap-4) calc(-1 * var(--rabi-gap-5)) calc(-1 * var(--rabi-gap-5));
-  padding: var(--rabi-gap-2_5) var(--rabi-gap-4);
+  padding: var(--rabi-gap-2) var(--rabi-gap-4);
   border-top: 1px solid var(--rabi-line);
 }
 
