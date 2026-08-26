@@ -13,6 +13,11 @@
   stroke-linejoin: round;
 }
 
+/* 上に積む図は線を 1 段太くする（`DESIGN.md`「図の置き方」）。寸法は載せる部品が持つ */
+.ico-stacked {
+  stroke-width: 1.5;
+}
+
 /* 面を横断する chrome。下端に貼り付く —— 流れの中に居るので、
    面が `body` の余白をどう書いても見本を覆わ**ない** */
 .surface-bar {

@@ -211,6 +211,33 @@ test("丈と余白の対応表を DESIGN.md から引けている", () => {
   ]);
 });
 
+/**
+ * 丈から決まる figure だけの部品の図の寸法。「Layout」の対応表**から導く**。
+ */
+const FIGURE_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
+  [
+    ...readFileSync(designPath(SKILL), "utf8").matchAll(
+      /^\| `(control[a-z-]*)`\s*\|[^|]*\|[^|]*\|\s*([0-9]+px)\s*\|/gm,
+    ),
+  ].map((m) => [m[1] as string, m[2] as string]),
+);
+
+test("丈と図の対応表を DESIGN.md から引けている", () => {
+  expect(FIGURE_FOR_HEIGHT).toEqual({
+    "control-lg": "16px",
+    control: "16px",
+    "control-sm": "14px",
+    "control-xs": "14px",
+  });
+});
+
+// figure だけのボタンの図は丈の表から引く。文字と並ぶ図は丈に依ら**ない**ので対象外
+test("front matter の figure だけのボタンの図が対応表と揃っている", () => {
+  const design = readFileSync(designPath(SKILL), "utf8");
+  const icon = design.match(/\n {2}button-icon:\n {4}iconSize: (\S+)\n/)?.[1];
+  expect(icon).toBe(FIGURE_FOR_HEIGHT["control"]);
+});
+
 /** 丈と左右の余白が対応表からずれているセレクタを返す。 */
 function heightPaddingMismatch(css: string): string[] {
   return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]

@@ -135,6 +135,8 @@ components:
     textColor: "{colors.faint}"
   button-icon:
     iconSize: 16px
+  button-inline-icon:
+    iconSize: 14px
   chip:
     borderColor: "{colors.edge}"
     backgroundColor: "{colors.paper}"
@@ -515,7 +517,7 @@ components:
     textColor: "{colors.ink}"
     typography: "{typography.body}"
     fontWeight: 400
-    blockGap: "{spacing.4}"
+    blockGap: "{spacing.6}"
     headingGap: "{spacing.10}"
     subheadingGap: "{spacing.8}"
     markerColor: "{colors.accent}"
@@ -576,7 +578,7 @@ components:
     rounded: "{rounded.lg}"
     paddingBlock: "{spacing.12}"
     paddingInline: "{spacing.5}"
-    iconSize: 28px
+    iconSize: 24px
     iconColor: "{colors.accent-text}"
   empty-title:
     textColor: "{colors.ink}"
@@ -608,7 +610,7 @@ components:
     markWidth: 2px
   input-figure:
     iconColor: "{colors.faint}"
-    iconSize: 16px
+    iconSize: 14px
   input-figure-invalid:
     iconColor: "{colors.accent-text}"
   btn-stack:
@@ -871,7 +873,9 @@ focus と、`outline` を使う選択は部品の**外側**に出る。エラー
 
 設定画面やエディタのように**値を並べて変える面**は `control-sm` で組む。
 
-アイコンだけのボタンは幅を丈と同値にする。丈は上の 4 段から選び、独自の寸法を作ら**ない**。
+figure だけのボタンは幅を丈と同値にする。丈は上の 4 段から選び、独自の寸法を作らない。
+
+表の図に従わ**ない**のは、ボタンと入力で文字と並ぶ図だけ —— 丈に依らない。
 
 セグメントは**例外**。段に載るのは容器で、文字と左右の余白は容器から余白を引いた中のセルの丈で決まる。
 
@@ -883,7 +887,7 @@ front matter が持つ**寸法**は、その部品を選ぶときに読む値 �
 
 これがチップとバッジを分ける境。
 
-丈の段が足りないと感じたら、部品の選び方が違う。段を増やさ**ない** —— `control-xs` より小さい操作はボタンでは**なく**、チップ・アイコンだけのボタン・本文中のリンクで組む。
+丈の段が足りないと感じたら、部品の選び方が違う。段を増やさ**ない** —— `control-xs` より小さい操作はボタンでは**なく**、チップ・figure だけのボタン・本文中のリンクで組む。
 
 グリッドは持たない。文書は 1 段組で、幅は読み幅で決める。UI は箱の入れ子で組み、列数を先に決め**ない**。
 
@@ -903,7 +907,7 @@ front matter が持つ**寸法**は、その部品を選ぶときに読む値 �
 
 印（開閉・チェック・選択）と文の間は `2`。図の列を図と共有する印は**例外**で、その列の規則に従って `1` で並べる。
 
-図の線幅は文字のステムに合わせる —— `1.2px`。部品は図の寸法だけを決めるので、線幅は図を引く側が持つ。
+図の線幅は文字のステムに合わせる —— `1.2px`。**上に積む図だけ** `1.5px`。部品が決めるのは図の寸法だけで、線幅は図を引く側が持つ。
 
 ### 一覧の組み方
 
@@ -1023,25 +1027,26 @@ UI を組む媒体では `rabi-components.css` のクラスを使う。部品の
 
 front matter のキーは class 名と 1 対 1 では**ない**。
 
-| front matter          | class                                   |
-| --------------------- | --------------------------------------- |
-| `button-*`            | `.rabi-btn` + `.rabi-btn-*`             |
-| `checkbox`            | `.rabi-check`                           |
-| `field-label`         | `.rabi-field` の**直下**の `label`      |
-| `tooltip-key`         | `.rabi-tooltip` の中の `kbd`            |
-| `accordion-mark`      | `.rabi-accordion-summary` の `::before` |
-| `accordion-mark-open` | 同上（`[open]` の中）                   |
-| `appbar-nav`          | `.rabi-appbar-nav` の中の `a`           |
-| `nav-item`            | `.rabi-nav` の中の `a`                  |
-| `crumbs` の区切り     | `.rabi-crumbs li + li` の `::before`    |
-| `page-title`          | `.rabi-page-head` の中の見出し          |
-| `prose-code`          | `.rabi-prose` の中の `code`             |
-| `steps` の丸          | `.rabi-steps > li` の `::before`        |
-| `checklist` の印      | `.rabi-checklist > li` の `::before`    |
-| `input-figure`        | `.rabi-input-wrap` の中の `svg`         |
-| `price` の単位        | `.rabi-price-unit`                      |
-| `footer-col-title`    | `.rabi-footer-col` の `h2` / `h3`       |
-| それ以外              | `rabi-` を冠すだけ                      |
+| front matter          | class                                    |
+| --------------------- | ---------------------------------------- |
+| `button-*`            | `.rabi-btn` + `.rabi-btn-*`              |
+| `checkbox`            | `.rabi-check`                            |
+| `field-label`         | `.rabi-field` の**直下**の `label`       |
+| `tooltip-key`         | `.rabi-tooltip` の中の `kbd`             |
+| `accordion-mark`      | `.rabi-accordion-summary` の `::before`  |
+| `accordion-mark-open` | 同上（`[open]` の中）                    |
+| `appbar-nav`          | `.rabi-appbar-nav` の中の `a`            |
+| `nav-item`            | `.rabi-nav` の中の `a`                   |
+| `crumbs` の区切り     | `.rabi-crumbs li + li` の `::before`     |
+| `page-title`          | `.rabi-page-head` の中の見出し           |
+| `prose-code`          | `.rabi-prose` の中の `code`              |
+| `steps` の丸          | `.rabi-steps > li` の `::before`         |
+| `checklist` の印      | `.rabi-checklist > li` の `::before`     |
+| `button-inline-icon`  | `.rabi-btn:not(.rabi-btn-icon)` の `svg` |
+| `input-figure`        | `.rabi-input-wrap` の中の `svg`          |
+| `price` の単位        | `.rabi-price-unit`                       |
+| `footer-col-title`    | `.rabi-footer-col` の `h2` / `h3`        |
+| それ以外              | `rabi-` を冠すだけ                       |
 
 単体では効か**ない**クラスがある。variant は土台と、内側の部品は容器と併記する。
 

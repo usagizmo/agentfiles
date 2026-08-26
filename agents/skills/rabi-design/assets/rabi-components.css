@@ -28,7 +28,7 @@
   /* 丈は 1 か所で決める。左右の余白も図の寸法も端寄せの量もここから従属する */
   --rabi-btn-h: var(--rabi-control);
   --rabi-btn-pad: var(--rabi-gap-3);
-  --rabi-btn-icon: 16px;
+  --rabi-btn-icon: 14px;
 
   display: inline-flex;
   align-items: center;
@@ -51,7 +51,6 @@
 .rabi-btn-sm {
   --rabi-btn-h: var(--rabi-control-sm);
   --rabi-btn-pad: var(--rabi-gap-2_5);
-  --rabi-btn-icon: 14px;
   font-size: var(--rabi-t-body-doc);
   font-weight: 500;
   line-height: 1;
@@ -66,16 +65,22 @@
 .rabi-btn-xs {
   --rabi-btn-h: var(--rabi-control-xs);
   --rabi-btn-pad: var(--rabi-gap-2);
-  --rabi-btn-icon: 14px;
   font-size: var(--rabi-t-label);
   font-weight: 500;
   line-height: 1;
 }
 
-/* アイコンだけのボタンは幅を丈と同値にする */
+/* アイコンだけのボタンは幅を丈と同値にし、図は丈の表の寸法で置く。
+ * 文字と並ぶ図は既定の 14px のまま —— 同じ寸法だと図の側が大きく見える */
 .rabi-btn-icon {
+  --rabi-btn-icon: 16px;
+
   width: var(--rabi-btn-h);
   padding: 0;
+}
+
+.rabi-btn-icon:is(.rabi-btn-sm, .rabi-btn-xs) {
+  --rabi-btn-icon: 14px;
 }
 
 /* 図と文字を並べるときは、図の側だけ 1 段詰める —— 図は文字より軽く見える。
@@ -89,8 +94,7 @@
   margin-right: calc(-1 * var(--rabi-gap-1));
 }
 
-/* 図の寸法は枠が決める。描画属性（stroke・端の形）は図を引く側。
- * figure だけのボタンに限ら**ない** —— 文字と並べるときも同じ寸法 */
+/* 図の寸法は枠が決める。描画属性（stroke・端の形）は図を引く側 */
 .rabi-btn svg {
   width: var(--rabi-btn-icon);
   height: var(--rabi-btn-icon);
@@ -1652,8 +1656,10 @@ summary.rabi-nav-group::-webkit-details-marker {
   margin: 0;
 }
 
-.rabi-prose > * + * {
-  margin-top: var(--rabi-gap-4);
+/* 部品も自分で `margin: 0` を持つ。同じ詳細度だと後に書いた部品が勝つので、
+ * 積む側を 1 段強くする */
+.rabi-prose > :not(:first-child) {
+  margin-top: var(--rabi-gap-6);
 }
 
 /* 組むのは直下の、class を持た**ない**要素だけ。部品は自分の段と余白を持っているので、
@@ -1670,22 +1676,27 @@ summary.rabi-nav-group::-webkit-details-marker {
   line-height: var(--rabi-lh-subheading);
 }
 
-/* 見出しの上の余白は隣接子だけ。先頭に来た見出しには付け**ない** */
-.rabi-prose > * + h2:not([class]) {
+/* 見出しの上の余白は先頭以外の子だけ。先頭に来た見出しには付け**ない** */
+.rabi-prose > h2:not([class]):not(:first-child) {
   margin-top: var(--rabi-gap-10);
 }
 
-.rabi-prose > * + h3:not([class]) {
+.rabi-prose > h3:not([class]):not(:first-child) {
   margin-top: var(--rabi-gap-8);
 }
 
-/* 入れ子は同じ組み方で何段でも。直下の `margin` は `> *` が消すので、入れ子側で消す */
+/* 入れ子は同じ組み方で何段でも */
 .rabi-prose > :is(ul, ol):not([class]),
 .rabi-prose > :is(ul, ol):not([class]) :is(ul, ol):not([class]) {
   display: grid;
   gap: var(--rabi-gap-2);
-  margin: 0;
   padding-left: var(--rabi-gap-5);
+}
+
+/* 展開先の `margin` を消す。上のブロックへ混ぜると詳細度が積む側を越えて、
+ * 直下のリストの上の余白まで消える */
+.rabi-prose > :is(ul, ol):not([class]) :is(ul, ol):not([class]) {
+  margin: 0;
 }
 
 /* 箇条書きの印だけ赤。文字は本文の段のまま */
@@ -1862,8 +1873,8 @@ summary.rabi-nav-group::-webkit-details-marker {
 }
 
 .rabi-empty svg {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: none;
   color: var(--rabi-accent-text);
 }
@@ -1967,8 +1978,9 @@ summary.rabi-nav-group::-webkit-details-marker {
 }
 
 /* ==== input-wrap。入力の先頭に図を置く枠 ==== */
+/* 図は文字と並ぶので 14px。丈が変わっても動かさ**ない** */
 .rabi-input-wrap {
-  --rabi-input-figure: 16px;
+  --rabi-input-figure: 14px;
   --rabi-input-pad: var(--rabi-gap-3);
 
   position: relative;
@@ -1976,7 +1988,6 @@ summary.rabi-nav-group::-webkit-details-marker {
 }
 
 .rabi-input-wrap:has(.rabi-input-sm) {
-  --rabi-input-figure: 14px;
   --rabi-input-pad: var(--rabi-gap-2_5);
 }
 

@@ -291,16 +291,13 @@
         align-items: start;
       }
 
-      /* 番号ではなく図で区別する。有彩色はクリムゾンのみ（DESIGN.md「赤を出す場所」の意味） */
+      /* 番号ではなく図で区別する。有彩色はクリムゾンのみ（DESIGN.md「赤を出す場所」の意味）。
+         線の引き方は .ico が持つ */
       .ficon {
         width: 18px;
         height: 18px;
         flex: none;
-        fill: none;
         stroke: var(--rabi-accent);
-        stroke-width: 1.2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
         /* 見出しの 1 行目の中心へ合わせる。行送りは font-size の半分だけ上に来る */
         margin-top: 2px;
       }
@@ -620,42 +617,42 @@
           </div>
           <div class="rabi-grid feature-grid">
             <div class="rabi-cell fcell">
-              <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="1.5" width="15" height="15" /><path d="M1.5 6.5h15M6.5 6.5v10" /></svg>
+              <svg class="ico ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="1.5" width="15" height="15" /><path d="M1.5 6.5h15M6.5 6.5v10" /></svg>
               <div>
                 <h3>項目 A</h3>
                 <p>置き換え用の説明文。長さを見るために置く</p>
               </div>
             </div>
             <div class="rabi-cell fcell">
-              <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="3.5" width="15" height="13" /><path d="M1.5 7.5h15M5.5 1.5v4M12.5 1.5v4" /></svg>
+              <svg class="ico ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="3.5" width="15" height="13" /><path d="M1.5 7.5h15M5.5 1.5v4M12.5 1.5v4" /></svg>
               <div>
                 <h3>項目 B</h3>
                 <p>置き換え用の説明文。意味は持たせない</p>
               </div>
             </div>
             <div class="rabi-cell fcell">
-              <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="4" r="2.5" /><circle cx="14" cy="6" r="2.5" /><circle cx="8" cy="14" r="2.5" /><path d="M6 5l5.6 1M5 6.3l2.2 5.4M12.6 8.2L9.6 12" /></svg>
+              <svg class="ico ficon" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="4" r="2.5" /><circle cx="14" cy="6" r="2.5" /><circle cx="8" cy="14" r="2.5" /><path d="M6 5l5.6 1M5 6.3l2.2 5.4M12.6 8.2L9.6 12" /></svg>
               <div>
                 <h3>項目 C</h3>
                 <p>置き換え用の説明文。2 行になる長さの見本</p>
               </div>
             </div>
             <div class="rabi-cell fcell">
-              <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><path d="M1.5 4.5h11M1.5 9h11M1.5 13.5h7" /><path d="M13.5 12l2 2 3-3.5" /></svg>
+              <svg class="ico ficon" viewBox="0 0 18 18" aria-hidden="true"><path d="M1.5 4.5h11M1.5 9h11M1.5 13.5h7" /><path d="M13.5 12l2 2 3-3.5" /></svg>
               <div>
                 <h3>項目 D</h3>
                 <p>置き換え用の説明文。短い側の見本</p>
               </div>
             </div>
             <div class="rabi-cell fcell">
-              <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l1.8 4.7L15.5 8l-4.7 1.8L9 14.5l-1.8-4.7L2.5 8l4.7-1.8z" /><path d="M14.5 13v3.5M12.8 14.8h3.5" /></svg>
+              <svg class="ico ficon" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l1.8 4.7L15.5 8l-4.7 1.8L9 14.5l-1.8-4.7L2.5 8l4.7-1.8z" /><path d="M14.5 13v3.5M12.8 14.8h3.5" /></svg>
               <div>
                 <h3>項目 E</h3>
                 <p>置き換え用の説明文。長い側の見本にする</p>
               </div>
             </div>
             <div class="rabi-cell fcell">
-              <svg class="ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="3.5" y="7.5" width="11" height="8" /><path d="M6 7.5V5a3 3 0 016 0v2.5" /></svg>
+              <svg class="ico ficon" viewBox="0 0 18 18" aria-hidden="true"><rect x="3.5" y="7.5" width="11" height="8" /><path d="M6 7.5V5a3 3 0 016 0v2.5" /></svg>
               <div>
                 <h3>項目 F</h3>
                 <p>置き換え用の説明文。中くらいの長さ</p>

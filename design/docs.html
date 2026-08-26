@@ -81,6 +81,12 @@
         grid-template-columns: 220px minmax(0, 1fr);
       }
 
+      /* 左のナビを持たない 2 桁。目次だけを右に置き、読む桁は幅を絞る */
+      .shell-toc {
+        grid-template-columns: minmax(0, 720px) 210px;
+        justify-content: start;
+      }
+
       .side {
         position: sticky;
         top: var(--page-clear);
@@ -138,7 +144,8 @@
       /* 狭い面では 1 桁へ落とす。ナビは本文の前、目次は後ろ */
       @media (max-width: 1040px) {
         .shell,
-        .shell-2 {
+        .shell-2,
+        .shell-toc {
           grid-template-columns: minmax(0, 1fr);
         }
 
@@ -186,6 +193,7 @@
         <nav class="rabi-appbar-nav" aria-label="Main">
           <a href="#doc" aria-current="page">ドキュメント</a>
           <a href="#log">更新履歴</a>
+          <a href="#policy">方針</a>
           <a href="app.html">操作</a>
         </nav>
         <div class="rabi-appbar-action">
@@ -461,6 +469,55 @@
             </ul>
           </div>
         </article>
+      </div>
+    </section>
+
+    <section class="band">
+      <p class="band-note">2 桁 —— 目次だけ。左のナビを持たない長文の面</p>
+
+      <div id="policy" class="shell shell-toc">
+        <article class="doc">
+          <header class="rabi-page-head">
+            <h2>置き換えの方針</h2>
+            <p class="rabi-page-meta">2026-08-25</p>
+          </header>
+
+          <div class="rabi-prose">
+            <p>
+              置き換えの導入文。長い文章を 1 桁で読ませる面で、左のナビを持たない。
+              頁の中の位置は右の目次だけが示す。
+            </p>
+
+            <h2 id="policy-scope">扱う範囲</h2>
+            <p>置き換えの本文。範囲を 2〜3 行で述べる。</p>
+            <ul>
+              <li>置き換えの項目</li>
+              <li>置き換えの項目</li>
+            </ul>
+
+            <h2 id="policy-use">使い方</h2>
+            <p>置き換えの本文。ここでは長さを見るために 2 段落置く。</p>
+            <p>2 段落目。行の長さと折り返しを見るためだけに置いている。</p>
+
+            <h2 id="policy-contact">問い合わせ</h2>
+            <p>置き換えの本文。</p>
+          </div>
+        </article>
+
+        <aside class="side">
+          <button type="button" class="rabi-btn rabi-btn-sm rabi-btn-secondary">
+            <svg class="ico"><use href="#i-copy" /></svg>
+            <span>ページをコピー</span>
+          </button>
+          <p class="toc-title">このページの内容</p>
+          <nav class="rabi-nav rabi-nav-sm" aria-label="置き換えの方針の目次">
+            <ul>
+              <li><a href="#policy-scope" aria-current="location">扱う範囲</a></li>
+              <li><a href="#policy-use">使い方</a></li>
+              <li><a href="#policy-contact">問い合わせ</a></li>
+            </ul>
+          </nav>
+        </aside>
       </div>
     </section>
 
