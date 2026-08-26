@@ -158,7 +158,27 @@ export const parseRoster = (text: string): Slot[] => {
   return slots;
 };
 
-const normalizeSnapshotLine = (line: string): string => line.replace(/\s*█?\s*$/u, "").trimEnd();
+/**
+ * 行頭の字下げと箇条書きの点、行末の幅埋め・カーソル・右端の時刻を落とす。
+ *
+ * TUI は応答を字下げして描き、実行器によっては段落へ点を打ち、行の右端へ時刻を
+ * 添える。落とさないと marker と**文字列比較できない**。時刻は 2 つ以上の空白で
+ * 隔てられたものだけを取る —— 本文が時刻で終わることがある。
+ */
+const normalizeSnapshotLine = (line: string): string =>
+  line
+    .replace(/\s*█?\s*$/u, "")
+    .replace(/\s{2,}\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?$/iu, "")
+    .trim()
+    .replace(/^[•·]\s+/u, "");
+
+/**
+ * 入力欄の行。枠の中に描く実行器と、地に描く実行器がある。
+ *
+ * 地に置く `>` は取ら**ない** —— 引用行と見分けが付かず、応答の中の引用より後ろを
+ * 落としてしまう。枠の中の `>` だけを取る。
+ */
+const INPUT_CARET = /^(?:[│|]\s*[›❯>]|[›❯])\s/u;
 
 export const isChromeLine = (line: string): boolean => {
   const trimmed = line.trim();
@@ -166,22 +186,44 @@ export const isChromeLine = (line: string): boolean => {
   if (trimmed.startsWith("Shift+Tab:")) return true;
   const stripped = trimmed.replace(BOX_STRIP, "").trim();
   if (stripped === "") return true;
+  // 経過時間の脚注。応答の後ろに出るので、落とさないと marker が最後の行にならない
+  if (stripped.startsWith("Worked for ")) return true;
   return BOX.test(line) && /always-approve|shortcuts/.test(line);
 };
 
+/**
+ * 応答の最後の行。TUI の枠と、**入力欄から後ろ**を落として読む。
+ *
+ * 入力欄の後ろには状態行が来る実行器がある。行の形を数え上げても追随でき**ない**
+ * ので、入力欄を境にする。送った prompt も同じ形で出るが、応答より前なので
+ * 最後の 1 つを境に取る。
+ */
 export const lastContentLine = (text: string): string | undefined => {
   const lines = text.split(/\r?\n/).map(normalizeSnapshotLine);
+  let end = lines.length;
   for (let i = lines.length - 1; i >= 0; i--) {
+    if (INPUT_CARET.test(lines[i] ?? "")) {
+      end = i;
+      break;
+    }
+  }
+  for (let i = end - 1; i >= 0; i--) {
     const line = lines[i] ?? "";
     if (!isChromeLine(line)) return line;
   }
   return undefined;
 };
 
+/**
+ * marker が応答の最後にあるかを見る。
+ *
+ * 一致では**なく**後方一致で取る —— 実行器によっては marker を直前の行の後ろへ
+ * 続けて描く。marker より後ろに本文が来ていないことは、これでも見える。
+ */
 export const advisorComplete = (text: string, marker: string): CompleteResult => {
   const last = lastContentLine(text);
   if (last === undefined) return { ok: false, reason: "出力なし" };
-  if (last !== marker) return { ok: false, reason: "マーカー無し" };
+  if (!last.endsWith(marker)) return { ok: false, reason: "マーカー無し" };
   return { ok: true };
 };
 
