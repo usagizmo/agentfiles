@@ -179,6 +179,13 @@ describe("既に working への agent prompt", () => {
   });
 });
 
+const composerSection = () => {
+  const md = harnessMd();
+  const start = md.indexOf("### composer の受け入れ");
+  const end = md.indexOf("### 失われた resolve を張り直す");
+  return md.slice(start, end);
+};
+
 describe("composer が受け付ける状態での agent prompt", () => {
   test("契約表に受け付ける状態で submit できたことの観測がある", () => {
     expect(harnessMd()).toContain("composer が受け付ける状態で submit できたことを観測できる");
@@ -192,14 +199,39 @@ describe("composer が受け付ける状態での agent prompt", () => {
     expect(md).toContain("Tab/Space: question");
   });
 
-  test("Tab はトグルなので使わない。復帰は space", () => {
-    const md = harnessMd();
-    expect(md).toMatch(/Tab はトグルなので使わ/);
+  test("Tab は使わない。復帰は space", () => {
+    const md = composerSection();
+    expect(md).toMatch(/Tab は使わ/);
     expect(md).toMatch(/send-keys <名前> space/);
   });
 
   test("質問カードへ park しているあいだは送らない", () => {
-    expect(harnessMd()).toMatch(/Tab\/Space: question[\s\S]*送ら/);
+    expect(composerSection()).toMatch(/Tab\/Space: question[\s\S]*送ら/);
+  });
+
+  test("質問カードがキーボードを持っているあいだは送らない", () => {
+    expect(composerSection()).toMatch(
+      /Tab:next answer[\s\S]*質問カードがキーボードを持つ[\s\S]*送ら/,
+    );
+  });
+
+  test("Esc:scrollback は送らない。復帰のキーにしない", () => {
+    const md = composerSection();
+    expect(md).toMatch(/Esc:scrollback[\s\S]*ブロッキングカードがキーボードを持つ[\s\S]*送ら/);
+    expect(md).toMatch(/`Space:prompt` または `j\/k:nav`/);
+    expect(md).not.toMatch(/Esc:scrollback` または/);
+    expect(md).not.toMatch(/または `Esc:scrollback/);
+  });
+
+  test("送らない字面は scrollback 復帰より先に並ぶ", () => {
+    const md = composerSection();
+    const resume = md.indexOf("Space:prompt");
+    expect(resume).toBeGreaterThanOrEqual(0);
+    for (const surface of ["Tab:next answer", "Esc:scrollback", "Tab/Space: question"]) {
+      const at = md.indexOf(surface);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(resume);
+    }
   });
 
   test("chrome が読めない、または表に無い字面は fail-open", () => {
@@ -217,7 +249,7 @@ describe("composer が受け付ける状態での agent prompt", () => {
   test("戻れず送れなかった周は retry に数えない", () => {
     expect(skillMd()).toMatch(/retry に数え\*\*ない\*\*/);
     expect(skillMd()).toContain(
-      "送れなかった周（質問カードへ park、scrollback から戻れなかった）は実行していない",
+      "送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった）は実行していない",
     );
   });
 
