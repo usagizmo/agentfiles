@@ -971,6 +971,9 @@ const ROLE_CSS_TEXT = () => readFileSync(ROLE_CSS, "utf8");
 
 const ROLE_NAMES = ["info", "success", "attention"] as const;
 
+/** チェックの形の SSOT。印・checklist・丸の中・ドロップダウンで共有する */
+const CHECK_PATH = "d='M2.6 8.6l4.4 4.4 7.5-8'";
+
 test("情報層のトークン SSOT が 3 ロールの fill / line / text を持つ", () => {
   const names = [...declarations(ROLE_CSS_TEXT()).keys()];
   expect(names.filter((n) => n.startsWith("role-")).sort()).toEqual(
@@ -1004,10 +1007,24 @@ test("components.html は情報層を読み 3 ロールを並べる", () => {
   expect(html).toContain("rabi-note-attention");
 });
 
-test("rabi-role.css が .rabi-note の 3 ロールを宣言している", () => {
+test("rabi-role.css が触るのは 3 ロールと、その中の見出しだけ", () => {
   expect(new Set(classesIn("assets/rabi-role.css"))).toEqual(
-    new Set(["rabi-note", "rabi-note-info", "rabi-note-success", "rabi-note-attention"]),
+    new Set(["rabi-note-info", "rabi-note-success", "rabi-note-attention", "rabi-note-title"]),
   );
+});
+
+// チェックは 4 か所に出る。形が割れたら読み分けられない印が増える
+test.each([
+  ["assets/rabi-components.css", 2],
+  ["assets/rabi-role.css", 1],
+] as const)("%s のチェックは共通のパス %i 回", (path, count) => {
+  const css = readFileSync(join(SKILL, path), "utf8");
+  expect(css.split(CHECK_PATH).length - 1).toBe(count);
+});
+
+test("components.html のドロップダウンのチェックも共通のパス", () => {
+  const html = readFileSync(join(DESIGN_DIR, "components.html"), "utf8");
+  expect(html.split(CHECK_PATH.replace(/'/g, '"')).length - 1).toBe(1);
 });
 
 test.each([...ROLE_NAMES])("%s の text は自分の fill の上で 4.5:1 を割らない", (role) => {

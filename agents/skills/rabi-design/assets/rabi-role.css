@@ -1,5 +1,5 @@
-/* Rabi 情報層 — 意味ロールのトークンと部品。`rabi.css` の後に読む。
- * 規則は `../references/DESIGN.md`「情報層」。危険は `.rabi-alert`。ここへ置か**ない**。 */
+/* Rabi 情報層 — 意味ロールのトークンと variant。`rabi-components.css` の後に読む。
+ * 規則は `../references/DESIGN.md`「情報層」。危険は `.rabi-note-danger`。ここへ置か**ない**。 */
 
 :root {
   --rabi-role-info: light-dark(#edf2f8, #0e1925);
@@ -15,25 +15,10 @@
   --rabi-role-attention-text: light-dark(#936515, #ae7719);
 }
 
-/* 役割名を必ず出す。色だけで意味を伝え**ない** */
-.rabi-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--rabi-gap-2);
-  margin: 0;
-  padding: var(--rabi-gap-2_5) var(--rabi-gap-3);
-  font-size: var(--rabi-t-body);
-  font-weight: 400;
-  line-height: var(--rabi-lh-body);
-  border: 1px solid;
-  border-radius: var(--rabi-r-md);
-}
-
-.rabi-note::before {
-  font-size: var(--rabi-t-label);
-  font-weight: 600;
-  line-height: var(--rabi-lh-label);
-  flex: none;
+/* 骨格は `rabi-components.css` の `.rabi-note`。ここは面と文字と図だけを差し替える */
+/* 見出しの扱いは `rabi-components.css` の `.rabi-note-danger` と同じ */
+:is(.rabi-note-info, .rabi-note-success, .rabi-note-attention) .rabi-note-title {
+  color: inherit;
 }
 
 .rabi-note-info {
@@ -43,7 +28,7 @@
 }
 
 .rabi-note-info::before {
-  content: "情報";
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='9' r='6.4'/%3E%3Cpath d='M9 8.2v4M9 5.8v.6'/%3E%3C/svg%3E");
 }
 
 .rabi-note-success {
@@ -52,8 +37,9 @@
   border-color: var(--rabi-role-success-line);
 }
 
+/* 丸へ収める分だけ縮尺がかかるので、線幅を割り戻す（`DESIGN.md`「図の置き方」） */
 .rabi-note-success::before {
-  content: "成功";
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='9' r='6.4'/%3E%3Cg transform='translate(9 9) scale(.571) translate(-8.55 -9)' stroke-width='2.1'%3E%3Cpath d='M2.6 8.6l4.4 4.4 7.5-8'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 .rabi-note-attention {
@@ -63,9 +49,5 @@
 }
 
 .rabi-note-attention::before {
-  content: "注意";
-}
-
-.rabi-note + .rabi-note {
-  margin-top: var(--rabi-gap-2);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='9' r='6.4'/%3E%3Cpath d='M9 5.6v4M9 11.8v.6'/%3E%3C/svg%3E");
 }

@@ -199,7 +199,7 @@ skill 固有の `assets/`:
 | ------------- | --------------------- | -------------------------------------------- |
 | `rabi-design` | `rabi.css`            | ブランド層の値の SSOT と文書の部品           |
 | `rabi-design` | `rabi-components.css` | UI 部品の実装。値はトークンを引く            |
-| `rabi-design` | `rabi-role.css`       | 情報層の値の SSOT と `.rabi-note`            |
+| `rabi-design` | `rabi-role.css`       | 情報層の値の SSOT と 3 ロールの variant      |
 | `rabi-design` | `rabi-mermaid.js`     | mermaid をトークンで塗る初期化（CDN を引く） |
 
 ## skill を参照する repo 側の実体

@@ -177,14 +177,6 @@
       <symbol id="i-chevron" viewBox="0 0 18 18">
         <path d="m7 5 4 4-4 4" />
       </symbol>
-      <symbol id="i-bulb" viewBox="0 0 18 18">
-        <path d="M9 2.5a4.4 4.4 0 0 1 2.6 7.9c-.4.3-.6.8-.6 1.3H7c0-.5-.2-1-.6-1.3A4.4 4.4 0 0 1 9 2.5z" />
-        <path d="M7.4 13.6h3.2M8 15.5h2" />
-      </symbol>
-      <symbol id="i-info" viewBox="0 0 18 18">
-        <circle cx="9" cy="9" r="6.4" />
-        <path d="M9 8.2v4M9 5.8v.6" />
-      </symbol>
     </svg>
 
     <header class="rabi-appbar site-header">
@@ -324,9 +316,8 @@
             </li>
           </ol>
 
-          <div class="rabi-callout">
-            <svg class="ico"><use href="#i-bulb" /></svg>
-            <p class="rabi-callout-title">その場で足す</p>
+          <div class="rabi-note">
+            <p class="rabi-note-title">その場で足す</p>
             <p>
               書けないときは <kbd class="rabi-kbd">Ctrl</kbd> + <kbd class="rabi-kbd">Space</kbd>
               で、今の置き場へその場で足せます。
@@ -349,9 +340,8 @@
             <li>要らなくなったら外す —— 消さずに外へ出しておく</li>
           </ul>
 
-          <div class="rabi-callout">
-            <svg class="ico"><use href="#i-info" /></svg>
-            <p class="rabi-callout-title">細かく切ると使い回せる</p>
+          <div class="rabi-note">
+            <p class="rabi-note-title">細かく切ると使い回せる</p>
             <p>細かく切り出したものは、他の場所からも参照できます。</p>
           </div>
 
@@ -384,7 +374,9 @@
 
           <h3>注意</h3>
 
-          <p class="rabi-alert">上限を超えた値は保存されず、既定へ戻ります。</p>
+          <div class="rabi-note rabi-note-danger">
+            <p>上限を超えた値は保存されず、既定へ戻ります。</p>
+          </div>
         </div>
       </article>
 

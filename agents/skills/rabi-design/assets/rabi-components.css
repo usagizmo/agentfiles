@@ -33,7 +33,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-1_5);
   height: var(--rabi-btn-h);
   padding: 0 var(--rabi-btn-pad);
   font-family: var(--rabi-font);
@@ -83,15 +83,15 @@
   --rabi-btn-icon: 14px;
 }
 
-/* 図と文字を並べるときは、図の側だけ 1 段詰める —— 図は文字より軽く見える。
+/* 図と文字を並べるときは、図の外側を図と文の間と同値だけ詰める —— 図は文字より軽く見える。
  * 文字は要素で包む —— テキストノードのままだと `:first-child` が図だけを指し、
  * 図が先か後かを CSS で判定でき**ない** */
 .rabi-btn:not(.rabi-btn-icon) > svg:first-child {
-  margin-left: calc(-1 * var(--rabi-gap-1));
+  margin-left: calc(-1 * var(--rabi-gap-1_5));
 }
 
 .rabi-btn:not(.rabi-btn-icon) > svg:last-child {
-  margin-right: calc(-1 * var(--rabi-gap-1));
+  margin-right: calc(-1 * var(--rabi-gap-1_5));
 }
 
 /* 図の寸法は枠が決める。描画属性（stroke・端の形）は図を引く側 */
@@ -152,7 +152,7 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-1_5);
   height: var(--rabi-control-xs);
   padding: 0 var(--rabi-gap-2);
   font-family: var(--rabi-font);
@@ -345,21 +345,15 @@
   -webkit-print-color-adjust: exact;
 }
 
-/* checked の印はチェック。丸では**ない**。
- * 形は読むだけのチェック（`.rabi-checklist`）と共有し、位置と色だけを各々が持つ */
-.rabi-check:checked::after,
-.rabi-checklist > li::before {
-  content: "";
-  width: 7px;
-  height: 4px;
-  border-left: 2px solid currentcolor;
-  border-bottom: 2px solid currentcolor;
-  rotate: -45deg;
-}
-
+/* checked の印はチェック。丸では**ない**。形は読むだけのチェック（`.rabi-checklist`）と共有する。
+ * 線幅は viewBox を枠へ縮めた後に 1.2px で出る値（`DESIGN.md`「図の置き方」） */
 .rabi-check:checked::after {
-  color: var(--rabi-on-accent);
-  translate: 0 -1px;
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: var(--rabi-on-accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.6 8.6l4.4 4.4 7.5-8'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 
 .rabi-radio:checked::after {
@@ -385,7 +379,7 @@
 }
 
 .rabi-check:checked:disabled::after {
-  color: var(--rabi-faint);
+  background: var(--rabi-faint);
 }
 
 .rabi-radio:checked:disabled::after {
@@ -527,7 +521,7 @@
 .rabi-card-title {
   display: flex;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-2);
   margin: 0 0 var(--rabi-gap-2);
   font-size: var(--rabi-t-subheading);
   font-weight: 600;
@@ -555,7 +549,7 @@
 .rabi-card-head {
   display: flex;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-1_5);
   padding: var(--rabi-gap-4);
   font-size: var(--rabi-t-subheading);
   font-weight: 600;
@@ -753,7 +747,7 @@
 .rabi-list-item {
   display: flex;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-1_5);
   width: 100%;
   min-height: var(--rabi-control);
   padding: 0 var(--rabi-gap-3);
@@ -813,17 +807,24 @@
 
 /* 印は + と −。縦棒を消して切り替える。回転で作ると × になる */
 .rabi-accordion-summary::before {
+  --rabi-accordion-mark: var(--rabi-faint);
+
   content: "";
   width: 18px;
   height: 18px;
   margin-top: 2px;
   background:
-    linear-gradient(var(--rabi-faint), var(--rabi-faint)) center / 11px 1.4px no-repeat,
-    linear-gradient(var(--rabi-faint), var(--rabi-faint)) center / 1.4px 11px no-repeat;
+    linear-gradient(var(--rabi-accordion-mark), var(--rabi-accordion-mark)) center / 11px 1.4px
+      no-repeat,
+    linear-gradient(var(--rabi-accordion-mark), var(--rabi-accordion-mark)) center / 1.4px 11px
+      no-repeat;
 }
 
 [open] > .rabi-accordion-summary::before {
-  background: linear-gradient(var(--rabi-accent), var(--rabi-accent)) center / 11px 1.4px no-repeat;
+  --rabi-accordion-mark: var(--rabi-accent);
+
+  background: linear-gradient(var(--rabi-accordion-mark), var(--rabi-accordion-mark)) center / 11px
+    1.4px no-repeat;
 }
 
 .rabi-accordion-summary {
@@ -985,7 +986,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-1_5);
   height: 100%;
   padding: 0 var(--rabi-gap-2_5);
   font-family: var(--rabi-font);
@@ -1066,7 +1067,7 @@
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-2);
   width: 100%;
   height: var(--rabi-control-sm);
   padding: 0 var(--rabi-gap-2_5);
@@ -1162,7 +1163,7 @@
 .rabi-panel-head {
   display: flex;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-2);
   height: var(--rabi-control);
   padding: 0 var(--rabi-gap-3);
   font-size: var(--rabi-t-subheading);
@@ -1182,7 +1183,7 @@
 .rabi-panel-section-head {
   display: flex;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-1_5);
   height: var(--rabi-control-sm);
   padding: 0 var(--rabi-gap-2_5);
   white-space: nowrap;
@@ -1308,22 +1309,6 @@ summary.rabi-panel-section-head:hover {
   border-top: 1px solid var(--rabi-line);
 }
 
-/* ==== alert。淡い面。危険はここ。情報ロールは DESIGN.md「情報層」と「Components」の添え物 ==== */
-.rabi-alert {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--rabi-gap-1);
-  margin: 0;
-  padding: var(--rabi-gap-2_5) var(--rabi-gap-3);
-  font-size: var(--rabi-t-body);
-  font-weight: 400;
-  line-height: var(--rabi-lh-body);
-  background: var(--rabi-wash);
-  color: var(--rabi-accent-text);
-  border: 1px solid var(--rabi-wash-line);
-  border-radius: var(--rabi-r-md);
-}
-
 /* ==== tooltip。地は ink のベタ。面の段を使わ**ない** ==== */
 .rabi-tooltip {
   position: relative;
@@ -1390,7 +1375,7 @@ summary.rabi-panel-section-head:hover {
 .rabi-brand {
   display: flex;
   align-items: center;
-  gap: var(--rabi-gap-1);
+  gap: var(--rabi-gap-2_5);
   font-size: var(--rabi-t-subheading);
   font-weight: 600;
   line-height: 1;
@@ -1789,12 +1774,15 @@ summary.rabi-nav-group::-webkit-details-marker {
   color: var(--rabi-soft);
 }
 
-/* ==== callout。図と見出しを持つ添え物。1 行の状態は `.rabi-alert`。
- * 赤も情報ロールも意味として載せ**ない**。情報層は `.rabi-note` ==== */
-.rabi-callout {
+/* ==== note。添え物はこれ 1 つ。見出しは任意で、図はロールが出す。
+ * 情報・成功・注意の 3 ロールは `rabi-role.css`（`DESIGN.md`「情報層」）==== */
+.rabi-note {
+  /* 図の辺。図の列も 1 行目への寄せもここから従属する */
+  --rabi-note-icon: 18px;
+
   display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: var(--rabi-gap-1);
+  grid-template-columns: var(--rabi-note-icon) 1fr;
+  gap: var(--rabi-gap-1_5);
   margin: 0;
   padding: var(--rabi-gap-3) var(--rabi-gap-4);
   font-size: var(--rabi-t-body);
@@ -1802,27 +1790,49 @@ summary.rabi-nav-group::-webkit-details-marker {
   line-height: var(--rabi-lh-body);
   background: var(--rabi-paper-2);
   color: var(--rabi-soft);
+  border: 1px solid var(--rabi-line);
   border-radius: var(--rabi-r-md);
 }
 
-.rabi-callout svg {
-  width: 18px;
-  height: 18px;
-  flex: none;
-  color: var(--rabi-faint);
+/* 図はロールが出す。作者は書か**ない** —— ロールと図がずれない */
+.rabi-note::before {
+  content: "";
+  width: var(--rabi-note-icon);
+  height: var(--rabi-note-icon);
+  /* 1 行目の中心へ揃える */
+  margin-top: calc((1lh - var(--rabi-note-icon)) / 2);
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 2.5a4.4 4.4 0 0 1 2.6 7.9c-.4.3-.6.8-.6 1.3H7c0-.5-.2-1-.6-1.3A4.4 4.4 0 0 1 9 2.5z'/%3E%3Cpath d='M7.4 13.6h3.2M8 15.5h2'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 
 /* 図の列を空けて、2 行目以降を見出しの左端へ揃える */
-.rabi-callout > :not(svg) {
+.rabi-note > * {
   grid-column: 2;
   margin: 0;
 }
 
-.rabi-callout-title {
+.rabi-note-title {
   font-size: var(--rabi-t-body);
   font-weight: 600;
   line-height: var(--rabi-lh-body);
   color: var(--rabi-ink);
+}
+
+/* 危険。ブランド層の赤。情報層の 3 ロールと同じ面に並べ**ない** */
+.rabi-note-danger {
+  background: var(--rabi-wash);
+  color: var(--rabi-accent-text);
+  border-color: var(--rabi-wash-line);
+}
+
+/* 彩色ロールの見出しは本文の色を継ぐ。ブランドの ink を彩色 fill の上へ持ち込ま**ない** */
+.rabi-note-danger .rabi-note-title {
+  color: inherit;
+}
+
+.rabi-note-danger::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3.4L15.4 14.6H2.6Z'/%3E%3Cpath d='M9 7.6v3.1M9 12.6v.5'/%3E%3C/svg%3E");
 }
 
 /* ==== code。塊のコード。地は沈んだ面で、枠は持た**ない** ==== */
@@ -1962,8 +1972,11 @@ summary.rabi-nav-group::-webkit-details-marker {
 }
 
 .rabi-checklist > li {
+  /* 図の辺。列幅も 1 行目への寄せもここから従属する */
+  --rabi-checklist-icon: 14px;
+
   display: grid;
-  grid-template-columns: 14px 1fr;
+  grid-template-columns: var(--rabi-checklist-icon) 1fr;
   align-items: start;
   gap: var(--rabi-gap-2);
   font-size: var(--rabi-t-body);
@@ -1972,10 +1985,17 @@ summary.rabi-nav-group::-webkit-details-marker {
   color: var(--rabi-ink);
 }
 
-/* 地を持たないので赤で描く。形は `.rabi-check:checked` と共有する */
+/* 地を持たないので赤で描く。形は checked の印と同じ。
+ * 線幅は viewBox を枠へ縮めた後に 1.2px で出る値（`DESIGN.md`「図の置き方」） */
 .rabi-checklist > li::before {
-  margin: 6px 0 0 3px;
-  color: var(--rabi-accent);
+  content: "";
+  width: var(--rabi-checklist-icon);
+  height: var(--rabi-checklist-icon);
+  /* 1 行目の中心へ揃える */
+  margin-top: calc((1lh - var(--rabi-checklist-icon)) / 2);
+  background: var(--rabi-accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23000' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.6 8.6l4.4 4.4 7.5-8'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 
 /* ==== input-wrap。入力の先頭に図を置く枠 ==== */
@@ -2122,5 +2142,26 @@ summary.rabi-nav-group::-webkit-details-marker {
   [class^="rabi-"]::after,
   [class*=" rabi-"]::after {
     transition: none;
+  }
+}
+
+/* ==== 強制配色。地は system color へ上書きされるので、地で描いた印と図が消える。
+ * 何を残すかは `DESIGN.md`「状態」==== */
+@media (forced-colors: active) {
+  .rabi-check:checked::after,
+  .rabi-radio:checked::after,
+  .rabi-switch::after,
+  .rabi-checklist > li::before,
+  .rabi-note::before {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  /* 地の形が 2 通りあるので、色だけ差し替える。開いた側は詳細度が上なので併記する */
+  .rabi-accordion-summary::before,
+  [open] > .rabi-accordion-summary::before {
+    --rabi-accordion-mark: CanvasText;
+
+    forced-color-adjust: none;
   }
 }

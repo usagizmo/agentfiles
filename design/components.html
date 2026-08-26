@@ -182,6 +182,11 @@
         display: block;
       }
 
+      /* 積む間隔は容器が持つ。部品に隣接 margin を持たせ**ない** */
+      .rows .v.stack > * + * {
+        margin-top: var(--rabi-gap-2);
+      }
+
       .note {
         font-size: var(--rabi-t-label);
         line-height: var(--rabi-lh-label);
@@ -373,7 +378,7 @@
           <li><a href="#settings">Settings 面</a></li>
           <li><a href="#accordion">Accordion</a></li>
           <li><a href="#statusbar">Status bar</a></li>
-          <li><a href="#alert">Alert / Tooltip</a></li>
+          <li><a href="#tooltip">Tooltip</a></li>
           <li><a href="#note">Note</a></li>
           <li><a href="#doc">Heading / Table</a></li>
           <li><a href="#appbar">Appbar / Footer</a></li>
@@ -434,7 +439,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn</code> + figure<span>図は 14px。図の側だけ 1 段詰める</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn</code> + figure<span>図は 14px。図の外側は間隔と同値だけ詰める</span></div>
             <div class="rabi-cell rabi-cell-row v">
               <button class="rabi-btn rabi-btn-secondary" type="button">
                 <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11" /></svg>
@@ -865,7 +870,7 @@
                 </button>
                 <button class="rabi-dropdown-item" type="button" aria-pressed="true">
                   <span class="rabi-dropdown-label">完全な URL を表示</span>
-                  <svg class="rabi-dropdown-check ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 9.5l3.5 3.5 7.5-8" /></svg>
+                  <svg class="rabi-dropdown-check ico" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.6 8.6l4.4 4.4 7.5-8" /></svg>
                 </button>
               </div>
 
@@ -1206,19 +1211,14 @@
           </div>
         </section>
 
-        <section class="sec" id="alert">
+        <section class="sec" id="tooltip">
           <div class="rabi-section-head sec-head">
-            <h2>Alert / Tooltip</h2>
+            <h2>Tooltip</h2>
             <p>吹き出しの地は ink のベタ。広い面を ink で塗ってよい唯一の例外</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
-
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-alert</code><span>alert-warn</span></div>
-            <div class="rabi-cell rabi-cell-row v stack">
-              <p class="rabi-alert" role="status">置き換えの警告文。淡い面の上なので、赤を意味として載せてよい。</p>
-            </div>
 
             <div class="rabi-cell rabi-cell-row k"><code>.rabi-tooltip</code><span>tooltip</span></div>
             <div class="rabi-cell rabi-cell-row v tips">
@@ -1232,17 +1232,41 @@
         <section class="sec" id="note">
           <div class="rabi-section-head sec-head">
             <h2>Note</h2>
-            <p>情報層。同一面に 3 ロールを並べる。危険は .rabi-alert のまま</p>
+            <p>添え物はこれ 1 つ。見出しは任意で、図はロールが出す。危険はブランド層、情報 3 ロールは情報層</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note</code><span>note-info / note-success / note-attention</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note</code><span>note / note-title</span></div>
             <div class="rabi-cell rabi-cell-row v stack">
-              <p class="rabi-note rabi-note-info" role="status">保存せずに閉じると、未反映の入力は残らない。</p>
-              <p class="rabi-note rabi-note-success" role="status">公開設定を保存した。</p>
-              <p class="rabi-note rabi-note-attention" role="status">この操作は取り消しできない。</p>
+              <div class="rabi-note demo-prose">
+                <p class="rabi-note-title">見出しを持つ添え物</p>
+                <p>2 行目以降は見出しの左端へ揃う。中立の地は paper-2 で、赤を意味として載せない。</p>
+              </div>
+              <div class="rabi-note">
+                <p>見出しは任意。1 行だけの注記も同じ余白で並ぶ。</p>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note-danger</code><span>note-danger</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-note rabi-note-danger" role="status">
+                <p>置き換えの警告文。淡い面の上なので、赤を意味として載せてよい。</p>
+              </div>
+            </div>
+
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note-*</code><span>note-info / note-success / note-attention</span></div>
+            <div class="rabi-cell rabi-cell-row v stack">
+              <div class="rabi-note rabi-note-info" role="status">
+                <p>保存せずに閉じると、未反映の入力は残らない。</p>
+              </div>
+              <div class="rabi-note rabi-note-success" role="status">
+                <p>公開設定を保存した。</p>
+              </div>
+              <div class="rabi-note rabi-note-attention" role="status">
+                <p>この操作は取り消しできない。</p>
+              </div>
             </div>
           </div>
         </section>
@@ -1464,7 +1488,7 @@
 
         <section class="sec" id="prose">
           <div class="rabi-section-head sec-head">
-            <h2>Prose / Steps / Callout</h2>
+            <h2>Prose / Steps</h2>
             <p>長文の面。積む間隔は .rabi-prose が 1 か所で持つ</p>
           </div>
           <div class="rabi-grid rows">
@@ -1495,15 +1519,6 @@
                   <p>最後の手順からは伸ばさない。</p>
                 </li>
               </ol>
-            </div>
-
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-callout</code><span>callout / callout-title</span></div>
-            <div class="rabi-cell rabi-cell-row v stack">
-              <div class="rabi-callout demo-prose">
-                <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="6.4" /><path d="M9 8.2v4M9 5.8v.6" /></svg>
-                <p class="rabi-callout-title">見出しを持つ添え物</p>
-                <p>2 行目以降は見出しの左端へ揃う。地は paper-2 で、赤を意味として載せない。</p>
-              </div>
             </div>
 
             <div class="rabi-cell rabi-cell-row k"><code>.rabi-code</code><span>code</span></div>

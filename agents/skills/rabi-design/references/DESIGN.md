@@ -105,6 +105,7 @@ components:
     rounded: "{rounded.md}"
     height: "{spacing.control}"
     padding: "{spacing.3}"
+    gap: "{spacing.1.5}"
   button-primary-hover:
     backgroundColor: "{colors.accent-hover}"
   button-primary-active:
@@ -117,6 +118,7 @@ components:
     rounded: "{rounded.md}"
     height: "{spacing.control}"
     padding: "{spacing.3}"
+    gap: "{spacing.1.5}"
   button-secondary-hover:
     backgroundColor: "{colors.paper-2}"
   button-ghost:
@@ -127,6 +129,7 @@ components:
     rounded: "{rounded.md}"
     height: "{spacing.control}"
     padding: "{spacing.3}"
+    gap: "{spacing.1.5}"
   button-ghost-hover:
     backgroundColor: "{colors.paper-2}"
   button-disabled:
@@ -145,6 +148,7 @@ components:
     rounded: "{rounded.md}"
     height: "{spacing.control-xs}"
     padding: "{spacing.2}"
+    gap: "{spacing.1.5}"
   chip-selected:
     backgroundColor: "{colors.wash}"
     borderColor: "{colors.wash-line}"
@@ -209,7 +213,7 @@ components:
     size: 16px
   checkbox-checked:
     backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
+    markColor: "{colors.on-accent}"
   radio:
     borderColor: "{colors.edge}"
     backgroundColor: "{colors.paper}"
@@ -276,6 +280,7 @@ components:
     rounded: "{rounded.none}"
     minHeight: "{spacing.control}"
     padding: "{spacing.3}"
+    gap: "{spacing.1.5}"
   list-item-hover:
     backgroundColor: "{colors.paper-2}"
   list-item-selected:
@@ -294,6 +299,7 @@ components:
   card-title:
     typography: "{typography.subheading}"
     fontWeight: 600
+    gap: "{spacing.2}"
   card-accent:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.on-accent}"
@@ -337,6 +343,7 @@ components:
     backgroundColor: "{colors.paper}"
   segment-item:
     padding: "{spacing.2.5}"
+    gap: "{spacing.1.5}"
   segment-selected:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
@@ -358,6 +365,7 @@ components:
     typography: "{typography.body-doc}"
     height: "{spacing.control-sm}"
     padding: "{spacing.2.5}"
+    gap: "{spacing.2}"
   dropdown-item-hover:
     backgroundColor: "{colors.paper-2}"
   dropdown-item-disabled:
@@ -384,10 +392,12 @@ components:
     height: "{spacing.control}"
     padding: "{spacing.3}"
     iconSize: 16px
+    gap: "{spacing.2}"
   panel-section-head:
     height: "{spacing.control-sm}"
     padding: "{spacing.2.5}"
     iconSize: 14px
+    gap: "{spacing.1.5}"
   panel-body:
     padding: "{spacing.3}"
   dialog:
@@ -432,14 +442,6 @@ components:
     padding: "{spacing.4}"
   statusbar-on:
     textColor: "{colors.accent-text}"
-  alert:
-    backgroundColor: "{colors.wash}"
-    textColor: "{colors.accent-text}"
-    borderColor: "{colors.wash-line}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    paddingBlock: "{spacing.2.5}"
-    paddingInline: "{spacing.3}"
   tooltip:
     backgroundColor: "{colors.ink}"
     textColor: "{colors.paper}"
@@ -460,6 +462,7 @@ components:
     typography: "{typography.subheading}"
     fontWeight: 600
     iconSize: 22px
+    gap: "{spacing.2.5}"
   appbar-nav:
     textColor: "{colors.soft}"
     typography: "{typography.body}"
@@ -476,6 +479,7 @@ components:
     padding: "{spacing.2.5}"
     indent: "{spacing.3}"
     iconSize: 14px
+    gap: "{spacing.1}"
   nav-item-hover:
     backgroundColor: "{colors.paper-2}"
   nav-item-current:
@@ -534,22 +538,29 @@ components:
     dotTypography: "{typography.label-sm}"
     dotFontWeight: 600
     lineColor: "{colors.line}"
-    gap: "{spacing.5}"
+    rowGap: "{spacing.5}"
   step-title:
     textColor: "{colors.ink}"
     typography: "{typography.body}"
     fontWeight: 600
-  callout:
+  note:
     backgroundColor: "{colors.paper-2}"
     textColor: "{colors.soft}"
+    borderColor: "{colors.line}"
     typography: "{typography.body}"
     rounded: "{rounded.md}"
     paddingBlock: "{spacing.3}"
     paddingInline: "{spacing.4}"
     iconSize: 18px
-  callout-title:
+    gap: "{spacing.1.5}"
+  note-title:
     textColor: "{colors.ink}"
     fontWeight: 600
+  note-danger:
+    backgroundColor: "{colors.wash}"
+    textColor: "{colors.accent-text}"
+    titleColor: "{colors.accent-text}"
+    borderColor: "{colors.wash-line}"
   code:
     backgroundColor: "{colors.paper-2}"
     textColor: "{colors.ink}"
@@ -571,6 +582,7 @@ components:
     padding: "{spacing.1.5}"
   empty:
     textColor: "{colors.soft}"
+    gap: "{spacing.2}"
     borderColor: "{colors.divider}"
     borderStyle: dashed
     typography: "{typography.body}"
@@ -607,10 +619,12 @@ components:
     typography: "{typography.body}"
     fontWeight: 400
     markColor: "{colors.accent}"
-    markWidth: 2px
+    markSize: 14px
+    gap: "{spacing.2}"
   input-figure:
     iconColor: "{colors.faint}"
     iconSize: 14px
+    gap: "{spacing.1}"
   input-figure-invalid:
     iconColor: "{colors.accent-text}"
   btn-stack:
@@ -625,6 +639,7 @@ components:
     typography: "{typography.subheading}"
     fontWeight: 600
     padding: "{spacing.4}"
+    gap: "{spacing.1.5}"
   card-foot:
     textColor: "{colors.faint}"
     borderColor: "{colors.line}"
@@ -724,7 +739,7 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 
 ### 情報層
 
-情報層は情報・成功・注意の 3 ロール。危険はブランドの警告部品のまま。情報層に危険ロールを置か**ない**。
+情報層は情報・成功・注意の 3 ロール。危険は `.rabi-note-danger` でブランド層に残す。情報層に危険ロールを置か**ない**。
 
 トークンは `--rabi-role-<name>` / `-line` / `-text`。値の SSOT は `../assets/rabi-role.css`。front matter の `colors` には出さ**ない**。
 
@@ -784,6 +799,8 @@ flowchart LR
 | 無効   | 地・文字・輪郭の 3 つとも下げる                                                                                                        |
 
 情報・成功・注意は警告の行に載せ**ない**。部品の選びは「Components」の添え物。
+
+地で描く印と図は強制配色でも残す。上書きを外す先は `../assets/rabi-components.css` の強制配色の節。
 
 選択で地を赤にし**ない**。
 
@@ -855,6 +872,8 @@ focus と、`outline` を使う選択は部品の**外側**に出る。エラー
 | `6` – `8`     | 外縁 | 節の内側の余白・まとまりとまとまりの間                             |
 | `10` – `14`   | 外縁 | 段組の列の間・節と節の間                                           |
 
+図と文の間は `1` – `2.5`（「図の置き方」）。
+
 位置は対象で決まる —— 部品・セル・見出しと中身は**内部**、節・まとまり・段組は**外縁**。
 
 内部に `6` 以上を使わ**ない**。面が疎でも密でも変わらない。
@@ -919,11 +938,15 @@ front matter が持つ**寸法**は、その部品を選ぶときに読む値 �
 
 左に出すのはぶら下げで、まとまりの全行が図の右の列に揃う。価格・箇条書き・ボタンのように内部構造を持つまとまりでは、図が支配するのは 1 行目だけなのに列は下まで残る。そこでは左に出さ**ない**。
 
-図の列の幅は図の寸法と同値にし、まとまりごとに変え**ない**。図と文の間は `1` —— 部品ごとに変え**ない**。
+図の列の幅は図の寸法と同値にし、まとまりごとに変え**ない**。図と文の間は部品ごとに決まる —— 値は front matter の `components` の `gap`。その値を面から上書きし**ない**。
 
-印（開閉・チェック・選択）と文の間は `2`。図の列を図と共有する印は**例外**で、その列の規則に従って `1` で並べる。
+印（開閉・チェック・選択）と文の間は `2`。図の列を図と共有する印は**例外**で、その部品の `gap` に従う。
 
 図の線幅は文字のステムに合わせる —— `1.2px`。**上に積む図だけ** `1.5px`。部品が決めるのは図の寸法だけで、線幅は図を引く側が持つ。
+
+mask で置く図は、縮尺が**かかるときだけ**、その分だけ元の値を上げて `1.2px` で出す。枠と viewBox の比と、図の中の `transform` の両方が縮尺。
+
+チェックの形は 1 つ。印と読むだけのチェックは `../assets/rabi-components.css`、添え物は `../assets/rabi-role.css` が出す。ドロップダウンだけは作者が同じ形を書く。
 
 ### 一覧の組み方
 
@@ -1035,11 +1058,11 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 
 ## Components
 
-値は front matter の `components`、実装は `../assets/rabi-components.css`。ここにはどちらにも置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持ち、front matter に値を持た**ない**。情報層の部品（`.rabi-note`）は `../assets/rabi-role.css` が実装を持ち、front matter に値を持た**ない**。
+値は front matter の `components`、実装は `../assets/rabi-components.css`。ここにはどちらにも置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持ち、front matter に値を持た**ない**。`.rabi-note` の骨格と中立・危険はブランド層にある。情報層が持つのは 3 ロールの variant と、その中の見出し**だけ**。
 
 部品が自分の中でだけ使う値（丈から幅や寄せを導くなど）は、**部品クラスのスコープ**で `--rabi-<部品>-<名>` を宣言してよい。`:root` に立てるのは値のトークン**だけ**。ブランド層は `rabi.css`、情報層は `rabi-role.css`。
 
-UI を組む媒体では `rabi-components.css` のクラスを使う。部品の一覧はそのファイルの節見出し。情報層の部品は `rabi-role.css`。
+UI を組む媒体では `rabi-components.css` のクラスを使う。部品の一覧はそのファイルの節見出し。情報層の 3 ロールは `rabi-role.css`。
 
 front matter のキーは class 名と 1 対 1 では**ない**。
 
@@ -1058,13 +1081,14 @@ front matter のキーは class 名と 1 対 1 では**ない**。
 | `prose-code`          | `.rabi-prose` の中の `code`              |
 | `steps` の丸          | `.rabi-steps > li` の `::before`         |
 | `checklist` の印      | `.rabi-checklist > li` の `::before`     |
+| `note` の図           | `.rabi-note` の `::before`               |
 | `button-inline-icon`  | `.rabi-btn:not(.rabi-btn-icon)` の `svg` |
 | `input-figure`        | `.rabi-input-wrap` の中の `svg`          |
 | `price` の単位        | `.rabi-price-unit`                       |
 | `footer-col-title`    | `.rabi-footer-col` の `h2` / `h3`        |
 | それ以外              | `rabi-` を冠すだけ                       |
 
-`.rabi-note` は front matter にキーを持たない。値は `../assets/rabi-role.css`。
+`.rabi-note-info` / `-success` / `-attention` は front matter にキーを持たない。値は `../assets/rabi-role.css`。
 
 単体では効か**ない**クラスがある。variant は土台と、内側の部品は容器と併記する。
 
@@ -1094,14 +1118,14 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 
 丈を持つ variant は「Layout」の丈の表の行をそのまま下げる。丈を持たない面（セル・表）の密度は位置の表の段から選び、値は `../assets/rabi-components.css` が持つ。
 
-無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` と front matter へ足してから使う。情報層の部品は `../assets/rabi-role.css` へ足す。
+無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` と front matter へ足してから使う。情報層のロールは `../assets/rabi-role.css` へ足す。
 
 媒体で読むものが変わる。
 
 | 媒体                             | 読むもの                                             | 使える部品                            |
 | -------------------------------- | ---------------------------------------------------- | ------------------------------------- |
 | UI。意味ロールが 2 つ以上並ぶ面  | `rabi.css` + `rabi-components.css` + `rabi-role.css` | すべて                                |
-| UI。それ以外                     | `rabi.css` + `rabi-components.css`                   | `.rabi-note` を除く                   |
+| UI。それ以外                     | `rabi.css` + `rabi-components.css`                   | 情報 3 ロールを除く                   |
 | 文書（見積・譜面・PDF）          | `rabi.css` だけ                                      | `.rabi-heading` と `.rabi-table` のみ |
 | CSS を持たない（docx・スライド） | 読めない                                             | 無し。段と余白を表から読んで当てる    |
 
@@ -1175,7 +1199,9 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 - 長文: 積む間隔は `.rabi-prose` が 1 か所で持つ。要素ごとの margin で積ま**ない**
 - 長文が組むのは**直下の、class を持たない要素だけ**
 - 長文の行送りは `body-doc`。字の段は `body` のまま
-- 添え物: 見出しを持つなら `.rabi-callout`、1 行の状態なら `.rabi-alert`。callout には赤を意味として載せ**ない**。情報・成功・注意が同一面に 2 つ以上並ぶときは `.rabi-note`。`.rabi-alert` を多色化し**ない**。
+- 添え物: `.rabi-note` **だけ**。見出し（`.rabi-note-title`）は任意で、有無で余白を変えない
+- 添え物の図はロールが出す。作者は書か**ない**
+- 添え物のロール: 既定は中立で、ロールの色を載せ**ない**。赤は `.rabi-note-danger`、情報・成功・注意は情報層（「情報層」）
 - コードの塊: 横に流さず折り返す。読む幅は面が決める
 - キー: 紙の面は `.rabi-kbd`（枠つき）、吹き出しの中は `kbd`（枠なし）。1 つにまとめ**ない**
 - 何も無い面: 押せる面と枠の形で区別する
