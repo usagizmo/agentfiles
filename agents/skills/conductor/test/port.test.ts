@@ -165,6 +165,31 @@ describe("設定の fail-closed", () => {
   });
 });
 
+describe("leftover 判定", () => {
+  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+
+  test("ended は visible の末尾からも取る。detection 窓だけにしない", () => {
+    const cmd = sessionsCmd();
+    expect(cmd).toContain("--source detection --lines 40");
+    expect(cmd).toContain("--source visible --format text");
+    expect(cmd).not.toMatch(/--source visible --lines/);
+    expect(cmd).toMatch(/\$snippet" \| tail -n /);
+    expect(cmd).toMatch(/\$visible" \| tail -n /);
+    expect(cmd).toContain('if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi');
+  });
+
+  test("契約表に turn 終了と背景残存の区別がある", () => {
+    expect(harnessMd()).toContain("turn の終了を背景作業の残存と区別して観測できる");
+  });
+
+  test("終了行は detection 末尾と画面末尾のどちらかを見る", () => {
+    expect(harnessMd()).toContain(
+      "終了行は detection 窓の末尾と描画中の画面末尾の**どちらか**を見る",
+    );
+    expect(harnessMd()).not.toContain("終了行は detection の末尾だけを見る");
+  });
+});
+
 describe("既に working への agent prompt", () => {
   test("確認は agent_prompted。seq 非変化を失敗にしない", () => {
     const md = harnessMd();

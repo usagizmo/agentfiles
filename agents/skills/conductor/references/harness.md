@@ -16,6 +16,7 @@ conductor が terminal multiplexer に対して行う操作。**差し替える�
 | 実行器だけ止める（worktree・workspace・branch・未コミットの変更は残す）      | 書き続ける実行器と新しい借り手が衝突する                                                       |
 | 起動が非同期（親が子の完了をブロックしない）                                 | tick が子の完了まで返らない                                                                    |
 | 稼働中のセッションを一覧で観測できる                                         | tick が現実を読めない                                                                          |
+| turn の終了を背景作業の残存と区別して観測できる                              | 背景だけ残った `working` を genuine `稼働中` と見なし、枠が渡らない                            |
 | composer が受け付ける状態で submit できたことを観測できる                    | PTY へ書いただけの `agent_prompted` を成功にして、scrollback フォーカスへ渡し続け retry を焼く |
 
 - **「前回」は時点ではなく実体**。tick が読んだ観測そのものを起床側へ渡し、起床側は取り直さない
@@ -347,10 +348,12 @@ while IFS= read -r row; do
   snippet=""
   if [ "$status" = "working" ]; then
     snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
+    visible=$(herdr agent read "$name" --source visible --format text </dev/null 2>/dev/null || true)
     still=0
     printf '%s' "$snippet" | grep -Eiq 'command still running|commands still running|shell still running|shells still running|background tasks still running|background task still running' && still=1
     ended=0
     printf '%s' "$snippet" | tail -n 12 | grep -Eiq 'Worked for|Baked for|Cogitated for' && ended=1
+    printf '%s' "$visible" | tail -n 12 | grep -Eiq 'Worked for|Baked for|Cogitated for' && ended=1
     if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi
   fi
   if [ "$leftover" = "leftover" ]; then
@@ -409,7 +412,10 @@ done | sort | grep .
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
 - **生値をそのまま出す**。分類は `src/observe.ts` の `sessionFromStatus` が持つ
 - **leftover は所有セッションと foreign の行に載せる**。トークンは `leftover` / `-` で、位置は状態の次
-- leftover は turn が終わり入力が通る正の証拠がある `working` だけ。終了行は detection の末尾だけを見る。証拠が無い `working` は genuine。信号が無いことを `Conflict` にしない。`working` 以外は leftover の detection を読ま**ない**
+- leftover は turn が終わり背景作業が残っている `working` だけ。
+- 終了行は detection 窓の末尾と描画中の画面末尾の**どちらか**を見る。末尾以外は見ない。
+- 証拠が無い `working` は genuine。信号が無いことを `Conflict` にしない。
+- `working` 以外は leftover の detection も visible も読ま**ない**。
 - **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄、foreign は 5 欄（cwd が末尾）。detection-derived は `pane_id - - - cwd`
 - leftover でなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
 - トークンが無い行は拒否ではない。kind は行に載せない
