@@ -11,12 +11,13 @@ description: >-
 
 ## 読む順
 
-1. `references/DESIGN.md` —— 仕様の全文。front matter が機械可読なトークン、本文が適用の規則
+1. `references/DESIGN.md` —— 仕様の全文。front matter が機械可読なトークン、本文が適用の規則。適合対象は「射程」
 2. `assets/rabi.css` —— ブランド層の値の SSOT
 3. `assets/rabi-components.css` —— UI 部品の実装
 4. `assets/rabi-role.css` —— 情報層の値の SSOT と 3 ロールの variant。いつ読むかは `references/DESIGN.md`「情報層」と「Components」
 
-値と規則の SSOT は上の 1 と 2 と 4 で、媒体には依ら**ない**。このファイルには写さ**ない**。
+値と規則の SSOT は上の 1 と 2 と 4 で、媒体には依ら**ない**。
+適合対象の境界は `references/DESIGN.md`「射程」。このファイルには写さ**ない**。
 
 ## 展開する順
 
