@@ -508,6 +508,33 @@ test.each([
   },
 );
 
+/**
+ * 部品に実体が在るのに、カタログの `class` 属性に出ないクラス。
+ *
+ * 上の gate が見るのは逆向き（面が部品に無い `.rabi-*` を名乗る）。こちらが無いと、
+ * `rabi-components.css` へ部品を足してカタログへ載せ忘れた形が素通りする。
+ */
+function uncatalogued(html: string, classes: ReadonlySet<string>): string[] {
+  const used = new Set(
+    [...html.matchAll(/class=["']([^"']+)["']/g)].flatMap((m) =>
+      (m[1] as string).split(/\s+/).filter((cls) => cls.startsWith("rabi-")),
+    ),
+  );
+  return [...classes].filter((cls) => !used.has(cls)).sort();
+}
+
+// カタログは部品ひとつを全状態で見る面。載らない部品はどの面からも拾われない
+test("components.html が部品を全部並べる", () => {
+  const html = readFileSync(join(DESIGN_DIR, "components.html"), "utf8");
+  expect(uncatalogued(html, componentClasses)).toEqual([]);
+});
+
+test("部品を足してカタログへ載せ忘れると落ちる", () => {
+  expect(
+    uncatalogued('<div class="rabi-here"></div>', new Set(["rabi-here", "rabi-nope"])),
+  ).toEqual(["rabi-nope"]);
+});
+
 /** 面の `<style>` と、面から切り出した `.css` に置かれた併記クラス。 */
 const surfaceSiblings = new Set(
   surfaces.flatMap((name) => [...siblingClasses(readFileSync(join(DESIGN_DIR, name), "utf8"))]),
