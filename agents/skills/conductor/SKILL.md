@@ -281,7 +281,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 - `agent prompt` の成否（前段・送れなかった周・張り直し除外を含む）は `references/harness.md`
 - `tab close` を行う入口は計画セッションと計画枠の逼迫の上限到達**だけ**
 - 「実行器だけ止める」は止まったことを `state_change_seq` で確かめてから資源を解放する。**確かめられなければ `Conflict`**。`agent_status` の 5 値を停止の証明に使わない
-- 意図して稼働中へ送るのは休止を促し直す。伝える 2 つは `canPrompt`。枠を渡すは受信可能を読む
+- 意図して genuine の稼働中へ送るのは休止を促し直す。leftover の `稼働中` は送る対象。伝える 2 つは `canPrompt`。枠を渡すは受信可能を読む
 - 前進と後退を混ぜ**ない**。「台帳を進める」は期待表に向かって進めるだけ、「差し戻す」だけが戻す
 - `stale` は独立した概念では**ない**。`progress` から期待される `runtime` / `capacity` / `ledger` とのずれがそれで、別の表を持た**ない**
 - 「伝える」3 つの加算は「記録の精算」が持つ。ここには写さない。加算の実体は `src/decide.ts` の `countsFailure`

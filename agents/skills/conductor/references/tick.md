@@ -42,7 +42,7 @@ PR を持たない面の `着地待ち` に、まとめの記録と clean の両
 
 止まったことを `agent_status` で判定しない: 5 値は画面の見た目であり、実行器が止まったことの証明ではない。止めた後の確認は `state_change_seq` が動かないことで行う（`harness.md`「実行器だけ止める」）。
 
-leftover を `runtime` に写さない: turn が終わっても背景作業は残るので、写すと `待機` になり write を取り上げて殺す。枠を渡すの受信可能だけ leftover を足す。送る側（`canPrompt`）と受け取る側（`receivable`）を 1 つにしないのは、`休止` が枠を渡すへ譲るため。条件は `src/decide.ts`。信号が無いことを leftover にも `Conflict` にもしない。
+leftover を `runtime` に写さない: turn が終わっても背景作業は残るので、写すと genuine の `稼働中`（送らない）と leftover の `稼働中`（送る）が同じ値に潰れる。`canPrompt` と受信可能の両方へ足す。二つを 1 つにしないのは、`休止` が枠を渡すへ譲るため。leftover は `稼働中` とだけ組む（`人待ち` の最上段を破らない）。条件は `src/decide.ts`。信号が無いことを leftover にも `Conflict` にもしない。検出の字面は `harness.md` の `--sessions-cmd`。
 
 refused を `runtime` に写さない: kind が行に無いので sessions 全体から lift する。写すと `待機` / `無し` に落ち、別 action が当たる。leftover は受信可能の正の証拠なので拒否を解く。`稼働中` の継続では解かない。Conflict にも退避先にも落とさない —— 落とすと選出対象外か Status 後退になり、入力が通るようになっても戻らない。選ばない action は `src/decide.ts`。検出の字面は `harness.md` の `--sessions-cmd`。
 

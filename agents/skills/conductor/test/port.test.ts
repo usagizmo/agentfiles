@@ -168,13 +168,59 @@ describe("設定の fail-closed", () => {
 describe("leftover 判定", () => {
   const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
 
-  test("ended は visible の末尾からも取る。detection 窓だけにしない", () => {
+  const leftoverPredicate = (cmd: string): string => {
+    const start = cmd.indexOf("    still=0\n");
+    const needle = 'if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi';
+    const end = cmd.indexOf(needle);
+    if (start < 0 || end < 0) throw new Error("leftover 判定が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runLeftover = async (snippet: string, visible: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "leftover-"));
+    try {
+      const snippetPath = join(dir, "snippet");
+      const visiblePath = join(dir, "visible");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(snippetPath, snippet);
+      await writeFile(visiblePath, visible);
+      await writeFile(
+        scriptPath,
+        [
+          'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
+          'visible=$(cat "$2"; printf x); visible=${visible%x}',
+          "leftover=-",
+          leftoverPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$leftover\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, snippetPath, visiblePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`leftover 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const chrome = "1 command still running";
+  const ended = "Worked for 44s";
+  const blanks = (n: number) => Array.from({ length: n }, () => "").join("\n");
+  const dump = (...lines: string[]) => `${lines.join("\n")}\n`;
+
+  test("still は detection 40 行。visible は行数で切らない。連言を落とさない", () => {
     const cmd = sessionsCmd();
     expect(cmd).toContain("--source detection --lines 40");
     expect(cmd).toContain("--source visible --format text");
     expect(cmd).not.toMatch(/--source visible --lines/);
-    expect(cmd).toMatch(/\$snippet" \| tail -n /);
-    expect(cmd).toMatch(/\$visible" \| tail -n /);
     expect(cmd).toContain('if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi');
   });
 
@@ -182,11 +228,42 @@ describe("leftover 判定", () => {
     expect(harnessMd()).toContain("turn の終了を背景作業の残存と区別して観測できる");
   });
 
-  test("終了行は detection 末尾と画面末尾のどちらかを見る", () => {
-    expect(harnessMd()).toContain(
-      "終了行は detection 窓の末尾と描画中の画面末尾の**どちらか**を見る",
-    );
+  test("終了行は末尾側 leftover chrome より前で最も近いものを見る", () => {
+    expect(harnessMd()).toContain("末尾側の leftover chrome");
     expect(harnessMd()).not.toContain("終了行は detection の末尾だけを見る");
+    expect(harnessMd()).not.toContain("末尾以外は見ない");
+  });
+
+  test("終了行が dump 末尾から外れ、chrome とのあいだが空行だけなら leftover", async () => {
+    expect(
+      await runLeftover(dump(chrome), dump(ended, blanks(35), chrome, "composer", "footer")),
+    ).toBe("leftover");
+  });
+
+  test("終了行と leftover chrome のあいだに空でない内容があれば leftover にしない", async () => {
+    expect(await runLeftover(dump(chrome), dump(ended, "assistant text", chrome))).toBe("-");
+  });
+
+  test("leftover chrome が複数あるときは末尾側を見る", async () => {
+    expect(await runLeftover(dump(chrome), dump(chrome, ended, blanks(35), chrome, "footer"))).toBe(
+      "leftover",
+    );
+  });
+
+  test("信号が無い working は leftover にしない", async () => {
+    expect(await runLeftover(dump("thinking"), dump("thinking", "footer"))).toBe("-");
+  });
+
+  test("still だけなら leftover にしない", async () => {
+    expect(await runLeftover(dump(chrome), dump("thinking", chrome))).toBe("-");
+  });
+
+  test("ended だけなら leftover にしない", async () => {
+    expect(await runLeftover(dump("thinking"), dump(ended, blanks(2), chrome))).toBe("-");
+  });
+
+  test("終了行が chrome の直前にあれば leftover のまま", async () => {
+    expect(await runLeftover(dump(chrome), dump(ended, chrome))).toBe("leftover");
   });
 });
 

@@ -350,10 +350,34 @@ while IFS= read -r row; do
     snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
     visible=$(herdr agent read "$name" --source visible --format text </dev/null 2>/dev/null || true)
     still=0
-    printf '%s' "$snippet" | grep -Eiq 'command still running|commands still running|shell still running|shells still running|background tasks still running|background task still running' && still=1
+    chrome_re='command still running|commands still running|shell still running|shells still running|background tasks still running|background task still running'
+    printf '%s' "$snippet" | grep -Eiq "$chrome_re" && still=1
     ended=0
-    printf '%s' "$snippet" | tail -n 12 | grep -Eiq 'Worked for|Baked for|Cogitated for' && ended=1
-    printf '%s' "$visible" | tail -n 12 | grep -Eiq 'Worked for|Baked for|Cogitated for' && ended=1
+    ended_from() {
+      printf '%s' "$1" | awk -v chrome_re="$chrome_re" '
+        {
+          n = NR
+          line[n] = $0
+          low = tolower($0)
+          if (low ~ chrome_re) chrome = n
+        }
+        END {
+          if (!chrome) exit 1
+          endline = 0
+          for (i = chrome - 1; i >= 1; i--) {
+            low = tolower(line[i])
+            if (low ~ /worked for|baked for|cogitated for/) { endline = i; break }
+          }
+          if (!endline) exit 1
+          for (i = endline + 1; i < chrome; i++) {
+            if (line[i] ~ /[^[:space:]]/) exit 1
+          }
+          exit 0
+        }
+      '
+    }
+    ended_from "$snippet" && ended=1
+    ended_from "$visible" && ended=1
     if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi
   fi
   if [ "$leftover" = "leftover" ]; then
@@ -413,8 +437,8 @@ done | sort | grep .
 - **生値をそのまま出す**。分類は `src/observe.ts` の `sessionFromStatus` が持つ
 - **leftover は所有セッションと foreign の行に載せる**。トークンは `leftover` / `-` で、位置は状態の次
 - leftover は turn が終わり背景作業が残っている `working` だけ。
-- 終了行は detection 窓の末尾と描画中の画面末尾の**どちらか**を見る。末尾以外は見ない。
-- 証拠が無い `working` は genuine。信号が無いことを `Conflict` にしない。
+- 終了行は末尾側の leftover chrome より前で最も近いもの。あいだが空行・空白のみなら ended。
+- 証拠が無い `working` は leftover にしない。
 - `working` 以外は leftover の detection も visible も読ま**ない**。
 - **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄、foreign は 5 欄（cwd が末尾）。detection-derived は `pane_id - - - cwd`
 - leftover でなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
