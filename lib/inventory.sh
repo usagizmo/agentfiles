@@ -58,4 +58,5 @@ inventory_define() {
   inv_section "opencode"
   inv_home "$HOME/.config/opencode"
   inv_symlink agents/AGENTS.md "$HOME/.config/opencode/AGENTS.md"
+  inv_symlink harnesses/opencode/opencode.json "$HOME/.config/opencode/opencode.json"
 }
