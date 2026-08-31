@@ -11,7 +11,7 @@ description: >-
 
 ## 読む順
 
-1. `references/DESIGN.md` —— 仕様の全文。front matter が機械可読なトークン、本文が適用の規則。適合対象は「射程」
+1. `references/DESIGN.md` —— 仕様の全文。front matter が機械可読な**段**、本文が適用の規則。適合対象は「射程」
 2. `assets/rabi.css` —— ブランド層の値の SSOT
 3. `assets/rabi-components.css` —— UI 部品の実装
 4. `assets/rabi-role.css` —— 情報層の値の SSOT と 3 ロールの variant。いつ読むかは `references/DESIGN.md`「情報層」と「Components」

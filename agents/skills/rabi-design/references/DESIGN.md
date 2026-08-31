@@ -386,9 +386,9 @@ figure だけのボタンは幅を丈と同値にする。丈は上の 4 段か�
 
 丈の段に載るのは、**文字を内包する操作枠**だけ —— ボタン・入力・select・チップ・タブ・セグメントの容器・リスト行。
 
-印そのものが的になる部品（チェック・ラジオ・スイッチ）と、押せない表示（バッジ）は**印の寸法**で組み、丈の段に載せ**ない**。値は front matter の `components`。段を増やす対象では**ない**。
+印そのものが的になる部品（チェック・ラジオ・スイッチ）と、押せない表示（バッジ）は**印の寸法**で組み、丈の段に載せ**ない**。値は `../assets/rabi-components.css`。段を増やす対象では**ない**。
 
-front matter が持つ**寸法**は、その部品を選ぶときに読む値 —— 丈・印の大きさ・図の大きさ・幅の下限と上限・罫の太さ。図形の内側の描き方（チェックの線の長さ、矢印の辺の角度）は実装が持つ。
+段として読む**寸法**は、部品を選ぶときに使う値 —— 丈・印の大きさ・図の大きさ・幅の下限と上限・罫の太さ。図形の内側の描き方（チェックの線の長さ、矢印の辺の角度）は部品の中に閉じる。
 
 これがチップとバッジを分ける境。
 
@@ -408,7 +408,7 @@ front matter が持つ**寸法**は、その部品を選ぶときに読む値 �
 
 左に出すのはぶら下げで、まとまりの全行が図の右の列に揃う。価格・箇条書き・ボタンのように内部構造を持つまとまりでは、図が支配するのは 1 行目だけなのに列は下まで残る。そこでは左に出さ**ない**。
 
-図の列の幅は図の寸法と同値にし、まとまりごとに変え**ない**。図と文の間は部品ごとに決まる —— 値は front matter の `components` の `gap`。その値を面から上書きし**ない**。
+図の列の幅は図の寸法と同値にし、まとまりごとに変え**ない**。図と文の間は部品ごとに決まる —— 値は `../assets/rabi-components.css` の `gap`。その値を面から上書きし**ない**。
 
 印（開閉・チェック・選択）と文の間は `2`。図の列を図と共有する印は**例外**で、その部品の `gap` に従う。
 
@@ -530,45 +530,13 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 
 ## Components
 
-値は front matter の `components`、実装は `../assets/rabi-components.css`。ここにはどちらにも置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持ち、front matter に値を持た**ない**。`.rabi-note` の骨格と中立・危険はブランド層にある。情報層が持つのは 3 ロールの variant と、その中の見出し**だけ**。
+値も実装も `../assets/rabi-components.css`。ここには CSS に置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持つ。`.rabi-note` の骨格と中立・危険はブランド層にある。情報層が持つのは 3 ロールの variant と、その中の見出し**だけ**。
 
 部品が自分の中でだけ使う値（丈から幅や寄せを導くなど）は、**部品クラスのスコープ**で `--rabi-<部品>-<名>` を宣言してよい。`:root` に立てるのは値のトークン**だけ**。ブランド層は `rabi.css`、情報層は `rabi-role.css`。
 
 UI を組む媒体では `rabi-components.css` のクラスを使う。部品の一覧はそのファイルの節見出し。情報層の 3 ロールは `rabi-role.css`。
 
-front matter のキーは class 名と 1 対 1 では**ない**。
-
-| front matter          | class                                             |
-| --------------------- | ------------------------------------------------- |
-| `button-*`            | `.rabi-btn` + `.rabi-btn-*`                       |
-| `checkbox`            | `.rabi-check`                                     |
-| `field-label`         | `.rabi-field` の**直下**の `label`                |
-| `tooltip-key`         | `.rabi-tooltip` の中の `kbd`                      |
-| `accordion-mark`      | `.rabi-accordion-summary` の `::before`           |
-| `accordion-mark-open` | 同上（`[open]` の中）                             |
-| `appbar-nav`          | `.rabi-appbar-nav` の中の `a`                     |
-| `nav-item`            | `.rabi-nav` の中の `a`                            |
-| `crumbs` の区切り     | `.rabi-crumbs li + li` の `::before`              |
-| `page-title`          | `.rabi-page-head` の中の見出し                    |
-| `prose-code`          | `.rabi-prose` の中の、`pre` に入っていない `code` |
-| `steps` の丸          | `.rabi-steps > li` の `::before`                  |
-| `checklist` の印      | `.rabi-checklist > li` の `::before`              |
-| `note` の図           | `.rabi-note` の `::before`                        |
-| `button-inline-icon`  | `.rabi-btn:not(.rabi-btn-icon)` の `svg`          |
-| `input-figure`        | `.rabi-input-wrap` の中の `svg`                   |
-| `price` の単位        | `.rabi-price-unit`                                |
-| `footer-col-title`    | `.rabi-footer-col` の `h2` / `h3`                 |
-| `island-tab-selected` | `.rabi-island-tab[aria-selected]`                 |
-| `cal-day-selected`    | `.rabi-cal-day[aria-selected]`                    |
-| `cal-day-today`       | `.rabi-cal-day[aria-current="date"]`              |
-| `chat-msg-user`       | `.rabi-chat-user .rabi-chat-msg`                  |
-| `history-dot`         | `.rabi-history-row` の `::before`                 |
-| `history-rail`        | `.rabi-history-row` の `::after`                  |
-| `meter-fill`          | `.rabi-meter` の塗り                              |
-| `bind-busy`           | `.rabi-bind[aria-busy]`                           |
-| それ以外              | `rabi-` を冠すだけ                                |
-
-`.rabi-note-info` / `-success` / `-attention` は front matter にキーを持たない。値は `../assets/rabi-role.css`。
+`.rabi-note-info` / `-success` / `-attention` の値は `../assets/rabi-role.css`。
 
 単体では効か**ない**クラスがある。variant は土台と、内側の部品は容器と併記する。
 
@@ -582,9 +550,9 @@ front matter のキーは class 名と 1 対 1 では**ない**。
 <div class="rabi-segment"><button class="rabi-segment-item">値</button></div>
 ```
 
-状態は要素の状態と `aria-*` で受かる。class で受けるのは `.rabi-statusbar-on` と `.rabi-field-note-error` **だけ**。
+状態は要素の状態と `aria-*` で受ける。class で受けるのは `.rabi-statusbar-on` と `.rabi-field-note-error` **だけ**。
 
-| suffix               | 受け方                            |
+| 状態                 | 受け方                            |
 | -------------------- | --------------------------------- |
 | `-hover` / `-active` | `:hover` / `:active`              |
 | `-invalid`           | `aria-invalid="true"`             |
@@ -594,11 +562,9 @@ front matter のキーは class 名と 1 対 1 では**ない**。
 | `-current`           | `aria-current`                    |
 | `-open`              | `[open]`                          |
 
-front matter にキーを持たないのは、寄せと列だけの構造クラスと、容器が段から引く値（一覧・タブの罫・半径・影は「一覧の組み方」「Shapes」が決める）と、密度の variant。
-
 丈を持つ variant は「Layout」の丈の表の行をそのまま下げる。丈を持たない面（セル・表）の密度は位置の表の段から選び、値は `../assets/rabi-components.css` が持つ。
 
-無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` と front matter へ足してから使う。情報層のロールは `../assets/rabi-role.css` へ足す。
+無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` へ足してから使う。情報層のロールは `../assets/rabi-role.css` へ足す。
 
 媒体で読むものが変わる。
 
@@ -657,7 +623,7 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 - ダイアログの操作: 下端に右寄せで、主操作は 1 つ。上の罫は面を**突っ切る**（余白の外まで伸ばす）
 - 開閉: 印は文の外の列へ出し、問いと答えの左端を 1 本に揃える。開いた印だけ `accent`
 - 結合グリッドの強調セル: 内側の上罫で示す。セルの外周と容器は動かさ**ない**
-- 価格: 数値は `display` の段を等幅数字で組み、単位は `label-sm` の `faint`。数値と単位で段を跨がせ**ない**。太さは front matter の `price`
+- 価格: 数値は `display` の段を等幅数字で組み、単位は `label-sm` の `faint`。数値と単位で段を跨がせ**ない**。太さは `.rabi-price-unit`
 - 島: キャンバスの上に浮く操作の帯。効いているタブは ink 反転。行のタブ（下罫）と混ぜない
 - 暦の日: 選択は wash + 内側の輪。今日は字を太くするだけ。選択と今日を同じ印にしない
 - 会話の文: 助手は paper-2、利用者は accent。吹き出し（tooltip）とは別部品
@@ -699,7 +665,7 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 - セグメント: 排他の選択肢を並べる。タブと使い分ける —— タブは現在地、セグメントは値
 - セグメントが受ける属性: 頁の現在地に使うなら `aria-current`。印は値の選択と同じ
 - セグメントの丈: 段に載るのは**容器**。中のセルは容器の内側に収まるだけで、段に載せ**ない**
-- セグメントの容器の余白: 浮かせるための隙間なので余白の段に載せ**ない**。値は front matter の `segment`
+- セグメントの容器の余白: 浮かせるための隙間なので余白の段に載せ**ない**。値は `.rabi-segment`
 - セグメントの hover: 沈んだ容器の上なので `paper` へ浮かせる。選択との差は影と太さと文字色で付け、hover では動かさ**ない**
 - ステータスバー: 等幅数字で組み、文字は `label-sm` の段。地と外周は置く面が持つ。区切りは `line` の縦罫で、境の `divider` にし**ない**
 - 密度: 詰めた面では variant を併記する（`.rabi-table-sm` / `.rabi-cell-row`）。面ごとに部品の余白や字の段を直接上書きし**ない**
