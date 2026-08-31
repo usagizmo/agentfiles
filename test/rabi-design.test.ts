@@ -801,7 +801,7 @@ test("表に無い key を front matter へ足すと落ちる", async () => {
   });
 });
 
-test("components の外で token 参照へ変えると落ちる", async () => {
+test("派生の宣言の外で token 参照へ変えると落ちる", async () => {
   await withSandbox(async (dir) => {
     const design = designPath(dir);
     const original = readFileSync(design, "utf8");
