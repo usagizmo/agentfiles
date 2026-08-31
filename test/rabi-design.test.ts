@@ -238,13 +238,6 @@ test("丈と図の対応表を DESIGN.md から引けている", () => {
   });
 });
 
-// figure だけのボタンの図は丈の表から引く。文字と並ぶ図は丈に依ら**ない**ので対象外
-test("front matter の figure だけのボタンの図が対応表と揃っている", () => {
-  const design = readFileSync(designPath(SKILL), "utf8");
-  const icon = design.match(/\n {2}button-icon:\n {4}iconSize: (\S+)\n/)?.[1];
-  expect(icon).toBe(FIGURE_FOR_HEIGHT["control"]);
-});
-
 /** 丈と左右の余白が対応表からずれているセレクタを返す。 */
 function heightPaddingMismatch(css: string): string[] {
   return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
@@ -267,33 +260,6 @@ test("rabi-components.css の丈と左右の余白が対応表と揃っている
   ).toEqual([]);
 });
 
-/** front matter の `components` で、丈と左右の余白が対応表からずれているキー。 */
-function frontMatterHeightPaddingMismatch(design: string): string[] {
-  const block = design.match(/\ncomponents:\n([\s\S]*?)\n---\n/)?.[1];
-  if (block === undefined) throw new Error("front matter に components が無い");
-  const step = (v: string) => v.replace(/^\{spacing\.(.+)\}$/, "$1");
-  return [...block.matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.+\n)+)/gm)]
-    .filter(([, , body]) => {
-      const height = /^ {4}height: "(\{spacing\.control[a-z-]*\})"$/m.exec(body as string)?.[1];
-      const pad = /^ {4}padding: "(\{spacing\.[0-9.]+\})"$/m.exec(body as string)?.[1];
-      if (height === undefined || pad === undefined) return false;
-      const want = PADDING_FOR_HEIGHT[step(height)];
-      return want !== undefined && want !== `gap-${step(pad).replace(".", "_")}`;
-    })
-    .map(([, key]) => key as string);
-}
-
-// front matter 側も同じ表に従う。CSS だけ見ると写しが取り残される
-test("front matter の丈と左右の余白が対応表と揃っている", () => {
-  expect(frontMatterHeightPaddingMismatch(readFileSync(designPath(SKILL), "utf8"))).toEqual([]);
-});
-
-test("front matter でずれると落ちる", () => {
-  const design =
-    '\ncomponents:\n  x:\n    height: "{spacing.control-sm}"\n    padding: "{spacing.3}"\n\n---\n';
-  expect(frontMatterHeightPaddingMismatch(design)).toEqual(["x"]);
-});
-
 // **通ることは何も証明しない** —— ずれたら落ちることを実測する
 test("丈と余白がずれると落ちる", () => {
   const css = ".x {\n  height: var(--rabi-control-sm);\n  padding: 0 var(--rabi-gap-3);\n}";
@@ -306,38 +272,6 @@ test.each([
   ["line-height が無い", ".x { font-size: 12px; font-weight: 500; }"],
 ])("字の段で %s と落ちる", (_label, css) => {
   expect(incompleteSteps(css)).toEqual([".x"]);
-});
-
-/**
- * front matter の `components` が持つ literal —— `{group.key}` の参照では**ない**値。
- *
- * 参照は `--check` が rabi.css との一致を守る。literal だけが front matter と
- * 実装の 2 か所に生で書かれるので、ここが乖離の唯一の穴になる。
- */
-function componentLiterals(design: string): string[] {
-  const block = design.match(/\ncomponents:\n([\s\S]*?)\n---\n/)?.[1];
-  if (block === undefined) throw new Error("front matter に components が無い");
-  return [
-    ...new Set(
-      [...block.matchAll(/^ {4}[a-zA-Z]+: (.+)$/gm)]
-        .map((m) => (m[1] as string).trim())
-        .filter((v) => !v.startsWith('"{')),
-    ),
-  ];
-}
-
-const literals = componentLiterals(readFileSync(designPath(SKILL), "utf8"));
-
-test("components に literal が在る", () => {
-  expect(literals.length).toBeGreaterThan(0);
-});
-
-// front matter だけ直して実装を忘れると、値が 2 つになったまま気づけない。
-// 見るのは「その値がどこかで使われている」ことまでで、部品ごとの対応は見**ない** ——
-// 同じ値を別の部品が持っていれば通る。部品単位の照合は目視。
-test.each(literals)("components の literal %s を rabi-components.css が使っている", (value) => {
-  const css = readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8");
-  expect(css).toContain(value);
 });
 
 /**
@@ -791,21 +725,6 @@ test("CSS 変数を足して front matter へ写さないと落ちる", async ()
 
     const { code, output } = await run(dir, "--check");
     expect(output).toContain("gap-huge");
-    expect(code).not.toBe(0);
-  });
-});
-
-test("components の token 参照が実在しないと落ちる", async () => {
-  await withSandbox(async (dir) => {
-    const design = designPath(dir);
-    const original = readFileSync(design, "utf8");
-    writeFileSync(
-      design,
-      original.replace('backgroundColor: "{colors.accent}"', 'backgroundColor: "{colors.crimson}"'),
-    );
-
-    const { code, output } = await run(dir, "--check");
-    expect(output).toContain("colors.crimson");
     expect(code).not.toBe(0);
   });
 });

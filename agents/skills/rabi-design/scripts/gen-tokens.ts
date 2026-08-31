@@ -88,7 +88,6 @@ function ownedByFrontMatter(path: readonly string[]): boolean {
   const [group, , property] = path;
   if (group === undefined) return false;
   if (["version", "name", "description"].includes(group)) return true;
-  if (group === "components") return true;
   if (DERIVED.has(path.join("."))) return true;
   return group === "typography" && ["fontWeight", "letterSpacing"].includes(property ?? "");
 }
@@ -113,7 +112,7 @@ const ROUNDED_VARS: Record<string, string> = {
   full: "r-full",
 };
 
-function cssVarName(path: readonly string[]): string | undefined {
+export function cssVarName(path: readonly string[]): string | undefined {
   const [group, key, property] = path;
   if (!group || !key) return undefined;
   if (group === "colors") return property === undefined ? key : undefined;
@@ -132,7 +131,7 @@ function cssVarName(path: readonly string[]): string | undefined {
   return undefined;
 }
 
-/** `{colors.ink}` の形。`components` とここ以外では許さ**ない**。 */
+/** `{colors.ink}` の形。派生の宣言以外では許さ**ない**。 */
 const isTokenRef = (value: unknown): boolean => typeof value === "string" && value.startsWith("{");
 
 /** 他 token の参照としてだけ持てる path。literal を置くと落ちる。 */
@@ -184,7 +183,7 @@ function rewrite(front: YAMLMap, css: Map<string, string>): Set<string> {
   return used;
 }
 
-/** `components` の `{group.key}` が front matter の実在する path を指すことを見る。 */
+/** `{group.key}` が front matter の実在する path を指すことを見る。 */
 function checkTokenRefs(front: YAMLMap): void {
   const walk = (map: YAMLMap): void => {
     for (const pair of map.items) {
@@ -209,8 +208,20 @@ function checkTokenRefs(front: YAMLMap): void {
  * front matter へ写されない CSS 変数。ここに載らない `--rabi-*` は必ず写す。
  *
  * 影と速さは spec に token group が無く、`shade` は混色の入力で単体では使わない。
+ * `r-unit` は段そのものでは**なく**段を導くつまみで、写しは導出後の 5 値だけを持つ。
+ * `select-bar` はどの段にも属さ**ない**別軸（枠でも輪でも余白でもない）。
  */
-const CSS_ONLY = new Set(["shade", "e1", "e2", "e3", "e2-accent", "e3-accent", "motion"]);
+const CSS_ONLY = new Set([
+  "shade",
+  "e1",
+  "e2",
+  "e3",
+  "e2-accent",
+  "e3-accent",
+  "motion",
+  "r-unit",
+  "select-bar",
+]);
 
 /** CSS 側に足した変数が front matter から漏れていないことを見る。 */
 function checkCssCoverage(css: Map<string, string>, used: Set<string>): void {

@@ -43,4 +43,4 @@ bun <skills root>/rabi-design/scripts/gen-tokens.ts
 
 front matter だけが持つ値は `references/DESIGN.md` を直接直す。どの path がそれに当たるかは `scripts/gen-tokens.ts` の `ownedByFrontMatter`。
 
-`components` の値は書き戻しの対象外。**front matter と `assets/rabi-components.css` の両方を直す**。
+部品の値は front matter に写さ**ない**。`assets/rabi-components.css` が唯一の実装で、front matter が持つのは段だけ。
