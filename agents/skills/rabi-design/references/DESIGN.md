@@ -4,12 +4,12 @@ name: Rabi
 description: 株式会社ラビのブランドスタイル。モノトーン + クリムゾン。
 colors:
   primary: "{colors.ink}"
-  ground: "#ffffff"
+  ground: "#f1f1f1"
   paper: "#ffffff"
   paper-2: "#f4f4f4"
   line: "#e9e9e9"
   divider: "#d3d3d3"
-  edge: "#888888"
+  edge: "#9c9c9c"
   ink: "#222222"
   soft: "#575757"
   faint: "#6e6e6e"
@@ -50,7 +50,7 @@ typography:
     fontFamily: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "BIZ UDPGothic", sans-serif
     fontSize: 13px
     fontWeight: 400
-    lineHeight: 1.6
+    lineHeight: 1.5
   label:
     fontFamily: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "BIZ UDPGothic", sans-serif
     fontSize: 12px
@@ -68,9 +68,9 @@ typography:
     lineHeight: 1.4
   mono:
     fontFamily: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace
-    fontSize: 13px
+    fontSize: 12px
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: 1.4
 spacing:
   "1": 4px
   "1.5": 6px
@@ -92,577 +92,10 @@ spacing:
   control-lg: 36px
 rounded:
   none: 0px
-  sm: 4px
-  md: 10px
-  lg: 14px
+  sm: 0px
+  md: calc(0px * 2.5)
+  lg: calc(0px * 3.5)
   full: 999px
-components:
-  button-primary:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-    typography: "{typography.body}"
-    fontWeight: 500
-    rounded: "{rounded.md}"
-    height: "{spacing.control}"
-    padding: "{spacing.3}"
-    gap: "{spacing.1.5}"
-  button-primary-hover:
-    backgroundColor: "{colors.accent-hover}"
-  button-primary-active:
-    backgroundColor: "{colors.accent-active}"
-  button-secondary:
-    borderColor: "{colors.edge}"
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    fontWeight: 500
-    rounded: "{rounded.md}"
-    height: "{spacing.control}"
-    padding: "{spacing.3}"
-    gap: "{spacing.1.5}"
-  button-secondary-hover:
-    backgroundColor: "{colors.paper-2}"
-  button-ghost:
-    backgroundColor: transparent
-    textColor: "{colors.soft}"
-    typography: "{typography.body}"
-    fontWeight: 500
-    rounded: "{rounded.md}"
-    height: "{spacing.control}"
-    padding: "{spacing.3}"
-    gap: "{spacing.1.5}"
-  button-ghost-hover:
-    backgroundColor: "{colors.paper-2}"
-  button-disabled:
-    borderColor: "{colors.line}"
-    backgroundColor: "{colors.paper-2}"
-    textColor: "{colors.faint}"
-  button-icon:
-    iconSize: 16px
-  button-inline-icon:
-    iconSize: 14px
-  chip:
-    borderColor: "{colors.edge}"
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.soft}"
-    typography: "{typography.label}"
-    rounded: "{rounded.md}"
-    height: "{spacing.control-xs}"
-    padding: "{spacing.2}"
-    gap: "{spacing.1.5}"
-  chip-selected:
-    backgroundColor: "{colors.wash}"
-    borderColor: "{colors.wash-line}"
-    textColor: "{colors.accent-text}"
-  chip-disabled:
-    borderColor: "{colors.line}"
-    backgroundColor: "{colors.paper-2}"
-    textColor: "{colors.faint}"
-  chip-selected-disabled:
-    borderColor: "{colors.line}"
-    backgroundColor: "{colors.wash}"
-    textColor: "{colors.faint}"
-  badge:
-    backgroundColor: "{colors.paper-2}"
-    textColor: "{colors.soft}"
-    typography: "{typography.label}"
-    rounded: "{rounded.full}"
-    height: 20px
-    padding: "{spacing.1.5}"
-  badge-outline:
-    backgroundColor: transparent
-    borderColor: "{colors.edge}"
-    textColor: "{colors.soft}"
-  badge-accent:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-  input:
-    borderColor: "{colors.edge}"
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    height: "{spacing.control}"
-    padding: "{spacing.3}"
-  input-invalid:
-    borderColor: "{colors.accent}"
-    textColor: "{colors.accent-text}"
-  input-disabled:
-    borderColor: "{colors.line}"
-    backgroundColor: "{colors.paper-2}"
-    textColor: "{colors.faint}"
-  textarea:
-    borderColor: "{colors.edge}"
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    paddingBlock: "{spacing.1.5}"
-    paddingInline: "{spacing.3}"
-  select:
-    borderColor: "{colors.edge}"
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    height: "{spacing.control}"
-    padding: "{spacing.3}"
-  checkbox:
-    borderColor: "{colors.edge}"
-    backgroundColor: "{colors.paper}"
-    rounded: "{rounded.sm}"
-    size: 16px
-  checkbox-checked:
-    backgroundColor: "{colors.accent}"
-    markColor: "{colors.on-accent}"
-  radio:
-    borderColor: "{colors.edge}"
-    backgroundColor: "{colors.paper}"
-    rounded: "{rounded.full}"
-    size: 16px
-  radio-checked:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-  switch:
-    backgroundColor: "{colors.paper-2}"
-    borderColor: "{colors.edge}"
-    rounded: "{rounded.full}"
-    height: 20px
-    width: 34px
-    knobSize: 14px
-  switch-on:
-    backgroundColor: "{colors.accent}"
-  field-row-label:
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-  field-label:
-    textColor: "{colors.faint}"
-    typography: "{typography.label}"
-    fontWeight: 600
-  field-note:
-    textColor: "{colors.soft}"
-    typography: "{typography.label}"
-  field-note-error:
-    textColor: "{colors.accent-text}"
-  choice:
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-  choice-disabled:
-    textColor: "{colors.faint}"
-  section-head:
-    textColor: "{colors.ink}"
-    typography: "{typography.heading}"
-  section-index:
-    textColor: "{colors.accent-text}"
-    typography: "{typography.heading}"
-  section-note:
-    textColor: "{colors.faint}"
-    typography: "{typography.label-sm}"
-  cell:
-    backgroundColor: "{colors.paper}"
-    padding: "{spacing.4}"
-  cell-head:
-    backgroundColor: "{colors.paper-2}"
-    textColor: "{colors.faint}"
-    typography: "{typography.label-sm}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 600
-    paddingBlock: "{spacing.2}"
-    paddingInline: "{spacing.3}"
-  cell-action-disabled:
-    textColor: "{colors.faint}"
-  cell-featured:
-    backgroundColor: "{colors.wash}"
-    borderColor: "{colors.accent}"
-    borderWidth: 2px
-  list-item:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-    minHeight: "{spacing.control}"
-    padding: "{spacing.3}"
-    gap: "{spacing.1.5}"
-  list-item-hover:
-    backgroundColor: "{colors.paper-2}"
-  list-item-selected:
-    backgroundColor: "{colors.wash}"
-    borderColor: "{colors.accent}"
-    borderWidth: 3px
-  list-item-disabled:
-    textColor: "{colors.faint}"
-  card:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    borderColor: "{colors.divider}"
-    rounded: "{rounded.lg}"
-    padding: "{spacing.4}"
-    iconSize: 18px
-  card-title:
-    typography: "{typography.subheading}"
-    fontWeight: 600
-    gap: "{spacing.2}"
-  card-accent:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-  price:
-    textColor: "{colors.ink}"
-    typography: "{typography.display}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 700
-    unitColor: "{colors.faint}"
-    unitTypography: "{typography.label-sm}"
-    unitFontWeight: 600
-  tab:
-    backgroundColor: transparent
-    textColor: "{colors.soft}"
-    typography: "{typography.body}"
-    rounded: "{rounded.none}"
-    height: "{spacing.control}"
-    padding: "{spacing.3}"
-  tab-hover:
-    backgroundColor: "{colors.paper-2}"
-  tab-disabled:
-    textColor: "{colors.faint}"
-  tab-selected-disabled:
-    textColor: "{colors.faint}"
-    borderColor: "{colors.faint}"
-  tab-selected:
-    textColor: "{colors.ink}"
-    borderColor: "{colors.accent}"
-    borderWidth: 2px
-    fontWeight: 600
-  segment:
-    backgroundColor: "{colors.paper-2}"
-    borderColor: "{colors.line}"
-    textColor: "{colors.soft}"
-    typography: "{typography.label}"
-    fontWeight: 500
-    rounded: "{rounded.md}"
-    height: "{spacing.control-sm}"
-    padding: 2px
-  segment-hover:
-    backgroundColor: "{colors.paper}"
-  segment-item:
-    padding: "{spacing.2.5}"
-    gap: "{spacing.1.5}"
-  segment-selected:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    fontWeight: 600
-  segment-selected-disabled:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.faint}"
-  segment-disabled:
-    textColor: "{colors.faint}"
-  dropdown:
-    backgroundColor: "{colors.paper}"
-    borderColor: "{colors.line}"
-    rounded: "{rounded.md}"
-    padding: "{spacing.1}"
-    minWidth: 200px
-    iconSize: 14px
-  dropdown-item:
-    textColor: "{colors.ink}"
-    typography: "{typography.body-doc}"
-    height: "{spacing.control-sm}"
-    padding: "{spacing.2.5}"
-    gap: "{spacing.2}"
-  dropdown-item-hover:
-    backgroundColor: "{colors.paper-2}"
-  dropdown-item-disabled:
-    textColor: "{colors.faint}"
-  dropdown-group:
-    textColor: "{colors.faint}"
-    typography: "{typography.label}"
-    height: "{spacing.control-xs}"
-    padding: "{spacing.2}"
-  dropdown-key:
-    textColor: "{colors.faint}"
-    typography: "{typography.label-sm}"
-    fontFamily: "{typography.mono}"
-  dropdown-divider:
-    borderColor: "{colors.line}"
-  panel:
-    backgroundColor: "{colors.paper}"
-    borderColor: "{colors.divider}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.lg}"
-  panel-head:
-    textColor: "{colors.ink}"
-    typography: "{typography.subheading}"
-    height: "{spacing.control}"
-    padding: "{spacing.3}"
-    iconSize: 16px
-    gap: "{spacing.2}"
-  panel-section-head:
-    height: "{spacing.control-sm}"
-    padding: "{spacing.2.5}"
-    iconSize: 14px
-    gap: "{spacing.1.5}"
-  panel-body:
-    padding: "{spacing.3}"
-  dialog:
-    backgroundColor: "{colors.paper}"
-    borderColor: "{colors.divider}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.lg}"
-    padding: "{spacing.5}"
-    maxWidth: 440px
-  dialog-title:
-    textColor: "{colors.ink}"
-    typography: "{typography.heading}"
-  dialog-lead:
-    textColor: "{colors.soft}"
-    typography: "{typography.label}"
-  dialog-foot:
-    borderColor: "{colors.line}"
-    paddingBlock: "{spacing.2}"
-    paddingInline: "{spacing.4}"
-  accordion-summary:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    fontWeight: 600
-    padding: "{spacing.3}"
-  accordion-summary-hover:
-    backgroundColor: "{colors.paper-2}"
-  accordion-body:
-    textColor: "{colors.soft}"
-    typography: "{typography.label}"
-  accordion-mark:
-    borderColor: "{colors.faint}"
-    size: 18px
-  accordion-mark-open:
-    borderColor: "{colors.accent}"
-  statusbar:
-    textColor: "{colors.faint}"
-    borderColor: "{colors.line}"
-    typography: "{typography.label-sm}"
-    fontFamily: "{typography.mono}"
-    minHeight: "{spacing.control-sm}"
-    padding: "{spacing.4}"
-  statusbar-on:
-    textColor: "{colors.accent-text}"
-  tooltip:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.paper}"
-    typography: "{typography.label}"
-    rounded: "{rounded.md}"
-    paddingBlock: "{spacing.1}"
-    paddingInline: "{spacing.2}"
-    arrowSize: 5px
-  tooltip-key:
-    textColor: "{colors.divider}"
-  appbar:
-    backgroundColor: "{colors.paper}"
-    borderColor: "{colors.divider}"
-    height: 48px
-    padding: "{spacing.5}"
-  brand:
-    textColor: "{colors.ink}"
-    typography: "{typography.subheading}"
-    fontWeight: 600
-    iconSize: 22px
-    gap: "{spacing.2.5}"
-  appbar-nav:
-    textColor: "{colors.soft}"
-    typography: "{typography.body}"
-    fontWeight: 500
-  appbar-nav-current:
-    textColor: "{colors.ink}"
-    fontWeight: 600
-  nav-item:
-    textColor: "{colors.soft}"
-    typography: "{typography.body-doc}"
-    fontWeight: 500
-    rounded: "{rounded.md}"
-    height: "{spacing.control-sm}"
-    padding: "{spacing.2.5}"
-    indent: "{spacing.3}"
-    iconSize: 14px
-    gap: "{spacing.1}"
-  nav-item-hover:
-    backgroundColor: "{colors.paper-2}"
-  nav-item-current:
-    backgroundColor: "{colors.wash}"
-    textColor: "{colors.accent-text}"
-    fontWeight: 600
-  nav-group:
-    textColor: "{colors.ink}"
-    typography: "{typography.body-doc}"
-    fontWeight: 600
-    height: "{spacing.control-sm}"
-    padding: "{spacing.2.5}"
-  crumbs:
-    textColor: "{colors.faint}"
-    typography: "{typography.label-sm}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 600
-    separatorColor: "{colors.divider}"
-  crumbs-current:
-    textColor: "{colors.ink}"
-  page-kicker:
-    textColor: "{colors.faint}"
-    typography: "{typography.label}"
-    fontWeight: 500
-  page-title:
-    textColor: "{colors.ink}"
-    typography: "{typography.display}"
-    fontWeight: 600
-  page-meta:
-    textColor: "{colors.faint}"
-    typography: "{typography.label}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 500
-  page-lead:
-    textColor: "{colors.soft}"
-    typography: "{typography.body}"
-    fontWeight: 400
-  prose:
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    fontWeight: 400
-    blockGap: "{spacing.6}"
-    headingGap: "{spacing.10}"
-    subheadingGap: "{spacing.8}"
-    markerColor: "{colors.accent}"
-  prose-code:
-    backgroundColor: "{colors.paper-2}"
-    typography: "{typography.body-doc}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 500
-    rounded: "{rounded.sm}"
-  steps:
-    dotColor: "{colors.accent}"
-    dotTextColor: "{colors.on-accent}"
-    dotSize: 22px
-    dotTypography: "{typography.label-sm}"
-    dotFontWeight: 600
-    lineColor: "{colors.line}"
-    rowGap: "{spacing.5}"
-  step-title:
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    fontWeight: 600
-  note:
-    backgroundColor: "{colors.paper-2}"
-    textColor: "{colors.soft}"
-    borderColor: "{colors.line}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    paddingBlock: "{spacing.3}"
-    paddingInline: "{spacing.4}"
-    iconSize: 18px
-    gap: "{spacing.1.5}"
-  note-title:
-    textColor: "{colors.ink}"
-    fontWeight: 600
-  note-danger:
-    backgroundColor: "{colors.wash}"
-    textColor: "{colors.accent-text}"
-    titleColor: "{colors.accent-text}"
-    borderColor: "{colors.wash-line}"
-  code:
-    backgroundColor: "{colors.paper-2}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-doc}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 400
-    rounded: "{rounded.md}"
-    paddingBlock: "{spacing.3}"
-    paddingInline: "{spacing.4}"
-  kbd:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.soft}"
-    borderColor: "{colors.edge}"
-    typography: "{typography.label-sm}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 600
-    rounded: "{rounded.sm}"
-    height: 20px
-    padding: "{spacing.1.5}"
-  empty:
-    textColor: "{colors.soft}"
-    gap: "{spacing.2}"
-    borderColor: "{colors.divider}"
-    borderStyle: dashed
-    typography: "{typography.body}"
-    fontWeight: 400
-    rounded: "{rounded.lg}"
-    paddingBlock: "{spacing.12}"
-    paddingInline: "{spacing.5}"
-    iconSize: 24px
-    iconColor: "{colors.accent-text}"
-  empty-title:
-    textColor: "{colors.ink}"
-    typography: "{typography.subheading}"
-    fontWeight: 600
-  stat:
-    backgroundColor: "{colors.paper-2}"
-    rounded: "{rounded.md}"
-    paddingBlock: "{spacing.3}"
-    paddingInline: "{spacing.4}"
-  stat-label:
-    textColor: "{colors.faint}"
-    typography: "{typography.label}"
-    fontWeight: 500
-  avatar:
-    backgroundColor: "{colors.wash}"
-    textColor: "{colors.accent-text}"
-    typography: "{typography.body}"
-    fontWeight: 600
-    rounded: "{rounded.full}"
-    size: "{spacing.control}"
-  avatar-lg:
-    size: 48px
-  checklist:
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    fontWeight: 400
-    markColor: "{colors.accent}"
-    markSize: 14px
-    gap: "{spacing.2}"
-  input-figure:
-    iconColor: "{colors.faint}"
-    iconSize: 14px
-    gap: "{spacing.1}"
-  input-figure-invalid:
-    iconColor: "{colors.accent-text}"
-  btn-stack:
-    backgroundColor: "{colors.paper}"
-    borderColor: "{colors.divider}"
-    dividerColor: "{colors.line}"
-    rounded: "{rounded.md}"
-  card-body:
-    padding: "{spacing.4}"
-  card-head:
-    textColor: "{colors.ink}"
-    typography: "{typography.subheading}"
-    fontWeight: 600
-    padding: "{spacing.4}"
-    gap: "{spacing.1.5}"
-  card-foot:
-    textColor: "{colors.faint}"
-    borderColor: "{colors.line}"
-    typography: "{typography.label}"
-    fontWeight: 500
-    paddingBlock: "{spacing.2}"
-    paddingInline: "{spacing.4}"
-  footer:
-    textColor: "{colors.soft}"
-    borderColor: "{colors.divider}"
-    typography: "{typography.label}"
-    fontWeight: 500
-    paddingBlock: "{spacing.8}"
-    paddingInline: "{spacing.5}"
-  footer-col-title:
-    textColor: "{colors.faint}"
-    typography: "{typography.label-sm}"
-    fontWeight: 600
-  footer-bottom:
-    textColor: "{colors.faint}"
-    typography: "{typography.label-sm}"
-    fontFamily: "{typography.mono}"
-    fontWeight: 500
 ---
 
 # Rabi DESIGN.md
@@ -695,7 +128,7 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 
 この skill が統べるのは、ブランドの既定を**宣言する**場所。
 
-採用する側がブランドの既定を置く宣言も入る。どのファイルがそれに当たるかは、採用する側が宣言する。
+この skill が配るファイルの外へは届か**ない**。採る側が何をどこまで採るかは採る側が決め、対応をこちらで持た**ない** —— 検証しない対応表は、片側を直しても静かにずれるので、無いより悪い。
 
 ファイルと selector で指す。runtime の選択状態では切ら**ない**。トークン名では切ら**ない**。skill が所有するファイルの一覧では切ら**ない**。
 
@@ -725,11 +158,13 @@ front matter に出せないものは `rabi.css` だけが持つ —— 影、�
 | 面  | `paper`   | カード・パネル・帯              |
 | 沈  | `paper-2` | hover・無効・グループ行・節の帯 |
 
-**light** は `ground` と `paper` を同値にし、濃淡を持つのは `paper-2` だけ。**dark** は `paper` にも濃淡を持たせる。この非対称を他の段へ持ち込ま**ない**。
+`ground` は両テーマで `paper` より**沈む**。面は地の上へ浮くので、地と面が同値だと境が影しか無くなり、影を切った環境（強制配色・印刷）で輪郭が消える。
 
 罫線の 3 種は役で選ぶ —— 面と面の境は `divider`、操作部品の輪郭は `edge`、面の内側の仕切りは `line`。濃い順に `edge` > `divider` > `line`。`wash` の面の上だけ 3 種の外で、`wash-line` を使う。`accent` のベタ面には罫を引か**ない** —— 分けるなら `on-accent` の面を重ねる。
 
-罫を `ink` と同値にし**ない**。面を分けるのは影が主で、罫は従。
+罫を `ink` と同値にし**ない**。
+
+**面を分けるのは面の明暗が主**で、罫は従。輪郭を持つのは、任意の中身の上に重なる**浮いた面だけ** —— 地に置く面（カード・パネル・帯・行）は輪郭も影も持た**ない**。読み方は「線があるものは浮いている」で一本化する。
 
 文字色は 3 段。強い順に `ink` > `soft` > `faint` で、段の間の値を作ら**ない**。
 
@@ -798,14 +233,14 @@ flowchart LR
 
 ### 状態
 
-状態ごとに新しい色を作ら**ない**。部品ごとの値は front matter の `components` の `-hover` / `-active` / `-disabled` / `-invalid` / `-selected` が持つ。ここには何の軸で表すかと、front matter に置けない値だけを書く。
+状態ごとに新しい色を作ら**ない**。部品ごとの値は `../assets/rabi-components.css` が持つ。ここには何の軸で表すかだけを書く。
 
 | 状態   | 何を動かすか                                                                                                                           |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | hover  | 赤ベタは地を 1 段暗く。他は地を 1 段動かす —— `paper` の面では `paper-2` へ沈め、`paper-2` の面では `paper` へ浮かせる                 |
 | active | hover と同じ軸で、赤ベタだけ 1 段暗く                                                                                                  |
-| focus  | 部品の外側の `outline` 1px + `outline-offset` 2px。色は `accent`。地は変え**ない**。切る容器（`overflow: hidden`）の中だけ内側へ寄せる |
-| 選択   | 部品の外側の `outline` 2px。色は `ink` で、赤の面の上だけ `accent`。例外は下の 4 つ**だけ**                                            |
+| focus  | 線を持つ部品（入力欄）は線の色を `accent` に。持たない部品は外側の `outline` 1px + `outline-offset` 2px。地は変え**ない**             |
+| 選択   | 左の `select-bar` のしるしと字の太さ。**地は塗らない**。例外は下の表**だけ**                                                          |
 | 完了   | 赤ベタと反転した印                                                                                                                     |
 | 警告   | 面と文字。入力欄は枠を `accent` にして説明文を添える                                                                                   |
 | 無効   | 地・文字・輪郭の 3 つとも下げる                                                                                                        |
@@ -814,20 +249,37 @@ flowchart LR
 
 地で描く印と図は強制配色でも残す。上書きを外す先は `../assets/rabi-components.css` の強制配色の節。
 
-選択で地を赤にし**ない**。
+**選択で地を塗らない**。淡い地を敷くと hover の地と同じ language になって、「触れている」と「選んである」が混ざる。しるしは触れない軸（左の帯）に置き、字は太らせる。
 
-状態が変わる速さは `--rabi-motion` の 1 つ**だけ**。段を作ら**ない**。`prefers-reduced-motion` では遷移を消す。
+振り切って示す場所（暦の日）だけ `accent` のベタ面にする。淡い地は使わ**ない**。
+
+**hover に時間を持たせない**。触れた瞬間に変える。時間を持つのは、位置か向きが変わるものだけ（スイッチのつまみ・開閉の三角）。速さは `--rabi-motion` の 1 つ**だけ**で、段を作ら**ない**。`prefers-reduced-motion` では遷移を消す。
 
 チェック・ラジオ・スイッチの `checked` は**選択では**なく、値が真であることを印そのものが表す。`outline` を使わ**ない**。
 
 選択の印は `aria-selected` でも `aria-pressed` でも受ける。`listbox` / `tablist` / `menu` の role は矢印キーと roving tabindex の操作契約を伴うので、**それを実装してから**名乗る。静的な見本では名乗ら**ない**。
 
-| 部品       | 選択の表し方                                      |
-| ---------- | ------------------------------------------------- |
-| チップ     | `wash` の面                                       |
-| タブ       | `accent` の下罫                                   |
-| リスト行   | `wash` の面 + 左の `accent` の帯                  |
-| セグメント | 沈めた容器の上に、選択セルだけ `paper` で浮かせる |
+| 部品               | 受ける属性                       | 表し方                                            |
+| ------------------ | -------------------------------- | ------------------------------------------------- |
+| チップ             | `aria-pressed` / `aria-selected` | 枠を `accent`、字を `accent-text`                 |
+| セグメント         | `aria-pressed` / `aria-current`  | 沈めた容器の上に、選択セルだけ `paper` で浮かせる |
+| 色の印・表紙タイル | `aria-pressed`                   | 枠                                                |
+| リスト行           | `aria-selected` / `aria-pressed` | 左の `accent` の帯 + 字を太く。地は塗らない       |
+| ツリーの行         | `aria-selected`                  | リスト行と同じ                                    |
+| 行のタブ           | `aria-selected` / `aria-pressed` | `accent` の下罫                                   |
+| 島・チャットのタブ | `aria-selected`                  | `ink` 反転                                        |
+| 縦のナビ           | `aria-current`                   | リスト行と同じ                                    |
+| 頁の天のナビ       | `aria-current`                   | 文字を `ink` にして太く。地は動かさ**ない**       |
+| パンくず           | `aria-current`                   | 最後の 1 つ                                       |
+| 暦の日             | `aria-selected`                  | `accent` のベタ面 + `on-accent` の字              |
+| タイムラインの行   | `aria-current`                   | 時刻を `ink` にして太く                           |
+| 履歴の行           | `aria-current`                   | 点だけ `accent`                                   |
+
+`aria-selected` は**もの**を選ぶ、`aria-current` は**場所**へ移る。同じ行の形でも、受ける属性が違えば表し方も違う。
+
+選択の既定は**左の帯と字**（`select-bar` の `accent` + 字を太く）。帯を立てられない部品は枠か字の色で示す。2 つ目の既定にし**ない**。
+
+しるしを立てるのは**選んだ行 1 つ**。入れ子を持つ部品でも、子孫までまとめて示さ**ない**。
 
 focus と、`outline` を使う選択は部品の**外側**に出る。エラー・警告は**枠そのもの**の色。誤りは説明文を必ず添える。色だけで表さ**ない**。
 
@@ -837,11 +289,11 @@ focus と、`outline` を使う選択は部品の**外側**に出る。エラー
 
 印と文字が並ぶ部品（チェック・ラジオ・スイッチ）は、印だけでなく**ラベルの文字とカーソルも**落とす。
 
-無効と選択が重なったら、**選択を示すものは残す**。地を選択に使う部品（チップ・セグメント）はその地を保ち、文字と輪郭だけ落とす。消すと状態が読め**ない**。
+無効と選択が重なったら、**選択を示すものは残す**。消すと状態が読め**ない**。
 
 ## Typography
 
-フォントは `--rabi-font`、等幅は `--rabi-mono`。行送りは段ごとに `--rabi-lh-<段>` を持ち、`body` の値は `rabi.css` が `body` の既定として敷く。面が書き直さ**ない**。
+フォントは `--rabi-font`、等幅は `--rabi-mono`。行送りは段ごとに `--rabi-lh-<段>` を持ち、`body` の値は `rabi.css` が `body` の既定として敷く。面が書き直さ**ない**。`body-doc` の行送りは `body` と同じなので、サイズだけが違う。文書のコード（識別子も塊も `pre > code` も）は `mono` 段で、サイズは 12px、行送りは 1.4。
 
 | 段           | 用途                                     |
 | ------------ | ---------------------------------------- |
@@ -854,7 +306,7 @@ focus と、`outline` を使う選択は部品の**外側**に出る。エラー
 | `label`      | ラベル・キャプション（`soft` / `faint`） |
 | `label-sm`   | ナビ・メタ・帯の小さいラベル             |
 | `label-xs`   | 字間を開けた見出しラベル                 |
-| `mono`       | 番号・時刻・件数                         |
+| `mono`       | 文書のコード。識別子・塊・`pre > code`   |
 
 数値が縦に並ぶ列は右揃え + `font-variant-numeric: tabular-nums`（`.rabi-table` では `.num`）。
 
@@ -863,6 +315,10 @@ focus と、`outline` を使う選択は部品の**外側**に出る。エラー
 太さの上限は 600。**例外は価格の数値だけ**（`price` の 700）—— そこは太字そのものが意匠。
 
 行送りも段から選ぶ。段の外の値を持てるのは、行の高さそのものが意味を持つ面**だけ**（等幅の擬似端末・行送り 1 で組む数値）。
+
+等幅を名乗れるのはコードと打鍵の印**だけ**（`.rabi-code` / `pre` / 本文の `code` / `.rabi-kbd` / `.rabi-bind` / `.rabi-dropdown-key` / `.rabi-chat-debug`）。数値を見せるだけの面に等幅を使わ**ない**。
+
+数値の桁を揃えたい面は本文の書体のまま `font-variant-numeric: tabular-nums` を敷く。要るのは、縦に並ぶ数字（時刻・価格・連番・暦の日）と、刻々と変わる数字（ステータスバー）**だけ**。文中の数字には敷か**ない**。
 
 画面幅で伸縮させるときは `clamp()` で段と段の間を補間してよい。禁じているのは**固定値**として段の間を持つこと。
 
@@ -900,12 +356,12 @@ focus と、`outline` を使う選択は部品の**外側**に出る。エラー
 
 操作部品の丈は余白の段の外。4px 刻みの 4 段だけ。
 
-| 段           | 何に付くか                        |
-| ------------ | --------------------------------- |
-| `control-xs` | チップ・ツールバー                |
-| `control-sm` | 詰めた面のボタン・入力            |
-| `control`    | ボタン・入力・リスト行の**既定**  |
-| `control-lg` | 疎な面の主操作（web の表紙・CTA） |
+| 段           | 何に付くか                         |
+| ------------ | ---------------------------------- |
+| `control-xs` | チップ・ツールバー                 |
+| `control-sm` | 詰めた面のボタン・入力・面の中の行 |
+| `control`    | ボタン・入力の**既定**             |
+| `control-lg` | 疎な面の主操作（web の表紙・CTA）  |
 
 `control-lg` を密な面に出さ**ない**。
 
@@ -924,13 +380,15 @@ figure だけのボタンは幅を丈と同値にする。丈は上の 4 段か�
 
 表の図に従わ**ない**のは、ボタンと入力で文字と並ぶ図だけ —— 丈に依らない。
 
+表の文字に従わ**ない**のは、見出しの段と、帯（ステータスバー・節の帯・面の頭）だけ —— どちらも丈に依らない。検査は `test/rabi-design.test.ts`。
+
 セグメントは**例外**。段に載るのは容器で、文字と左右の余白は容器から余白を引いた中のセルの丈で決まる。
 
 丈の段に載るのは、**文字を内包する操作枠**だけ —— ボタン・入力・select・チップ・タブ・セグメントの容器・リスト行。
 
-印そのものが的になる部品（チェック・ラジオ・スイッチ）と、押せない表示（バッジ）は**印の寸法**で組み、丈の段に載せ**ない**。値は front matter の `components`。段を増やす対象では**ない**。
+印そのものが的になる部品（チェック・ラジオ・スイッチ）と、押せない表示（バッジ）は**印の寸法**で組み、丈の段に載せ**ない**。値は `../assets/rabi-components.css`。段を増やす対象では**ない**。
 
-front matter が持つ**寸法**は、その部品を選ぶときに読む値 —— 丈・印の大きさ・図の大きさ・幅の下限と上限・罫の太さ。図形の内側の描き方（チェックの線の長さ、矢印の辺の角度）は実装が持つ。
+段として読む**寸法**は、部品を選ぶときに使う値 —— 丈・印の大きさ・図の大きさ・幅の下限と上限・罫の太さ。図形の内側の描き方（チェックの線の長さ、矢印の辺の角度）は部品の中に閉じる。
 
 これがチップとバッジを分ける境。
 
@@ -950,7 +408,7 @@ front matter が持つ**寸法**は、その部品を選ぶときに読む値 �
 
 左に出すのはぶら下げで、まとまりの全行が図の右の列に揃う。価格・箇条書き・ボタンのように内部構造を持つまとまりでは、図が支配するのは 1 行目だけなのに列は下まで残る。そこでは左に出さ**ない**。
 
-図の列の幅は図の寸法と同値にし、まとまりごとに変え**ない**。図と文の間は部品ごとに決まる —— 値は front matter の `components` の `gap`。その値を面から上書きし**ない**。
+図の列の幅は図の寸法と同値にし、まとまりごとに変え**ない**。図と文の間は部品ごとに決まる —— 値は `../assets/rabi-components.css` の `gap`。その値を面から上書きし**ない**。
 
 印（開閉・チェック・選択）と文の間は `2`。図の列を図と共有する印は**例外**で、その部品の `gap` に従う。
 
@@ -981,6 +439,8 @@ mask で置く図は、縮尺が**かかるときだけ**、その分だけ元�
 ```
 
 ## Elevation & Depth
+
+**UI の部品は影を持たない**。丈のある面（`e1`〜`e3`）を使うのは、読み物・表紙・図版のように**疎な面**だけ。道具の面は面の明暗と罫で分ける（「面と段」）。
 
 影は 3 段。1 が置いてある、2 が掴んでいる、3 が浮く。
 
@@ -1070,37 +530,13 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 
 ## Components
 
-値は front matter の `components`、実装は `../assets/rabi-components.css`。ここにはどちらにも置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持ち、front matter に値を持た**ない**。`.rabi-note` の骨格と中立・危険はブランド層にある。情報層が持つのは 3 ロールの variant と、その中の見出し**だけ**。
+値も実装も `../assets/rabi-components.css`。ここには CSS に置けない規則だけを書く。文書の部品（`.rabi-heading` / `.rabi-table`）だけは `rabi.css` が実装を持つ。`.rabi-note` の骨格と中立・危険はブランド層にある。情報層が持つのは 3 ロールの variant と、その中の見出し**だけ**。
 
 部品が自分の中でだけ使う値（丈から幅や寄せを導くなど）は、**部品クラスのスコープ**で `--rabi-<部品>-<名>` を宣言してよい。`:root` に立てるのは値のトークン**だけ**。ブランド層は `rabi.css`、情報層は `rabi-role.css`。
 
 UI を組む媒体では `rabi-components.css` のクラスを使う。部品の一覧はそのファイルの節見出し。情報層の 3 ロールは `rabi-role.css`。
 
-front matter のキーは class 名と 1 対 1 では**ない**。
-
-| front matter          | class                                    |
-| --------------------- | ---------------------------------------- |
-| `button-*`            | `.rabi-btn` + `.rabi-btn-*`              |
-| `checkbox`            | `.rabi-check`                            |
-| `field-label`         | `.rabi-field` の**直下**の `label`       |
-| `tooltip-key`         | `.rabi-tooltip` の中の `kbd`             |
-| `accordion-mark`      | `.rabi-accordion-summary` の `::before`  |
-| `accordion-mark-open` | 同上（`[open]` の中）                    |
-| `appbar-nav`          | `.rabi-appbar-nav` の中の `a`            |
-| `nav-item`            | `.rabi-nav` の中の `a`                   |
-| `crumbs` の区切り     | `.rabi-crumbs li + li` の `::before`     |
-| `page-title`          | `.rabi-page-head` の中の見出し           |
-| `prose-code`          | `.rabi-prose` の中の `code`              |
-| `steps` の丸          | `.rabi-steps > li` の `::before`         |
-| `checklist` の印      | `.rabi-checklist > li` の `::before`     |
-| `note` の図           | `.rabi-note` の `::before`               |
-| `button-inline-icon`  | `.rabi-btn:not(.rabi-btn-icon)` の `svg` |
-| `input-figure`        | `.rabi-input-wrap` の中の `svg`          |
-| `price` の単位        | `.rabi-price-unit`                       |
-| `footer-col-title`    | `.rabi-footer-col` の `h2` / `h3`        |
-| それ以外              | `rabi-` を冠すだけ                       |
-
-`.rabi-note-info` / `-success` / `-attention` は front matter にキーを持たない。値は `../assets/rabi-role.css`。
+`.rabi-note-info` / `-success` / `-attention` の値は `../assets/rabi-role.css`。
 
 単体では効か**ない**クラスがある。variant は土台と、内側の部品は容器と併記する。
 
@@ -1114,9 +550,9 @@ front matter のキーは class 名と 1 対 1 では**ない**。
 <div class="rabi-segment"><button class="rabi-segment-item">値</button></div>
 ```
 
-状態は要素の状態と `aria-*` で受かる。class で受けるのは `.rabi-statusbar-on` と `.rabi-field-note-error` **だけ**。
+状態は要素の状態と `aria-*` で受ける。class で受けるのは `.rabi-statusbar-on` と `.rabi-field-note-error` **だけ**。
 
-| suffix               | 受け方                            |
+| 状態                 | 受け方                            |
 | -------------------- | --------------------------------- |
 | `-hover` / `-active` | `:hover` / `:active`              |
 | `-invalid`           | `aria-invalid="true"`             |
@@ -1126,11 +562,9 @@ front matter のキーは class 名と 1 対 1 では**ない**。
 | `-current`           | `aria-current`                    |
 | `-open`              | `[open]`                          |
 
-front matter にキーを持たないのは、寄せと列だけの構造クラスと、容器が段から引く値（一覧・タブの罫・半径・影は「一覧の組み方」「Shapes」が決める）と、密度の variant。
-
 丈を持つ variant は「Layout」の丈の表の行をそのまま下げる。丈を持たない面（セル・表）の密度は位置の表の段から選び、値は `../assets/rabi-components.css` が持つ。
 
-無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` と front matter へ足してから使う。情報層のロールは `../assets/rabi-role.css` へ足す。
+無い部品は「状態」「Shapes」「Layout」に従ってその場で組む。**`.rabi-` は部品の名前空間**なので、面固有のクラスに冠さ**ない**。繰り返し要るものは `../assets/rabi-components.css` へ足してから使う。情報層のロールは `../assets/rabi-role.css` へ足す。
 
 媒体で読むものが変わる。
 
@@ -1189,13 +623,51 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 - ダイアログの操作: 下端に右寄せで、主操作は 1 つ。上の罫は面を**突っ切る**（余白の外まで伸ばす）
 - 開閉: 印は文の外の列へ出し、問いと答えの左端を 1 本に揃える。開いた印だけ `accent`
 - 結合グリッドの強調セル: 内側の上罫で示す。セルの外周と容器は動かさ**ない**
-- 価格: 数値は `display` の段を等幅で組み、単位は `label-sm` の `faint`。数値と単位で段を跨がせ**ない**。太さは front matter の `price`
+- 価格: 数値は `display` の段を等幅数字で組み、単位は `label-sm` の `faint`。数値と単位で段を跨がせ**ない**。太さは `.rabi-price-unit`
+- 島: キャンバスの上に浮く操作の帯。効いているタブは ink 反転。行のタブ（下罫）と混ぜない
+- 暦の日: 選択は wash + 内側の輪。今日は字を太くするだけ。選択と今日を同じ印にしない
+- 会話の文: 助手は paper-2、利用者は accent。吹き出し（tooltip）とは別部品
+- チャットのタブ: 島のタブと同じ ink 反転。wash にしない
+- チャットの入力: 枠は容器が持ち、中の textarea は枠を持たない。送る操作は右下
+- 待ち: 点は accent、字は faint。開閉しない
+- 考え中: 字は faint。開閉は accordion
+- debug: 見出しは mono の極小。本体は paper-2 に沈める
+- 下線の入力: 面の中で枠を増やさ**ない**。本体は下罫だけ
+- パネルの絞り込み: 絞る本体（`.rabi-panel-body`）の中に、その先頭の行として置く。帯で包ま**ない** —— 間隔も左右の余白も本体が 1 か所で持つ
+- 罫の段は 3 つ。何を囲うかで引く。濃さで選ば**ない**
+
+| 段        | 引くもの         | 部品                                                                                                     |
+| --------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
+| `edge`    | 操作の境         | ボタンの二次・チップ・入力・select・textarea・チェック・ラジオ・スイッチ・下線の入力・色の印・表紙タイル |
+| `divider` | 地に置く面の外周 | 結合グリッド・一覧・ボタンの塔・空状態                                                                   |
+| `line`    | 面の中の区切り   | カードの脚・行の境・ステータスバーの区切り・ツリーのガイド罫・ダイアログの脚                             |
+
+- 地が既に境を作る面は外周も `line` まで落とす（注記・セグメント —— どちらも `paper-2` の塗りを持つ）
+- 浮く面は罫を持た**ない**。境は影が作る（カード `e1` / パネル・島 `e2` / ダイアログ `e3`）。罫と影を両方持たせ**ない** —— 二重に持つとどちらも読めない
+- 逆に、地に置く面（一覧・結合グリッド）は罫が境。影を落とさ**ない**
+- 無効は罫を 1 段落として `line` にする
+- 沈んだ帯の上のバッジの輪郭だけ、押せなくても `edge`（`divider` では地に消える）
+- `edge` は文字の下限（4.5:1）にも図の下限（3:1）にも載せ**ない**。欄がどこかは添えたラベルと地が示すので、輪郭は形を与えるだけ
+- ただし消えると枠が無いのと同じなので、下は 2:1 で止める。上も 3:1 へ戻さ**ない** —— 戻すと操作だけが面から浮く（検査は `test/rabi-design.test.ts`）
+- ツリー: 入れ子が字下げとガイド線を持つ。選択はリスト行と同じ
+- タイムライン: 時刻列は揃える。字を出さない行も列は残す
+- 履歴: 左の点つき罫。罫は line。現在地の点だけ accent
+- 行の角丸: 縦に積む行は `rounded.none`（一覧・ツリー・ナビ・タイムライン・履歴・タブ）。hover と選択と現在地の地も四角
+- 丸い容器の中の行は容器から引いた角丸を持つ（ドロップダウン・セグメント・島）。裸の面に置く行に角丸を足さ**ない**
+- 行の図と字の隙間は `spacing.1.5`。丈でも部品でも変え**ない**
+- キーと値: キーは右寄せの faint。値の枠は下線入力
+- 色の印: 色そのものが面。選択は枠
+- 表紙のタイル: 選択は枠。画像の上では地で示せない
+- ブックカバー: 見本は箱の中。製品は全面。地は ink
+- メーター: 塗りは accent。強さの色分けは情報層で、ここは持たない
+- キーバインド: 取り込み中は地を捨てて枠だけ
+- ノートの一覧は `.rabi-list-item`、ノートのカードは `.rabi-card`。一覧用の部品を足さ**ない**
 - セグメント: 排他の選択肢を並べる。タブと使い分ける —— タブは現在地、セグメントは値
 - セグメントが受ける属性: 頁の現在地に使うなら `aria-current`。印は値の選択と同じ
 - セグメントの丈: 段に載るのは**容器**。中のセルは容器の内側に収まるだけで、段に載せ**ない**
-- セグメントの容器の余白: 浮かせるための隙間なので余白の段に載せ**ない**。値は front matter の `segment`
+- セグメントの容器の余白: 浮かせるための隙間なので余白の段に載せ**ない**。値は `.rabi-segment`
 - セグメントの hover: 沈んだ容器の上なので `paper` へ浮かせる。選択との差は影と太さと文字色で付け、hover では動かさ**ない**
-- ステータスバー: 等幅で組み、文字は `label-sm` の段。地と外周は置く面が持つ。区切りは `line` の縦罫で、境の `divider` にし**ない**
+- ステータスバー: 等幅数字で組み、文字は `label-sm` の段。地と外周は置く面が持つ。区切りは `line` の縦罫で、境の `divider` にし**ない**
 - 密度: 詰めた面では variant を併記する（`.rabi-table-sm` / `.rabi-cell-row`）。面ごとに部品の余白や字の段を直接上書きし**ない**
 - 結合グリッドのセルの密度: カードとして並べるなら `.rabi-cell`、**表として**組むなら `.rabi-cell-row`
 - 面が要素で指すセレクタ（`.x span`）を、部品の載った要素へ届かせ**ない**。中身の組み方は面の裁量だが、届いた先が部品なら実装が 2 つになる
@@ -1205,12 +677,14 @@ front matter にキーを持たないのは、寄せと列だけの構造クラ�
 - 縦のナビ: 左のナビも頁内の目次も同じ部品。位置で variant を分け**ない**。密度だけ `-sm` で分ける
 - 縦のナビの字下げ: 入れ子の `ul` が持つ。使う側が数値を渡さ**ない**
 - 縦のナビの現在地: `aria-current` で受ける。頁のナビは `page`、頁内の目次は `location`。表し方は同じ
+- 地を敷ける場所の印は 1 つ（`wash` の面 + 左の `accent` の帯）。文字色と太さで重ね**ない** —— 欧文で字幅が動く
 - 縦のナビを分ける条件は操作の契約の差**だけ**（roving tabindex・並べ替え・値の選択）。密度と figure の有無では分けない
 - 縦のナビの figure: ドロップダウンと同じで、使うなら容器に `.rabi-nav-icons` を付けて**全行で**列を確保する
 - パンくず: 区切りは項目の `::before`。要素として置くと読み上げに乗る。最後の 1 つが `aria-current="page"`
 - 長文: 積む間隔は `.rabi-prose` が 1 か所で持つ。要素ごとの margin で積ま**ない**
+- 文書のコード: 識別子も塊も `pre > code` も `mono` 段（12px / 1.4）。塊は `.rabi-code` か、長文の中の class を持たない `pre`
 - 長文が組むのは**直下の、class を持たない要素だけ**
-- 長文の行送りは `body-doc`。字の段は `body` のまま
+- 長文の字の段も行送りも `body`。詰めた面のサイズだけ `body-doc`
 - 添え物: `.rabi-note` **だけ**。見出し（`.rabi-note-title`）は任意で、有無で余白を変えない
 - 添え物の図はロールが出す。作者は書か**ない**
 - 添え物のロール: 既定は中立で、ロールの色を載せ**ない**。赤は `.rabi-note-danger`、情報・成功・注意は情報層（「情報層」）

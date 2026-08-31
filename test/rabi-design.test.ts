@@ -162,6 +162,17 @@ const classesIn = (rel: string): string[] =>
       .matchAll(/\.(rabi-[a-z0-9-]+)/g),
   ].map((m) => m[1] as string);
 
+/** 丈から決まら**ない**文字の段（`DESIGN.md`「Layout」）。 */
+const HEADING_STEPS = new Set(["display", "heading", "subheading"]);
+
+/**
+ * 丈の表に載ら**ない**セレクタ。
+ *
+ * 表が縛るのは**文字を内包する操作枠**だけ（`DESIGN.md`「Layout」）。
+ * 帯は丈を面の都合で決めるので、字の段が丈から従属し**ない**。
+ */
+const NOT_ON_HEIGHT_STEP = new Set([".rabi-statusbar", ".rabi-panel-section-head"]);
+
 const uiClasses = classesIn("assets/rabi-components.css");
 const componentClasses = new Set([
   ...uiClasses,
@@ -196,6 +207,70 @@ test.each(["assets/rabi-components.css", "assets/rabi.css", "assets/rabi-role.cs
     expect(incompleteSteps(readFileSync(join(SKILL, rel), "utf8"))).toEqual([]);
   },
 );
+
+/**
+ * 丈から決まる文字の段。「Layout」の対応表**から導く**。
+ */
+const TYPE_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
+  [
+    ...readFileSync(designPath(SKILL), "utf8").matchAll(
+      /^\| `(control[a-z-]*)`\s*\|\s*`([a-z-]+)`\s*\|/gm,
+    ),
+  ].map((m) => [m[1] as string, m[2] as string]),
+);
+
+test("丈と文字の対応表を DESIGN.md から引けている", () => {
+  expect(TYPE_FOR_HEIGHT).toEqual({
+    "control-lg": "body",
+    control: "body",
+    "control-sm": "body-doc",
+    "control-xs": "label",
+  });
+});
+
+/**
+ * 丈と文字の段が対応表からずれているセレクタを返す。
+ *
+ * 等幅と見出しの段、そして帯は丈に依ら**ない**（`DESIGN.md`「Layout」）ので見に行かない。
+ */
+function heightTypeMismatch(css: string): string[] {
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
+    .filter((m) => {
+      const body = m[2] as string;
+      if (NOT_ON_HEIGHT_STEP.has((m[1] as string).trim().replace(/\s+/g, " "))) return false;
+      if (/font-family: var\(--rabi-mono\)/.test(body)) return false;
+      const height = /height: var\(--rabi-(control[a-z-]*)\)/.exec(body)?.[1];
+      const step = /font-size: var\(--rabi-t-([a-z-]+)\)/.exec(body)?.[1];
+      if (height === undefined || step === undefined) return false;
+      if (HEADING_STEPS.has(step)) return false;
+      const want = TYPE_FOR_HEIGHT[height];
+      return want !== undefined && want !== step;
+    })
+    .map((m) => (m[1] as string).trim().replace(/\s+/g, " "));
+}
+
+// 丈が決まれば文字の段も決まる（`DESIGN.md`「Layout」）
+test("rabi-components.css の丈と文字の段が対応表と揃っている", () => {
+  expect(
+    heightTypeMismatch(readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8")),
+  ).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— ずれたら落ちることを実測する
+test("丈と文字の段がずれると落ちる", () => {
+  const css = ".x {\n  height: var(--rabi-control);\n  font-size: var(--rabi-t-label);\n}";
+  expect(heightTypeMismatch(css)).toEqual([".x"]);
+});
+
+test.each([
+  ["見出しの段", ".x { height: var(--rabi-control); font-size: var(--rabi-t-subheading); }"],
+  [
+    "等幅",
+    ".x { height: var(--rabi-control); font-family: var(--rabi-mono); font-size: var(--rabi-t-label-sm); }",
+  ],
+])("%s は丈の表の対象外", (_label, css) => {
+  expect(heightTypeMismatch(css)).toEqual([]);
+});
 
 /**
  * 丈から決まる左右の余白。`DESIGN.md`「Layout」の対応表**から導く**。
@@ -238,13 +313,6 @@ test("丈と図の対応表を DESIGN.md から引けている", () => {
   });
 });
 
-// figure だけのボタンの図は丈の表から引く。文字と並ぶ図は丈に依ら**ない**ので対象外
-test("front matter の figure だけのボタンの図が対応表と揃っている", () => {
-  const design = readFileSync(designPath(SKILL), "utf8");
-  const icon = design.match(/\n {2}button-icon:\n {4}iconSize: (\S+)\n/)?.[1];
-  expect(icon).toBe(FIGURE_FOR_HEIGHT["control"]);
-});
-
 /** 丈と左右の余白が対応表からずれているセレクタを返す。 */
 function heightPaddingMismatch(css: string): string[] {
   return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
@@ -267,33 +335,6 @@ test("rabi-components.css の丈と左右の余白が対応表と揃っている
   ).toEqual([]);
 });
 
-/** front matter の `components` で、丈と左右の余白が対応表からずれているキー。 */
-function frontMatterHeightPaddingMismatch(design: string): string[] {
-  const block = design.match(/\ncomponents:\n([\s\S]*?)\n---\n/)?.[1];
-  if (block === undefined) throw new Error("front matter に components が無い");
-  const step = (v: string) => v.replace(/^\{spacing\.(.+)\}$/, "$1");
-  return [...block.matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.+\n)+)/gm)]
-    .filter(([, , body]) => {
-      const height = /^ {4}height: "(\{spacing\.control[a-z-]*\})"$/m.exec(body as string)?.[1];
-      const pad = /^ {4}padding: "(\{spacing\.[0-9.]+\})"$/m.exec(body as string)?.[1];
-      if (height === undefined || pad === undefined) return false;
-      const want = PADDING_FOR_HEIGHT[step(height)];
-      return want !== undefined && want !== `gap-${step(pad).replace(".", "_")}`;
-    })
-    .map(([, key]) => key as string);
-}
-
-// front matter 側も同じ表に従う。CSS だけ見ると写しが取り残される
-test("front matter の丈と左右の余白が対応表と揃っている", () => {
-  expect(frontMatterHeightPaddingMismatch(readFileSync(designPath(SKILL), "utf8"))).toEqual([]);
-});
-
-test("front matter でずれると落ちる", () => {
-  const design =
-    '\ncomponents:\n  x:\n    height: "{spacing.control-sm}"\n    padding: "{spacing.3}"\n\n---\n';
-  expect(frontMatterHeightPaddingMismatch(design)).toEqual(["x"]);
-});
-
 // **通ることは何も証明しない** —— ずれたら落ちることを実測する
 test("丈と余白がずれると落ちる", () => {
   const css = ".x {\n  height: var(--rabi-control-sm);\n  padding: 0 var(--rabi-gap-3);\n}";
@@ -306,38 +347,6 @@ test.each([
   ["line-height が無い", ".x { font-size: 12px; font-weight: 500; }"],
 ])("字の段で %s と落ちる", (_label, css) => {
   expect(incompleteSteps(css)).toEqual([".x"]);
-});
-
-/**
- * front matter の `components` が持つ literal —— `{group.key}` の参照では**ない**値。
- *
- * 参照は `--check` が rabi.css との一致を守る。literal だけが front matter と
- * 実装の 2 か所に生で書かれるので、ここが乖離の唯一の穴になる。
- */
-function componentLiterals(design: string): string[] {
-  const block = design.match(/\ncomponents:\n([\s\S]*?)\n---\n/)?.[1];
-  if (block === undefined) throw new Error("front matter に components が無い");
-  return [
-    ...new Set(
-      [...block.matchAll(/^ {4}[a-zA-Z]+: (.+)$/gm)]
-        .map((m) => (m[1] as string).trim())
-        .filter((v) => !v.startsWith('"{')),
-    ),
-  ];
-}
-
-const literals = componentLiterals(readFileSync(designPath(SKILL), "utf8"));
-
-test("components に literal が在る", () => {
-  expect(literals.length).toBeGreaterThan(0);
-});
-
-// front matter だけ直して実装を忘れると、値が 2 つになったまま気づけない。
-// 見るのは「その値がどこかで使われている」ことまでで、部品ごとの対応は見**ない** ——
-// 同じ値を別の部品が持っていれば通る。部品単位の照合は目視。
-test.each(literals)("components の literal %s を rabi-components.css が使っている", (value) => {
-  const css = readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8");
-  expect(css).toContain(value);
 });
 
 /**
@@ -668,8 +677,32 @@ const FLOORS: ReadonlyArray<readonly [string, number]> = [
   ["soft", 4.5],
   ["faint", 4.5],
   ["accent-text", 4.5],
-  ["edge", 3],
 ];
+
+/**
+ * 操作の輪郭。**文字の下限（4.5:1）にも図の下限（3:1）にも載せ**ない。
+ *
+ * 欄がどこかは添えたラベルと地が示すので、輪郭は形を与えるだけ。
+ * ただし消えると枠が無いのと同じなので、下は 2:1 で止める。
+ */
+test("edge は面のどれに載せても 2:1 を割らない", () => {
+  const css = readFileSync(join(SKILL, "assets/rabi.css"), "utf8");
+  for (const theme of [0, 1] as const) {
+    for (const bg of SURFACES) {
+      expect(contrast(themes(css, "edge")[theme], themes(css, bg)[theme])).toBeGreaterThanOrEqual(
+        2,
+      );
+    }
+  }
+});
+
+// 上へ振れると操作だけが画面から浮く。図の下限（3:1）へ戻さ**ない**
+test("edge は 3:1 へ戻らない", () => {
+  const css = readFileSync(join(SKILL, "assets/rabi.css"), "utf8");
+  for (const theme of [0, 1] as const) {
+    expect(contrast(themes(css, "edge")[theme], themes(css, "paper")[theme])).toBeLessThan(3);
+  }
+});
 
 test.each(FLOORS)("%s は面のどれに載せても %f:1 を割らない", (fg, floor) => {
   const css = readFileSync(join(SKILL, "assets/rabi.css"), "utf8");
@@ -791,21 +824,6 @@ test("CSS 変数を足して front matter へ写さないと落ちる", async ()
 
     const { code, output } = await run(dir, "--check");
     expect(output).toContain("gap-huge");
-    expect(code).not.toBe(0);
-  });
-});
-
-test("components の token 参照が実在しないと落ちる", async () => {
-  await withSandbox(async (dir) => {
-    const design = designPath(dir);
-    const original = readFileSync(design, "utf8");
-    writeFileSync(
-      design,
-      original.replace('backgroundColor: "{colors.accent}"', 'backgroundColor: "{colors.crimson}"'),
-    );
-
-    const { code, output } = await run(dir, "--check");
-    expect(output).toContain("colors.crimson");
     expect(code).not.toBe(0);
   });
 });
@@ -961,9 +979,10 @@ test("値が $& を含んでも front matter が壊れない", async () => {
   });
 });
 
-test("light は ground と paper が同値、dark は違う", () => {
+// 地に置く面は面の明暗だけで分ける。ground と paper が同値だと、その差が消える
+test("ground と paper は light でも dark でも違う", () => {
   const css = CSS();
-  expect(themes(css, "ground")[0]).toBe(themes(css, "paper")[0]);
+  expect(themes(css, "ground")[0]).not.toBe(themes(css, "paper")[0]);
   expect(themes(css, "ground")[1]).not.toBe(themes(css, "paper")[1]);
 });
 
@@ -1073,4 +1092,32 @@ test.each([...ROLE_NAMES])("%s の line は隣接面のどれに対しても 3:1
       ).toBeGreaterThanOrEqual(3);
     }
   }
+});
+
+/**
+ * `::-webkit-` と `::-moz-` を 1 つの並びに混ぜているセレクタ。
+ *
+ * 相手の擬似要素を知らない engine は、並びごと**規則を捨てる**。
+ * 片方だけ効かなくなるのではなく、両方で UA 既定に戻る。
+ */
+function mixedVendorSelectors(css: string): string[] {
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{[^{}]*\}/g)]
+    .map((m) => (m[1] as string).trim().replace(/\s+/g, " "))
+    .filter((sel) => sel.includes("::-webkit-") && sel.includes("::-moz-"));
+}
+
+test.each(["assets/rabi-components.css", "assets/rabi.css", "assets/rabi-role.css"])(
+  "%s は engine ごとの擬似要素を 1 つの並びに混ぜない",
+  (rel) => {
+    expect(mixedVendorSelectors(readFileSync(join(SKILL, rel), "utf8"))).toEqual([]);
+  },
+);
+
+// **通ることは何も証明しない** —— 混ぜたら落ちることを実測する
+test("engine ごとの擬似要素を混ぜると落ちる", () => {
+  expect(
+    mixedVendorSelectors(
+      ".x::-webkit-progress-value,\n.x::-moz-progress-bar {\n  background: red;\n}",
+    ),
+  ).toEqual([".x::-webkit-progress-value, .x::-moz-progress-bar"]);
 });

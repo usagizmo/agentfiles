@@ -102,7 +102,7 @@
         white-space: nowrap;
         font-size: var(--rabi-t-body-doc);
         font-weight: 600;
-        line-height: var(--rabi-lh-body-doc);
+        line-height: var(--rabi-lh-body);
         color: var(--rabi-ink);
       }
 
@@ -258,7 +258,7 @@
       .note-body {
         font-size: var(--rabi-t-body-doc);
         font-weight: 400;
-        line-height: var(--rabi-lh-body-doc);
+        line-height: var(--rabi-lh-body);
         color: var(--rabi-soft);
       }
 
@@ -325,6 +325,55 @@
           width: auto;
         }
       }
+
+      /* ==== 密な操作の面。並べ方だけ ==== */
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: var(--rabi-gap-4);
+        align-items: start;
+      }
+
+      .workspace-island {
+        display: flex;
+        justify-content: center;
+      }
+
+      .workspace-col {
+        display: grid;
+        gap: var(--rabi-gap-4);
+      }
+
+      .workspace-chat {
+        display: flex;
+        flex-direction: column;
+        gap: var(--rabi-gap-2);
+      }
+
+      .workspace-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--rabi-gap-1);
+      }
+
+      .workspace-tiles {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--rabi-gap-2);
+      }
+
+      .workspace-swatches,
+      .workspace-binds {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--rabi-gap-1);
+      }
+
+      @media (max-width: 900px) {
+        .workspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
     </style>
   </head>
 
@@ -363,6 +412,9 @@
         <rect x="13" y="13" width="8" height="8" rx="2" />
         <path d="M11 7h4a2 2 0 0 1 2 2v4" />
       </symbol>
+      <symbol id="i-send" viewBox="0 0 18 18">
+        <path d="M3 15.5L15.5 9 3 2.5v5l7 1.5-7 1.5z" />
+      </symbol>
     </svg>
 
     <header class="rabi-appbar site-header">
@@ -371,6 +423,7 @@
         <nav class="rabi-appbar-nav" aria-label="Main">
           <a href="docs.html">ドキュメント</a>
           <a href="#listing">一覧</a>
+          <a href="#workspace">操作</a>
           <a href="#account" aria-current="page">設定</a>
         </nav>
         <div class="rabi-appbar-action">
@@ -700,6 +753,173 @@
             <p class="rabi-page-lead">お探しのページは存在しないか、移動した可能性があります。</p>
           </div>
           <a class="rabi-btn rabi-btn-primary" href="landing.html">最初へ戻る</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="workspace" class="band">
+      <div class="band-inner">
+        <p class="band-note">操作 —— 島・暦・樹・会話・履歴を同じ頁に置く</p>
+
+        <div class="workspace-island">
+          <div class="rabi-island" aria-label="置き換えの島">
+            <button class="rabi-island-tab" type="button" aria-selected="true">ノート</button>
+            <button class="rabi-island-tab" type="button" aria-selected="false">タスク</button>
+            <span class="rabi-island-rule"></span>
+            <button class="rabi-date-pill" type="button">8/29</button>
+          </div>
+        </div>
+
+        <div class="workspace">
+          <div class="workspace-col">
+            <div class="rabi-panel">
+              <div class="rabi-panel-head">棚</div>
+              <div class="rabi-panel-body">
+                <input class="rabi-input-line" type="search" aria-label="棚を探す" placeholder="検索" />
+                <div class="rabi-tree">
+                  <button class="rabi-tree-row" type="button">棚</button>
+                  <div class="rabi-tree">
+                    <button class="rabi-tree-row" type="button">フォルダ</button>
+                    <div class="rabi-tree">
+                      <button class="rabi-tree-row" type="button" aria-selected="true">ノート</button>
+                      <button class="rabi-tree-row" type="button">別のノート</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rabi-calendar" aria-label="置き換えの暦">
+              <span class="rabi-cal-weekday">日</span>
+              <span class="rabi-cal-weekday">月</span>
+              <span class="rabi-cal-weekday">火</span>
+              <span class="rabi-cal-weekday">水</span>
+              <span class="rabi-cal-weekday">木</span>
+              <span class="rabi-cal-weekday">金</span>
+              <span class="rabi-cal-weekday">土</span>
+              <button class="rabi-cal-day" type="button" disabled></button>
+              <button class="rabi-cal-day" type="button" disabled></button>
+              <button class="rabi-cal-day" type="button" disabled></button>
+              <button class="rabi-cal-day" type="button" disabled></button>
+              <button class="rabi-cal-day" type="button" disabled></button>
+              <button class="rabi-cal-day" type="button" disabled></button>
+              <button class="rabi-cal-day" type="button">1</button>
+              <button class="rabi-cal-day" type="button">2</button>
+              <button class="rabi-cal-day" type="button">3</button>
+              <button class="rabi-cal-day" type="button">4</button>
+              <button class="rabi-cal-day" type="button">5</button>
+              <button class="rabi-cal-day" type="button">6</button>
+              <button class="rabi-cal-day" type="button">7</button>
+              <button class="rabi-cal-day" type="button" aria-selected="true">8<span class="rabi-cal-dot"></span></button>
+              <button class="rabi-cal-day" type="button">9</button>
+              <button class="rabi-cal-day" type="button">10</button>
+              <button class="rabi-cal-day" type="button">11</button>
+              <button class="rabi-cal-day" type="button">12</button>
+              <button class="rabi-cal-day" type="button">13</button>
+              <button class="rabi-cal-day" type="button">14</button>
+              <button class="rabi-cal-day" type="button">15<span class="rabi-cal-dot"></span></button>
+              <button class="rabi-cal-day" type="button">16</button>
+              <button class="rabi-cal-day" type="button">17</button>
+              <button class="rabi-cal-day" type="button">18</button>
+              <button class="rabi-cal-day" type="button">19</button>
+              <button class="rabi-cal-day" type="button">20</button>
+              <button class="rabi-cal-day" type="button">21</button>
+              <button class="rabi-cal-day" type="button">22</button>
+              <button class="rabi-cal-day" type="button">23</button>
+              <button class="rabi-cal-day" type="button">24</button>
+              <button class="rabi-cal-day" type="button">25<span class="rabi-cal-dot"></span></button>
+              <button class="rabi-cal-day" type="button">26</button>
+              <button class="rabi-cal-day" type="button">27</button>
+              <button class="rabi-cal-day" type="button">28</button>
+              <button class="rabi-cal-day" type="button" aria-current="date">29</button>
+              <button class="rabi-cal-day" type="button">30</button>
+              <button class="rabi-cal-day" type="button">31</button>
+            </div>
+
+            <div>
+              <button class="rabi-timeline-row" type="button" aria-current="true">
+                <span class="rabi-timeline-time">09:00</span>
+                <span>置き換えの出来事</span>
+              </button>
+              <button class="rabi-timeline-row" type="button">
+                <span class="rabi-timeline-time"></span>
+                <span>同じ時間帯の続き</span>
+              </button>
+              <button class="rabi-timeline-row" type="button">
+                <span class="rabi-timeline-time">14:30</span>
+                <span>午後の出来事</span>
+              </button>
+            </div>
+
+            <div class="rabi-history">
+              <button class="rabi-history-row" type="button" aria-current="true">いまの版</button>
+              <button class="rabi-history-row" type="button">ひとつ前</button>
+              <button class="rabi-history-row" type="button">さらに前</button>
+            </div>
+          </div>
+
+          <div class="workspace-col">
+            <div class="workspace-chat">
+              <div class="workspace-tabs" aria-label="会話のタブ">
+                <button class="rabi-island-tab" type="button" aria-selected="true">新しいチャット</button>
+                <button class="rabi-island-tab" type="button" aria-selected="false">置き換え</button>
+              </div>
+              <div class="rabi-chat">
+                <p class="rabi-chat-msg">置き換えの返答。助手側の文。</p>
+              </div>
+              <div class="rabi-chat rabi-chat-user">
+                <p class="rabi-chat-msg">置き換えの質問。</p>
+              </div>
+              <span class="rabi-chat-wait">調べています</span>
+              <details class="rabi-accordion-item" open>
+                <summary class="rabi-accordion-summary"><span>考え中</span></summary>
+                <p class="rabi-chat-thinking">関連するノートを辿って、問いの核を拾う。</p>
+              </details>
+              <span class="rabi-chat-debug">DEBUG</span>
+              <dl class="rabi-chat-debug-body">
+                <div>model: sample-0</div>
+                <div>tokens: 0 / 0</div>
+              </dl>
+              <div class="rabi-chat-input">
+                <textarea class="rabi-textarea" rows="1" aria-label="チャットの入力">置き換えの質問。</textarea>
+                <div class="rabi-chat-input-actions">
+                  <button class="rabi-btn rabi-btn-sm rabi-btn-primary rabi-btn-icon" type="button" aria-label="送る">
+                    <svg class="ico"><use href="#i-send" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <table class="rabi-prop">
+              <tbody>
+                <tr>
+                  <th class="rabi-prop-key" scope="row">タグ</th>
+                  <td><input class="rabi-input-line" type="text" value="置き換え" aria-label="タグ" /></td>
+                </tr>
+                <tr>
+                  <th class="rabi-prop-key" scope="row">出典</th>
+                  <td><input class="rabi-input-line" type="text" value="ノート" aria-label="出典" /></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="workspace-swatches">
+              <button class="rabi-swatch" type="button" aria-pressed="true" aria-label="選んだ色"></button>
+              <button class="rabi-swatch" type="button" aria-pressed="false" aria-label="別の色"></button>
+            </div>
+
+            <div class="workspace-tiles">
+              <button class="rabi-cover-tile" type="button" aria-pressed="true" aria-label="選んだ表紙"></button>
+              <button class="rabi-cover-tile" type="button" aria-pressed="false" aria-label="別の表紙"></button>
+            </div>
+
+            <div class="workspace-binds">
+              <button class="rabi-bind" type="button">⌘K</button>
+              <button class="rabi-bind" type="button" aria-busy="true">打鍵待ち</button>
+            </div>
+
+            <progress class="rabi-meter" value="3" max="4">75%</progress>
+          </div>
         </div>
       </div>
     </section>

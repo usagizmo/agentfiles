@@ -68,8 +68,12 @@
 
       /* ==== 桁割り。3 桁と 2 桁。列幅は面が決める ==== */
       .shell {
+        /* 両脇の桁幅。2 桁の変種もここから引く */
+        --nav-col: 220px;
+        --toc-col: 210px;
+
         display: grid;
-        grid-template-columns: 220px minmax(0, 1fr) 210px;
+        grid-template-columns: var(--nav-col) minmax(0, 1fr) var(--toc-col);
         align-items: start;
         gap: var(--rabi-gap-8);
         width: min(1240px, calc(100% - 40px));
@@ -77,14 +81,17 @@
         padding: var(--rabi-gap-8) 0 var(--rabi-gap-14);
       }
 
+      /* 目次を持たない 2 桁。読む桁は幅を絞り、面の中で中央へ置く */
       .shell-2 {
-        grid-template-columns: 220px minmax(0, 1fr);
+        grid-template-columns: var(--nav-col) minmax(0, 720px);
+        justify-content: center;
       }
 
-      /* 左のナビを持たない 2 桁。目次だけを右に置き、読む桁は幅を絞る */
+      /* 左のナビを持たない 2 桁。目次だけを右に置き、読む桁は幅を絞る。
+         桁の合計が面より狭いので、左へ寄せずに面の中で中央へ置く */
       .shell-toc {
-        grid-template-columns: minmax(0, 720px) 210px;
-        justify-content: start;
+        grid-template-columns: minmax(0, 720px) var(--toc-col);
+        justify-content: center;
       }
 
       .side {
@@ -328,9 +335,9 @@
 
           <p>まとまりごとに切り出して渡すと、次の工程がそのまま受け取れます。</p>
 
-          <pre class="rabi-code">いま置いてあるものを読んで、まとまりごとに分けて、
+          <pre class="rabi-code"><code>いま置いてあるものを読んで、まとまりごとに分けて、
 それぞれを別の置き場として元の隣へ出してください。
-元の置き場と各置き場を線で繋いで。</pre>
+元の置き場と各置き場を線で繋いで。</code></pre>
 
           <p>切り出されたものは、別の場所の既存のものとも繋げられます。</p>
 
