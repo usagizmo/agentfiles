@@ -10,6 +10,7 @@
     ["landing.html", "宣伝"],
     ["docs.html", "読み物"],
     ["app.html", "操作"],
+    ["screen.html", "主画面"],
     ["diagram.html", "図"],
   ];
 
