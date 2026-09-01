@@ -1,7 +1,8 @@
 #!/bin/sh
 # watch.sh 用の偽 gh。graphql は watch.sh が自前で jq に通す。
 # issues / comments は JSON を返す（指紋への写しは watch.sh 側）。
-# complete-rest-list.sh は --include で件数を取り、--paginate で一覧を取る。
+# complete-rest-list.sh は --include で probe する。page 番号方式は --paginate で一覧を取り、
+# cursor 方式は --include で Link を辿る。
 set -eu
 
 include=0

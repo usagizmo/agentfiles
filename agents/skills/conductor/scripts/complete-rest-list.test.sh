@@ -1,8 +1,9 @@
 #!/bin/sh
-# complete-rest-list.sh の件数照合を固定する。
+# complete-rest-list.sh の完全性照合を固定する。
 #
 # **守っているのは「`--paginate` の exit 0 を全件の証拠にしない」こと。**
-# 件数は probe 側の Link / 1 ページ長から取り、生配列長と照合する。
+# page 番号方式は probe 側の Link / 1 ページ長から件数を取り、生配列長と照合する。
+# cursor 方式は Link を辿り、終端ページを観測する。
 set -u
 
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
@@ -55,6 +56,24 @@ else
   body='[{"n":1}]'
 fi
 if [ "$include" = 1 ]; then
+  if [ "${GH_CURSOR:-}" = 1 ]; then
+    page1=${GH_CURSOR_PAGE1-}
+    page2=${GH_CURSOR_PAGE2-}
+    [ -n "$page1" ] || page1='[{"n":1}]'
+    [ -n "$page2" ] || page2='[{"n":2}]'
+    case $path in
+      *after=*)
+        if [ "${GH_CURSOR_FAIL_SECOND:-}" = 1 ]; then
+          echo "cursor second page failed" >&2
+          exit 1
+        fi
+        printf 'HTTP/2.0 200 OK\nContent-Type: application/json\n\n%s\n' "$page2"
+        exit 0
+        ;;
+    esac
+    printf 'HTTP/2.0 200 OK\nLink: <https://api.github.com/%s&after=c1>; rel="next"\nContent-Type: application/json\n\n%s\n' "$path" "$page1"
+    exit 0
+  fi
   if [ "${GH_NEXT_ONLY:-}" = 1 ]; then
     printf 'HTTP/2.0 200 OK\nLink: <https://api.github.com/%s&page=2>; rel="next"\nContent-Type: application/json\n\n%s\n' "$path" "$body"
     exit 0
@@ -107,6 +126,20 @@ export GH_NEXT_ONLY GH_LIST_JSON
 bash "$HELPER" "repos/o/r/issues?per_page=100" >/dev/null 2>&1
 check 1 $? "rel=next だけで rel=last が無ければ失敗する"
 unset GH_NEXT_ONLY GH_LIST_JSON
+
+GH_CURSOR=1 GH_CURSOR_PAGE1='[{"n":1}]' GH_CURSOR_PAGE2='[{"n":2}]'
+export GH_CURSOR GH_CURSOR_PAGE1 GH_CURSOR_PAGE2
+out=$(bash "$HELPER" "repos/o/r/issues?per_page=100")
+check 0 $? "cursor の after= つき next で終端まで辿れた一覧は受理する"
+printf '%s' "$out" | python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); raise SystemExit(0 if d==[{"n":1},{"n":2}] else 1)'
+check 0 $? "cursor の一覧をページ順に結合する"
+unset GH_CURSOR GH_CURSOR_PAGE1 GH_CURSOR_PAGE2
+
+GH_CURSOR=1 GH_CURSOR_FAIL_SECOND=1
+export GH_CURSOR GH_CURSOR_FAIL_SECOND
+bash "$HELPER" "repos/o/r/issues?per_page=100" >/dev/null 2>&1
+check 1 $? "cursor の walk が途中で失敗したら失敗する"
+unset GH_CURSOR GH_CURSOR_FAIL_SECOND
 
 GH_INCLUDE_JSON='[{"n":1}]' GH_LIST_JSON='[{"n":1}]'
 export GH_INCLUDE_JSON GH_LIST_JSON
