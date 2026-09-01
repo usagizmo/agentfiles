@@ -253,24 +253,24 @@ flowchart LR
 
 チェック・ラジオ・スイッチの `checked` は**選択では**なく、値が真であることを印そのものが表す。`outline` を使わ**ない**。
 
-選択の印は `aria-selected` でも `aria-pressed` でも受ける。`listbox` / `tablist` / `menu` の role は矢印キーと roving tabindex の操作契約を伴うので、**それを実装してから**名乗る。静的な見本では名乗ら**ない**。
+選択の印は `aria-pressed` で受ける。`aria-selected` を名乗れるのは `tab` / `option` / `treeitem` など、矢印キーと roving tabindex の操作契約を実装した role **だけ**。静的な見本では role を名乗らない。
 
-| 部品               | 受ける属性                                        | 表し方                                            |
-| ------------------ | ------------------------------------------------- | ------------------------------------------------- |
-| チップ             | `aria-pressed` / `aria-selected`                  | 枠を `accent`、字を `accent-text`                 |
-| セグメント         | `aria-selected` / `aria-pressed` / `aria-current` | 沈めた容器の上に、選択セルだけ `paper` で浮かせる |
-| 色の印・表紙タイル | `aria-pressed`                                    | 枠                                                |
-| リスト行           | `aria-selected` / `aria-pressed`                  | 字を `accent-text` にして太く。地は塗らない       |
-| 行のタブ           | `aria-selected` / `aria-pressed`                  | `accent` の下罫                                   |
-| 島・チャットのタブ | `aria-selected`                                   | `ink` 反転                                        |
-| 縦のナビ           | `aria-current`・`aria-selected="true"`            | リスト行と同じ                                    |
-| 頁の天のナビ       | `aria-current`                                    | 文字を `ink` にして太く。地は動かさ**ない**       |
-| パンくず           | `aria-current`                                    | 最後の 1 つ。字を `ink` にして太く                |
-| 暦の日             | `aria-selected`                                   | `accent` のベタ面 + `on-accent` の字              |
-| タイムラインの行   | `aria-current`                                    | 時刻を `ink` にして太く                           |
-| 履歴の行           | `aria-current`                                    | 点だけ `accent`                                   |
+| 部品               | 受ける属性                      | 表し方                                            |
+| ------------------ | ------------------------------- | ------------------------------------------------- |
+| チップ             | `aria-pressed`                  | 枠を `accent`、字を `accent-text`                 |
+| セグメント         | `aria-pressed` / `aria-current` | 沈めた容器の上に、選択セルだけ `paper` で浮かせる |
+| 色の印・表紙タイル | `aria-pressed`                  | 枠                                                |
+| リスト行           | `aria-pressed`                  | 字を `accent-text` にして太く。地は塗らない       |
+| 行のタブ           | `aria-pressed`                  | `accent` の下罫                                   |
+| 島・チャットのタブ | `aria-pressed`                  | `ink` 反転                                        |
+| 縦のナビ           | `aria-current` / `aria-pressed` | リスト行と同じ                                    |
+| 頁の天のナビ       | `aria-current`                  | 文字を `ink` にして太く。地は動かさ**ない**       |
+| パンくず           | `aria-current`                  | 最後の 1 つ。字を `ink` にして太く                |
+| 暦の日             | `aria-pressed`                  | `accent` のベタ面 + `on-accent` の字              |
+| タイムラインの行   | `aria-current`                  | 時刻を `ink` にして太く                           |
+| 履歴の行           | `aria-current`                  | 点だけ `accent`                                   |
 
-`aria-selected` は**もの**を選ぶ、`aria-current` は**場所**へ移る。同じ行の形でも、受ける属性が違えば表し方も違う。
+`aria-pressed` は**もの**を選ぶ、`aria-current` は場所へ移る。同じ行の形でも、受ける属性が違えば表し方も違う。
 
 選択の既定は**字**（`accent-text` + 太字）。字で示せない部品は枠で示す。2 つ目の既定にし**ない**。
 
@@ -561,16 +561,16 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 
 状態は要素の状態と `aria-*` で受ける。class で受けるのは `.rabi-statusbar-on` と `.rabi-field-note-error` **だけ**。
 
-| 状態                 | 受け方                            |
-| -------------------- | --------------------------------- |
-| `-hover` / `-active` | `:hover` / `:active`              |
-| `-invalid`           | `aria-invalid="true"`             |
-| `-disabled`          | `:disabled`                       |
-| `-selected`          | `aria-pressed` か `aria-selected` |
-| `-checked`           | `:checked`                        |
-| `-current`           | `aria-current`                    |
-| `-open`              | `[open]`                          |
-| `-busy`              | `aria-busy="true"`                |
+| 状態                 | 受け方                |
+| -------------------- | --------------------- |
+| `-hover` / `-active` | `:hover` / `:active`  |
+| `-invalid`           | `aria-invalid="true"` |
+| `-disabled`          | `:disabled`           |
+| `-selected`          | `aria-pressed`        |
+| `-checked`           | `:checked`            |
+| `-current`           | `aria-current`        |
+| `-open`              | `[open]`              |
+| `-busy`              | `aria-busy="true"`    |
 
 丈を持つ variant は「Layout」の丈の表の行をそのまま下げる。丈を持たない面（セル・表）の密度は位置の表の段から選び、値は `../assets/rabi-components.css` が持つ。
 
@@ -697,7 +697,7 @@ overlay の背面を黒く塗ら**ない**。影だけで離す。
 - 縦のナビ: 左のナビも頁内の目次もファイル一覧も同じ部品。位置で variant を分け**ない**。密度だけ `-sm` で分ける
 - 縦のナビの字下げ: 入れ子の `ul` が持つ。使う側が数値を渡さ**ない**
 - 縦のナビの現在地: `aria-current` で受ける。頁のナビは `page`、頁内の目次は `location`。表し方は同じ
-- 縦のナビの選択: 行を `button` にして `aria-selected` で受ける（ファイル一覧・棚の木）。表し方は現在地と同じ
+- 縦のナビの選択: 行を `button` にして `aria-pressed` で受ける（ファイル一覧・棚の木）。表し方は現在地と同じ
 - 縦のナビの群: `details` / `summary` で畳む。畳めない群は**ない**。印の列は「図の置き方」のとおり
 - 縦のナビの行: `a` でも `button` でもよい。字の始まりは印の列の後で揃う。子を持た**ない** —— 子は群が持つ
 - パンくず: 区切りは項目の `::before`。要素として置くと読み上げに乗る。最後の 1 つが `aria-current="page"`

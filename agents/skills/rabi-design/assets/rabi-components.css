@@ -12,8 +12,8 @@
 .rabi-badge-accent ::selection,
 .rabi-card-accent::selection,
 .rabi-card-accent ::selection,
-.rabi-cal-day[aria-selected="true"]::selection,
-.rabi-cal-day[aria-selected="true"] ::selection,
+.rabi-cal-day[aria-pressed="true"]::selection,
+.rabi-cal-day[aria-pressed="true"] ::selection,
 .rabi-chat-user .rabi-chat-msg::selection,
 .rabi-chat-user .rabi-chat-msg ::selection {
   background: var(--rabi-on-accent);
@@ -230,8 +230,7 @@
 }
 
 /* 選択は枠と字で示す。地を塗ら**ない**（`DESIGN.md`「状態」） */
-.rabi-chip[aria-pressed="true"],
-.rabi-chip[aria-selected="true"] {
+.rabi-chip[aria-pressed="true"] {
   border-color: var(--rabi-accent);
   color: var(--rabi-accent-text);
 }
@@ -249,9 +248,7 @@
 
 /* 無効でも選択は残す。枠は動かさず、字だけ下げる */
 .rabi-chip:disabled[aria-pressed="true"],
-.rabi-chip:disabled[aria-selected="true"],
-.rabi-chip:disabled[aria-pressed="true"]:hover,
-.rabi-chip:disabled[aria-selected="true"]:hover {
+.rabi-chip:disabled[aria-pressed="true"]:hover {
   border-color: var(--rabi-accent);
   color: var(--rabi-faint);
 }
@@ -873,9 +870,7 @@
 }
 
 /* hover は面、選択は字。同じ軸を両方に使わ**ない**（`DESIGN.md`「状態」） */
-.rabi-list-item[aria-selected="true"],
 .rabi-list-item[aria-pressed="true"],
-.rabi-list-item[aria-selected="true"]:hover,
 .rabi-list-item[aria-pressed="true"]:hover {
   color: var(--rabi-accent-text);
   font-weight: 600;
@@ -1053,7 +1048,6 @@
 }
 
 /* 行として並ぶので outline で囲むと隣と衝突する。下罫で表す例外 */
-.rabi-tab[aria-selected="true"],
 .rabi-tab[aria-pressed="true"] {
   color: var(--rabi-ink);
   font-weight: 600;
@@ -1061,7 +1055,6 @@
 }
 
 /* 無効でも選択は残す。選択の宣言より**後ろ**に置く */
-.rabi-tab:disabled[aria-selected="true"],
 .rabi-tab:disabled[aria-pressed="true"] {
   color: var(--rabi-faint);
   border-bottom-color: var(--rabi-faint);
@@ -1109,9 +1102,7 @@
   background: var(--rabi-paper);
 }
 
-/* 選択したセルだけ paper で浮かせる。値は `aria-selected` / `aria-pressed`、
- * 頁の現在地は `aria-current`。印は同じ */
-.rabi-segment-item[aria-selected="true"],
+/* 選択したセルだけ paper で浮かせる（`DESIGN.md`「状態」） */
 .rabi-segment-item[aria-pressed="true"],
 .rabi-segment-item[aria-current]:not([aria-current="false"]) {
   background: var(--rabi-paper);
@@ -1567,11 +1558,10 @@ summary.rabi-panel-section-head:hover {
   background: none;
 }
 
-/* 現在地と選択。**地は塗らない**（`DESIGN.md`「状態」）。
- * `aria-current` は場所、`aria-selected` はもの。表し方は同じ 1 つの形 */
+/* 現在地と選択。**地は塗らない**。表し方は 1 つ（`DESIGN.md`「状態」） */
 .rabi-nav :is(a, button)[aria-current]:not([aria-current="false"]),
-.rabi-nav :is(a, button)[aria-selected="true"],
-.rabi-nav :is(a, button)[aria-selected="true"]:hover {
+.rabi-nav :is(a, button)[aria-pressed="true"],
+.rabi-nav :is(a, button)[aria-pressed="true"]:hover {
   color: var(--rabi-accent-text);
   font-weight: 600;
 }
@@ -2425,7 +2415,7 @@ summary.rabi-nav-group::-webkit-details-marker {
   color: var(--rabi-soft);
 }
 
-.rabi-island-tab[aria-selected="true"] {
+.rabi-island-tab[aria-pressed="true"] {
   background: var(--rabi-ink);
   color: var(--rabi-paper);
 }
@@ -2435,7 +2425,7 @@ summary.rabi-nav-group::-webkit-details-marker {
   cursor: not-allowed;
 }
 
-.rabi-island-tab:disabled[aria-selected="true"] {
+.rabi-island-tab:disabled[aria-pressed="true"] {
   background: var(--rabi-paper-2);
   color: var(--rabi-faint);
 }
@@ -2513,8 +2503,8 @@ summary.rabi-nav-group::-webkit-details-marker {
 }
 
 /* 選んだ日は赤ベタ。淡い地を挟ま**ない**（`DESIGN.md`「状態」） */
-.rabi-cal-day[aria-selected="true"],
-.rabi-cal-day[aria-selected="true"]:hover {
+.rabi-cal-day[aria-pressed="true"],
+.rabi-cal-day[aria-pressed="true"]:hover {
   background: var(--rabi-accent);
   color: var(--rabi-on-accent);
   print-color-adjust: exact;
@@ -2538,7 +2528,7 @@ summary.rabi-nav-group::-webkit-details-marker {
 }
 
 /* 赤が地の面では印も反転する（`DESIGN.md`「赤を出す場所」） */
-.rabi-cal-day[aria-selected="true"] .rabi-cal-dot {
+.rabi-cal-day[aria-pressed="true"] .rabi-cal-dot {
   background: var(--rabi-on-accent);
 }
 
@@ -2989,7 +2979,6 @@ summary.rabi-nav-group::-webkit-details-marker {
   .rabi-textarea:focus-visible,
   .rabi-chat-input:focus-within,
   .rabi-chip[aria-pressed="true"],
-  .rabi-chip[aria-selected="true"],
   .rabi-swatch[aria-pressed="true"],
   .rabi-cover-tile[aria-pressed="true"] {
     outline: 1px solid CanvasText;
@@ -3027,19 +3016,19 @@ summary.rabi-nav-group::-webkit-details-marker {
   }
 
   /* 地で選択を示す部品。塗りが潰れると選んだものが分から**ない** */
-  .rabi-cal-day[aria-selected="true"],
-  .rabi-island-tab[aria-selected="true"] {
+  .rabi-cal-day[aria-pressed="true"],
+  .rabi-island-tab[aria-pressed="true"] {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
   }
 
-  .rabi-cal-day[aria-selected="true"] .rabi-cal-dot {
+  .rabi-cal-day[aria-pressed="true"] .rabi-cal-dot {
     forced-color-adjust: none;
     background: HighlightText;
   }
 
-  .rabi-island-tab:disabled[aria-selected="true"] {
+  .rabi-island-tab:disabled[aria-pressed="true"] {
     background: GrayText;
     color: Canvas;
   }

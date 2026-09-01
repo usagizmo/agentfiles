@@ -474,6 +474,82 @@ test("statusbar は kicker と併記する", () => {
   }
 });
 
+/** 選択・現在地を受ける `aria-*`（`DESIGN.md`「状態」の受ける属性の表）。 */
+const STATE_ATTRIBUTES = ["aria-pressed", "aria-selected", "aria-current"] as const;
+
+/**
+ * 選択の印を markup が持つ部品（`DESIGN.md`「Shapes」のチェックの形）。
+ *
+ * 行はチェックの要素そのもので選択を示すので、CSS は属性で受け**ない**。
+ * 印が在ることは別の gate（「ドロップダウンの選択はチェックで示す」）が見る。
+ */
+const MARKUP_MARKED = new Set(["rabi-dropdown-item"]);
+
+/**
+ * 面の HTML で状態を立てているのに、CSS がその属性で受けていない `class` と `aria-*`。
+ *
+ * 要素が持つ `.rabi-*` の**どれか 1 つ**が受けていれば通る ——
+ * variant（`rabi-tab-sm`）は基底が受ける。class を持たない要素は見ない ——
+ * 受け手が子孫セレクタ（`.rabi-nav :is(a, button)`）なので、class からは辿れ**ない**。
+ */
+function unreceivedStates(html: string, css: string): string[] {
+  const selectors = rules(css, "css").flatMap(([head]) => head.split(","));
+  const receives = (cls: string, attr: string): boolean =>
+    selectors.some((selector) => selector.includes(`.${cls}`) && selector.includes(`[${attr}`));
+  const hits: string[] = [];
+  for (const tag of html.match(/<[a-z][^>]*>/g) ?? []) {
+    const classes = (tag.match(/\sclass=["']([^"']+)["']/)?.[1] ?? "")
+      .split(/\s+/)
+      .filter((cls) => componentClasses.has(cls));
+    if (classes.length === 0 || classes.some((cls) => MARKUP_MARKED.has(cls))) continue;
+    for (const attr of STATE_ATTRIBUTES) {
+      const value = tag.match(new RegExp(`\\s${attr}=["']([^"']*)["']`))?.[1];
+      if (value === undefined || value === "false") continue;
+      if (classes.some((cls) => receives(cls, attr))) continue;
+      hits.push(`${classes[0]}[${attr}]`);
+    }
+  }
+  return [...new Set(hits)].sort();
+}
+
+// 面が立てた状態は CSS が同じ属性で受ける（`DESIGN.md`「状態」）。
+// 属性を片側だけ替えると、印は消えるのに markup は選択を名乗ったまま残る
+test.each(surfaces)("%s の状態を CSS が受けている", (name) => {
+  expect(unreceivedStates(readFileSync(join(DESIGN_DIR, name), "utf8"), COMPONENTS_CSS())).toEqual(
+    [],
+  );
+});
+
+/** 選択を名乗るドロップダウンの行のうち、チェックの印を持たないもの。 */
+function uncheckedDropdownItems(html: string): string[] {
+  return [...html.matchAll(/<button[^>]*\brabi-dropdown-item\b[^>]*>([\s\S]*?)<\/button>/g)]
+    .filter((m) => /\saria-pressed=["']true["']/.test(m[0]))
+    .filter((m) => !(m[1] as string).includes("rabi-dropdown-check"))
+    .map((m) => (m[1] as string).trim());
+}
+
+// ドロップダウンの行の選択は作者が書くチェックで示す（`DESIGN.md`「Shapes」）
+test.each(surfaces)("%s のドロップダウンの選択はチェックで示す", (name) => {
+  expect(uncheckedDropdownItems(readFileSync(join(DESIGN_DIR, name), "utf8"))).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 印を落としたら落ちることを実測する
+test("チェックを落としたドロップダウンの行で gate が落ちる", () => {
+  const html = '<button class="rabi-dropdown-item" aria-pressed="true"><span>行</span></button>';
+  expect(uncheckedDropdownItems(html)).toEqual(["<span>行</span>"]);
+});
+
+// **通ることは何も証明しない** —— 受け手を片側だけ替えたら落ちることを実測する
+test("受ける属性が面と CSS でずれると gate が落ちる", () => {
+  const css = COMPONENTS_CSS().replace(
+    /\.rabi-cal-day\[aria-pressed/g,
+    ".rabi-cal-day[aria-selected",
+  );
+  expect(unreceivedStates(readFileSync(join(DESIGN_DIR, "components.html"), "utf8"), css)).toEqual([
+    "rabi-cal-day[aria-pressed]",
+  ]);
+});
+
 // **通ることは何も証明しない** —— 欠けたら落ちることを実測する
 test.each([
   ["weight が無い", ".x { font-size: 12px; line-height: 1.4; }"],
