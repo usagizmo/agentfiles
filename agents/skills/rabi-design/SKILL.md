@@ -16,7 +16,7 @@ description: >-
 3. `assets/rabi-components.css` —— UI 部品の実装
 4. `assets/rabi-role.css` —— 情報層の値の SSOT と 3 ロールの variant。いつ読むかは `references/DESIGN.md`「情報層」と「Components」
 
-値と規則の SSOT は上の 1 と 2 と 4 で、媒体には依ら**ない**。
+front matter が写すのはブランド層の値で、SSOT は 2。部品の実装は 3、情報層は 4。規則は 1。媒体には依ら**ない**。
 適合対象の境界は `references/DESIGN.md`「射程」。このファイルには写さ**ない**。
 
 ## 展開する順

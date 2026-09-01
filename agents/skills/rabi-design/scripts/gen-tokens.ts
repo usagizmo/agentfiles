@@ -89,7 +89,7 @@ function ownedByFrontMatter(path: readonly string[]): boolean {
   if (group === undefined) return false;
   if (["version", "name", "description"].includes(group)) return true;
   if (DERIVED.has(path.join("."))) return true;
-  return group === "typography" && ["fontWeight", "letterSpacing"].includes(property ?? "");
+  return group === "typography" && property === "fontWeight";
 }
 
 /**

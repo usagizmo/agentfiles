@@ -13,8 +13,8 @@
       面そのものは密（一覧）なので、深さを使わず外縁も `5` 以下に収める
       （DESIGN.md「深さを使わない面」「Layout」）。
 
-      各行の左は部品のクラス名と、front matter `components` のキーか、
-      その行が何を見せるかの一言。値を確かめるのは DESIGN.md 側で、この面は形と状態だけを見る。
+      各行の左は部品のクラス名と、その行が何を見せるかの一言（要らない行はクラス名だけ）。
+      値を確かめるのは DESIGN.md 側で、この面は形と状態だけを見る。
     -->
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi.css" />
     <link rel="stylesheet" href="../agents/skills/rabi-design/assets/rabi-components.css" />
@@ -45,16 +45,6 @@
         html {
           scroll-behavior: auto;
         }
-      }
-
-      body {
-        font-size: var(--rabi-t-body);
-        line-height: var(--rabi-lh-body);
-      }
-
-      ::selection {
-        background: var(--rabi-wash);
-        color: var(--rabi-ink);
       }
 
       svg {
@@ -455,21 +445,21 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-primary</code><span>button-primary</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-primary</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <button class="rabi-btn rabi-btn-primary" type="button">主操作</button>
               <button class="rabi-btn rabi-btn-primary" type="button" disabled>無効</button>
               <span class="note">hover は accent-hover、active は accent-active</span>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-secondary</code><span>button-secondary</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-secondary</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <button class="rabi-btn rabi-btn-secondary" type="button">二次操作</button>
               <button class="rabi-btn rabi-btn-secondary" type="button" disabled>無効</button>
               <span class="note">hover は地だけ沈める。枠と文字は動かさない</span>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-ghost</code><span>button-ghost</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-ghost</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <button class="rabi-btn rabi-btn-ghost" type="button">三次操作</button>
               <button class="rabi-btn rabi-btn-ghost" type="button" disabled>無効</button>
@@ -535,33 +525,33 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chip</code><span>chip / chip-selected</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chip</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <button class="rabi-chip" type="button" aria-pressed="false">すべて</button>
               <button class="rabi-chip" type="button" aria-pressed="true">進行中</button>
               <button class="rabi-chip" type="button" aria-pressed="false">完了</button>
               <button class="rabi-chip" type="button" disabled>無効</button>
               <button class="rabi-chip" type="button" aria-pressed="true" disabled>無効かつ選択</button>
-              <span class="note">outline を使わない選択はチップ・タブ・リスト行・セグメントだけ</span>
+              <span class="note">選択は枠を accent、字を accent-text。地は塗らない</span>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-swatch</code><span>swatch / swatch-selected</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-swatch</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="demo-swatches">
-                <button class="rabi-swatch" type="button" aria-pressed="false" aria-label="未選択"></button>
-                <button class="rabi-swatch" type="button" aria-pressed="true" aria-label="選択"></button>
+                <button class="rabi-swatch" style="--rabi-swatch-color: var(--rabi-accent)" type="button" aria-pressed="false" aria-label="未選択"></button>
+                <button class="rabi-swatch" style="--rabi-swatch-color: var(--rabi-accent)" type="button" aria-pressed="true" aria-label="選択"></button>
               </div>
               <span class="note">色そのものが面。選択は枠</span>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-bind</code><span>bind / bind-busy</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-bind</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <button class="rabi-bind" type="button">⌘K</button>
               <button class="rabi-bind" type="button" aria-busy="true">打鍵待ち</button>
               <button class="rabi-bind" type="button" disabled>⌘S</button>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-badge</code><span>badge / badge-accent</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-badge</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <span class="rabi-badge">下書き</span>
               <span class="rabi-badge rabi-badge-outline">輪郭</span>
@@ -580,7 +570,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-section-head</code> / <code>.rabi-section-index</code> / <code>.rabi-section-note</code><span>section-head / section-index / section-note</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-section-head</code> / <code>.rabi-section-index</code> / <code>.rabi-section-note</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-section-head">
                 <span class="rabi-section-index">01</span>
@@ -597,13 +587,13 @@
         <section class="sec" id="input">
           <div class="rabi-section-head sec-head">
             <h2>Input</h2>
-            <p>誤りは枠そのものの色。focus は枠の外の outline で、位置で分かれる</p>
+            <p>箱で囲わない。書ける場所は下罫だけが示す。focus も誤りもその線の色</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input</code><span>input / input-invalid / input-disabled</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-field demo-field">
                 <label for="c-ok">既定</label>
@@ -621,7 +611,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-select</code> / <code>.rabi-select-wrap</code><span>select</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-select</code> / <code>.rabi-select-wrap</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-field demo-field">
                 <label for="c-sel">既定</label>
@@ -643,7 +633,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-textarea</code><span>textarea</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-textarea</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-field demo-field">
                 <label for="c-ta">既定</label>
@@ -666,12 +656,6 @@
               </div>
               <span class="note">一覧・ツールバーの中</span>
             </div>
-
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input-line</code><span>input-line</span></div>
-            <div class="rabi-cell rabi-cell-row v stack">
-              <input class="rabi-input-line" type="search" aria-label="下線の入力" placeholder="検索" />
-              <span class="note">枠は帯が持つ。本体は下罫だけ</span>
-            </div>
           </div>
         </section>
 
@@ -684,7 +668,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-check</code><span>checkbox / checkbox-checked</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-check</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <label class="rabi-choice"><input class="rabi-check" type="checkbox" />未チェック</label>
               <label class="rabi-choice"><input class="rabi-check" type="checkbox" checked />チェック済み</label>
@@ -692,7 +676,7 @@
               <label class="rabi-choice"><input class="rabi-check" type="checkbox" checked disabled />無効かつチェック済み</label>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-radio</code><span>radio / radio-checked</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-radio</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <label class="rabi-choice"><input class="rabi-radio" type="radio" name="c-role" checked />個人</label>
               <label class="rabi-choice"><input class="rabi-radio" type="radio" name="c-role" />チーム</label>
@@ -700,7 +684,7 @@
               <label class="rabi-choice"><input class="rabi-radio" type="radio" name="c-role2" checked disabled />無効かつ選択済み</label>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-switch</code><span>switch / switch-on</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-switch</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <label class="rabi-choice"><input class="rabi-switch" type="checkbox" />オフ</label>
               <label class="rabi-choice"><input class="rabi-switch" type="checkbox" checked />オン</label>
@@ -740,7 +724,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cell-featured</code><span>cell-featured</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cell-featured</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-grid demo-grid">
                 <div class="rabi-cell">通常のセル</div>
@@ -754,13 +738,13 @@
         <section class="sec" id="list">
           <div class="rabi-section-head sec-head">
             <h2>List</h2>
-            <p>hover は paper-2、選択は wash の面 + 左の帯。同じ面を両方に使わない</p>
+            <p>hover は paper-2 の面、選択は左の帯と字。同じ軸を両方に使わない</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-list</code> / <code>.rabi-list-item</code><span>list-item / list-item-hover</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-list</code> / <code>.rabi-list-item</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="demo-list">
                 <div class="rabi-list" aria-label="一覧の見本">
@@ -778,13 +762,13 @@
         <section class="sec" id="tree">
           <div class="rabi-section-head sec-head">
             <h2>Tree</h2>
-            <p>入れ子が字下げとガイド線を持つ。選択はリスト行と同じ wash + 左の帯</p>
+            <p>入れ子が字下げとガイド線を持つ。選択はリスト行と同じ左の帯と字</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tree</code> / <code>.rabi-tree-row</code><span>tree-row / tree-row-selected</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tree</code> / <code>.rabi-tree-row</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-tree demo-tree">
                 <button class="rabi-tree-row" type="button">棚</button>
@@ -809,7 +793,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card</code><span>card</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-card demo-card">
                 <h3 class="rabi-card-title">
@@ -820,7 +804,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card-head / -body / -foot</code><span>card-head / card-foot</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card-head / -body / -foot</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-card demo-card">
                 <div class="rabi-card-head">
@@ -839,7 +823,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card-accent</code><span>card-accent</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-card-accent</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-card rabi-card-accent demo-card">
                 <h3 class="rabi-card-title">
@@ -855,13 +839,13 @@
         <section class="sec" id="tab">
           <div class="rabi-section-head sec-head">
             <h2>Tab</h2>
-            <p>行は下罫。島とチャットのタブは ink 反転。wash はチップとリスト行と暦だけ</p>
+            <p>行のタブは現在地を下罫で示す。島とチャットのタブは ink 反転</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tabs</code> / <code>.rabi-tab</code><span>tab / tab-hover / tab-selected</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tabs</code> / <code>.rabi-tab</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-tabs" aria-label="タブの見本">
                 <button class="rabi-tab" type="button" aria-pressed="true">概要</button>
@@ -895,7 +879,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-island</code> / <code>.rabi-island-tab</code> / <code>.rabi-island-rule</code> / <code>.rabi-date-pill</code><span>island / island-tab / date-pill</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-island</code> / <code>.rabi-island-tab</code> / <code>.rabi-island-rule</code> / <code>.rabi-date-pill</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-island demo-island" aria-label="島の見本">
                 <button class="rabi-island-tab" type="button" aria-selected="true">ノート</button>
@@ -914,13 +898,13 @@
         <section class="sec" id="calendar">
           <div class="rabi-section-head sec-head">
             <h2>Calendar</h2>
-            <p>選択は wash + 内側の輪。今日は字を太くするだけ</p>
+            <p>選択は accent のベタ面。今日は字を太くするだけ</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-calendar</code> / <code>.rabi-cal-weekday</code> / <code>.rabi-cal-day</code> / <code>.rabi-cal-dot</code><span>cal-day / cal-day-selected / cal-day-today / cal-dot</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-calendar</code> / <code>.rabi-cal-weekday</code> / <code>.rabi-cal-day</code> / <code>.rabi-cal-dot</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-calendar demo-cal" aria-label="暦の見本">
                 <span class="rabi-cal-weekday">日</span>
@@ -990,7 +974,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat</code> / <code>.rabi-chat-user</code> / <code>.rabi-chat-msg</code><span>chat-msg / chat-msg-user</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat</code> / <code>.rabi-chat-user</code> / <code>.rabi-chat-msg</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="demo-chat">
                 <div class="rabi-chat">
@@ -1002,7 +986,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-input</code> / <code>.rabi-chat-input-actions</code><span>chat-input</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-input</code> / <code>.rabi-chat-input-actions</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="demo-chat">
                 <div class="rabi-chat-input">
@@ -1035,12 +1019,12 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-wait</code><span>chat-wait</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-wait</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <span class="rabi-chat-wait">調べています</span>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-thinking</code><span>chat-thinking</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-thinking</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <details class="rabi-accordion-item" open>
                 <summary class="rabi-accordion-summary"><span>考え中</span></summary>
@@ -1048,7 +1032,7 @@
               </details>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-debug</code> / <code>.rabi-chat-debug-body</code><span>chat-debug / chat-debug-body</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-chat-debug</code> / <code>.rabi-chat-debug-body</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <span class="rabi-chat-debug">DEBUG</span>
               <dl class="rabi-chat-debug-body">
@@ -1068,7 +1052,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-timeline-row</code> / <code>.rabi-timeline-time</code><span>timeline-row / timeline-time</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-timeline-row</code> / <code>.rabi-timeline-time</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="demo-timeline">
                 <button class="rabi-timeline-row" type="button" aria-current="true">
@@ -1097,7 +1081,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-history</code> / <code>.rabi-history-row</code><span>history-row / history-dot / history-rail</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-history</code> / <code>.rabi-history-row</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-history demo-history">
                 <button class="rabi-history-row" type="button" aria-current="true">いまの版</button>
@@ -1117,7 +1101,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-segment</code> / <code>.rabi-segment-item</code><span>segment / segment-selected</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-segment</code> / <code>.rabi-segment-item</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-segment" role="group" aria-label="表示形式">
                 <button class="rabi-segment-item" type="button" aria-pressed="true">一覧</button>
@@ -1148,13 +1132,13 @@
         <section class="sec" id="price">
           <div class="rabi-section-head sec-head">
             <h2>Price</h2>
-            <p>数値は display の段を等幅で組み、単位は label-sm の faint</p>
+            <p>数値は display の段を等幅数字で組み、単位は label-sm の faint</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-price</code><span>price</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-price</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <p class="rabi-price"><span class="rabi-price-val">¥0</span><span class="rabi-price-unit">／永久</span></p>
               <p class="rabi-price"><span class="rabi-price-val">¥1,400</span><span class="rabi-price-unit">／人・月</span></p>
@@ -1171,7 +1155,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-dropdown</code> / <code>.rabi-dropdown-item</code> / <code>.rabi-dropdown-divider</code><span>dropdown / dropdown-item / dropdown-divider</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-dropdown</code> / <code>.rabi-dropdown-item</code> / <code>.rabi-dropdown-divider</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-dropdown" aria-label="メニューの見本">
                 <button class="rabi-dropdown-item" type="button">
@@ -1236,7 +1220,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-panel</code> / <code>.rabi-panel-head</code> / <code>.rabi-panel-section-head</code> / <code>.rabi-panel-body</code><span>panel / panel-head / panel-section-head / panel-body</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-panel</code> / <code>.rabi-panel-head</code> / <code>.rabi-panel-section-head</code> / <code>.rabi-panel-body</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-panel demo-panel">
                 <div class="rabi-panel-head">
@@ -1293,12 +1277,12 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-panel-body</code> + <code>.rabi-input-line</code> + <code>.rabi-list-item</code><span>絞り込みは絞る本体の中</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-panel-body</code> + <code>.rabi-input</code> + <code>.rabi-list-item</code><span>絞り込みは絞る本体の中</span></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-panel demo-panel">
                 <div class="rabi-panel-head">最近のノート</div>
                 <div class="rabi-panel-body">
-                  <input class="rabi-input-line" type="search" aria-label="ノートを探す" placeholder="検索" />
+                  <input class="rabi-input rabi-input-sm" type="search" aria-label="ノートを探す" placeholder="検索" />
                   <div class="rabi-list">
                     <button class="rabi-list-item" type="button">置き換えのノート</button>
                     <button class="rabi-list-item" type="button">別のノート</button>
@@ -1312,23 +1296,23 @@
         <section class="sec" id="property">
           <div class="rabi-section-head sec-head">
             <h2>Property</h2>
-            <p>キーは右寄せの faint。値の枠は下線入力</p>
+            <p>キーは右寄せの faint。値は詰めた面の入力で、列いっぱいに伸ばす</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-prop</code> / <code>.rabi-prop-key</code><span>prop-key</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-prop</code> / <code>.rabi-prop-key</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <table class="rabi-prop demo-prop">
                 <tbody>
                   <tr>
                     <th class="rabi-prop-key" scope="row">タグ</th>
-                    <td><input class="rabi-input-line" type="text" value="置き換え" aria-label="タグ" /></td>
+                    <td><input class="rabi-input rabi-input-sm" type="text" value="置き換え" aria-label="タグ" /></td>
                   </tr>
                   <tr>
                     <th class="rabi-prop-key" scope="row">出典</th>
-                    <td><input class="rabi-input-line" type="text" value="ノート" aria-label="出典" /></td>
+                    <td><input class="rabi-input rabi-input-sm" type="text" value="ノート" aria-label="出典" /></td>
                   </tr>
                 </tbody>
               </table>
@@ -1345,7 +1329,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cover-tile</code><span>cover-tile / cover-tile-selected</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cover-tile</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="demo-tiles">
                 <button class="rabi-cover-tile" type="button" aria-pressed="true" aria-label="選んだ表紙"></button>
@@ -1353,7 +1337,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cover</code><span>cover</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-cover</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-cover">Rabi Notes</div>
             </div>
@@ -1363,13 +1347,13 @@
         <section class="sec" id="dialog">
           <div class="rabi-section-head sec-head">
             <h2>Dialog</h2>
-            <p>手前の層。影は e3、背面は塗らない。操作は下端に右寄せで主操作は 1 つ</p>
+            <p>手前の層。背面は塗らない。操作は下端に右寄せで主操作は 1 つ</p>
           </div>
           <div class="rabi-grid rows">
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-dialog</code> / <code>.rabi-dialog-head</code> / <code>.rabi-dialog-foot</code><span>dialog / dialog-title / dialog-lead / dialog-foot</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-dialog</code> / <code>.rabi-dialog-head</code> / <code>.rabi-dialog-foot</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-dialog" role="dialog" aria-labelledby="d-title">
                 <div class="rabi-dialog-head">
@@ -1561,7 +1545,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-accordion-item</code> / <code>.rabi-accordion-summary</code> / <code>.rabi-accordion-body</code><span>accordion-summary / accordion-body</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-accordion-item</code> / <code>.rabi-accordion-summary</code> / <code>.rabi-accordion-body</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-grid">
                 <details class="rabi-accordion-item" open>
@@ -1590,7 +1574,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-statusbar</code><span>statusbar / statusbar-on</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-statusbar</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="demo-statusbar">
                 <div class="rabi-statusbar">
@@ -1613,7 +1597,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tooltip</code><span>tooltip</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-tooltip</code></div>
             <div class="rabi-cell rabi-cell-row v tips">
               <span class="rabi-tooltip">置き換えの補足</span>
               <span class="rabi-tooltip">置き換えの操作 <kbd>⌘⌥2</kbd></span>
@@ -1631,7 +1615,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note</code><span>note / note-title</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-note demo-prose">
                 <p class="rabi-note-title">見出しを持つ添え物</p>
@@ -1642,14 +1626,14 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note-danger</code><span>note-danger</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note-danger</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-note rabi-note-danger" role="status">
                 <p>置き換えの警告文。淡い面の上なので、赤を意味として載せてよい。</p>
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note-*</code><span>note-info / note-success / note-attention</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-note-*</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-note rabi-note-info" role="status">
                 <p>保存せずに閉じると、未反映の入力は残らない。</p>
@@ -1741,7 +1725,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-appbar</code><span>appbar</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-appbar</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-appbar demo-stage">
                 <a class="rabi-brand" href="#appbar">
@@ -1758,7 +1742,7 @@
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-footer</code><span>footer / footer-col / footer-bottom</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-footer</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-footer demo-stage">
                 <div class="demo-footer-cols">
@@ -1794,7 +1778,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-nav</code><span>nav-item / nav-group</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-nav</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <nav class="rabi-nav demo-nav" aria-label="見本">
                 <ul>
@@ -1884,7 +1868,7 @@
               </nav>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-nav-sm</code><span>nav-item-sm</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-nav-sm</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <nav class="rabi-nav rabi-nav-sm demo-nav" aria-label="目次の見本">
                 <ul>
@@ -1899,7 +1883,7 @@
               </nav>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-crumbs</code><span>crumbs</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-crumbs</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <ol class="rabi-crumbs">
                 <li><a href="#nav">上の階層</a></li>
@@ -1919,7 +1903,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-page-head</code><span>page-kicker / page-title / page-lead</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-page-head</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <header class="rabi-page-head">
                 <p class="rabi-page-kicker">分類</p>
@@ -1928,7 +1912,7 @@
               </header>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-page-meta</code><span>page-meta</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-page-meta</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <header class="rabi-page-head">
                 <h3>日付を添える題</h3>
@@ -1947,7 +1931,7 @@
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-prose</code><span>prose / prose-code</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-prose</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-prose demo-prose">
                 <p>本文。<a href="#prose">リンク</a>は下線を必ず添える。短いコードは <code>inline</code> で埋める。</p>
@@ -1961,7 +1945,7 @@ pre &gt; code も同じ段</code></pre>
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-steps</code><span>steps / step-title</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-steps</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <ol class="rabi-steps demo-prose">
                 <li>
@@ -1981,7 +1965,7 @@ pre &gt; code も同じ段</code></pre>
 2 行目 —— 横に流さず折り返す</code></pre>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-kbd</code><span>kbd</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-kbd</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <span><kbd class="rabi-kbd">Cmd</kbd> + <kbd class="rabi-kbd">K</kbd></span>
             </div>
@@ -1997,7 +1981,7 @@ pre &gt; code も同じ段</code></pre>
             <div class="rabi-cell rabi-cell-head">CLASS</div>
             <div class="rabi-cell rabi-cell-head">SPECIMEN</div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-empty</code><span>empty / empty-title</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-empty</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <div class="rabi-empty demo-stage">
                 <svg class="ico ico-stacked" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /><path d="M11 7h4a2 2 0 0 1 2 2v4" /></svg>
@@ -2010,13 +1994,13 @@ pre &gt; code も同じ段</code></pre>
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-meter</code><span>meter / meter-fill</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-meter</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <progress class="rabi-meter" value="3" max="4">75%</progress>
               <span class="note">塗りは accent。強さの色分けは情報層</span>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-stat</code><span>stat / stat-label</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-stat</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-stat demo-stat">
                 <p class="rabi-stat-label">読むだけの値</p>
@@ -2030,7 +2014,7 @@ pre &gt; code も同じ段</code></pre>
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-avatar</code><span>avatar / avatar-lg</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-avatar</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <span class="rabi-avatar">S</span>
               <span class="rabi-avatar rabi-avatar-lg">S</span>
@@ -2039,7 +2023,7 @@ pre &gt; code も同じ段</code></pre>
               </span>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-checklist</code><span>checklist</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-checklist</code></div>
             <div class="rabi-cell rabi-cell-row v stack">
               <ul class="rabi-checklist">
                 <li>読むだけのチェック</li>
@@ -2047,7 +2031,7 @@ pre &gt; code も同じ段</code></pre>
               </ul>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input-wrap</code><span>input-figure</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-input-wrap</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-input-wrap demo-field">
                 <svg class="ico" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="4.6" /><path d="m11.4 11.4 3 3" /></svg>
@@ -2075,7 +2059,7 @@ pre &gt; code も同じ段</code></pre>
               </div>
             </div>
 
-            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-stack</code><span>btn-stack</span></div>
+            <div class="rabi-cell rabi-cell-row k"><code>.rabi-btn-stack</code></div>
             <div class="rabi-cell rabi-cell-row v">
               <div class="rabi-btn-stack">
                 <button type="button" class="rabi-btn rabi-btn-xs rabi-btn-icon rabi-btn-ghost" aria-label="足す">

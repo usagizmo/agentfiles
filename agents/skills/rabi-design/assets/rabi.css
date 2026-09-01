@@ -66,8 +66,8 @@
   --rabi-gap-12: 48px;
   --rabi-gap-14: 56px;
 
-  /* 一覧・ツリー・ナビで選んでいる行の左に立てるしるし。
-   * 枠でも輪でもない別軸なので、余白の段にも半径の段にも載せ**ない** */
+  /* 一覧・ツリー・ナビで選んでいる行の左に立てるしるしの太さ。
+   * 余白の段にも半径の段にも載せ**ない** */
   --rabi-select-bar: 2px;
 
   /* 操作部品の丈。`DESIGN.md`「Layout」 */
@@ -151,6 +151,12 @@ textarea {
   font-family: inherit;
 }
 
+/* 選んだ範囲。赤ベタと反転した字。面の段を使わ**ない** */
+::selection {
+  background: var(--rabi-accent);
+  color: var(--rabi-on-accent);
+}
+
 a {
   color: var(--rabi-accent-text);
   text-decoration: underline;
@@ -182,6 +188,11 @@ a:hover {
 .rabi-table td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* 等幅は数値のセルだけ。列見出しは字なので本文の書体のまま。
+ * サイズは表の段を継ぐので、詰めた面でも列の中で揃う */
+.rabi-table td.num {
+  font-family: var(--rabi-mono);
 }
 .rabi-table thead th {
   border-bottom: 1px solid var(--rabi-divider);
