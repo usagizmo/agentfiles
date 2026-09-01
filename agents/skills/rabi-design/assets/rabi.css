@@ -26,7 +26,7 @@
   --rabi-on-accent: #ffffff;
   --rabi-wash: light-dark(#fdeff2, #2a1219);
   --rabi-wash-line: light-dark(#f4d3db, #4a2029);
-  --rabi-shade: #000000; /* 混色の入力。地・文字に直接使わない */
+  --rabi-shade: #000000; /* 混色の入力。地・文字に直接使わ**ない** */
   --rabi-accent-hover: color-mix(in oklab, var(--rabi-accent) 88%, var(--rabi-shade));
   --rabi-accent-active: color-mix(in oklab, var(--rabi-accent) 76%, var(--rabi-shade));
 
@@ -39,10 +39,8 @@
   --rabi-e2-accent: 0 5px 14px rgb(88 6 22 / 0.34);
   --rabi-e3-accent: 0 12px 28px rgb(88 6 22 / 0.4);
 
-  /* 半径。`DESIGN.md`「Shapes」。
-   * 段は 1 つのつまみから導く。**平面**なので、いまつまみは 0 —— 箱は角を持た**ない**。
-   * `full` だけはつまみに従わ**ない**（円そのものが意味を持つ印・図） */
-  --rabi-r-unit: 0px;
+  /* 半径。段は 1 つのつまみから導く。`none` と `full` はつまみに従わ**ない** */
+  --rabi-r-unit: 4px;
 
   --rabi-r-none: 0px;
   --rabi-r-sm: var(--rabi-r-unit);
@@ -66,9 +64,8 @@
   --rabi-gap-12: 48px;
   --rabi-gap-14: 56px;
 
-  /* 一覧・ツリー・ナビで選んでいる行の左に立てるしるし。
-   * 枠でも輪でもない別軸なので、余白の段にも半径の段にも載せ**ない** */
-  --rabi-select-bar: 2px;
+  /* 行が左に確保する印の列（`DESIGN.md`「図の置き方」） */
+  --rabi-row-figure: 12px;
 
   /* 操作部品の丈。`DESIGN.md`「Layout」 */
   --rabi-control-xs: 24px;
@@ -110,7 +107,7 @@
   --rabi-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
-/* 閲覧側のトグル。無ければ OS の設定に従う */
+/* 閲覧側のトグル。無ければ OS に従う */
 :root[data-theme="light"] {
   color-scheme: light;
 }
@@ -118,8 +115,7 @@
   color-scheme: dark;
 }
 
-/* 印刷は常にライト値。dark の地は印刷されず文字だけが薄く残る。
- * トグルの `[data-theme]` に負けないよう、同じ詳細度で後に置く。 */
+/* 印刷は常にライト値。dark の地は印刷されず文字だけが薄く残る */
 @media print {
   :root,
   :root[data-theme="dark"] {
@@ -151,6 +147,12 @@ textarea {
   font-family: inherit;
 }
 
+/* 選んだ範囲。赤ベタと反転した字。面の段を使わ**ない** */
+::selection {
+  background: var(--rabi-accent);
+  color: var(--rabi-on-accent);
+}
+
 a {
   color: var(--rabi-accent-text);
   text-decoration: underline;
@@ -163,6 +165,7 @@ a:hover {
 .rabi-heading {
   color: var(--rabi-ink);
   font-weight: 600;
+  text-wrap: balance;
   border-bottom: 2px solid var(--rabi-accent);
   padding-bottom: var(--rabi-gap-1);
 }
@@ -182,6 +185,10 @@ a:hover {
 .rabi-table td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* 等幅は数値のセルだけ */
+.rabi-table td.num {
+  font-family: var(--rabi-mono);
 }
 .rabi-table thead th {
   border-bottom: 1px solid var(--rabi-divider);

@@ -588,11 +588,11 @@ partners:
     expect(executorRefused(["resolve-12 idle - -"])).toBe(false);
     expect(executorRefused(["resolve-12 working"])).toBe(false);
     expect(
-      executorRefused(["resolve-12 working leftover -", "a-grok-1 idle - refused - /tmp/x"]),
+      executorRefused(["resolve-12 working leftover -", "a-grok-1 idle - refused - - /tmp/x"]),
     ).toBe(false);
     expect(executorRefused(["resolve-12 working leftover refused"])).toBe(false);
     expect(executorRefused(["resolve-12 working - refused"])).toBe(true);
-    expect(executorRefused(["a-grok-1 done - refused - /tmp/other"])).toBe(true);
+    expect(executorRefused(["a-grok-1 done - refused - - /tmp/other"])).toBe(true);
   });
 
   test("計画セッションは refine-<番号> から引く（resolve の名前で代用しない）", async () => {

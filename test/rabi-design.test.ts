@@ -41,6 +41,49 @@ async function withSandbox(body: (dir: string) => Promise<void>): Promise<void> 
 const asset = (dir: string, name: string) => join(dir, "assets", name);
 const designPath = (dir: string) => join(dir, "references/DESIGN.md");
 
+const DESIGN_MD = readFileSync(designPath(SKILL), "utf8");
+const EVAL_MD = readFileSync(join(SKILL, "references/EVAL.md"), "utf8");
+
+/**
+ * 見出しの列名で表を選び、行を返す。
+ *
+ * 行は見出しの**直後から連続する分だけ**。`|` の行を拾い集めると、
+ * 表が終わったあとの別の表が同じ表の続きとして混ざる。
+ *
+ * 列名が重複する表は掴め**ない**。先頭を黙って取ると、別の表を正として読む。
+ */
+function table(doc: string, header: readonly string[]): string[][] {
+  const lines = doc.split("\n");
+  const cells = (line: string): string[] | undefined => {
+    const t = line.trim();
+    if (!t.startsWith("|") || !t.endsWith("|")) return undefined;
+    return t
+      .slice(1, -1)
+      .split("|")
+      .map((c) => c.trim());
+  };
+  const heads = lines.flatMap((line, i) => {
+    const c = cells(line);
+    const hit = c !== undefined && c.length === header.length && header.every((h, j) => c[j] === h);
+    return hit ? [i] : [];
+  });
+  const label = header.join(" / ");
+  if (heads.length === 0) throw new Error(`${label} の表が無い`);
+  if (heads.length > 1) throw new Error(`${label} の表が ${heads.length} つある`);
+  const rows: string[][] = [];
+  for (let i = (heads[0] as number) + 2; i < lines.length; i += 1) {
+    const c = cells(lines[i] as string);
+    if (c === undefined || c.length !== header.length) break;
+    rows.push(c);
+  }
+  return rows;
+}
+
+/** 「Layout」の丈の対応表。丈から決まる 3 つはこの 1 本の行から導く。 */
+const HEIGHT_ROWS = table(DESIGN_MD, ["丈", "文字", "左右の余白", "図"]).map((row) =>
+  row.map((cell) => cell.replaceAll("`", "")),
+);
+
 /** DESIGN.md の front matter だけを返す。本文の例は写しでは**ない**ので検査に混ぜない。 */
 function frontMatter(design: string): string {
   const m = design.match(/^---\n([\s\S]*?\n)---\n/);
@@ -166,12 +209,12 @@ const classesIn = (rel: string): string[] =>
 const HEADING_STEPS = new Set(["display", "heading", "subheading"]);
 
 /**
- * 丈の表に載ら**ない**セレクタ。
+ * 丈から決まら**ない**文字の段（`DESIGN.md`「Layout」）。
  *
  * 表が縛るのは**文字を内包する操作枠**だけ（`DESIGN.md`「Layout」）。
  * 帯は丈を面の都合で決めるので、字の段が丈から従属し**ない**。
  */
-const NOT_ON_HEIGHT_STEP = new Set([".rabi-statusbar", ".rabi-panel-section-head"]);
+const NOT_ON_HEIGHT_STEP = new Set([".rabi-panel-section-head"]);
 
 const uiClasses = classesIn("assets/rabi-components.css");
 const componentClasses = new Set([
@@ -208,15 +251,9 @@ test.each(["assets/rabi-components.css", "assets/rabi.css", "assets/rabi-role.cs
   },
 );
 
-/**
- * 丈から決まる文字の段。「Layout」の対応表**から導く**。
- */
+/** 丈から決まる文字の段。 */
 const TYPE_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
-  [
-    ...readFileSync(designPath(SKILL), "utf8").matchAll(
-      /^\| `(control[a-z-]*)`\s*\|\s*`([a-z-]+)`\s*\|/gm,
-    ),
-  ].map((m) => [m[1] as string, m[2] as string]),
+  HEIGHT_ROWS.map((row) => [row[0] as string, row[1] as string]),
 );
 
 test("丈と文字の対応表を DESIGN.md から引けている", () => {
@@ -239,7 +276,11 @@ function heightTypeMismatch(css: string): string[] {
       const body = m[2] as string;
       if (NOT_ON_HEIGHT_STEP.has((m[1] as string).trim().replace(/\s+/g, " "))) return false;
       if (/font-family: var\(--rabi-mono\)/.test(body)) return false;
-      const height = /height: var\(--rabi-(control[a-z-]*)\)/.exec(body)?.[1];
+      // 部品ローカルの変数（`--rabi-btn-h` など）も丈の宣言。別ブロックへ割られた
+      // variant（丈は基底、文字は variant）でも gate の外に逃がさ**ない**
+      const height =
+        /--rabi-[a-z0-9-]+:\s*var\(--rabi-(control[a-z-]*)\)/.exec(body)?.[1] ??
+        /height: var\(--rabi-(control[a-z-]*)\)/.exec(body)?.[1];
       const step = /font-size: var\(--rabi-t-([a-z-]+)\)/.exec(body)?.[1];
       if (height === undefined || step === undefined) return false;
       if (HEADING_STEPS.has(step)) return false;
@@ -262,6 +303,14 @@ test("丈と文字の段がずれると落ちる", () => {
   expect(heightTypeMismatch(css)).toEqual([".x"]);
 });
 
+test("ローカル変数を経由する部品の文字の段のずれも落ちる", () => {
+  const css = COMPONENTS_CSS().replace(
+    "--rabi-btn-h: var(--rabi-control-xs);\n  --rabi-btn-pad: var(--rabi-gap-2);\n  font-size: var(--rabi-t-label);",
+    "--rabi-btn-h: var(--rabi-control-xs);\n  --rabi-btn-pad: var(--rabi-gap-2);\n  font-size: var(--rabi-t-hero);",
+  );
+  expect(heightTypeMismatch(css)).toEqual([".rabi-btn-xs"]);
+});
+
 test.each([
   ["見出しの段", ".x { height: var(--rabi-control); font-size: var(--rabi-t-subheading); }"],
   [
@@ -272,16 +321,9 @@ test.each([
   expect(heightTypeMismatch(css)).toEqual([]);
 });
 
-/**
- * 丈から決まる左右の余白。`DESIGN.md`「Layout」の対応表**から導く**。
- * 表を写すと同じ値が 2 か所になり、片方だけ直る。
- */
+/** 丈から決まる左右の余白。 */
 const PADDING_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
-  [
-    ...readFileSync(designPath(SKILL), "utf8").matchAll(
-      /^\| `(control[a-z-]*)`\s*\|[^|]*\|\s*`([0-9.]+)`\s*\|/gm,
-    ),
-  ].map((m) => [m[1] as string, `gap-${(m[2] as string).replace(".", "_")}`]),
+  HEIGHT_ROWS.map((row) => [row[0] as string, `gap-${(row[2] as string).replace(".", "_")}`]),
 );
 
 test("丈と余白の対応表を DESIGN.md から引けている", () => {
@@ -293,39 +335,36 @@ test("丈と余白の対応表を DESIGN.md から引けている", () => {
   ]);
 });
 
-/**
- * 丈から決まる figure だけの部品の図の寸法。「Layout」の対応表**から導く**。
- */
-const FIGURE_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
-  [
-    ...readFileSync(designPath(SKILL), "utf8").matchAll(
-      /^\| `(control[a-z-]*)`\s*\|[^|]*\|[^|]*\|\s*([0-9]+px)\s*\|/gm,
-    ),
-  ].map((m) => [m[1] as string, m[2] as string]),
-);
-
-test("丈と図の対応表を DESIGN.md から引けている", () => {
-  expect(FIGURE_FOR_HEIGHT).toEqual({
-    "control-lg": "16px",
-    control: "16px",
-    "control-sm": "14px",
-    "control-xs": "14px",
-  });
-});
-
-/** 丈と左右の余白が対応表からずれているセレクタを返す。 */
+/** 丈と左右の余白が対応表からずれているセレクタを返す。
+ * 宣言はセレクタごとに規則を横断して集める —— 丈と余白を別ブロックへ割った部品も
+ * gate の外に逃がさ**ない**。部品ローカルの変数（`--rabi-btn-h` など）は 1 段解決する */
 function heightPaddingMismatch(css: string): string[] {
-  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
-    .filter((m) => {
-      const height = /height: var\(--rabi-(control[a-z-]*)\)/.exec(m[2] as string)?.[1];
-      const pad = /padding(?:-inline)?: (?:0 )?var\(--rabi-(gap-[0-9_]+)\)/.exec(
-        m[2] as string,
-      )?.[1];
-      if (height === undefined || pad === undefined) return false;
-      const want = PADDING_FOR_HEIGHT[height];
-      return want !== undefined && want !== pad;
-    })
-    .map((m) => (m[1] as string).trim().replace(/\s+/g, " "));
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const acc = new Map<string, { height?: string; pad?: string; aliases: Map<string, string> }>();
+  for (const m of bare.matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)) {
+    const sel = (m[1] as string).trim().replace(/\s+/g, " ");
+    const body = m[2] as string;
+    const entry = acc.get(sel) ?? { aliases: new Map<string, string>() };
+    for (const [, local, target] of body.matchAll(
+      /--rabi-([a-z0-9-]+):\s*var\(--rabi-(control[a-z-]*|gap-[0-9_]+)\)/g,
+    )) {
+      entry.aliases.set(local ?? "", target ?? "");
+    }
+    const height = /height: var\(--rabi-([a-z0-9-]+)\)/.exec(body)?.[1];
+    if (height !== undefined) entry.height = height;
+    const pad = /padding(?:-inline)?: (?:0 )?var\(--rabi-([a-z0-9_-]+)\)/.exec(body)?.[1];
+    if (pad !== undefined) entry.pad = pad;
+    acc.set(sel, entry);
+  }
+  const bad: string[] = [];
+  for (const [sel, entry] of acc) {
+    if (entry.height === undefined || entry.pad === undefined) continue;
+    const resolve = (ref: string): string =>
+      ref.startsWith("control") || ref.startsWith("gap-") ? ref : (entry.aliases.get(ref) ?? "");
+    const want = PADDING_FOR_HEIGHT[resolve(entry.height)];
+    if (want !== undefined && want !== resolve(entry.pad ?? "")) bad.push(sel);
+  }
+  return bad.sort();
 }
 
 // 丈が決まれば左右の余白も決まる（`DESIGN.md`「Layout」）
@@ -335,10 +374,180 @@ test("rabi-components.css の丈と左右の余白が対応表と揃っている
   ).toEqual([]);
 });
 
-// **通ることは何も証明しない** —— ずれたら落ちることを実測する
+// **通ることは何も証明しない** —— ずれたら落ちることを実測する。
+// ローカル変数を経由する `.rabi-btn` が gate の外に逃げ**ない**ことも、崩して実測する
 test("丈と余白がずれると落ちる", () => {
   const css = ".x {\n  height: var(--rabi-control-sm);\n  padding: 0 var(--rabi-gap-3);\n}";
   expect(heightPaddingMismatch(css)).toEqual([".x"]);
+});
+
+test("ローカル変数を経由する部品のずれも落ちる", () => {
+  const css = COMPONENTS_CSS().replace(
+    "--rabi-btn-pad: var(--rabi-gap-3);",
+    "--rabi-btn-pad: var(--rabi-gap-4);",
+  );
+  expect(heightPaddingMismatch(css)).toEqual([".rabi-btn"]);
+});
+
+test("別ブロックに割れた丈と余白も落ちる", () => {
+  const css = ".x { height: var(--rabi-control-sm); }\n.x { padding: 0 var(--rabi-gap-3); }";
+  expect(heightPaddingMismatch(css)).toEqual([".x"]);
+});
+
+/**
+ * 押すと沈む部品。`DESIGN.md`「状態」の active の行。
+ *
+ * 面積の広い行と、**文字である操作**（縦のナビ・パンくず）は沈め**ない** ——
+ * hover の地が既に応える。沈むのは押した面として立つものだけ。
+ */
+const PRESSABLE = [
+  ".rabi-btn",
+  ".rabi-chip",
+  ".rabi-chip-kbd",
+  ".rabi-swatch",
+  ".rabi-cell-action",
+  ".rabi-tab",
+  ".rabi-island-tab",
+  ".rabi-segment-item",
+  ".rabi-cal-day",
+  ".rabi-date-pill",
+  ".rabi-dropdown-item",
+  ".rabi-appbar-nav a",
+] as const;
+
+/** 広い面積の行と、文字である操作。押しの対象外。入ったら落ちる */
+const WIDE_ROWS = [
+  ".rabi-list-item",
+  ".rabi-timeline-row",
+  ".rabi-history-row",
+  ".rabi-accordion-summary",
+  ".rabi-nav :is(a, button)",
+  ".rabi-crumbs a",
+] as const;
+
+/** `needle` を本体に持つ規則のセレクタを 1 つずつに割って返す。 */
+function pressSelectorList(css: string, needle: string): string[] {
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
+    .filter((m) => (m[2] as string).includes(needle))
+    .flatMap((m) => (m[1] as string).split(","))
+    .map((s) => s.trim());
+}
+
+/** 押しの並びから欠けている対象。空なら gate は通る。 */
+function missingPress(css: string, needle: string, suffix: string): string[] {
+  const selectors = new Set(pressSelectorList(css, needle));
+  return PRESSABLE.filter((target) => !selectors.has(`${target}${suffix}`));
+}
+
+const COMPONENTS_CSS = () => readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8");
+
+// 押せる部品は押下で沈み、離す速さは motion の 1 つ（`DESIGN.md`「状態」「Typography」）
+test("押せる部品は押下で沈み、戻りが motion を持つ", () => {
+  const css = COMPONENTS_CSS();
+  expect(missingPress(css, "transition: translate", "")).toEqual([]);
+  expect(missingPress(css, "translate: 0 1px", ":active")).toEqual([]);
+});
+
+test("押せる部品を押しの並びから外すと gate が落ちる", () => {
+  const css = COMPONENTS_CSS().replace(".rabi-chip:active,", ".rabi-chip-nope:active,");
+  expect(missingPress(css, "translate: 0 1px", ":active")).toEqual([".rabi-chip"]);
+});
+
+// 面積の広い行は沈め**ない**（`DESIGN.md`「状態」の active の行）
+test("面積の広い行は押下で沈めない", () => {
+  const active = pressSelectorList(COMPONENTS_CSS(), "translate: 0 1px");
+  for (const row of WIDE_ROWS) {
+    expect(active.some((selector) => selector.startsWith(`${row}`))).toBe(false);
+  }
+});
+
+// statusbar は字の面を kicker の併記で受ける（`DESIGN.md`「Components」）。
+// 忘れると字が本文の書体へ落ちるので、面の側で検査する
+test("statusbar は kicker と併記する", () => {
+  for (const name of surfaces) {
+    const html = readFileSync(join(DESIGN_DIR, name), "utf8");
+    for (const m of html.matchAll(/class="([^"]*)"/g)) {
+      const classes = (m[1] as string).split(/\s+/);
+      if (!classes.includes("rabi-statusbar")) continue;
+      expect(classes).toContain("rabi-kicker");
+    }
+  }
+});
+
+/** 選択・現在地を受ける `aria-*`（`DESIGN.md`「状態」の受ける属性の表）。 */
+const STATE_ATTRIBUTES = ["aria-pressed", "aria-selected", "aria-current"] as const;
+
+/**
+ * 選択の印を markup が持つ部品（`DESIGN.md`「図の置き方」のチェックの形）。
+ *
+ * 行はチェックの要素そのもので選択を示すので、CSS は属性で受け**ない**。
+ * 印が在ることは別の gate（「ドロップダウンの選択はチェックで示す」）が見る。
+ */
+const MARKUP_MARKED = new Set(["rabi-dropdown-item"]);
+
+/**
+ * 面の HTML で状態を立てているのに、CSS がその属性で受けていない `class` と `aria-*`。
+ *
+ * 要素が持つ `.rabi-*` の**どれか 1 つ**が受けていれば通る ——
+ * variant（`rabi-tab-sm`）は基底が受ける。class を持たない要素は見ない ——
+ * 受け手が子孫セレクタ（`.rabi-nav :is(a, button)`）なので、class からは辿れ**ない**。
+ */
+function unreceivedStates(html: string, css: string): string[] {
+  const selectors = rules(css, "css").flatMap(([head]) => head.split(","));
+  const receives = (cls: string, attr: string): boolean =>
+    selectors.some((selector) => selector.includes(`.${cls}`) && selector.includes(`[${attr}`));
+  const hits: string[] = [];
+  for (const tag of html.match(/<[a-z][^>]*>/g) ?? []) {
+    const classes = (tag.match(/\sclass=["']([^"']+)["']/)?.[1] ?? "")
+      .split(/\s+/)
+      .filter((cls) => componentClasses.has(cls));
+    if (classes.length === 0 || classes.some((cls) => MARKUP_MARKED.has(cls))) continue;
+    for (const attr of STATE_ATTRIBUTES) {
+      const value = tag.match(new RegExp(`\\s${attr}=["']([^"']*)["']`))?.[1];
+      if (value === undefined || value === "false") continue;
+      if (classes.some((cls) => receives(cls, attr))) continue;
+      hits.push(`${classes[0]}[${attr}]`);
+    }
+  }
+  return [...new Set(hits)].sort();
+}
+
+// 面が立てた状態は CSS が同じ属性で受ける（`DESIGN.md`「状態」）。
+// 属性を片側だけ替えると、印は消えるのに markup は選択を名乗ったまま残る
+test.each(surfaces)("%s の状態を CSS が受けている", (name) => {
+  expect(unreceivedStates(readFileSync(join(DESIGN_DIR, name), "utf8"), COMPONENTS_CSS())).toEqual(
+    [],
+  );
+});
+
+/** 選択を名乗るドロップダウンの行のうち、チェックの印を持たないもの。 */
+function uncheckedDropdownItems(html: string): string[] {
+  return [...html.matchAll(/<button[^>]*\brabi-dropdown-item\b[^>]*>([\s\S]*?)<\/button>/g)]
+    .filter((m) => /\saria-pressed=["']true["']/.test(m[0]))
+    .filter((m) => !(m[1] as string).includes("rabi-dropdown-check"))
+    .map((m) => (m[1] as string).trim());
+}
+
+// ドロップダウンの行の選択は作者が書くチェックで示す（`DESIGN.md`「図の置き方」）
+test.each(surfaces)("%s のドロップダウンの選択はチェックで示す", (name) => {
+  expect(uncheckedDropdownItems(readFileSync(join(DESIGN_DIR, name), "utf8"))).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 印を落としたら落ちることを実測する
+test("チェックを落としたドロップダウンの行で gate が落ちる", () => {
+  const html = '<button class="rabi-dropdown-item" aria-pressed="true"><span>行</span></button>';
+  expect(uncheckedDropdownItems(html)).toEqual(["<span>行</span>"]);
+});
+
+// **通ることは何も証明しない** —— 受け手を片側だけ替えたら落ちることを実測する
+test("受ける属性が面と CSS でずれると gate が落ちる", () => {
+  const css = COMPONENTS_CSS().replace(
+    /\.rabi-cal-day\[aria-pressed/g,
+    ".rabi-cal-day[aria-selected",
+  );
+  expect(unreceivedStates(readFileSync(join(DESIGN_DIR, "components.html"), "utf8"), css)).toEqual([
+    "rabi-cal-day[aria-pressed]",
+  ]);
 });
 
 // **通ることは何も証明しない** —— 欠けたら落ちることを実測する
@@ -1120,4 +1329,152 @@ test("engine ごとの擬似要素を混ぜると落ちる", () => {
       ".x::-webkit-progress-value,\n.x::-moz-progress-bar {\n  background: red;\n}",
     ),
   ).toEqual([".x::-webkit-progress-value, .x::-moz-progress-bar"]);
+});
+
+/** 所在が解決する先。`##` と `###` の両方を取る。 */
+function headings(design: string): Set<string> {
+  return new Set([...design.matchAll(/^#{2,3} (.+)$/gm)].map((m) => (m[1] as string).trim()));
+}
+
+/** 失敗パターンの表を (名, 所在) で返す。所在は鉤括弧の中。 */
+function failurePatterns(design: string): { name: string; places: string[] }[] {
+  return table(design, ["名", "所在"]).map((row) => ({
+    name: row[0] as string,
+    places: [...(row[1] as string).matchAll(/「([^」]+)」/g)].map((m) => m[1] as string),
+  }));
+}
+
+/** 解決しない所在。同じ見出しを複数の名が指すので、束ねて返す。 */
+const unresolvedPlaces = (design: string): string[] => {
+  const known = headings(design);
+  const missing = failurePatterns(design).flatMap((p) => p.places.filter((h) => !known.has(h)));
+  return [...new Set(missing)].sort();
+};
+
+// 索引が指す先が消えても本文は無事なので、突き合わせないと静かにずれる
+test("失敗パターンの所在が DESIGN.md の見出しに解決する", () => {
+  expect(unresolvedPlaces(DESIGN_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 見出しを改名したら落ちることを実測する
+test("見出しを改名すると落ちる", () => {
+  expect(unresolvedPlaces(DESIGN_MD.replace(/^### 面と段$/m, "### 面と階調"))).toEqual(["面と段"]);
+});
+
+const singlePlaced = (design: string): string[] =>
+  failurePatterns(design)
+    .filter((p) => p.places.length < 2)
+    .map((p) => p.name);
+
+// 所在が 1 つの禁止はその見出しが索引（`DESIGN.md`「失敗パターン」）
+test("失敗パターンの所在が 2 つ以上ある", () => {
+  expect(singlePlaced(DESIGN_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 所在が 1 つの名を足したら落ちることを実測する
+test("所在が 1 つの名を足すと落ちる", () => {
+  const added = DESIGN_MD.replace(
+    /^\| 押せる行を div で組む\s*\|.*$/m,
+    (row) => `${row}\n| 半径を大きさと別に選ぶ | 「Shapes」 |`,
+  );
+  expect(singlePlaced(added)).toEqual(["半径を大きさと別に選ぶ"]);
+});
+
+const MEDIA_HEADER = ["媒体", "読むもの", "使える部品"] as const;
+const SCENARIO_HEADER = ["お題", "媒体", "渡すもの", "見る軸"] as const;
+
+/** 媒体表の第 1 列。EVAL.md のシナリオはこの文字列そのものを名乗る。 */
+const media = (design: string): string[] =>
+  table(design, MEDIA_HEADER).map((row) => row[0] as string);
+
+/** シナリオが名乗る媒体。 */
+const scenarioMedia = (evalMd: string): string[] =>
+  table(evalMd, SCENARIO_HEADER).map((row) => row[1] as string);
+
+test("媒体表を DESIGN.md から引けている", () => {
+  expect(media(DESIGN_MD)).toEqual([
+    "UI。意味ロールが 2 つ以上並ぶ面",
+    "UI。それ以外",
+    "文書（見積・譜面・PDF）",
+    "CSS を持たない（docx・スライド）",
+  ]);
+});
+
+const uncovered = (design: string, evalMd: string): string[] => {
+  const named = scenarioMedia(evalMd);
+  return media(design).filter((m) => !named.includes(m));
+};
+
+// 媒体を足してシナリオを足さないと、その媒体は一度も生成されずに入る
+test("シナリオが媒体表の全行を覆う", () => {
+  expect(uncovered(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 覆い漏れが落ちることを実測する
+test("媒体を足してシナリオを足さないと落ちる", () => {
+  const added = DESIGN_MD.replace(
+    /^\| CSS を持たない（docx・スライド）.*$/m,
+    (row) => `${row}\n| 紙。刷って配る面 | \`rabi.css\` だけ | 表のみ |`,
+  );
+  expect(uncovered(added, EVAL_MD)).toEqual(["紙。刷って配る面"]);
+});
+
+const unknownMedia = (design: string, evalMd: string): string[] => {
+  const known = media(design);
+  return scenarioMedia(evalMd).filter((m) => !known.includes(m));
+};
+
+// 媒体表に無い媒体を名乗ると、読むものも使える部品も決まらない
+test("シナリオが媒体表に無い媒体を名乗らない", () => {
+  expect(unknownMedia(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 言い換えたら落ちることを実測する
+test("媒体を言い換えると落ちる", () => {
+  const reworded = EVAL_MD.replace(/^(\| 読み物\s*\|)[^|]*/m, "$1 UI（その他） ");
+  expect(unknownMedia(DESIGN_MD, reworded)).toEqual(["UI（その他）"]);
+});
+
+/** シナリオが挙げる見る軸。名は `DESIGN.md`「失敗パターン」のもの。 */
+const scenarioAxes = (evalMd: string): string[] =>
+  table(evalMd, SCENARIO_HEADER).flatMap((row) =>
+    (row[3] as string).split("/").map((axis) => axis.trim()),
+  );
+
+const unknownAxes = (design: string, evalMd: string): string[] => {
+  const known = new Set(failurePatterns(design).map((p) => p.name));
+  return [...new Set(scenarioAxes(evalMd).filter((axis) => !known.has(axis)))].sort();
+};
+
+// 名を改名しても EVAL.md は落ちないので、突き合わせないと死んだ名を指し続ける
+test("見る軸が失敗パターンの名に解決する", () => {
+  expect(unknownAxes(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 改名したら落ちることを実測する
+test("失敗パターンを改名すると落ちる", () => {
+  expect(
+    unknownAxes(DESIGN_MD.replace(/^\| 影で階層を作る /m, "| 影で層を作る "), EVAL_MD),
+  ).toEqual(["影で階層を作る"]);
+});
+
+const unusedPatterns = (design: string, evalMd: string): string[] => {
+  const axes = new Set(scenarioAxes(evalMd));
+  return failurePatterns(design)
+    .map((p) => p.name)
+    .filter((name) => !axes.has(name));
+};
+
+// 見る軸に出ない名は、どのシナリオでも当たりを取られない
+test("失敗パターンの名を見る軸が全部使う", () => {
+  expect(unusedPatterns(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 使い漏れが落ちることを実測する
+test("失敗パターンを足してシナリオへ足さないと落ちる", () => {
+  const added = DESIGN_MD.replace(
+    /^\| 押せる行を div で組む\s*\|.*$/m,
+    (row) => `${row}\n| 半径を大きさと別に選ぶ | 「Shapes」「Components」 |`,
+  );
+  expect(unusedPatterns(added, EVAL_MD)).toEqual(["半径を大きさと別に選ぶ"]);
 });

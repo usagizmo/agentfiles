@@ -57,6 +57,23 @@ export function declarations(css: string): Map<string, string> {
 }
 
 /**
+ * `calc()` の定数畳み込み。`4px * 2.5` の形の 1 演算だけを落とす。
+ * front matter は literal しか持て**ない**ので、畳めない式は許さ**ない**。
+ */
+function foldCalc(value: string): string {
+  return value.replace(/calc\(([^()]+)\)/g, (_whole, inner: string) => {
+    const m = /^(-?\d+(?:\.\d+)?)([a-z%]*)\s*([*/])\s*(-?\d+(?:\.\d+)?)([a-z%]*)$/.exec(
+      inner.replace(/\s+/g, " ").trim(),
+    );
+    if (!m) throw new Error(`畳めない calc() が残った: calc(${inner})`);
+    const [, a = "", au = "", op = "", b = "", bu = ""] = m;
+    if (op === "*" && au && bu) throw new Error(`単位が 2 つある calc(): calc(${inner})`);
+    if (op === "/" && bu) throw new Error(`割る数に単位を置け**ない**: calc(${inner})`);
+    return `${op === "*" ? Number(a) * Number(b) : Number(a) / Number(b)}${au || bu}`;
+  });
+}
+
+/**
  * `var(--rabi-…)` の参照を宣言値へ展開しきる。front matter は literal しか持て**ない**。
  *
  * 多段の参照も辿る。同じ名前へ戻ったら循環として throw する。
@@ -76,7 +93,9 @@ function expand(
     return expand(css, declared, new Set([...seen, name]));
   });
   if (expanded.includes("var(")) throw new Error(`展開しきれない参照が残った: ${expanded}`);
-  return expanded;
+  const folded = foldCalc(expanded);
+  if (folded.includes("calc(")) throw new Error(`畳みきれない calc() が残った: ${folded}`);
+  return folded;
 }
 
 /**
@@ -89,7 +108,7 @@ function ownedByFrontMatter(path: readonly string[]): boolean {
   if (group === undefined) return false;
   if (["version", "name", "description"].includes(group)) return true;
   if (DERIVED.has(path.join("."))) return true;
-  return group === "typography" && ["fontWeight", "letterSpacing"].includes(property ?? "");
+  return group === "typography" && property === "fontWeight";
 }
 
 /**
@@ -207,9 +226,10 @@ function checkTokenRefs(front: YAMLMap): void {
 /**
  * front matter へ写されない CSS 変数。ここに載らない `--rabi-*` は必ず写す。
  *
- * 影と速さは spec に token group が無く、`shade` は混色の入力で単体では使わない。
+ * 影と速さと混色の派生（`shade` `accent-hover` `accent-active`）は spec に token group が無く、
+ * 単体では使わない。
  * `r-unit` は段そのものでは**なく**段を導くつまみで、写しは導出後の 5 値だけを持つ。
- * `select-bar` はどの段にも属さ**ない**別軸（枠でも輪でも余白でもない）。
+ * `row-figure` は行の印の列の寸法で、余白の段にも半径の段にも載ら**ない**。
  */
 const CSS_ONLY = new Set([
   "shade",
@@ -218,9 +238,11 @@ const CSS_ONLY = new Set([
   "e3",
   "e2-accent",
   "e3-accent",
+  "accent-hover",
+  "accent-active",
   "motion",
   "r-unit",
-  "select-bar",
+  "row-figure",
 ]);
 
 /** CSS 側に足した変数が front matter から漏れていないことを見る。 */

@@ -11,12 +11,12 @@ description: >-
 
 ## 読む順
 
-1. `references/DESIGN.md` —— 仕様の全文。front matter が機械可読な**段**、本文が適用の規則。適合対象は「射程」
+1. `references/DESIGN.md` —— 仕様の全文。front matter が機械可読な**段**、本文が適用の規則
 2. `assets/rabi.css` —— ブランド層の値の SSOT
 3. `assets/rabi-components.css` —— UI 部品の実装
-4. `assets/rabi-role.css` —— 情報層の値の SSOT と 3 ロールの variant。いつ読むかは `references/DESIGN.md`「情報層」と「Components」
+4. `assets/rabi-role.css` —— 情報層の値の SSOT と 3 ロールの variant。いつ読むかは `references/DESIGN.md`「Components」の媒体表
 
-値と規則の SSOT は上の 1 と 2 と 4 で、媒体には依ら**ない**。
+front matter が写すのはブランド層の値で、SSOT は 2。値は媒体に依ら**ない**。
 適合対象の境界は `references/DESIGN.md`「射程」。このファイルには写さ**ない**。
 
 ## 展開する順
@@ -29,11 +29,13 @@ UI を組む媒体では続けて `assets/rabi-components.css` を入れる。**
 
 図を描く媒体では `assets/rabi-mermaid.js` も入れる。**`assets/rabi.css` より後に置く**。
 
+組んだあとに `references/DESIGN.md`「失敗パターン」で当たりを取る。
+
 ## 値を変えるとき
 
 ブランド層で `assets/rabi.css` と `references/DESIGN.md` の front matter の両方に現れる値は、`assets/rabi.css` だけを直し、次で写しへ書き戻す。
 
-情報層は `assets/rabi-role.css` だけを直す。front matter に写さ**ない**。
+情報層は `assets/rabi-role.css` だけを直す。
 
 ```bash
 bun <skills root>/rabi-design/scripts/gen-tokens.ts
@@ -43,4 +45,15 @@ bun <skills root>/rabi-design/scripts/gen-tokens.ts
 
 front matter だけが持つ値は `references/DESIGN.md` を直接直す。どの path がそれに当たるかは `scripts/gen-tokens.ts` の `ownedByFrontMatter`。
 
-部品の値は front matter に写さ**ない**。`assets/rabi-components.css` が唯一の実装で、front matter が持つのは段だけ。
+部品の値は front matter に写さ**ない**。実装は `assets/rabi-components.css`。
+
+## 指摘を落とす先
+
+`references/DESIGN.md` と `assets/` を変えたら `references/EVAL.md` のシナリオを回す。通常の適用では読ま**ない**。
+
+指摘は 1 か所へ落とし、他の層から写さ**ない**。落とす先は「読む順」の役で引き、お題が足りないなら `references/EVAL.md`。
+
+この skill を agentfiles で直すときは、続けて二次反映を見る。
+
+- 機械で判定できるなら repo root の `test/rabi-design.test.ts` へ検査を足す
+- 組み合わせを目に見せるなら repo root の `design/` の面へ足す

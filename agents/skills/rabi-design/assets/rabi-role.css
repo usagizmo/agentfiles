@@ -15,8 +15,7 @@
   --rabi-role-attention-text: light-dark(#936515, #ae7719);
 }
 
-/* 骨格は `rabi-components.css` の `.rabi-note`。ここは面と文字と図だけを差し替える */
-/* 見出しの扱いは `rabi-components.css` の `.rabi-note-danger` と同じ */
+/* 骨格は `.rabi-note`。ここは面と文字と図だけを差し替える */
 :is(.rabi-note-info, .rabi-note-success, .rabi-note-attention) .rabi-note-title {
   color: inherit;
 }
