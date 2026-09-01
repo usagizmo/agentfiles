@@ -310,7 +310,7 @@ partners:
   test("無名の agent list 行は pane_id を第 1 欄にした foreign。所有へ昇格しない", async () => {
     const snap = SNAP.replace(
       "resolve-12 working",
-      "w7Y:p1 working leftover - - /tmp/wt/feat-12-x",
+      "w7Y:p1 working leftover - - - /tmp/wt/feat-12-x",
     );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).session).toEqual({ kind: "none" });
@@ -318,16 +318,17 @@ partners:
     expect(find(rows, 12).leftover).toBe(false);
   });
 
-  test("detection-derived 行は pane_id - - - workspace cwd。所有へ昇格しない", async () => {
-    const snap = SNAP.replace("resolve-12 working", "w7Y:p1 - - - - /tmp/wt/feat-12-x");
+  test("detection-derived 行は pane_id - - - - workspace cwd。所有へ昇格しない", async () => {
+    const snap = SNAP.replace("resolve-12 working", "w7Y:p1 - - - - - /tmp/wt/feat-12-x");
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).session).toEqual({ kind: "none" });
     expect(find(rows, 12).worktreeOccupied).toEqual(present(true));
-    expect(parseSessionRow("w7Y:p1 - - - - /tmp/wt/feat-12-x")).toEqual({
+    expect(parseSessionRow("w7Y:p1 - - - - - /tmp/wt/feat-12-x")).toEqual({
       name: "w7Y:p1",
       status: "-",
       leftover: false,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
@@ -336,7 +337,7 @@ partners:
   test("同じ pane を named owned と foreign の両方へ出しても所有は resolve 側", async () => {
     const snap = SNAP.replace(
       "resolve-12 working",
-      "resolve-12 working leftover -\nw7Y:p1 - - - - /tmp/wt/feat-12-x",
+      "resolve-12 working leftover -\nw7Y:p1 - - - - - /tmp/wt/feat-12-x",
     );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).session).toEqual({ kind: "running" });
@@ -363,7 +364,7 @@ partners:
   test("pane が所有 worktree の workspace に居る foreign は、cwd が逸れていても occupancy が居る", async () => {
     const snap = SNAP.replace(
       "resolve-12 working",
-      "catalog-1195 working leftover - ws-12 /tmp/gone/feat-12-x",
+      "catalog-1195 working leftover - - ws-12 /tmp/gone/feat-12-x",
     );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).session).toEqual({ kind: "none" });
@@ -372,7 +373,7 @@ partners:
   });
 
   test("detection-derived は cwd が実在しない path でも workspace が所有なら occupancy が居る", async () => {
-    const snap = SNAP.replace("resolve-12 working", "w9S:p3 - - - ws-12 /does/not/exist");
+    const snap = SNAP.replace("resolve-12 working", "w9S:p3 - - - - ws-12 /does/not/exist");
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).session).toEqual({ kind: "none" });
     expect(find(rows, 12).worktreeOccupied).toEqual(present(true));
@@ -381,14 +382,14 @@ partners:
   test("pane の workspace が所有でなく cwd も所有に載らない foreign は occupancy が居ない", async () => {
     const snap = SNAP.replace(
       "resolve-12 working",
-      "theme-polish-12 idle - - ws-old /tmp/unrelated",
+      "theme-polish-12 idle - - - ws-old /tmp/unrelated",
     );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).worktreeOccupied).toEqual(present(false));
   });
 
   test("workspace 識別が無く cwd も所有に載らない foreign は occupancy が居ない", async () => {
-    const snap = SNAP.replace("resolve-12 working", "w9S:p3 - - - - /does/not/exist");
+    const snap = SNAP.replace("resolve-12 working", "w9S:p3 - - - - - /does/not/exist");
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).worktreeOccupied).toEqual(present(false));
   });
@@ -397,7 +398,7 @@ partners:
     const seen: CycleMarkInput[] = [];
     const snap = SNAP.replace(
       "resolve-12 working",
-      "catalog-1195 working leftover - ws-12 /tmp/gone/feat-12-x",
+      "catalog-1195 working leftover - - ws-12 /tmp/gone/feat-12-x",
     );
     await observe(
       port({
@@ -415,12 +416,13 @@ partners:
     ]);
   });
 
-  test("parseSessionRow: leftover / refused トークンを読む。トークンが無い行はどちらにもしない", () => {
+  test("parseSessionRow: leftover / refused / card トークンを読む。トークンが無い行はどれにもしない", () => {
     expect(parseSessionRow("resolve-12 working leftover")).toEqual({
       name: "resolve-12",
       status: "working",
       leftover: true,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "",
     });
@@ -429,6 +431,7 @@ partners:
       status: "done",
       leftover: false,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "",
     });
@@ -437,6 +440,7 @@ partners:
       status: "idle",
       leftover: false,
       refused: true,
+      card: false,
       workspace: "",
       cwd: "",
     });
@@ -445,6 +449,7 @@ partners:
       status: "working",
       leftover: true,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "",
     });
@@ -453,6 +458,16 @@ partners:
       status: "working",
       leftover: true,
       refused: true,
+      card: false,
+      workspace: "",
+      cwd: "",
+    });
+    expect(parseSessionRow("resolve-12 done - - card")).toEqual({
+      name: "resolve-12",
+      status: "done",
+      leftover: false,
+      refused: false,
+      card: true,
       workspace: "",
       cwd: "",
     });
@@ -461,30 +476,34 @@ partners:
       status: "working",
       leftover: true,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
-    expect(parseSessionRow("a-grok-1 idle - refused - /tmp/wt/feat-12-x")).toEqual({
+    expect(parseSessionRow("a-grok-1 idle - refused - - /tmp/wt/feat-12-x")).toEqual({
       name: "a-grok-1",
       status: "idle",
       leftover: false,
       refused: true,
+      card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
-    expect(parseSessionRow("a-grok-1 idle - - - /tmp/wt/feat-12-x")).toEqual({
+    expect(parseSessionRow("a-grok-1 idle - - - - /tmp/wt/feat-12-x")).toEqual({
       name: "a-grok-1",
       status: "idle",
       leftover: false,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
-    expect(parseSessionRow("catalog-1195 working leftover - ws-12 /tmp/gone/feat-12-x")).toEqual({
+    expect(parseSessionRow("catalog-1195 working leftover - - ws-12 /tmp/gone/feat-12-x")).toEqual({
       name: "catalog-1195",
       status: "working",
       leftover: true,
       refused: false,
+      card: false,
       workspace: "ws-12",
       cwd: "/tmp/gone/feat-12-x",
     });
@@ -494,6 +513,7 @@ partners:
       status: "working",
       leftover: false,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "",
     });
@@ -502,6 +522,7 @@ partners:
       status: "working",
       leftover: false,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
@@ -511,6 +532,7 @@ partners:
       status: "",
       leftover: false,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
@@ -519,6 +541,7 @@ partners:
       status: "-",
       leftover: false,
       refused: false,
+      card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
@@ -545,6 +568,28 @@ partners:
     expect(find(rows, 12).session).toEqual({ kind: "none" });
   });
 
+  test("idle/done の所有行に card があれば blocked。unknown は素通し", async () => {
+    const card = SNAP.replace("resolve-12 working", "refine-12 done - - card");
+    const rows = await observe(port({ snapshot: async () => card }), STATUS, SURFACES);
+    expect(find(rows, 12).refineSession).toEqual({ kind: "blocked" });
+    expect(find(rows, 12).session).toEqual({ kind: "none" });
+
+    const idleCard = SNAP.replace("resolve-12 working", "refine-12 idle - - card");
+    const idleRows = await observe(port({ snapshot: async () => idleCard }), STATUS, SURFACES);
+    expect(find(idleRows, 12).refineSession).toEqual({ kind: "blocked" });
+
+    const none = SNAP.replace("resolve-12 working", "refine-12 done - - -");
+    const noneRows = await observe(port({ snapshot: async () => none }), STATUS, SURFACES);
+    expect(find(noneRows, 12).refineSession).toEqual({ kind: "idle" });
+
+    const unknown = SNAP.replace("resolve-12 working", "refine-12 weird - - card");
+    const unknownRows = await observe(port({ snapshot: async () => unknown }), STATUS, SURFACES);
+    expect(find(unknownRows, 12).refineSession).toEqual({
+      kind: "unclassifiable",
+      raw: "weird",
+    });
+  });
+
   test("所有セッションの leftover トークンを読む", async () => {
     const leftover = SNAP.replace("resolve-12 working", "resolve-12 working leftover");
     const rows = await observe(port({ snapshot: async () => leftover }), STATUS, SURFACES);
@@ -562,7 +607,7 @@ partners:
   test("所有外の refused を所有セッションへ lift する", async () => {
     const snap = SNAP.replace(
       "resolve-12 working",
-      "resolve-12 idle -\na-grok-1 done - refused - /tmp/other",
+      "resolve-12 idle -\na-grok-1 done - refused - - /tmp/other",
     );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).refused).toBe(true);
@@ -573,7 +618,7 @@ partners:
   test("leftover がどれか 1 本でもあれば refused を解く", async () => {
     const snap = SNAP.replace(
       "resolve-12 working",
-      "resolve-12 working leftover -\na-grok-1 done - refused - /tmp/other",
+      "resolve-12 working leftover -\na-grok-1 done - refused - - /tmp/other",
     );
     const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
     expect(find(rows, 12).leftover).toBe(true);

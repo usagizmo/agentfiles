@@ -217,15 +217,17 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
 };
 
 /**
- * `sessions` 行の leftover / refused トークン。harness の `--sessions-cmd` が書く。
- * トークンが無い行は leftover にも refused にもしない。
+ * `sessions` 行の leftover / refused / card トークン。harness の `--sessions-cmd` が書く。
+ * トークンが無い行は leftover にも refused にも card にもしない。
  */
 type ParsedSessionRow = {
   readonly name: string;
   readonly status: string;
   readonly leftover: boolean;
   readonly refused: boolean;
-  /** leftover / refused の次。トークンが `-` または欄が無いときは空。 */
+  /** leftover / refused の次。`card` のときだけ真。欄が無い・`-` は偽。 */
+  readonly card: boolean;
+  /** leftover / refused / card の次。トークンが `-` または欄が無いときは空。 */
   readonly workspace: string;
   readonly cwd: string;
 };
@@ -235,6 +237,14 @@ const sessionFromStatus = (status: string): SessionObservation => {
   if (status === "idle" || status === "done") return { kind: "idle" };
   if (status === "blocked") return { kind: "blocked" };
   return { kind: "unclassifiable", raw: status };
+};
+
+/** status と card を合成する。**`unknown` は token があっても素通し。** */
+const sessionFromParsed = (parsed: ParsedSessionRow): SessionObservation => {
+  const fromStatus = sessionFromStatus(parsed.status);
+  if (fromStatus.kind === "unclassifiable") return fromStatus;
+  if (parsed.card) return { kind: "blocked" };
+  return fromStatus;
 };
 
 /** census / detection が読めないときの sessions 行。**foreign にも所有にもしない。** */
@@ -248,18 +258,21 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   const status = parts[1] ?? "";
   const leftoverToken = parts[2];
   // **トークンの位置で見分ける。**`leftover` / `-` はこの位置にしか来ないので、
-  // トークンを持たない行の cwd（絶対 path）と衝突しない。refused も leftover の隣だけ。
+  // トークンを持たない行の cwd（絶対 path）と衝突しない。refused は leftover の隣、
+  // card はその次。所有行にだけ card を足すと `parts[4]` が card と workspace で衝突する。
   if (leftoverToken === "leftover" || leftoverToken === "-") {
     const refusedToken = parts[3];
     if (refusedToken === "refused" || refusedToken === "-") {
-      const workspaceToken = parts[4];
+      const cardToken = parts[4];
+      const workspaceToken = parts[5];
       return {
         name,
         status,
         leftover: leftoverToken === "leftover",
         refused: refusedToken === "refused",
+        card: cardToken === "card",
         workspace: workspaceToken === undefined || workspaceToken === "-" ? "" : workspaceToken,
-        cwd: parts.slice(5).join(" ").trim(),
+        cwd: parts.slice(6).join(" ").trim(),
       };
     }
     return {
@@ -267,6 +280,7 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
       status,
       leftover: leftoverToken === "leftover",
       refused: false,
+      card: false,
       workspace: "",
       cwd: parts.slice(3).join(" ").trim(),
     };
@@ -276,6 +290,7 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
     status,
     leftover: false,
     refused: false,
+    card: false,
     workspace: "",
     cwd: parts.slice(2).join(" ").trim(),
   };
@@ -297,7 +312,7 @@ const classifyOwned = (rows: readonly string[], name: string): OwnedClassificati
   if (row === undefined) return noneOwned;
   const parsed = parseSessionRow(row);
   if (parsed === undefined) return noneOwned;
-  return { session: sessionFromStatus(parsed.status), leftover: parsed.leftover };
+  return { session: sessionFromParsed(parsed), leftover: parsed.leftover };
 };
 
 /** leftover は受信可能の正の証拠。どれか 1 本でもあれば拒否を解く。 */

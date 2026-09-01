@@ -217,20 +217,20 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 ### 数えない失敗
 
-`receiveRefusal` は観測の付帯で、実行した action の成否ではない。立っているあいだ prompt 系は選ばれない（条件は `src/decide.ts`）。環境起因の箇条は実行した action の成否だけに掛かる。送れなかった周は実行していない。
+`receiveRefusal` は観測の付帯で、実行した action の成否ではない。立っているあいだ prompt 系は選ばれない（条件は `src/decide.ts`）。
 
 実行環境が操作そのものを拒否した失敗は、retry budget に数え**ない**（`count` を進めず、`lastAction` も書かない）。判定は API へ到達したかどうか —— 応答が返ったなら（4xx / 5xx も含む）通常の失敗、コマンドが起動しない・permission で弾かれて応答が無いなら環境起因。
 
 - action 上限にも数えず、観測もやり直さ**ない**
-- 次の tick でも同じ action を選び続ける
+- この tick を終える。`cli.ts` を呼び直さない。次の tick でも同じ action を選び続ける
 - 応答へ出す。**時間切れで解除しない**
 
-送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった、Trust を承認しても composer が戻らなかった）は実行していない。判定は `references/harness.md`「composer の受け入れ」。
+送れなかった周は実行していない。判定は `references/harness.md`「composer の受け入れ」。
 
 - retry の `count` も `lastAction` も進めない。retry に数え**ない**
 - action 上限に数えない
 - この tick を終える。`cli.ts` を呼び直さない。次の tick で同じ action が当たる
-- 環境起因の箇条は掛けない
+- 応答へは出さない
 
 失われたセッションへの渡しが観測上の変化を生まなかった失敗は、通常の失敗として 1 回数える。
 
@@ -290,7 +290,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 #### 計画セッションを閉じる
 
-非稼働なら閉じる。止まったことを確かめ**ない**。生値は稼働中（`working` / `blocked`）を外すためだけに引き、実行の直前に取り直す。手順は `references/harness.md`「片付ける」。
+非稼働なら閉じる。止まったことを確かめ**ない**。生値は sessions 行を取り直し、`src/observe.ts` と同じ合成を通す。合成後の `running` / `blocked` では実行しない。leftover の `running` も実行しない。分類できない生値では実行しない（`観測できない`）。手順は `references/harness.md`「片付ける」。
 
 - 閉じずに残す退避路を持た**ない**。`resolve` へ広げるのも同じ（未コミットの成果を持つ）
 - 閉じたあとも `ledger` が `未計画` なら「計画を起こす」がまた当たる。往復を止めるのは周回の記録で、失敗の記録では数え**ない**

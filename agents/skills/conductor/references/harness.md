@@ -105,7 +105,7 @@ action でない中断（API エラー等）だけ、ここで決める —— �
 - 生きている checkout の workspace 対応は `open_workspace_id`。孤児は閉じる段で `workspace list` を引き直し、下の「3 つの経路」の述語で照合する。path や label から ID を復元しない
 - 未マージの branch だけが残っている状態は片付ける対象では**ない**
 
-`refine` は実行直前に、sessions 行と同じ分類器で生値を取り直す。`working` / `blocked` では実行しない。leftover の `working` も実行しない。生値が分類できないなら `観測できない`。**止まったことは確かめない**（述語は `../SKILL.md`「計画セッションを閉じる」）。非稼働なら、セッションが載っている tab を閉じる。コマンドは「herdr での実現」。
+`refine` の閉じる述語は `../SKILL.md`「計画セッションを閉じる」。非稼働なら、セッションが載っている tab を閉じる。コマンドは「herdr での実現」。
 
 **例外は計画枠の逼迫の上限到達**。実行器を止めてから tab を閉じる。`working` / `blocked` でも止めてから閉じる。
 
@@ -145,7 +145,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | worktree を作り直す（起こし直し。二次面）      | **`git -C <その面の checkout> worktree add <path> <名>`**（**`-b` を付けない。base も渡さない** —— 既存の branch を出すだけ）                                                                                                                                                                                         |
 | worktree を観測する                            | **`git -C <面の checkout> worktree list --porcelain`**（**面ごとに 1 回**）                                                                                                                                                                                                                                           |
 | 実行器だけ止める                               | `herdr agent send-keys <名前> esc`（効かなければ `ctrl+c`）の後 `herdr agent get <名前>` で `agent_status` と `state_change_seq` を読む。**止まったことを観測できるまで資源を解放しない**。pane・worktree・branch・未コミットの変更は残る。`agent stop` は無い（割り込みは `send-keys`）。動かないときだけ `Conflict` |
-| 片付ける（`refine`・生値）                     | 実行直前に取り直した生値で稼働中を外す（上の「実行直前に」）                                                                                                                                                                                                                                                          |
+| 片付ける（`refine`・生値）                     | 述語は `../SKILL.md`「計画セッションを閉じる」                                                                                                                                                                                                                                                                        |
 | 片付ける（`refine`・非稼働）                   | `herdr tab close <id>`（**`agent list` の `tab_id` を使う**。pane を閉じても tab は残る）                                                                                                                                                                                                                             |
 | 計画枠の逼迫の上限到達                         | 「実行器だけ止める」のあと `herdr tab close <id>`                                                                                                                                                                                                                                                                     |
 | 片付ける（`resolve`。退避〜branch）            | checkout があるとき `python3 ~/.config/herdr/remove-worktree.py --workspace <id> --yes`。非 0 で閉じる段を止め**ない**                                                                                                                                                                                                |
@@ -222,16 +222,15 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | `Tab:next answer`                                        | 質問カードがキーボードを持つ         | 復帰も `agent prompt` も送ら**ない**                                                                    |
 | `Esc:scrollback`                                         | ブロッキングカードがキーボードを持つ | 復帰も `agent prompt` も送ら**ない**                                                                    |
 | `Tab/Space: question`                                    | 質問カードへ park                    | 復帰も `agent prompt` も送ら**ない**                                                                    |
+| 末行に `↑/↓ option` と `Esc to skip`                     | Cursor の質問カード                  | 復帰も `agent prompt` も送ら**ない**                                                                    |
 | `Workspace Trust Required` と `[a] Trust this workspace` | Workspace Trust                      | `herdr agent send-keys <名前> a`。**1 回**。再観測は 3 回まで。受け付けるなら送る。戻らなければ送らない |
 | `Space:prompt` または `j/k:nav`                          | scrollback フォーカス                | `herdr agent send-keys <名前> space`。再観測して受け付けるなら送る。戻らなければ送らない                |
 | 読めない、または表に無い字面                             | —                                    | fail-open。送る                                                                                         |
 
 送らない行を先に見る。送らない判定と scrollback 復帰が同時なら、送らない。
+見出し（`Question 1 of 1`）単独では引かない。
 Trust の組があるあいだは `agent prompt` を送らない。
-`Esc:scrollback` は復帰のキーにしない。
-
 表に `enter` / `ctrl+enter` を置か**ない**。
-
 Tab は使わ**ない**。
 
 表が送らないと決めた周（復帰できず送らなかった周を含む）は成功でも失敗でもない。数え方は `../SKILL.md`「数えない失敗」。
@@ -355,7 +354,9 @@ while IFS= read -r row; do
   printf '%s' "$name" | grep -Eq '^(refine|resolve)-[0-9]+$' && owned=1
   leftover=-
   refused=-
+  card=-
   snippet=""
+  visible=""
   if [ "$status" = "working" ]; then
     snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
     visible=$(herdr agent read "$name" --source visible --format text </dev/null 2>/dev/null || true)
@@ -398,10 +399,22 @@ while IFS= read -r row; do
     fi
     printf '%s' "$snippet" | grep -Eiq 'Weekly limit left: 0%|hit your limit|hit your weekly limit' && refused=refused
   fi
+  if [ "$owned" = 1 ] && { [ "$status" = "idle" ] || [ "$status" = "done" ]; }; then
+    if [ -z "$visible" ]; then
+      visible=$(herdr agent read "$name" --source visible --format text </dev/null 2>/dev/null || true)
+    fi
+    last=$(printf '%s' "$visible" | awk 'NF { last = $0 } END { print last }')
+    if printf '%s' "$last" | grep -Fq 'Tab:next answer' \
+      || printf '%s' "$last" | grep -Fq 'Esc:scrollback' \
+      || printf '%s' "$last" | grep -Fq 'Tab/Space: question' \
+      || { printf '%s' "$last" | grep -Fq '↑/↓ option' && printf '%s' "$last" | grep -Fq 'Esc to skip'; }; then
+      card=card
+    fi
+  fi
   if [ "$owned" = 1 ]; then
-    printf '%s %s %s %s\n' "$name" "$status" "$leftover" "$refused" >> "$tmpdir/out"
+    printf '%s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$card" >> "$tmpdir/out"
   else
-    printf '%s %s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$ws" "$cwd" >> "$tmpdir/out"
+    printf '%s %s %s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$card" "$ws" "$cwd" >> "$tmpdir/out"
   fi
 done < "$tmpdir/agents.ndjson"
 if herdr pane list > "$tmpdir/panes.json"; then
@@ -414,7 +427,7 @@ if herdr pane list > "$tmpdir/panes.json"; then
     cwd=$(printf '%s' "$prow" | jq -r '.cwd // ""')
     ws=$(printf '%s' "$prow" | jq -r '.workspace_id // empty')
     [ -n "$ws" ] || ws=-
-    printf '%s - - - %s %s\n' "$pane_id" "$ws" "$cwd" >> "$tmpdir/out"
+    printf '%s - - - - %s %s\n' "$pane_id" "$ws" "$cwd" >> "$tmpdir/out"
   done < "$tmpdir/exec.ndjson"
 else
   printf '%s\n' "occupancy-unreadable - - -" >> "$tmpdir/out"
@@ -442,14 +455,16 @@ done | sort | grep .
 
 - **`.name // .pane_id` を agent でない pane の fallback には使わない**。採用してよいのは `agent list` の無名行と、実行器 kind がある未登録 pane に限る
 - 無名の `agent list` 行は第 1 欄を `pane_id` にした foreign 行。所有セッションへ昇格し**ない**
-- `agent list` に無い pane は、`pane.agent`（実行器 kind）があるものだけ detection-derived 行にする。形は `pane_id - - - workspace cwd`。stale な検出文字列だけでは occupied にしない
+- `agent list` に無い pane は、`pane.agent`（実行器 kind）があるものだけ detection-derived 行にする。形は `pane_id - - - - workspace cwd`。stale な検出文字列だけでは occupied にしない
 - 同じ pane を named owned と foreign の両方へ出さ**ない**（`pane_id` で潰す）
 - `pane list` の失敗は空集合へ畳まない。`occupancy-unreadable - - -` を出す。agent list の失敗は非 0 のまま
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
-- **生値をそのまま出す**。分類は `src/observe.ts` の `sessionFromStatus` が持つ
+- **生値をそのまま出す**。分類は `src/observe.ts` が token と status を合成する
 - **leftover は所有セッションと foreign の行に載せる**。トークンは `leftover` / `-` で、位置は状態の次
 - leftover は turn が終わり背景作業が残っている `working` だけ。終了行は末尾側の leftover chrome より前で最も近いもの。証拠が無い `working` は leftover にしない。`working` 以外は leftover の detection も visible も読ま**ない**。走査は上の fence
-- **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄。foreign は leftover / refused の次が workspace、cwd が末尾。workspace のトークンは `workspace_id` / `-`
+- **refused は leftover の隣**。トークンは `refused` / `-`
+- **card は refused の隣**。トークンは `card` / `-`。所有は 5 欄、foreign は workspace を 1 つ右へ。workspace のトークンは `workspace_id` / `-`。所有行にだけ足すと `parts[4]` が card と workspace で衝突する
+- **card は `idle` / `done` の所有セッションだけ visible を読み、末行が composer 表の「復帰も送らない」行なら付ける**。leftover の `working` 分岐の外。見出し単独では引かない。scrollback フォーカスは付けない
 - leftover でなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
 - トークンが無い行は拒否ではない。kind は行に載せない
 - **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（workspace と cwd つき）

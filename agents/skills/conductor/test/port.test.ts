@@ -267,6 +267,92 @@ describe("leftover 判定", () => {
   });
 });
 
+describe("card 判定", () => {
+  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+
+  const cardPredicate = (cmd: string): string => {
+    const start = cmd.indexOf('if [ "$owned" = 1 ] && { [ "$status" = "idle" ]');
+    const needle = "      card=card\n    fi\n  fi";
+    const end = cmd.indexOf(needle, start);
+    if (start < 0 || end < 0) throw new Error("card 判定が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runCard = async (status: string, visible: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "card-"));
+    try {
+      const visiblePath = join(dir, "visible");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(visiblePath, visible);
+      await writeFile(
+        scriptPath,
+        [
+          `status=${JSON.stringify(status)}`,
+          "owned=1",
+          "card=-",
+          'visible=$(cat "$1"; printf x); visible=${visible%x}',
+          cardPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$card\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, visiblePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`card 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const dump = (...lines: string[]) => `${lines.join("\n")}\n`;
+  const cursorFooter = "↑/↓ option · ←/→ question · Space select · Enter next/submit · Esc to skip";
+
+  test("idle/done の所有だけ visible を読む。card 欄は全行", () => {
+    const cmd = sessionsCmd();
+    expect(cmd).toContain(
+      'printf \'%s %s %s %s %s\\n\' "$name" "$status" "$leftover" "$refused" "$card"',
+    );
+    expect(cmd).toContain(
+      'printf \'%s %s %s %s %s %s %s\\n\' "$name" "$status" "$leftover" "$refused" "$card" "$ws" "$cwd"',
+    );
+    expect(cmd).toContain('[ "$status" = "idle" ] || [ "$status" = "done" ]');
+    expect(cmd).not.toContain("Question 1 of 1");
+  });
+
+  test("Cursor 質問カードの末尾 footer なら card", async () => {
+    expect(
+      await runCard("done", dump("Issue #1208 の意図確認", "Question 1 of 1", cursorFooter)),
+    ).toBe("card");
+  });
+
+  test("見出し単独では card にしない", async () => {
+    expect(await runCard("done", dump("Issue #1208 の意図確認", "Question 1 of 1"))).toBe("-");
+  });
+
+  test("composer 表の復帰も送らない末行なら card", async () => {
+    expect(await runCard("idle", dump("body", "Tab:next answer"))).toBe("card");
+    expect(await runCard("done", dump("body", "Esc:scrollback"))).toBe("card");
+    expect(await runCard("idle", dump("body", "Tab/Space: question"))).toBe("card");
+  });
+
+  test("scrollback フォーカスは card にしない", async () => {
+    expect(await runCard("done", dump("body", "Space:prompt"))).toBe("-");
+    expect(await runCard("idle", dump("body", "j/k:nav"))).toBe("-");
+  });
+
+  test("working では card を付けない", async () => {
+    expect(await runCard("working", dump(cursorFooter))).toBe("-");
+  });
+});
+
 describe("既に working への agent prompt", () => {
   test("確認は agent_prompted。seq 非変化を失敗にしない", () => {
     const md = harnessMd();
@@ -329,11 +415,18 @@ describe("composer が受け付ける状態での agent prompt", () => {
     const md = composerSection();
     const resume = md.indexOf("Space:prompt");
     expect(resume).toBeGreaterThanOrEqual(0);
-    for (const surface of ["Tab:next answer", "Esc:scrollback", "Tab/Space: question"]) {
+    for (const surface of [
+      "Tab:next answer",
+      "Esc:scrollback",
+      "Tab/Space: question",
+      "↑/↓ option",
+      "Esc to skip",
+    ]) {
       const at = md.indexOf(surface);
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(resume);
     }
+    expect(md).toContain("見出し（`Question 1 of 1`）単独では引かない");
   });
 
   test("chrome が読めない、または表に無い字面は fail-open", () => {
@@ -350,9 +443,8 @@ describe("composer が受け付ける状態での agent prompt", () => {
 
   test("戻れず送れなかった周は retry に数えない", () => {
     expect(skillMd()).toMatch(/retry に数え\*\*ない\*\*/);
-    expect(skillMd()).toContain(
-      "送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった、Trust を承認しても composer が戻らなかった）は実行していない",
-    );
+    expect(skillMd()).toMatch(/送れなかった周は実行していない/);
+    expect(skillMd()).toContain("composer の受け入れ");
   });
 
   test("live chrome が残る stalled は張り直しに当てない", () => {
