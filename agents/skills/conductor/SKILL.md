@@ -225,7 +225,7 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 - 次の tick でも同じ action を選び続ける
 - 応答へ出す。**時間切れで解除しない**
 
-送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった）は実行していない。判定は `references/harness.md`「composer の受け入れ」。
+送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった、Trust を承認しても composer が戻らなかった）は実行していない。判定は `references/harness.md`「composer の受け入れ」。
 
 - retry の `count` も `lastAction` も進めない。retry に数え**ない**
 - action 上限に数えない

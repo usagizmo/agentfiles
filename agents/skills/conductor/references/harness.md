@@ -171,7 +171,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - **`herdr worktree list` に `--cwd` を必ず付ける**。省くと返るのは「UI がフォーカスしている workspace の repo」
 - `worktree create` は worktree・workspace・root pane を一度に作る。pane を別途 split し**ない**
 - **`--json` を付けない**。socket API 経由のコマンドは既定で JSON を返す（`agent start` に付けると exit 2）
-- 入力欄への送信は `agent prompt` 以外を使わない。**例外は focus 復帰キーだけ**。`pane send-keys <id> enter` も `pane send-text` の改行も submit しない。未送信の下書きは `agent prompt` が捨てるので、事前に消そうとしなくてよい
+- 入力欄への送信は `agent prompt` 以外を使わない。**例外は「composer の受け入れ」表が定めるキー**。`pane send-keys <id> enter` も `pane send-text` の改行も submit しない。未送信の下書きは `agent prompt` が捨てるので、事前に消そうとしなくてよい
 - **`agent prompt` の引数順は `<名前> <本文>` で、option は本文の後**。`--no-focus` は `agent prompt` には無い
 - `agent prompt` の前段は下の「composer の受け入れ」。張り直しの `agent prompt` も同じ
 - 稼働の確認（`idle` / `done` から起こす）は、前段のあと `agent prompt <名前> <本文> --wait --until working`
@@ -212,22 +212,29 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 `agent prompt` するすべての実行の前段。kind 名では分岐しない。字面の写しは下の表に閉じる。
 
-観測は `herdr agent read <名前> --source visible --format text` の末尾（フッター / focus hint）。入力欄は上の「入力欄の文字列は観測材料ではない」。
+観測は `herdr agent read <名前> --source visible --format text`。入力欄は上の「入力欄の文字列は観測材料ではない」。
 
-| 末尾に含まれる字面              | 状態                                 | すること                                                                                 |
-| ------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `Tab:next answer`               | 質問カードがキーボードを持つ         | 復帰も `agent prompt` も送ら**ない**                                                     |
-| `Esc:scrollback`                | ブロッキングカードがキーボードを持つ | 復帰も `agent prompt` も送ら**ない**                                                     |
-| `Tab/Space: question`           | 質問カードへ park                    | 復帰も `agent prompt` も送ら**ない**                                                     |
-| `Space:prompt` または `j/k:nav` | scrollback フォーカス                | `herdr agent send-keys <名前> space`。再観測して受け付けるなら送る。戻らなければ送らない |
-| 読めない、または表に無い字面    | —                                    | fail-open。送る                                                                          |
+- フッター / focus hint の行は末尾で引く
+- Workspace Trust の行は visible 全体で組として引く。見出しだけ、選択肢だけ、では送ら**ない**
+
+| 含まれる字面                                             | 状態                                 | すること                                                                                                |
+| -------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `Tab:next answer`                                        | 質問カードがキーボードを持つ         | 復帰も `agent prompt` も送ら**ない**                                                                    |
+| `Esc:scrollback`                                         | ブロッキングカードがキーボードを持つ | 復帰も `agent prompt` も送ら**ない**                                                                    |
+| `Tab/Space: question`                                    | 質問カードへ park                    | 復帰も `agent prompt` も送ら**ない**                                                                    |
+| `Workspace Trust Required` と `[a] Trust this workspace` | Workspace Trust                      | `herdr agent send-keys <名前> a`。**1 回**。再観測は 3 回まで。受け付けるなら送る。戻らなければ送らない |
+| `Space:prompt` または `j/k:nav`                          | scrollback フォーカス                | `herdr agent send-keys <名前> space`。再観測して受け付けるなら送る。戻らなければ送らない                |
+| 読めない、または表に無い字面                             | —                                    | fail-open。送る                                                                                         |
 
 送らない行を先に見る。送らない判定と scrollback 復帰が同時なら、送らない。
+Trust の組があるあいだは `agent prompt` を送らない。
 `Esc:scrollback` は復帰のキーにしない。
+
+表に `enter` / `ctrl+enter` を置か**ない**。
 
 Tab は使わ**ない**。
 
-表で送らないと決めた周は成功でも失敗でもない。数え方は `../SKILL.md`「数えない失敗」。
+表が送らないと決めた周（復帰できず送らなかった周を含む）は成功でも失敗でもない。数え方は `../SKILL.md`「数えない失敗」。
 
 成功:
 

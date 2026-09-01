@@ -351,7 +351,7 @@ describe("composer が受け付ける状態での agent prompt", () => {
   test("戻れず送れなかった周は retry に数えない", () => {
     expect(skillMd()).toMatch(/retry に数え\*\*ない\*\*/);
     expect(skillMd()).toContain(
-      "送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった）は実行していない",
+      "送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった、Trust を承認しても composer が戻らなかった）は実行していない",
     );
   });
 
@@ -362,6 +362,43 @@ describe("composer が受け付ける状態での agent prompt", () => {
 
   test("張り直しの agent prompt も同じ前段を通す", () => {
     expect(harnessMd()).toMatch(/張り直しの `agent prompt` も同じ/);
+  });
+
+  test("Workspace Trust は visible 全体の組で引き、片方だけでは送らない", () => {
+    const md = composerSection();
+    expect(md).toContain("Workspace Trust Required");
+    expect(md).toContain("[a] Trust this workspace");
+    expect(md).toMatch(/visible 全体/);
+    expect(md).toMatch(/見出しだけ/);
+    expect(md).toMatch(/選択肢だけ/);
+  });
+
+  test("Trust の組があるとき send-keys a は 1 回。再観測は 3 回まで", () => {
+    const md = composerSection();
+    expect(md).toMatch(/send-keys <名前> a/);
+    expect(md).toMatch(/1 回/);
+    expect(md).toMatch(/3 回まで/);
+  });
+
+  test("Trust 行は送らない行の後、fail-open の前。scrollback 復帰の順序には載せない", () => {
+    const md = composerSection();
+    const trust = md.indexOf("Workspace Trust Required");
+    const failOpen = md.indexOf("表に無い字面");
+    expect(trust).toBeGreaterThanOrEqual(0);
+    expect(failOpen).toBeGreaterThan(trust);
+    for (const surface of ["Tab:next answer", "Esc:scrollback", "Tab/Space: question"]) {
+      const at = md.indexOf(surface);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(trust);
+    }
+  });
+
+  test("send-keys の例外は composer の受け入れ表が定めるキー。表に submit キーを置かない", () => {
+    expect(harnessMd()).toMatch(/例外は「composer の受け入れ」表が定めるキー/);
+    const md = composerSection();
+    expect(md).toMatch(/表に `enter` \/ `ctrl\+enter` を置か/);
+    expect(md).not.toMatch(/send-keys <名前> enter/);
+    expect(md).not.toMatch(/send-keys <名前> ctrl\+enter/);
   });
 });
 
