@@ -19,17 +19,11 @@
     'M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" /></svg>';
 
   var root = document.documentElement;
-  var os = matchMedia("(prefers-color-scheme: dark)");
-  var pinned = false;
 
-  var follow = function () {
-    if (pinned) return;
-    root.dataset.theme = os.matches ? "dark" : "light";
-    sync();
-  };
+  // 顔は紙。闇は切り替えで見る —— 文房具の既定は紙の上
+  root.dataset.theme = "light";
 
   function toggle() {
-    pinned = true;
     root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
     sync();
   }
@@ -76,8 +70,7 @@
 
   // 状態を配るのは `sync()` なので、切り替えを注入した後に走らせる
   bar();
-  follow();
-  os.addEventListener("change", follow);
+  sync();
 
   document.addEventListener("click", function (e) {
     if (e.target.closest("[data-theme-toggle]")) toggle();

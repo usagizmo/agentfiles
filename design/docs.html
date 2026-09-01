@@ -141,11 +141,6 @@
       .band-note {
         width: min(1240px, calc(100% - 40px));
         margin-inline: auto;
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-sm);
-        font-weight: 600;
-        line-height: var(--rabi-lh-label-sm);
-        color: var(--rabi-faint);
       }
 
       /* 狭い面では 1 桁へ落とす。ナビは本文の前、目次は後ろ */
@@ -165,14 +160,6 @@
 
   <body>
     <svg hidden aria-hidden="true">
-      <symbol id="i-play" viewBox="0 0 18 18">
-        <circle cx="9" cy="9" r="6.2" />
-        <path d="M7.6 6.6 11.4 9l-3.8 2.4z" />
-      </symbol>
-      <symbol id="i-doc" viewBox="0 0 18 18">
-        <path d="M4.5 2.5h6L14 6v9.5H4.5z" />
-        <path d="M10.4 2.6V6H14" />
-      </symbol>
       <symbol id="i-search" viewBox="0 0 18 18">
         <circle cx="8" cy="8" r="4.6" />
         <path d="m11.4 11.4 3 3" />
@@ -221,7 +208,7 @@
           />
         </div>
 
-        <nav class="rabi-nav rabi-nav-icons" aria-label="ドキュメント">
+        <nav class="rabi-nav" aria-label="ドキュメント">
           <ul>
             <li>
               <details open>
@@ -231,10 +218,10 @@
                 </summary>
                 <ul>
                   <li>
-                    <a href="#doc"><svg class="ico"><use href="#i-doc" /></svg><span>概要</span></a>
+                    <a href="#doc"><span>概要</span></a>
                   </li>
                   <li>
-                    <a href="#doc"><svg class="ico"><use href="#i-doc" /></svg><span>はじめかた</span></a>
+                    <a href="#doc"><span>はじめかた</span></a>
                   </li>
                   <li>
                     <a href="#doc"><span>用語</span></a>
@@ -251,7 +238,7 @@
                 <ul>
                   <li>
                     <a href="#doc" aria-current="page">
-                      <svg class="ico"><use href="#i-play" /></svg><span>最初の一歩</span>
+                      <span>最初の一歩</span>
                     </a>
                   </li>
                   <li>
@@ -264,17 +251,27 @@
               </details>
             </li>
             <li>
-              <p class="rabi-nav-group"><span>リファレンス</span></p>
-              <ul>
-                <li><a href="#doc"><span>設定</span></a></li>
-                <li>
-                  <a href="#doc"><span>コマンド</span></a>
-                  <ul>
-                    <li><a href="#doc"><span>入れ子の行</span></a></li>
-                    <li><a href="#doc"><span>もう 1 段の行</span></a></li>
-                  </ul>
-                </li>
-              </ul>
+              <details open>
+                <summary class="rabi-nav-group">
+                  <svg class="ico rabi-nav-mark"><use href="#i-chevron" /></svg>
+                  <span>リファレンス</span>
+                </summary>
+                <ul>
+                  <li><a href="#doc"><span>設定</span></a></li>
+                  <li>
+                    <details>
+                      <summary class="rabi-nav-group">
+                        <svg class="ico rabi-nav-mark"><use href="#i-chevron" /></svg>
+                        <span>コマンド</span>
+                      </summary>
+                      <ul>
+                        <li><a href="#doc"><span>入れ子の行</span></a></li>
+                        <li><a href="#doc"><span>もう 1 段の行</span></a></li>
+                      </ul>
+                    </details>
+                  </li>
+                </ul>
+              </details>
             </li>
           </ul>
         </nav>
@@ -410,7 +407,7 @@
     </main>
 
     <section class="band">
-      <p class="band-note">2 桁 —— 更新履歴。目次を持たず、左は年で畳む</p>
+      <p class="band-note rabi-kicker">2 桁 —— 更新履歴。目次を持たず、左は年で畳む</p>
 
       <div id="log" class="shell shell-2">
         <aside class="side">
@@ -472,7 +469,7 @@
     </section>
 
     <section class="band">
-      <p class="band-note">2 桁 —— 目次だけ。左のナビを持たない長文の面</p>
+      <p class="band-note rabi-kicker">2 桁 —— 目次だけ。左のナビを持たない長文の面</p>
 
       <div id="policy" class="shell shell-toc">
         <article class="doc">

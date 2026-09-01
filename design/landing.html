@@ -94,11 +94,7 @@
       }
 
       .kicker {
-        font-family: var(--rabi-mono);
-        font-size: var(--rabi-t-label-sm);
-        line-height: var(--rabi-lh-label-sm);
-        font-weight: 600;
-        color: var(--rabi-faint);
+        margin: 0;
       }
 
       .hero h1 {
@@ -326,14 +322,12 @@
       }
 
       .plan-name {
-        font-family: var(--rabi-mono);
         font-size: var(--rabi-t-body-doc);
         line-height: var(--rabi-lh-body);
         font-weight: 600;
       }
 
       .plan-badge {
-        font-family: var(--rabi-mono);
         font-size: var(--rabi-t-label-xs);
         line-height: var(--rabi-lh-label-xs);
         color: var(--rabi-faint);
@@ -559,7 +553,7 @@
       <section class="hero" aria-label="ヒーロー">
         <div class="container hero-grid">
           <div>
-            <p class="kicker">SAMPLE / PLACEHOLDER</p>
+            <p class="kicker rabi-kicker">SAMPLE / PLACEHOLDER</p>
             <h1>見出しの段。<br />強調が、<em>効く</em>。</h1>
             <p class="hero-lead">
               置き換え用の本文。行の長さと折り返しを見るためだけに置いている。
@@ -589,7 +583,7 @@
       </section>
 
       <div class="statusline">
-        <div class="container rabi-statusbar">
+        <div class="container rabi-statusbar rabi-kicker">
           <span>sample <b class="rabi-statusbar-value">v0.0.0</b></span>
           <span>sync <b class="rabi-statusbar-value rabi-statusbar-on">●</b> ok</span>
           <span>flag <b class="rabi-statusbar-value rabi-statusbar-on">●</b> on</span>

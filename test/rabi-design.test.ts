@@ -209,12 +209,12 @@ const classesIn = (rel: string): string[] =>
 const HEADING_STEPS = new Set(["display", "heading", "subheading"]);
 
 /**
- * 丈の表に載ら**ない**セレクタ。
+ * 丈から決まら**ない**文字の段（`DESIGN.md`「Layout」）。
  *
  * 表が縛るのは**文字を内包する操作枠**だけ（`DESIGN.md`「Layout」）。
  * 帯は丈を面の都合で決めるので、字の段が丈から従属し**ない**。
  */
-const NOT_ON_HEIGHT_STEP = new Set([".rabi-statusbar", ".rabi-panel-section-head"]);
+const NOT_ON_HEIGHT_STEP = new Set([".rabi-panel-section-head"]);
 
 const uiClasses = classesIn("assets/rabi-components.css");
 const componentClasses = new Set([
@@ -276,7 +276,11 @@ function heightTypeMismatch(css: string): string[] {
       const body = m[2] as string;
       if (NOT_ON_HEIGHT_STEP.has((m[1] as string).trim().replace(/\s+/g, " "))) return false;
       if (/font-family: var\(--rabi-mono\)/.test(body)) return false;
-      const height = /height: var\(--rabi-(control[a-z-]*)\)/.exec(body)?.[1];
+      // 部品ローカルの変数（`--rabi-btn-h` など）も丈の宣言。別ブロックへ割られた
+      // variant（丈は基底、文字は variant）でも gate の外に逃がさ**ない**
+      const height =
+        /--rabi-[a-z0-9-]+:\s*var\(--rabi-(control[a-z-]*)\)/.exec(body)?.[1] ??
+        /height: var\(--rabi-(control[a-z-]*)\)/.exec(body)?.[1];
       const step = /font-size: var\(--rabi-t-([a-z-]+)\)/.exec(body)?.[1];
       if (height === undefined || step === undefined) return false;
       if (HEADING_STEPS.has(step)) return false;
@@ -297,6 +301,14 @@ test("rabi-components.css の丈と文字の段が対応表と揃っている", 
 test("丈と文字の段がずれると落ちる", () => {
   const css = ".x {\n  height: var(--rabi-control);\n  font-size: var(--rabi-t-label);\n}";
   expect(heightTypeMismatch(css)).toEqual([".x"]);
+});
+
+test("ローカル変数を経由する部品の文字の段のずれも落ちる", () => {
+  const css = COMPONENTS_CSS().replace(
+    "--rabi-btn-h: var(--rabi-control-xs);\n  --rabi-btn-pad: var(--rabi-gap-2);\n  font-size: var(--rabi-t-label);",
+    "--rabi-btn-h: var(--rabi-control-xs);\n  --rabi-btn-pad: var(--rabi-gap-2);\n  font-size: var(--rabi-t-hero);",
+  );
+  expect(heightTypeMismatch(css)).toEqual([".rabi-btn-xs"]);
 });
 
 test.each([
@@ -323,19 +335,36 @@ test("丈と余白の対応表を DESIGN.md から引けている", () => {
   ]);
 });
 
-/** 丈と左右の余白が対応表からずれているセレクタを返す。 */
+/** 丈と左右の余白が対応表からずれているセレクタを返す。
+ * 宣言はセレクタごとに規則を横断して集める —— 丈と余白を別ブロックへ割った部品も
+ * gate の外に逃がさ**ない**。部品ローカルの変数（`--rabi-btn-h` など）は 1 段解決する */
 function heightPaddingMismatch(css: string): string[] {
-  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
-    .filter((m) => {
-      const height = /height: var\(--rabi-(control[a-z-]*)\)/.exec(m[2] as string)?.[1];
-      const pad = /padding(?:-inline)?: (?:0 )?var\(--rabi-(gap-[0-9_]+)\)/.exec(
-        m[2] as string,
-      )?.[1];
-      if (height === undefined || pad === undefined) return false;
-      const want = PADDING_FOR_HEIGHT[height];
-      return want !== undefined && want !== pad;
-    })
-    .map((m) => (m[1] as string).trim().replace(/\s+/g, " "));
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const acc = new Map<string, { height?: string; pad?: string; aliases: Map<string, string> }>();
+  for (const m of bare.matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)) {
+    const sel = (m[1] as string).trim().replace(/\s+/g, " ");
+    const body = m[2] as string;
+    const entry = acc.get(sel) ?? { aliases: new Map<string, string>() };
+    for (const [, local, target] of body.matchAll(
+      /--rabi-([a-z0-9-]+):\s*var\(--rabi-(control[a-z-]*|gap-[0-9_]+)\)/g,
+    )) {
+      entry.aliases.set(local ?? "", target ?? "");
+    }
+    const height = /height: var\(--rabi-([a-z0-9-]+)\)/.exec(body)?.[1];
+    if (height !== undefined) entry.height = height;
+    const pad = /padding(?:-inline)?: (?:0 )?var\(--rabi-([a-z0-9_-]+)\)/.exec(body)?.[1];
+    if (pad !== undefined) entry.pad = pad;
+    acc.set(sel, entry);
+  }
+  const bad: string[] = [];
+  for (const [sel, entry] of acc) {
+    if (entry.height === undefined || entry.pad === undefined) continue;
+    const resolve = (ref: string): string =>
+      ref.startsWith("control") || ref.startsWith("gap-") ? ref : (entry.aliases.get(ref) ?? "");
+    const want = PADDING_FOR_HEIGHT[resolve(entry.height)];
+    if (want !== undefined && want !== resolve(entry.pad ?? "")) bad.push(sel);
+  }
+  return bad.sort();
 }
 
 // 丈が決まれば左右の余白も決まる（`DESIGN.md`「Layout」）
@@ -345,10 +374,104 @@ test("rabi-components.css の丈と左右の余白が対応表と揃っている
   ).toEqual([]);
 });
 
-// **通ることは何も証明しない** —— ずれたら落ちることを実測する
+// **通ることは何も証明しない** —— ずれたら落ちることを実測する。
+// ローカル変数を経由する `.rabi-btn` が gate の外に逃げ**ない**ことも、崩して実測する
 test("丈と余白がずれると落ちる", () => {
   const css = ".x {\n  height: var(--rabi-control-sm);\n  padding: 0 var(--rabi-gap-3);\n}";
   expect(heightPaddingMismatch(css)).toEqual([".x"]);
+});
+
+test("ローカル変数を経由する部品のずれも落ちる", () => {
+  const css = COMPONENTS_CSS().replace(
+    "--rabi-btn-pad: var(--rabi-gap-3);",
+    "--rabi-btn-pad: var(--rabi-gap-4);",
+  );
+  expect(heightPaddingMismatch(css)).toEqual([".rabi-btn"]);
+});
+
+test("別ブロックに割れた丈と余白も落ちる", () => {
+  const css = ".x { height: var(--rabi-control-sm); }\n.x { padding: 0 var(--rabi-gap-3); }";
+  expect(heightPaddingMismatch(css)).toEqual([".x"]);
+});
+
+/**
+ * 押すと沈む部品。`DESIGN.md`「状態」の active の行。
+ *
+ * 面積の広い行と、**文字である操作**（縦のナビ・パンくず）は沈め**ない** ——
+ * hover の地が既に応える。沈むのは押した面として立つものだけ。
+ */
+const PRESSABLE = [
+  ".rabi-btn",
+  ".rabi-chip",
+  ".rabi-chip-kbd",
+  ".rabi-swatch",
+  ".rabi-cell-action",
+  ".rabi-tab",
+  ".rabi-island-tab",
+  ".rabi-segment-item",
+  ".rabi-cal-day",
+  ".rabi-date-pill",
+  ".rabi-dropdown-item",
+  ".rabi-appbar-nav a",
+] as const;
+
+/** 広い面積の行と、文字である操作。押しの対象外。入ったら落ちる */
+const WIDE_ROWS = [
+  ".rabi-list-item",
+  ".rabi-timeline-row",
+  ".rabi-history-row",
+  ".rabi-accordion-summary",
+  ".rabi-nav :is(a, button)",
+  ".rabi-crumbs a",
+] as const;
+
+/** `needle` を本体に持つ規則のセレクタを 1 つずつに割って返す。 */
+function pressSelectorList(css: string, needle: string): string[] {
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+?)\s*\{([^{}]*)\}/g)]
+    .filter((m) => (m[2] as string).includes(needle))
+    .flatMap((m) => (m[1] as string).split(","))
+    .map((s) => s.trim());
+}
+
+/** 押しの並びから欠けている対象。空なら gate は通る。 */
+function missingPress(css: string, needle: string, suffix: string): string[] {
+  const selectors = new Set(pressSelectorList(css, needle));
+  return PRESSABLE.filter((target) => !selectors.has(`${target}${suffix}`));
+}
+
+const COMPONENTS_CSS = () => readFileSync(join(SKILL, "assets/rabi-components.css"), "utf8");
+
+// 押せる部品は押下で沈み、離す速さは motion の 1 つ（`DESIGN.md`「状態」「Typography」）
+test("押せる部品は押下で沈み、戻りが motion を持つ", () => {
+  const css = COMPONENTS_CSS();
+  expect(missingPress(css, "transition: translate", "")).toEqual([]);
+  expect(missingPress(css, "translate: 0 1px", ":active")).toEqual([]);
+});
+
+test("押せる部品を押しの並びから外すと gate が落ちる", () => {
+  const css = COMPONENTS_CSS().replace(".rabi-chip:active,", ".rabi-chip-nope:active,");
+  expect(missingPress(css, "translate: 0 1px", ":active")).toEqual([".rabi-chip"]);
+});
+
+// 面積の広い行は沈め**ない**（`DESIGN.md`「状態」の active の行）
+test("面積の広い行は押下で沈めない", () => {
+  const active = pressSelectorList(COMPONENTS_CSS(), "translate: 0 1px");
+  for (const row of WIDE_ROWS) {
+    expect(active.some((selector) => selector.startsWith(`${row}`))).toBe(false);
+  }
+});
+
+// statusbar は字の面を kicker の併記で受ける（`DESIGN.md`「Components」）。
+// 忘れると字が本文の書体へ落ちるので、面の側で検査する
+test("statusbar は kicker と併記する", () => {
+  for (const name of surfaces) {
+    const html = readFileSync(join(DESIGN_DIR, name), "utf8");
+    for (const m of html.matchAll(/class="([^"]*)"/g)) {
+      const classes = (m[1] as string).split(/\s+/);
+      if (!classes.includes("rabi-statusbar")) continue;
+      expect(classes).toContain("rabi-kicker");
+    }
+  }
 });
 
 // **通ることは何も証明しない** —— 欠けたら落ちることを実測する
