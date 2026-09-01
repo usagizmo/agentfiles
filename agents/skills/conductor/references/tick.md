@@ -44,6 +44,8 @@ PR を持たない面の `着地待ち` に、まとめの記録と clean の両
 
 leftover を `runtime` に写さない: turn が終わっても背景作業は残るので、写すと genuine の `稼働中`（送らない）と leftover の `稼働中`（送る）が同じ値に潰れる。`canPrompt` と受信可能の両方へ足す。二つを 1 つにしないのは、`休止` が枠を渡すへ譲るため。leftover は `稼働中` とだけ組む（`人待ち` の最上段を破らない）。条件は `src/decide.ts`。信号が無いことを leftover にも `Conflict` にもしない。検出の字面は `harness.md` の `--sessions-cmd`。
 
+subagent を leftover にしない: leftover の `稼働中` は枠の受け手なので、送ると subagent を中断する。検出の字面は `harness.md` の `--sessions-cmd`。合成は `src/observe.ts`。
+
 refused を `runtime` に写さない: kind が行に無いので sessions 全体から lift する。写すと `待機` / `無し` に落ち、別 action が当たる。leftover は受信可能の正の証拠なので拒否を解く。`稼働中` の継続では解かない。Conflict にも退避先にも落とさない —— 落とすと選出対象外か Status 後退になり、入力が通るようになっても戻らない。選ばない action は `src/decide.ts`。検出の字面は `harness.md` の `--sessions-cmd`。
 
 「休止要求中」を `休止` に丸めない: 記録を書いた直後はまだ書き続けているので、丸めるとまだ書いている後発が非保持になり、交差する別の課題へ枠が渡って 2 つが実際に同時に書く。

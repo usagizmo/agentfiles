@@ -353,6 +353,124 @@ describe("card 判定", () => {
   });
 });
 
+describe("subagent 判定", () => {
+  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+
+  const subagentPredicate = (cmd: string): string => {
+    const start = cmd.indexOf("  subagent_re=");
+    const needle = "then leftover=subagent; fi";
+    const end = cmd.indexOf(needle);
+    if (start < 0 || end < 0) throw new Error("subagent 判定が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runSubagent = async (snippet: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "subagent-"));
+    try {
+      const snippetPath = join(dir, "snippet");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(snippetPath, snippet);
+      await writeFile(
+        scriptPath,
+        [
+          'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
+          "leftover=-",
+          subagentPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$leftover\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, snippetPath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`subagent 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const activityPredicate = (cmd: string): string => {
+    const start = cmd.indexOf("  subagent_re=");
+    const needle = "then leftover=leftover; fi\n  fi";
+    const end = cmd.indexOf(needle);
+    if (start < 0 || end < 0)
+      throw new Error("subagent と leftover の連塊が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runActivity = async (snippet: string, visible: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "activity-"));
+    try {
+      const snippetPath = join(dir, "snippet");
+      const visiblePath = join(dir, "visible");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(snippetPath, snippet);
+      await writeFile(visiblePath, visible);
+      await writeFile(
+        scriptPath,
+        [
+          'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
+          'visible=$(cat "$2"; printf x); visible=${visible%x}',
+          "leftover=-",
+          "status=working",
+          activityPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$leftover\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, snippetPath, visiblePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`activity 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const dump = (...lines: string[]) => `${lines.join("\n")}\n`;
+  const subagentLine = "○ 1 subagent still running · send a message to interrupt";
+  const leftoverChrome = "1 command still running";
+
+  test("leftover 位置のトークンに subagent がある", () => {
+    const cmd = sessionsCmd();
+    expect(cmd).toContain("leftover=subagent");
+    expect(cmd).toContain("subagents? still running");
+    expect(cmd).toContain("send a message to interrupt");
+    expect(cmd).toContain('if [ "$leftover" = "leftover" ] || [ "$leftover" = "subagent" ]');
+  });
+
+  test("同一行の 2 断片なら subagent。interrupt 単独では引かない", async () => {
+    expect(await runSubagent(dump(subagentLine))).toBe("subagent");
+    expect(await runSubagent(dump("send a message to interrupt"))).toBe("-");
+    expect(await runSubagent(dump("1 subagent still running"))).toBe("-");
+    expect(await runSubagent(dump("1 subagent still running", "send a message to interrupt"))).toBe(
+      "-",
+    );
+  });
+
+  test("subagent は leftover より先。working + leftover chrome でも leftover にしない", async () => {
+    const ended = "Worked for 44s";
+    expect(await runActivity(dump(subagentLine, leftoverChrome), dump(ended, leftoverChrome))).toBe(
+      "subagent",
+    );
+    expect(await runActivity(dump(leftoverChrome), dump(ended, leftoverChrome))).toBe("leftover");
+  });
+});
+
 describe("既に working への agent prompt", () => {
   test("確認は agent_prompted。seq 非変化を失敗にしない", () => {
     const md = harnessMd();

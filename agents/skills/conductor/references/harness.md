@@ -105,7 +105,7 @@ action でない中断（API エラー等）だけ、ここで決める —— �
 - 生きている checkout の workspace 対応は `open_workspace_id`。孤児は閉じる段で `workspace list` を引き直し、下の「3 つの経路」の述語で照合する。path や label から ID を復元しない
 - 未マージの branch だけが残っている状態は片付ける対象では**ない**
 
-`refine` の閉じる述語は `../SKILL.md`「計画セッションを閉じる」。非稼働なら、セッションが載っている tab を閉じる。コマンドは「herdr での実現」。
+`refine` の閉じる述語は `../SKILL.md`「計画セッションを閉じる」。実行直前に `--sessions-cmd` と同じ観測を 1 回取り直す。分類は `src/observe.ts`。非稼働なら、セッションが載っている tab を閉じる。コマンドは「herdr での実現」。
 
 **例外は計画枠の逼迫の上限到達**。実行器を止めてから tab を閉じる。`working` / `blocked` でも止めてから閉じる。
 
@@ -360,6 +360,13 @@ while IFS= read -r row; do
   if [ "$status" = "working" ]; then
     snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
     visible=$(herdr agent read "$name" --source visible --format text </dev/null 2>/dev/null || true)
+  fi
+  if [ -z "$snippet" ]; then
+    snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
+  fi
+  subagent_re='subagents? still running.*send a message to interrupt|send a message to interrupt.*subagents? still running'
+  if printf '%s' "$snippet" | grep -Eiq "$subagent_re"; then leftover=subagent; fi
+  if [ "$leftover" = "-" ] && [ "$status" = "working" ]; then
     still=0
     chrome_re='command still running|commands still running|shell still running|shells still running|background tasks still running|background task still running'
     printf '%s' "$snippet" | grep -Eiq "$chrome_re" && still=1
@@ -391,12 +398,9 @@ while IFS= read -r row; do
     ended_from "$visible" && ended=1
     if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi
   fi
-  if [ "$leftover" = "leftover" ]; then
+  if [ "$leftover" = "leftover" ] || [ "$leftover" = "subagent" ]; then
     refused=-
   else
-    if [ -z "$snippet" ]; then
-      snippet=$(herdr agent read "$name" --source detection --lines 40 --format text </dev/null 2>/dev/null || true)
-    fi
     printf '%s' "$snippet" | grep -Eiq 'Weekly limit left: 0%|hit your limit|hit your weekly limit' && refused=refused
   fi
   if [ "$owned" = 1 ] && { [ "$status" = "idle" ] || [ "$status" = "done" ]; }; then
@@ -459,13 +463,14 @@ done | sort | grep .
 - 同じ pane を named owned と foreign の両方へ出さ**ない**（`pane_id` で潰す）
 - `pane list` の失敗は空集合へ畳まない。`occupancy-unreadable - - -` を出す。agent list の失敗は非 0 のまま
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
-- **生値をそのまま出す**。分類は `src/observe.ts` が token と status を合成する
-- **leftover は所有セッションと foreign の行に載せる**。トークンは `leftover` / `-` で、位置は状態の次
-- leftover は turn が終わり背景作業が残っている `working` だけ。終了行は末尾側の leftover chrome より前で最も近いもの。証拠が無い `working` は leftover にしない。`working` 以外は leftover の detection も visible も読ま**ない**。走査は上の fence
-- **refused は leftover の隣**。トークンは `refused` / `-`
+- **生値をそのまま出す**。分類は `src/observe.ts` が leftover 位置 / card と status を合成する。status 欄は上書きしない
+- **leftover 位置は所有セッションと foreign の行に載せる**。トークンは `leftover` / `subagent` / `-` で、位置は状態の次
+- leftover は turn が終わり背景作業が残っている `working` だけ。終了行は末尾側の leftover chrome より前で最も近いもの。証拠が無い `working` は leftover にしない。`working` 以外は leftover の visible を読ま**ない**。走査は上の fence
+- **subagent は leftover より先**。検出 40 行の同一行が `subagents? still running` と `send a message to interrupt` を含むとき。`interrupt` 単独では引かない。leftover の chrome_re と ended 連言は変えない
+- **refused は leftover の隣**。トークンは `refused` / `-`。subagent の行は refused 検査を飛ばす
 - **card は refused の隣**。トークンは `card` / `-`。所有は 5 欄、foreign は workspace を 1 つ右へ。workspace のトークンは `workspace_id` / `-`。所有行にだけ足すと `parts[4]` が card と workspace で衝突する
 - **card は `idle` / `done` の所有セッションだけ visible を読み、末行が composer 表の「復帰も送らない」行なら付ける**。leftover の `working` 分岐の外。見出し単独では引かない。scrollback フォーカスは付けない
-- leftover でなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
+- leftover でも subagent でもなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
 - トークンが無い行は拒否ではない。kind は行に載せない
 - **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（workspace と cwd つき）
 

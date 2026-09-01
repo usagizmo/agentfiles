@@ -196,7 +196,7 @@ export type IssueObservation = {
   readonly claimedAt: Observed<number>;
   /**
    * 同じ worktree に `refine` / `resolve` / `conductor` 以外が genuine-working か。
-   * **所有外の leftover は turn 中の証拠にしない。**
+   * **所有外の leftover は turn 中の証拠にしない。**subagent は genuine `working` と同じ。
    */
   readonly worktreeBusy: boolean;
   /**

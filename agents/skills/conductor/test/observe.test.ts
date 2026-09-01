@@ -327,6 +327,7 @@ partners:
       name: "w7Y:p1",
       status: "-",
       leftover: false,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -421,6 +422,7 @@ partners:
       name: "resolve-12",
       status: "working",
       leftover: true,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -430,6 +432,7 @@ partners:
       name: "resolve-12",
       status: "done",
       leftover: false,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -439,6 +442,7 @@ partners:
       name: "resolve-12",
       status: "idle",
       leftover: false,
+      subagent: false,
       refused: true,
       card: false,
       workspace: "",
@@ -448,6 +452,7 @@ partners:
       name: "resolve-12",
       status: "working",
       leftover: true,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -457,6 +462,7 @@ partners:
       name: "resolve-12",
       status: "working",
       leftover: true,
+      subagent: false,
       refused: true,
       card: false,
       workspace: "",
@@ -466,6 +472,7 @@ partners:
       name: "resolve-12",
       status: "done",
       leftover: false,
+      subagent: false,
       refused: false,
       card: true,
       workspace: "",
@@ -475,6 +482,7 @@ partners:
       name: "a-grok-1",
       status: "working",
       leftover: true,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -484,6 +492,7 @@ partners:
       name: "a-grok-1",
       status: "idle",
       leftover: false,
+      subagent: false,
       refused: true,
       card: false,
       workspace: "",
@@ -493,6 +502,7 @@ partners:
       name: "a-grok-1",
       status: "idle",
       leftover: false,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -502,6 +512,7 @@ partners:
       name: "catalog-1195",
       status: "working",
       leftover: true,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "ws-12",
@@ -512,6 +523,7 @@ partners:
       name: "resolve-12",
       status: "working",
       leftover: false,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -521,6 +533,7 @@ partners:
       name: "a-grok-1",
       status: "working",
       leftover: false,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -531,6 +544,7 @@ partners:
       name: "a-grok-1",
       status: "",
       leftover: false,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
@@ -540,12 +554,33 @@ partners:
       name: "a-grok-1",
       status: "-",
       leftover: false,
+      subagent: false,
       refused: false,
       card: false,
       workspace: "",
       cwd: "/tmp/wt/feat-12-x",
     });
     expect(parseSessionRow("conductor present")).toBeUndefined();
+    expect(parseSessionRow("resolve-12 done subagent - -")).toEqual({
+      name: "resolve-12",
+      status: "done",
+      leftover: false,
+      subagent: true,
+      refused: false,
+      card: false,
+      workspace: "",
+      cwd: "",
+    });
+    expect(parseSessionRow("a-grok-1 done subagent - - - /tmp/wt/feat-12-x")).toEqual({
+      name: "a-grok-1",
+      status: "done",
+      leftover: false,
+      subagent: true,
+      refused: false,
+      card: false,
+      workspace: "",
+      cwd: "/tmp/wt/feat-12-x",
+    });
   });
 
   test("executorRefused: leftover がどれか 1 本でもあれば拒否を解く。トークンが無い行は拒否にしない", () => {
@@ -624,6 +659,48 @@ partners:
     expect(find(rows, 12).leftover).toBe(true);
     expect(find(rows, 12).refused).toBe(false);
     expect(find(rows, 34).refused).toBe(false);
+  });
+
+  test("7w: idle/done + subagent は稼働中。leftover は偽", async () => {
+    const done = SNAP.replace("resolve-12 working", "resolve-12 done subagent - -");
+    const doneRows = await observe(port({ snapshot: async () => done }), STATUS, SURFACES);
+    expect(find(doneRows, 12).session).toEqual({ kind: "running" });
+    expect(find(doneRows, 12).leftover).toBe(false);
+    const idle = SNAP.replace("resolve-12 working", "resolve-12 idle subagent - -");
+    const idleRows = await observe(port({ snapshot: async () => idle }), STATUS, SURFACES);
+    expect(find(idleRows, 12).session).toEqual({ kind: "running" });
+    expect(find(idleRows, 12).leftover).toBe(false);
+  });
+
+  test("7w2: 計画セッションの done + subagent も稼働中", async () => {
+    const snap = SNAP.replace("resolve-12 working", "refine-12 done subagent - -");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).refineSession).toEqual({ kind: "running" });
+    expect(find(rows, 12).session).toEqual({ kind: "none" });
+    expect(find(rows, 12).leftover).toBe(false);
+  });
+
+  test("7w3: 所有外の idle/done + subagent は worktreeBusy", () => {
+    const owned = ["/tmp/wt/feat-12-x"];
+    expect(worktreeBusy(["a-grok-1 done subagent - - - /tmp/wt/feat-12-x"], owned, [])).toBe(true);
+    expect(worktreeBusy(["a-grok-1 idle subagent - - - /tmp/wt/feat-12-x"], owned, [])).toBe(true);
+    expect(worktreeBusy(["a-grok-1 working subagent - - - /tmp/wt/feat-12-x"], owned, [])).toBe(
+      true,
+    );
+  });
+
+  test("7w4: unknown + subagent は素通し", async () => {
+    const snap = SNAP.replace("resolve-12 working", "resolve-12 unknown subagent - -");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "unclassifiable", raw: "unknown" });
+    expect(find(rows, 12).leftover).toBe(false);
+  });
+
+  test("chrome が無い idle/done は待機のまま", async () => {
+    const snap = SNAP.replace("resolve-12 working", "resolve-12 done -");
+    const rows = await observe(port({ snapshot: async () => snap }), STATUS, SURFACES);
+    expect(find(rows, 12).session).toEqual({ kind: "idle" });
+    expect(find(rows, 12).leftover).toBe(false);
   });
 
   test("対応表に無い Status を既定へ倒さない", async () => {

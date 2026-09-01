@@ -218,12 +218,13 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
 
 /**
  * `sessions` 行の leftover / refused / card トークン。harness の `--sessions-cmd` が書く。
- * トークンが無い行は leftover にも refused にも card にもしない。
+ * leftover 位置は `leftover` / `subagent` / `-`。トークンが無い行はどれにもしない。
  */
 type ParsedSessionRow = {
   readonly name: string;
   readonly status: string;
   readonly leftover: boolean;
+  readonly subagent: boolean;
   readonly refused: boolean;
   /** leftover / refused の次。`card` のときだけ真。欄が無い・`-` は偽。 */
   readonly card: boolean;
@@ -239,10 +240,11 @@ const sessionFromStatus = (status: string): SessionObservation => {
   return { kind: "unclassifiable", raw: status };
 };
 
-/** status と card を合成する。**`unknown` は token があっても素通し。** */
+/** status と leftover 位置 / card を合成する。**`unknown` は token があっても素通し。** */
 const sessionFromParsed = (parsed: ParsedSessionRow): SessionObservation => {
   const fromStatus = sessionFromStatus(parsed.status);
   if (fromStatus.kind === "unclassifiable") return fromStatus;
+  if (parsed.subagent) return { kind: "running" };
   if (parsed.card) return { kind: "blocked" };
   return fromStatus;
 };
@@ -257,10 +259,10 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   if (name === OCCUPANCY_UNREADABLE) return undefined;
   const status = parts[1] ?? "";
   const leftoverToken = parts[2];
-  // **トークンの位置で見分ける。**`leftover` / `-` はこの位置にしか来ないので、
+  // **トークンの位置で見分ける。**`leftover` / `subagent` / `-` はこの位置にしか来ないので、
   // トークンを持たない行の cwd（絶対 path）と衝突しない。refused は leftover の隣、
   // card はその次。所有行にだけ card を足すと `parts[4]` が card と workspace で衝突する。
-  if (leftoverToken === "leftover" || leftoverToken === "-") {
+  if (leftoverToken === "leftover" || leftoverToken === "subagent" || leftoverToken === "-") {
     const refusedToken = parts[3];
     if (refusedToken === "refused" || refusedToken === "-") {
       const cardToken = parts[4];
@@ -269,6 +271,7 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
         name,
         status,
         leftover: leftoverToken === "leftover",
+        subagent: leftoverToken === "subagent",
         refused: refusedToken === "refused",
         card: cardToken === "card",
         workspace: workspaceToken === undefined || workspaceToken === "-" ? "" : workspaceToken,
@@ -279,6 +282,7 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
       name,
       status,
       leftover: leftoverToken === "leftover",
+      subagent: leftoverToken === "subagent",
       refused: false,
       card: false,
       workspace: "",
@@ -289,6 +293,7 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
     name,
     status,
     leftover: false,
+    subagent: false,
     refused: false,
     card: false,
     workspace: "",
@@ -352,6 +357,7 @@ type ForeignRow = {
   readonly name: string;
   readonly status: string;
   readonly leftover: boolean;
+  readonly subagent: boolean;
   readonly cwd: string;
 };
 
@@ -379,6 +385,7 @@ const foreignOnOwned = (
       name: parsed.name,
       status: parsed.status,
       leftover: parsed.leftover,
+      subagent: parsed.subagent,
       cwd: parsed.cwd,
     });
   }
@@ -387,7 +394,7 @@ const foreignOnOwned = (
 
 /**
  * 同じ worktree で `refine` / `resolve` / `conductor` 以外が genuine-working か。
- * **所有外の leftover は turn 中の証拠にしない。**
+ * **所有外の leftover は turn 中の証拠にしない。**subagent は genuine `working` と同じ。
  */
 export const worktreeBusy = (
   rows: readonly string[],
@@ -395,7 +402,7 @@ export const worktreeBusy = (
   workspaces: readonly WorkspaceRow[],
 ): boolean =>
   foreignOnOwned(rows, ownedPaths, workspaces).some(
-    (row) => row.status === "working" && !row.leftover,
+    (row) => (row.status === "working" && !row.leftover) || row.subagent,
   );
 
 /** 同じ worktree で `refine` / `resolve` / `conductor` 以外が居るか。**状態は問わない。** */
