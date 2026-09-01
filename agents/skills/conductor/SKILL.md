@@ -26,13 +26,13 @@ description: >-
 
 触る関数の周りだけを読ま**ない**。規則の理由は doc comment にあり、述語の理由は関数の直上、順序と単位の理由は `LADDER` と `Rung` の定義側にある。
 
-| 変えるもの          | 全文を読むファイル                                                                                                                                                                                                                                                                             |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                                                                                                                      |
-| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                                                                                                                         |
-| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                                                                                                                 |
-| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `src/standalone-line.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/comment-fingerprint.jq` / `scripts/issue-fingerprint.py` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
-| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                                                                                                                          |
+| 変えるもの          | 全文を読むファイル                                                                                                                                                                                                                                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                                                                                                                                                        |
+| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                                                                                                                                                           |
+| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                                                                                                                                                   |
+| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `src/standalone-line.ts` / `scripts/watch.sh` / `scripts/complete-rest-list.sh` / `scripts/pr-list.jq` / `scripts/comment-fingerprint.jq` / `scripts/issue-fingerprint.py` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
+| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                                                                                                                                                            |
 
 自分が本文を作るのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` と `stalls[]` と `receiveRefusal` は `cli.ts` が出す。
 
@@ -66,7 +66,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 観測の最初に、各着地面の統合先を fetch する（snapshot が行う）。
 
-一覧は必ず全件取る。先頭 N 件で打ち切ら**ない**（ページングを最後まで回す。上限つきの API は上限に達したこと自体を失敗として扱う）。
+一覧は全件取る。先頭 N 件で打ち切ら**ない**。`--paginate` の exit 0 を全件の証拠にしない。REST の照合は `scripts/complete-rest-list.sh`。board は最終ページの `hasNextPage`。上限つきの API は上限に達したこと自体を失敗として扱う。
 
 読む先はここからのみ。
 
@@ -309,7 +309,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 - 観測できなかった tick も張る。渡すのは直前に成功した snapshot（`--snapshot` は失敗しても既存の file を壊さない）。**取り直さない**
 - 張らずに終えてよいのは、一度も観測に成功していないときと、`halt` でセッションを止めるときと、exit 2 だけ。1 つめは渡せる baseline が無い。あとの 2 つは人が直すまで動かない
 
-指紋に入れるのは、正規化と action が読むものすべての digest。**項目を列挙して数え上げない**。snapshot の節の一覧は `src/decode.ts` の `SECTIONS`、digest は `src/port.ts`。
+指紋の材料は `watch.sh --snapshot`。**項目を列挙して数え上げない**。snapshot の節の一覧は `src/decode.ts` の `SECTIONS`。比較は `scripts/watch.sh` の `--baseline`。
 
 読むものは「観測」の表がそのまま該当する。**着地面ごとに取る。**
 

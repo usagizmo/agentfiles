@@ -1,7 +1,5 @@
 #!/bin/sh
-# watch.sh 用の偽 gh。graphql は watch.sh が自前で jq に通す。
-# issues / comments は JSON を返す（指紋への写しは watch.sh 側）。
-# complete-rest-list.sh は --include で件数を取り、--paginate で一覧を取る。
+# 打ち切られた board / REST 一覧を返す偽 gh。watch.sh がラウンドを捨てることを測る。
 set -eu
 
 include=0
@@ -16,12 +14,22 @@ for a in "$@"; do
   esac
 done
 
+mode=${GH_PARTIAL:-board}
+
 if [ "$graphql" = 1 ]; then
-  cat <<'JSON'
+  if [ "$mode" = "board" ]; then
+    cat <<'JSON'
+{"data":{"rateLimit":{"cost":2},"organization":{"projectV2":{"items":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
+  {"content":{"number":1},"fieldValueByName":{"name":"In progress"}}
+]}}}}}
+JSON
+  else
+    cat <<'JSON'
 {"data":{"rateLimit":{"cost":2},"organization":{"projectV2":{"items":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
   {"content":{"number":1},"fieldValueByName":{"name":"In progress"}}
 ]}}}}}
 JSON
+  fi
   exit 0
 fi
 
@@ -39,6 +47,10 @@ case $path in
 esac
 
 if [ "$include" = 1 ]; then
+  if [ "$mode" = "rest" ]; then
+    printf 'HTTP/2.0 200 OK\nLink: <https://api.github.com/%s&page=2>; rel="next", <https://api.github.com/%s&page=3>; rel="last"\nContent-Type: application/json\n\n%s\n' "$path" "$path" "$body"
+    exit 0
+  fi
   printf 'HTTP/2.0 200 OK\nContent-Type: application/json\n\n%s\n' "$body"
   exit 0
 fi

@@ -30,6 +30,12 @@ describe("scripts の自前テスト", () => {
     expect(code).toBe(0);
   });
 
+  test("REST 一覧の件数照合", async () => {
+    const { code, output } = await run(["sh", "complete-rest-list.test.sh"]);
+    expect(output).toContain("0 fail");
+    expect(code).toBe(0);
+  });
+
   // 175 件が git を temp dir で回すので十数秒かかる。**件数を削って速くしない** ——
   // 分離と不変性の検査はどれも 1 つの成分を落とす変異を止めている。
   test("cycle-mark.py の符号化", async () => {
@@ -50,6 +56,7 @@ describe("scripts の自前テスト", () => {
       "watch.test.sh",
       "cycle-mark.test.py",
       "ensure-integration-ref.test.sh",
+      "complete-rest-list.test.sh",
     ]);
     const found = readdirSync(SCRIPTS).filter((f) => /\.test\.[a-z]+$/.test(f));
     expect([...found].sort()).toEqual([...declared].sort());

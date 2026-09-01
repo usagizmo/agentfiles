@@ -482,9 +482,9 @@ worktree 一覧は面ごとの checkout から取る（スクリプトが `--rep
 
 - **`gh project item-list` を使わない —— 観測でも書き込みでも**。item ごとに全 field 値を取る（`fieldValues(first:100)`）のでノード数が `件数 × 100` になる。`fieldValueByName` は単一ノードで `件数`。`item-add` など mutation 系はそのままでよい
 - **書き込みに要る item ID は、ボードではなく Issue 側から引く**（`repository.issue(number:)` の `projectItems` を project 番号で絞る。具体のクエリは project 側のボード規約）
-- **`--limit` で回避しない** —— コストが上がるうえ、「打ち切られた」と「そもそも載っていない」がどちらも空で返る
+- **GraphQL の `--limit` で回避しない** —— コストが上がるうえ、「打ち切られた」と「そもそも載っていない」がどちらも空で返る
 - 引けなかったら**書かずに止める**
-- **REST は GraphQL とは別枠で 0 pt**。Issue 一覧を REST 経由にしてあるのは取りこぼしを塞ぐため（`--limit N` は N を超えると不完全なまま非 0 件で返る）
+- **REST は GraphQL とは別枠で 0 pt**
 - 1 周のコストは O(items)。Project の item は単調増加する
 - **`items` の `query` で Status を絞らない**。Done は片付けの入口であり Depends-on の解消にも要る。落とすと「載っていない」と「絞られた」が同じ空になる
 

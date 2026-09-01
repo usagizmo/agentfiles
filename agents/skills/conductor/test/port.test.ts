@@ -3,7 +3,7 @@
 // **渡し漏れは観測の穴になる。**面を 1 つ落とすとそこで書き進んでいる課題が成果ゼロの周として
 // 数えられ、`--sessions-cmd` / `--workspaces-cmd` を落とすと usage error で 1 度も観測できない。
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -18,6 +18,7 @@ import { parseJsonc } from "../src/jsonc.ts";
 import { readFileSync } from "node:fs";
 import { createPort, snapshotArgs } from "../src/port.ts";
 import { present } from "../src/types.ts";
+import type { Observed } from "../src/types.ts";
 
 const raw = {
   ghRepo: "acme/control",
@@ -752,5 +753,136 @@ describe("cycleMark の入力 file", () => {
     });
     const extraNl = await markFromExactFiles(scriptsDir, `${body}\n`, null);
     expect(got).not.toEqual(present(extraNl));
+  });
+});
+
+const truncatedGh = `#!/bin/sh
+set -eu
+include=0
+paginate=0
+path=""
+for a in "$@"; do
+  case $a in
+    --include|-i) include=1 ;;
+    --paginate) paginate=1 ;;
+    repos/*) path=$a ;;
+  esac
+done
+issues='[{"number":1,"body":"one"}]'
+comments='[{"id":1,"issue_url":"https://api.github.com/repos/acme/control/issues/1","body":"<!-- plan -->\\n","created_at":"2000-01-01T00:00:00Z"}]'
+prs='[{"number":9,"merged_at":null,"state":"open","head":{"ref":"fix/1-x"}}]'
+body=$issues
+case $path in
+  */issues/comments*) body=$comments ;;
+  */pulls*) body=$prs ;;
+  */issues*) body=$issues ;;
+  *) echo "fake gh: unexpected path: $path ($*)" >&2; exit 1 ;;
+esac
+if [ "$include" = 1 ]; then
+  printf 'HTTP/2.0 200 OK\\nLink: <https://api.github.com/%s&page=2>; rel="next", <https://api.github.com/%s&page=3>; rel="last"\\nContent-Type: application/json\\n\\n%s\\n' "$path" "$path" "$body"
+  exit 0
+fi
+printf '%s\\n' "$body"
+`;
+
+const completeGh = `#!/bin/sh
+set -eu
+include=0
+path=""
+for a in "$@"; do
+  case $a in
+    --include|-i) include=1 ;;
+    --paginate) ;;
+    repos/*) path=$a ;;
+  esac
+done
+issues='[{"number":1,"body":"one"},{"number":2,"body":"two"}]'
+comments='[{"id":1,"issue_url":"https://api.github.com/repos/acme/control/issues/1","body":"<!-- plan -->\\n","created_at":"2000-01-01T00:00:00Z"}]'
+prs='[{"number":9,"merged_at":null,"state":"open","head":{"ref":"fix/1-x"}}]'
+body=$issues
+case $path in
+  */issues/comments*) body=$comments ;;
+  */pulls*) body=$prs ;;
+  */issues*) body=$issues ;;
+  *) echo "fake gh: unexpected path: $path ($*)" >&2; exit 1 ;;
+esac
+if [ "$include" = 1 ]; then
+  printf 'HTTP/2.0 200 OK\\nContent-Type: application/json\\n\\n%s\\n' "$body"
+  exit 0
+fi
+printf '%s\\n' "$body"
+`;
+
+const withFakeGh = async (script: string, fn: () => Promise<void>) => {
+  const dir = await mkdtemp(join(tmpdir(), "gh-"));
+  const prev = process.env["PATH"];
+  try {
+    const bin = join(dir, "bin");
+    await mkdir(bin);
+    await writeFile(join(bin, "gh"), script, { mode: 0o755 });
+    process.env["PATH"] = `${bin}:${prev ?? ""}`;
+    await fn();
+  } finally {
+    if (prev === undefined) delete process.env["PATH"];
+    else process.env["PATH"] = prev;
+    await rm(dir, { recursive: true, force: true });
+  }
+};
+
+const portOf = () => {
+  const config = parseConfig(raw);
+  return createPort({
+    config,
+    surfaces: resolveSurfaces(config.surfaces, PATHS),
+    scriptsDir: join(import.meta.dir, "../scripts"),
+    snapshotPath: "/tmp/snap",
+  });
+};
+
+const reasons = <T>(map: ReadonlyMap<number, Observed<T>>, numbers: readonly number[]) =>
+  numbers.map((n) => {
+    const got = map.get(n);
+    if (got === undefined) return "missing";
+    if (got.kind === "unobservable") return got.reason;
+    return got.kind;
+  });
+
+describe("REST 一覧の打ち切り", () => {
+  test("短い Issue 一覧は渡された番号のすべてが同じ観測失敗である", async () => {
+    await withFakeGh(truncatedGh, async () => {
+      const map = await portOf().issueBodies([1, 2, 3]);
+      const got = reasons(map, [1, 2, 3]);
+      expect(got[0]).not.toBe("present");
+      expect(new Set(got).size).toBe(1);
+      expect(got[0]).not.toBe("Issue 一覧に居ない");
+    });
+  });
+
+  test("件数照合が通ったあと、一覧に無い番号だけが個別の欠落である", async () => {
+    await withFakeGh(completeGh, async () => {
+      const map = await portOf().issueBodies([1, 2, 3]);
+      expect(map.get(1)).toEqual(present("one"));
+      expect(map.get(2)).toEqual(present("two"));
+      expect(map.get(3)?.kind).toBe("unobservable");
+      expect(map.get(3)).toEqual(
+        expect.objectContaining({ kind: "unobservable", reason: "Issue 一覧に居ない" }),
+      );
+    });
+  });
+
+  test("短いコメント一覧は固定 marker を欠落として読まない", async () => {
+    await withFakeGh(truncatedGh, async () => {
+      const map = await portOf().issueComments([1, 2]);
+      const got = reasons(map, [1, 2]);
+      expect(got[0]).not.toBe("present");
+      expect(new Set(got).size).toBe(1);
+    });
+  });
+
+  test("短い PR 一覧は PR を読めない", async () => {
+    await withFakeGh(truncatedGh, async () => {
+      const facts = await portOf().issueFacts(1);
+      expect(facts.prMerged.kind).toBe("unobservable");
+    });
   });
 });

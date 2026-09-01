@@ -336,6 +336,14 @@ snapshot() {
   page_cost=$(printf '%s' "$proj_json" | jq -s '[.[].data.rateLimit.cost] | add // 0') || return 1
   printf '%s\n' "$page_cost" > "$COST_FILE"
 
+  # **`--paginate` の exit 0 は全件の証拠にしない。**最終ページの hasNextPage が真なら
+  # 打ち切り。GraphQL totalCount は使わない。
+  has_next=$(printf '%s' "$proj_json" | jq -s '.[-1].data.organization.projectV2.items.pageInfo.hasNextPage') || return 1
+  if [ "$has_next" != "false" ]; then
+    echo "[watch] board GraphQL の最終ページ hasNextPage が偽でない: $has_next" >&2
+    return 1
+  fi
+
   # **ボード上の並び順が選出の tiebreaker** なので、番号で sort し直さず API の返却順に index を振る。
   proj=$(printf '%s' "$proj_json" | jq -r '
       .data.organization.projectV2.items.nodes[]
@@ -346,7 +354,7 @@ snapshot() {
   # REST（0 pt）。`gh issue list --limit N` は N を超えると**不完全なまま非 0 件で返る**ので使わない。
   # REST の issues は PR も返すため `.pull_request` で落とす。
   # issues 行は `$ISSUE_FP`。コメントの upsert で Issue が動いても起きない。
-  issues_json=$(gh api "repos/$GH_REPO/issues?state=all&per_page=100" --paginate) || return 1
+  issues_json=$(bash "$DIR/complete-rest-list.sh" "repos/$GH_REPO/issues?state=all&per_page=100") || return 1
   issues=$(printf '%s' "$issues_json" | python3 "$ISSUE_FP") || return 1
   issues=$(printf '%s\n' "$issues" | sort -n)
   # ページは最後まで取る。絞るのは出力であって打ち切りではない。
@@ -355,7 +363,7 @@ snapshot() {
   issues=$(printf '%s\n' "$issues" | awk -f "$RESTRICT" "$STATE_DIR/board_nums" -) || return 1
 
   # コメント指紋は `$COMMENT_FP`。ページは最後まで取る。直近 100 件の窓は使わない。
-  comments_json=$(gh api "repos/$GH_REPO/issues/comments?per_page=100" --paginate) || return 1
+  comments_json=$(bash "$DIR/complete-rest-list.sh" "repos/$GH_REPO/issues/comments?per_page=100") || return 1
   comments=$(printf '%s' "$comments_json" | jq -r -f "$COMMENT_FP" --arg board "$board_nums") || return 1
   comments=$(printf '%s\n' "$comments" | sort)
 
