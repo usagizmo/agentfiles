@@ -41,6 +41,49 @@ async function withSandbox(body: (dir: string) => Promise<void>): Promise<void> 
 const asset = (dir: string, name: string) => join(dir, "assets", name);
 const designPath = (dir: string) => join(dir, "references/DESIGN.md");
 
+const DESIGN_MD = readFileSync(designPath(SKILL), "utf8");
+const EVAL_MD = readFileSync(join(SKILL, "references/EVAL.md"), "utf8");
+
+/**
+ * 見出しの列名で表を選び、行を返す。
+ *
+ * 行は見出しの**直後から連続する分だけ**。`|` の行を拾い集めると、
+ * 表が終わったあとの別の表が同じ表の続きとして混ざる。
+ *
+ * 列名が重複する表は掴め**ない**。先頭を黙って取ると、別の表を正として読む。
+ */
+function table(doc: string, header: readonly string[]): string[][] {
+  const lines = doc.split("\n");
+  const cells = (line: string): string[] | undefined => {
+    const t = line.trim();
+    if (!t.startsWith("|") || !t.endsWith("|")) return undefined;
+    return t
+      .slice(1, -1)
+      .split("|")
+      .map((c) => c.trim());
+  };
+  const heads = lines.flatMap((line, i) => {
+    const c = cells(line);
+    const hit = c !== undefined && c.length === header.length && header.every((h, j) => c[j] === h);
+    return hit ? [i] : [];
+  });
+  const label = header.join(" / ");
+  if (heads.length === 0) throw new Error(`${label} の表が無い`);
+  if (heads.length > 1) throw new Error(`${label} の表が ${heads.length} つある`);
+  const rows: string[][] = [];
+  for (let i = (heads[0] as number) + 2; i < lines.length; i += 1) {
+    const c = cells(lines[i] as string);
+    if (c === undefined || c.length !== header.length) break;
+    rows.push(c);
+  }
+  return rows;
+}
+
+/** 「Layout」の丈の対応表。丈から決まる 3 つはこの 1 本の行から導く。 */
+const HEIGHT_ROWS = table(DESIGN_MD, ["丈", "文字", "左右の余白", "図"]).map((row) =>
+  row.map((cell) => cell.replaceAll("`", "")),
+);
+
 /** DESIGN.md の front matter だけを返す。本文の例は写しでは**ない**ので検査に混ぜない。 */
 function frontMatter(design: string): string {
   const m = design.match(/^---\n([\s\S]*?\n)---\n/);
@@ -208,15 +251,9 @@ test.each(["assets/rabi-components.css", "assets/rabi.css", "assets/rabi-role.cs
   },
 );
 
-/**
- * 丈から決まる文字の段。「Layout」の対応表**から導く**。
- */
+/** 丈から決まる文字の段。 */
 const TYPE_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
-  [
-    ...readFileSync(designPath(SKILL), "utf8").matchAll(
-      /^\| `(control[a-z-]*)`\s*\|\s*`([a-z-]+)`\s*\|/gm,
-    ),
-  ].map((m) => [m[1] as string, m[2] as string]),
+  HEIGHT_ROWS.map((row) => [row[0] as string, row[1] as string]),
 );
 
 test("丈と文字の対応表を DESIGN.md から引けている", () => {
@@ -272,16 +309,9 @@ test.each([
   expect(heightTypeMismatch(css)).toEqual([]);
 });
 
-/**
- * 丈から決まる左右の余白。`DESIGN.md`「Layout」の対応表**から導く**。
- * 表を写すと同じ値が 2 か所になり、片方だけ直る。
- */
+/** 丈から決まる左右の余白。 */
 const PADDING_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
-  [
-    ...readFileSync(designPath(SKILL), "utf8").matchAll(
-      /^\| `(control[a-z-]*)`\s*\|[^|]*\|\s*`([0-9.]+)`\s*\|/gm,
-    ),
-  ].map((m) => [m[1] as string, `gap-${(m[2] as string).replace(".", "_")}`]),
+  HEIGHT_ROWS.map((row) => [row[0] as string, `gap-${(row[2] as string).replace(".", "_")}`]),
 );
 
 test("丈と余白の対応表を DESIGN.md から引けている", () => {
@@ -291,26 +321,6 @@ test("丈と余白の対応表を DESIGN.md から引けている", () => {
     "control-sm",
     "control-xs",
   ]);
-});
-
-/**
- * 丈から決まる figure だけの部品の図の寸法。「Layout」の対応表**から導く**。
- */
-const FIGURE_FOR_HEIGHT: Record<string, string> = Object.fromEntries(
-  [
-    ...readFileSync(designPath(SKILL), "utf8").matchAll(
-      /^\| `(control[a-z-]*)`\s*\|[^|]*\|[^|]*\|\s*([0-9]+px)\s*\|/gm,
-    ),
-  ].map((m) => [m[1] as string, m[2] as string]),
-);
-
-test("丈と図の対応表を DESIGN.md から引けている", () => {
-  expect(FIGURE_FOR_HEIGHT).toEqual({
-    "control-lg": "16px",
-    control: "16px",
-    "control-sm": "14px",
-    "control-xs": "14px",
-  });
 });
 
 /** 丈と左右の余白が対応表からずれているセレクタを返す。 */
@@ -1120,4 +1130,152 @@ test("engine ごとの擬似要素を混ぜると落ちる", () => {
       ".x::-webkit-progress-value,\n.x::-moz-progress-bar {\n  background: red;\n}",
     ),
   ).toEqual([".x::-webkit-progress-value, .x::-moz-progress-bar"]);
+});
+
+/** 所在が解決する先。`##` と `###` の両方を取る。 */
+function headings(design: string): Set<string> {
+  return new Set([...design.matchAll(/^#{2,3} (.+)$/gm)].map((m) => (m[1] as string).trim()));
+}
+
+/** 失敗パターンの表を (名, 所在) で返す。所在は鉤括弧の中。 */
+function failurePatterns(design: string): { name: string; places: string[] }[] {
+  return table(design, ["名", "所在"]).map((row) => ({
+    name: row[0] as string,
+    places: [...(row[1] as string).matchAll(/「([^」]+)」/g)].map((m) => m[1] as string),
+  }));
+}
+
+/** 解決しない所在。同じ見出しを複数の名が指すので、束ねて返す。 */
+const unresolvedPlaces = (design: string): string[] => {
+  const known = headings(design);
+  const missing = failurePatterns(design).flatMap((p) => p.places.filter((h) => !known.has(h)));
+  return [...new Set(missing)].sort();
+};
+
+// 索引が指す先が消えても本文は無事なので、突き合わせないと静かにずれる
+test("失敗パターンの所在が DESIGN.md の見出しに解決する", () => {
+  expect(unresolvedPlaces(DESIGN_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 見出しを改名したら落ちることを実測する
+test("見出しを改名すると落ちる", () => {
+  expect(unresolvedPlaces(DESIGN_MD.replace(/^### 面と段$/m, "### 面と階調"))).toEqual(["面と段"]);
+});
+
+const singlePlaced = (design: string): string[] =>
+  failurePatterns(design)
+    .filter((p) => p.places.length < 2)
+    .map((p) => p.name);
+
+// 所在が 1 つの禁止はその見出しが索引（`DESIGN.md`「失敗パターン」）
+test("失敗パターンの所在が 2 つ以上ある", () => {
+  expect(singlePlaced(DESIGN_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 所在が 1 つの名を足したら落ちることを実測する
+test("所在が 1 つの名を足すと落ちる", () => {
+  const added = DESIGN_MD.replace(
+    /^\| 押せる行を div で組む\s*\|.*$/m,
+    (row) => `${row}\n| 半径を大きさと別に選ぶ | 「Shapes」 |`,
+  );
+  expect(singlePlaced(added)).toEqual(["半径を大きさと別に選ぶ"]);
+});
+
+const MEDIA_HEADER = ["媒体", "読むもの", "使える部品"] as const;
+const SCENARIO_HEADER = ["お題", "媒体", "渡すもの", "見る軸"] as const;
+
+/** 媒体表の第 1 列。EVAL.md のシナリオはこの文字列そのものを名乗る。 */
+const media = (design: string): string[] =>
+  table(design, MEDIA_HEADER).map((row) => row[0] as string);
+
+/** シナリオが名乗る媒体。 */
+const scenarioMedia = (evalMd: string): string[] =>
+  table(evalMd, SCENARIO_HEADER).map((row) => row[1] as string);
+
+test("媒体表を DESIGN.md から引けている", () => {
+  expect(media(DESIGN_MD)).toEqual([
+    "UI。意味ロールが 2 つ以上並ぶ面",
+    "UI。それ以外",
+    "文書（見積・譜面・PDF）",
+    "CSS を持たない（docx・スライド）",
+  ]);
+});
+
+const uncovered = (design: string, evalMd: string): string[] => {
+  const named = scenarioMedia(evalMd);
+  return media(design).filter((m) => !named.includes(m));
+};
+
+// 媒体を足してシナリオを足さないと、その媒体は一度も生成されずに入る
+test("シナリオが媒体表の全行を覆う", () => {
+  expect(uncovered(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 覆い漏れが落ちることを実測する
+test("媒体を足してシナリオを足さないと落ちる", () => {
+  const added = DESIGN_MD.replace(
+    /^\| CSS を持たない（docx・スライド）.*$/m,
+    (row) => `${row}\n| 紙。刷って配る面 | \`rabi.css\` だけ | 表のみ |`,
+  );
+  expect(uncovered(added, EVAL_MD)).toEqual(["紙。刷って配る面"]);
+});
+
+const unknownMedia = (design: string, evalMd: string): string[] => {
+  const known = media(design);
+  return scenarioMedia(evalMd).filter((m) => !known.includes(m));
+};
+
+// 媒体表に無い媒体を名乗ると、読むものも使える部品も決まらない
+test("シナリオが媒体表に無い媒体を名乗らない", () => {
+  expect(unknownMedia(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 言い換えたら落ちることを実測する
+test("媒体を言い換えると落ちる", () => {
+  const reworded = EVAL_MD.replace(/^(\| 読み物\s*\|)[^|]*/m, "$1 UI（その他） ");
+  expect(unknownMedia(DESIGN_MD, reworded)).toEqual(["UI（その他）"]);
+});
+
+/** シナリオが挙げる見る軸。名は `DESIGN.md`「失敗パターン」のもの。 */
+const scenarioAxes = (evalMd: string): string[] =>
+  table(evalMd, SCENARIO_HEADER).flatMap((row) =>
+    (row[3] as string).split("/").map((axis) => axis.trim()),
+  );
+
+const unknownAxes = (design: string, evalMd: string): string[] => {
+  const known = new Set(failurePatterns(design).map((p) => p.name));
+  return [...new Set(scenarioAxes(evalMd).filter((axis) => !known.has(axis)))].sort();
+};
+
+// 名を改名しても EVAL.md は落ちないので、突き合わせないと死んだ名を指し続ける
+test("見る軸が失敗パターンの名に解決する", () => {
+  expect(unknownAxes(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 改名したら落ちることを実測する
+test("失敗パターンを改名すると落ちる", () => {
+  expect(
+    unknownAxes(DESIGN_MD.replace(/^\| 影で階層を作る /m, "| 影で層を作る "), EVAL_MD),
+  ).toEqual(["影で階層を作る"]);
+});
+
+const unusedPatterns = (design: string, evalMd: string): string[] => {
+  const axes = new Set(scenarioAxes(evalMd));
+  return failurePatterns(design)
+    .map((p) => p.name)
+    .filter((name) => !axes.has(name));
+};
+
+// 見る軸に出ない名は、どのシナリオでも当たりを取られない
+test("失敗パターンの名を見る軸が全部使う", () => {
+  expect(unusedPatterns(DESIGN_MD, EVAL_MD)).toEqual([]);
+});
+
+// **通ることは何も証明しない** —— 使い漏れが落ちることを実測する
+test("失敗パターンを足してシナリオへ足さないと落ちる", () => {
+  const added = DESIGN_MD.replace(
+    /^\| 押せる行を div で組む\s*\|.*$/m,
+    (row) => `${row}\n| 半径を大きさと別に選ぶ | 「Shapes」「Components」 |`,
+  );
+  expect(unusedPatterns(added, EVAL_MD)).toEqual(["半径を大きさと別に選ぶ"]);
 });
