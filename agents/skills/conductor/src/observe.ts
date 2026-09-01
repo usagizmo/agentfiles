@@ -262,20 +262,34 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   // **トークンの位置で見分ける。**`leftover` / `subagent` / `-` はこの位置にしか来ないので、
   // トークンを持たない行の cwd（絶対 path）と衝突しない。refused は leftover の隣、
   // card はその次。所有行にだけ card を足すと `parts[4]` が card と workspace で衝突する。
+  // card / workspace も照合してから消費する —— 位置だけ当てにすると、card 欄を持たない
+  // 古い sessionsCmd の行で cwd が静かに失われる
   if (leftoverToken === "leftover" || leftoverToken === "subagent" || leftoverToken === "-") {
     const refusedToken = parts[3];
     if (refusedToken === "refused" || refusedToken === "-") {
       const cardToken = parts[4];
-      const workspaceToken = parts[5];
+      if (cardToken === "card" || cardToken === "-") {
+        const workspaceToken = parts[5];
+        return {
+          name,
+          status,
+          leftover: leftoverToken === "leftover",
+          subagent: leftoverToken === "subagent",
+          refused: refusedToken === "refused",
+          card: cardToken === "card",
+          workspace: workspaceToken === undefined || workspaceToken === "-" ? "" : workspaceToken,
+          cwd: parts.slice(6).join(" ").trim(),
+        };
+      }
       return {
         name,
         status,
         leftover: leftoverToken === "leftover",
         subagent: leftoverToken === "subagent",
         refused: refusedToken === "refused",
-        card: cardToken === "card",
-        workspace: workspaceToken === undefined || workspaceToken === "-" ? "" : workspaceToken,
-        cwd: parts.slice(6).join(" ").trim(),
+        card: false,
+        workspace: "",
+        cwd: parts.slice(4).join(" ").trim(),
       };
     }
     return {

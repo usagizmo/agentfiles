@@ -198,7 +198,7 @@ const finishGroup = (args: {
 /**
  * 対象集合（claim 記録が `present`）または本文閉包（双方 `absent`）の連結成分。
  *
- * **二段。**claim 記録が `present` の集合は記録の `members` だけで group を作る。
+ * **二段。**claim 記録が `present` の集合は members・代表・持ち主の 3 軸で結んだ cluster で group を作る。
  * 残りは双方の記録が `absent` のときだけ本文の `sameBranchAs` で group を作る。
  * **代表は記録の `representative`、無ければ最小番号**（固定の規約は `same-branch.md`）。
  */
@@ -207,22 +207,38 @@ export const buildGroups = (observations: readonly IssueObservation[]): Group[] 
   const groups: Group[] = [];
   const claimed = new Set<number>();
 
-  const presentClaims = observations.filter((o) => presentClaim(o) !== undefined);
-  let clusters: IssueObservation[][] = [];
-  for (const o of presentClaims) {
-    const members = presentClaim(o)?.members ?? [];
-    const hits = clusters.filter((cluster) =>
-      cluster.some((x) => membersOverlap(members, presentClaim(x)?.members ?? [])),
-    );
-    if (hits.length === 0) {
-      clusters = [...clusters, [o]];
-      continue;
+  // **同じ group を指す記録は 1 つの cluster へ。**証跡の頂点は members だけで**なく**
+  // representative と記録の持ち主 —— 代表を共有する 2 本の記録は、members が交わら**なくても**
+  // 同じ group の矛盾した証跡なので、別々の cluster に割ると片方だけが Conflict になる
+  const items = observations.flatMap((o) => {
+    const claim = presentClaim(o);
+    return claim === undefined ? [] : [{ o, claim }];
+  });
+  const roots = new Map(items.map((_, i) => [i, i] as const));
+  const find = (i: number): number => {
+    const parent = roots.get(i);
+    if (parent === undefined || parent === i) return i;
+    const root = find(parent);
+    roots.set(i, root);
+    return root;
+  };
+  for (const [i, a] of items.entries()) {
+    for (const [j, b] of items.entries()) {
+      if (j <= i) continue;
+      const shared =
+        membersOverlap(a.claim.members, b.claim.members) ||
+        a.claim.representative === b.claim.representative ||
+        a.claim.representative === b.o.issue ||
+        b.claim.representative === a.o.issue;
+      if (shared) roots.set(find(j), find(i));
     }
-    clusters = [
-      ...clusters.filter((cluster) => !hits.includes(cluster)),
-      [...new Set([...hits.flat(), o])],
-    ];
   }
+  const clusterMap = new Map<number, IssueObservation[]>();
+  for (const [i, item] of items.entries()) {
+    const root = find(i);
+    clusterMap.set(root, [...(clusterMap.get(root) ?? []), item.o]);
+  }
+  const clusters = [...clusterMap.values()];
 
   for (const cluster of clusters) {
     const memberSet = sortedUnique(cluster.flatMap((o) => presentClaim(o)?.members ?? []));
@@ -242,7 +258,29 @@ export const buildGroups = (observations: readonly IssueObservation[]): Group[] 
     if (distinct.length > 1) {
       groupingConflicts.push({
         reason: "証跡が矛盾している",
-        evidence: ["claim の members が交わるのに集合が一致しない"],
+        evidence: ["claim の members の集合が一致しない"],
+        issues: memberSet,
+      });
+    }
+    if (new Set(reps).size > 1) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の representative が一致しない"],
+        issues: memberSet,
+      });
+    }
+    if (cluster.some((o) => !(presentClaim(o)?.members ?? []).includes(o.issue))) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の持ち主が自分の members に居ない"],
+        issues: memberSet,
+      });
+    }
+    // **記録は代表にしか無い**（`same-branch.md`）。成員の側に載った記録は写しでなく矛盾
+    if (cluster.some((o) => presentClaim(o)?.representative !== o.issue)) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim 記録が代表の issue に無い"],
         issues: memberSet,
       });
     }

@@ -2292,6 +2292,65 @@ describe("group", () => {
     expect(d.outcome.kind === "action" ? d.outcome.target.members : d.outcome.kind).toEqual([1, 2]);
   });
 
+  test("12r: 同じ members で代表が違う記録は Conflict。観測順で代表が動か**ない**", () => {
+    const a = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const b = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [1, 2], landing: ["control"] }),
+    });
+    expectConflict([a, b], "証跡が矛盾している");
+    expectConflict([b, a], "証跡が矛盾している");
+    expectIdle([a, b]);
+    expectIdle([b, a]);
+  });
+
+  test("12s: 持ち主が自分の members に居ない記録は Conflict。成員から静かに落ち**ない**", () => {
+    const a = implementing({
+      issue: 5,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const b = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    expectConflict([a, b], "証跡が矛盾している");
+    expectConflict([b, a], "証跡が矛盾している");
+    expectIdle([a, b]);
+    expectIdle([b, a]);
+  });
+
+  test("12t: 成員の側に載った claim 記録は Conflict。代表の証跡を奪わ**ない**", () => {
+    const rep = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const misplaced = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    expectConflict([rep, misplaced], "証跡が矛盾している");
+    expectConflict([misplaced, rep], "証跡が矛盾している");
+    expectIdle([rep, misplaced]);
+  });
+
+  test("12u: 代表を共有する 2 本の記録は、members が交わら**なくても** Conflict", () => {
+    const a = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
+    });
+    const b = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 1, members: [2], landing: ["control"] }),
+    });
+    expectConflict([a, b], "証跡が矛盾している");
+    expectConflict([b, a], "証跡が矛盾している");
+    expectIdle([a, b]);
+    expectIdle([b, a]);
+  });
+
   test("12: group の一部だけ計画済み。group は claim の候補にしない", () => {
     const planned = observation({ issue: 1, ledger: present("計画済み"), sameBranchAs: [2] });
     const unplanned = observation({ issue: 2, ledger: present("未計画"), sameBranchAs: [1] });
@@ -2606,10 +2665,11 @@ describe("順序", () => {
 
 describe("硬い上限", () => {
   test("10: 人が直接 resolve を走らせ、worktree が目安を超えた", () => {
+    // 記録は代表にしか無いので、別々の group は代表も別々に持つ
     const busy = Array.from({ length: 6 }, (_, i) =>
       implementing({
         issue: 10 + i,
-        claimRecord: present({ representative: 10, members: [10 + i], landing: ["control"] }),
+        claimRecord: present({ representative: 10 + i, members: [10 + i], landing: ["control"] }),
         session: session.running,
       }),
     );
