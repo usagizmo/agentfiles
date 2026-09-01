@@ -90,6 +90,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 | 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                                                           |
 | 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                                                                |
 | 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                                                        |
+| occupancy                | 所有 worktree 上の所有外セッション。判定は `src/observe.ts`。行の形は `references/harness.md` の `--sessions-cmd`                                                                                           |
 | live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査の項目は `merge` の「着地の検査」。いつ掛けるかは `references/landing-surface.md`                                 |
 | 容量                     | 着地面ごとの worktree と、repo 非依存の workspace 一覧（1 回）。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）。`prunable` の述語は `references/harness.md` |
 | 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                                                                |
@@ -144,7 +145,7 @@ bun run <skills root>/conductor/src/cli.ts --config <project 差分 skill の co
 
 対で渡す。`<代表>` は実行しなかった action の代表。壊れた渡しは `src/cli.ts` の `specGap` が止める。
 
-座標は **project 差分 skill の `config.json`**（JSON）、配線は隣の untracked `config.local.json`（JSONC。tracked に置かない）。必須項目と検証は `src/config.ts` の `loadProjectFiles` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
+座標は **project 差分 skill の `config.json`**（JSON）、配線は隣の untracked `config.local.json`（JSONC。tracked に置かない）。必須項目と検証は `src/config.ts` の `loadProjectFiles` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。occupancy の入力でもある（判定は `src/observe.ts`）。project に手で写さ**ない**。
 
 **checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**座標表の全面を 1 つでも渡さなければ exit 2**（Issue 本文の宣言では**ない**）。
 

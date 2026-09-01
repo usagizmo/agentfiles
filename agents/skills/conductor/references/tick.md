@@ -110,9 +110,9 @@ branch を `capacity` に入れない: 未マージ branch は意図的に残す
 
 `枠を渡す` を claim へ譲る行: 1 周 1 action の下では同じ write が毎周の唯一の actionになり、下位の claim が起きない。足りない実体は `report` であって merge ではない。`holdsWrite` の `提出中` を外すと、まだ書く課題から write が離れる。`report` を促す行は足さない。運ぶ受け口は `枠を渡す` の `missing`。譲位した周は回していないので上限の対象にしない。`休止` に掛けると交差の再開が後ろへ送られる。leftover の `稼働中` は譲る（譲らないと空周回で退避先へ落ちる）。
 
-同じ worktree に `refine` / `resolve` / `conductor` 以外が genuine-working なら write を渡さない: consult の子が走っているあいだ親は `done` なので `待機` に写る。渡しが consult を割る。所有外の leftover は turn 中の証拠にしない。integration は別資源。
+同じ worktree に genuine-working なら write を渡さない: consult の子が走っているあいだ親は `done` なので `待機` に写る。渡しが consult を割る。述語は `src/observe.ts` の `worktreeBusy`。integration は別資源。
 
-named 所有行が無いことを実行器の不在に畳まない: `--sessions-cmd` が `select(.name != null)` で無名行を落とすと、稼働中の実行器の上で「解決を起こし直す」が当たる。無名の `agent list` 行と、実行器 kind がある未登録 pane は foreign。既存 7t。census / detection の失敗は空集合へ畳まず、in-flight かつ owned 不在なら `観測できない`。
+named 所有行が無いことを実行器の不在に畳まない: `--sessions-cmd` が `select(.name != null)` で無名行を落とすと、稼働中の実行器の上で「解決を起こし直す」が当たる。行の形は `harness.md` の `--sessions-cmd`。読めない occupancy は `src/observe.ts` の `occupancyUnreadable`。Conflict は `src/normalize.ts`。
 
 `枠を渡す` の受け手を「何を待っているか」で絞らない: 渡す資源は `progress` が決める。既に write を保持していることでは外さない。leftover は `稼働中` のまま受信可能。外すと実装の途中で止まったセッションを起こす経路が無くなる。
 

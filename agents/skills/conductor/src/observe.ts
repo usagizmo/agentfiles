@@ -225,6 +225,8 @@ type ParsedSessionRow = {
   readonly status: string;
   readonly leftover: boolean;
   readonly refused: boolean;
+  /** leftover / refused の次。トークンが `-` または欄が無いときは空。 */
+  readonly workspace: string;
   readonly cwd: string;
 };
 
@@ -250,12 +252,14 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   if (leftoverToken === "leftover" || leftoverToken === "-") {
     const refusedToken = parts[3];
     if (refusedToken === "refused" || refusedToken === "-") {
+      const workspaceToken = parts[4];
       return {
         name,
         status,
         leftover: leftoverToken === "leftover",
         refused: refusedToken === "refused",
-        cwd: parts.slice(4).join(" ").trim(),
+        workspace: workspaceToken === undefined || workspaceToken === "-" ? "" : workspaceToken,
+        cwd: parts.slice(5).join(" ").trim(),
       };
     }
     return {
@@ -263,10 +267,18 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
       status,
       leftover: leftoverToken === "leftover",
       refused: false,
+      workspace: "",
       cwd: parts.slice(3).join(" ").trim(),
     };
   }
-  return { name, status, leftover: false, refused: false, cwd: parts.slice(2).join(" ").trim() };
+  return {
+    name,
+    status,
+    leftover: false,
+    refused: false,
+    workspace: "",
+    cwd: parts.slice(2).join(" ").trim(),
+  };
 };
 
 type OwnedClassification = {
@@ -308,6 +320,19 @@ const cwdOnOwned = (cwd: string, ownedPaths: readonly string[]): boolean =>
     (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
   );
 
+/** pane の workspace_id で workspaces 節を引き、その checkout_path が所有か。**path で結び直さない。** */
+const workspaceOnOwned = (
+  workspace: string,
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): boolean => {
+  if (workspace === "") return false;
+  const row = workspaces.find((w) => w.id === workspace);
+  if (row === undefined) return false;
+  if (row.path === "" || row.path === "-") return false;
+  return cwdOnOwned(row.path, ownedPaths);
+};
+
 type ForeignRow = {
   readonly name: string;
   readonly status: string;
@@ -315,17 +340,26 @@ type ForeignRow = {
   readonly cwd: string;
 };
 
-/** 所有外で、課題の worktree に cwd が載っている行。**cwd が無い行は入れない。** */
-const foreignOnOwned = (rows: readonly string[], ownedPaths: readonly string[]): ForeignRow[] => {
+/**
+ * 所有外で、課題の worktree に居る行。
+ * 一次は pane の workspace の checkout_path、二次は cwd。**どちらも無い行は入れない。**
+ */
+const foreignOnOwned = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): ForeignRow[] => {
   const out: ForeignRow[] = [];
   for (const row of rows) {
     const parsed = parseSessionRow(row);
     if (parsed === undefined) continue;
     if (OWNED_SESSION.test(parsed.name)) continue;
-    // **cwd が無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
+    const onOwned =
+      (parsed.cwd !== "" && cwdOnOwned(parsed.cwd, ownedPaths)) ||
+      workspaceOnOwned(parsed.workspace, ownedPaths, workspaces);
+    // **cwd も workspace も無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
     // 帰属できない 1 本が全課題の write を止める。
-    if (parsed.cwd === "") continue;
-    if (!cwdOnOwned(parsed.cwd, ownedPaths)) continue;
+    if (!onOwned) continue;
     out.push({
       name: parsed.name,
       status: parsed.status,
@@ -340,23 +374,33 @@ const foreignOnOwned = (rows: readonly string[], ownedPaths: readonly string[]):
  * 同じ worktree で `refine` / `resolve` / `conductor` 以外が genuine-working か。
  * **所有外の leftover は turn 中の証拠にしない。**
  */
-export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
-  foreignOnOwned(rows, ownedPaths).some((row) => row.status === "working" && !row.leftover);
+export const worktreeBusy = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): boolean =>
+  foreignOnOwned(rows, ownedPaths, workspaces).some(
+    (row) => row.status === "working" && !row.leftover,
+  );
 
 /** 同じ worktree で `refine` / `resolve` / `conductor` 以外が居るか。**状態は問わない。** */
-export const worktreeOccupied = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
-  foreignOnOwned(rows, ownedPaths).length > 0;
+export const worktreeOccupied = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): boolean => foreignOnOwned(rows, ownedPaths, workspaces).length > 0;
 
 /** census / detection の失敗。**空集合へ畳まない。** */
 export const occupancyUnreadable = (rows: readonly string[]): boolean =>
   rows.some((row) => row.split(" ")[0] === OCCUPANCY_UNREADABLE);
 
-/** 指紋用。**状態は落とす。**出現・消滅・cwd だけが動く。 */
+/** 指紋用。**状態は落とす。**出現・消滅・cwd だけが動く。workspace は入れない。 */
 export const occupiedSessions = (
   rows: readonly string[],
   ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
 ): readonly { readonly name: string; readonly cwd: string }[] =>
-  foreignOnOwned(rows, ownedPaths)
+  foreignOnOwned(rows, ownedPaths, workspaces)
     .map(({ name, cwd }) => ({ name, cwd }))
     .sort((a, b) => a.name.localeCompare(b.name) || a.cwd.localeCompare(b.cwd));
 
@@ -397,6 +441,8 @@ export const observeTick = async (
   );
 
   const workspaceList = workspaceRows(snapshot);
+  const ownedPathsFor = (n: number): readonly string[] =>
+    worktreeRows.filter((w) => ownsWorktreePath(w.path, n)).map((w) => w.path);
 
   // **面ごとの worktree 一覧を読めたか。**`watch.sh` の `plane_unknown` は面ごと `-` で潰すので、
   // 実体が 0 件なのか読めなかったのかを行の有無では区別できない。**dirty を読めない行が
@@ -513,6 +559,7 @@ export const observeTick = async (
     const row = issueRows.get(issue);
     const owned = classifyOwned(sessionRows, `resolve-${issue}`);
     const refine = classifyOwned(sessionRows, `refine-${issue}`);
+    const ownedPaths = ownedPathsFor(issue);
 
     return {
       issue,
@@ -549,18 +596,10 @@ export const observeTick = async (
       leftover: owned.leftover,
       refused: receiveRefused,
       refineSession: refine.session,
-      worktreeBusy: worktreeBusy(
-        sessionRows,
-        worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
-      ),
+      worktreeBusy: worktreeBusy(sessionRows, ownedPaths, workspaceList),
       worktreeOccupied: occupancyUnreadable(sessionRows)
         ? unobservable("pane census / detection を読めない")
-        : present(
-            worktreeOccupied(
-              sessionRows,
-              worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
-            ),
-          ),
+        : present(worktreeOccupied(sessionRows, ownedPaths, workspaceList)),
 
       waitRecord: waitRecord(commentText, pause),
       waitRecordCreatedAt: extra.waitRecordCreatedAt,
@@ -639,10 +678,7 @@ export const observeTick = async (
         planComment: plan.kind === "present" ? plan.value : null,
         waitRecord: validWait,
         issueBodies,
-        occupied: occupiedSessions(
-          sessionRows,
-          worktreeRows.filter((w) => ownsWorktreePath(w.path, o.issue)).map((w) => w.path),
-        ),
+        occupied: occupiedSessions(sessionRows, ownedPathsFor(o.issue), workspaceList),
       }),
     );
   });

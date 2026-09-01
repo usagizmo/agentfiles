@@ -73,11 +73,12 @@ action でない中断（API エラー等）だけ、ここで決める —— �
 
 ### 観測する
 
-| 見たいもの                    | 使い道                                                            |
-| ----------------------------- | ----------------------------------------------------------------- |
-| 稼働中セッションの名前と状態  | `runtime` の判定・多重起動の検知                                  |
-| **全着地面の** worktree 一覧  | `capacity` が `あり` かの判定                                     |
-| 所有している workspace の一覧 | `capacity` が `prunable` かの判定。孤児の述語は下の「3 つの経路」 |
+| 見たいもの                         | 使い道                                                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 稼働中セッションの名前と状態       | `runtime` の判定・多重起動の検知                                                                          |
+| **全着地面の** worktree 一覧       | `capacity` が `あり` かの判定                                                                             |
+| 所有している workspace の一覧      | `capacity` が `prunable` かの判定。occupancy が `workspace_id` で引く対象。孤児の述語は下の「3 つの経路」 |
+| 所有 worktree 上の所有外セッション | occupancy。判定は `src/observe.ts`。行の形は下の `--sessions-cmd`                                         |
 
 - **worktree 一覧は repo を明示して取る**（「今いる場所」に依存する手段を使わない）
 - 引く repo の集合は project 差分の座標表の全面（先頭が制御面）。**「いま使われている面だけ」にも制御面だけにも絞らない**
@@ -139,7 +140,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | pane_id を得る                                 | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                                                             |
 | セッションを起こす                             | `herdr agent start <名前> --kind <配線の kind> --pane <id> --timeout 90000 [-- <args>...]`                                                                                                                                                                                                                            |
 | 課題を渡す・再開する                           | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                                                          |
-| セッションを観測する                           | `herdr agent list`（`name` / `agent_status` / `cwd`）                                                                                                                                                                                                                                                                 |
+| セッションを観測する                           | `herdr agent list`（`name` / `agent_status` / `cwd` / `workspace_id` / `pane_id`）                                                                                                                                                                                                                                    |
 | worktree を作る（claim。二次面）               | **`git -C <その面の checkout> worktree add -b <名> <path> <その面の統合先>`**（**pane を作らない**。`<path>` の決め方は下記）                                                                                                                                                                                         |
 | worktree を作り直す（起こし直し。二次面）      | **`git -C <その面の checkout> worktree add <path> <名>`**（**`-b` を付けない。base も渡さない** —— 既存の branch を出すだけ）                                                                                                                                                                                         |
 | worktree を観測する                            | **`git -C <面の checkout> worktree list --porcelain`**（**面ごとに 1 回**）                                                                                                                                                                                                                                           |
@@ -337,6 +338,8 @@ while IFS= read -r row; do
   status=$(printf '%s' "$row" | jq -r '.agent_status // ""')
   [ -n "$status" ] || status=-
   cwd=$(printf '%s' "$row" | jq -r '.cwd // ""')
+  ws=$(printf '%s' "$row" | jq -r '.workspace_id // empty')
+  [ -n "$ws" ] || ws=-
   if [ "$given" = "conductor" ]; then
     printf '%s\n' "conductor present" >> "$tmpdir/out"
     continue
@@ -391,7 +394,7 @@ while IFS= read -r row; do
   if [ "$owned" = 1 ]; then
     printf '%s %s %s %s\n' "$name" "$status" "$leftover" "$refused" >> "$tmpdir/out"
   else
-    printf '%s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$cwd" >> "$tmpdir/out"
+    printf '%s %s %s %s %s %s\n' "$name" "$status" "$leftover" "$refused" "$ws" "$cwd" >> "$tmpdir/out"
   fi
 done < "$tmpdir/agents.ndjson"
 if herdr pane list > "$tmpdir/panes.json"; then
@@ -402,7 +405,9 @@ if herdr pane list > "$tmpdir/panes.json"; then
     [ -n "$pane_id" ] || continue
     if grep -Fxq "$pane_id" "$tmpdir/seen" 2>/dev/null; then continue; fi
     cwd=$(printf '%s' "$prow" | jq -r '.cwd // ""')
-    printf '%s - - - %s\n' "$pane_id" "$cwd" >> "$tmpdir/out"
+    ws=$(printf '%s' "$prow" | jq -r '.workspace_id // empty')
+    [ -n "$ws" ] || ws=-
+    printf '%s - - - %s %s\n' "$pane_id" "$ws" "$cwd" >> "$tmpdir/out"
   done < "$tmpdir/exec.ndjson"
 else
   printf '%s\n' "occupancy-unreadable - - -" >> "$tmpdir/out"
@@ -430,20 +435,17 @@ done | sort | grep .
 
 - **`.name // .pane_id` を agent でない pane の fallback には使わない**。採用してよいのは `agent list` の無名行と、実行器 kind がある未登録 pane に限る
 - 無名の `agent list` 行は第 1 欄を `pane_id` にした foreign 行。所有セッションへ昇格し**ない**
-- `agent list` に無い pane は、`pane.agent`（実行器 kind）があるものだけ detection-derived 行にする。形は `pane_id - - - cwd`。stale な検出文字列だけでは occupied にしない
+- `agent list` に無い pane は、`pane.agent`（実行器 kind）があるものだけ detection-derived 行にする。形は `pane_id - - - workspace cwd`。stale な検出文字列だけでは occupied にしない
 - 同じ pane を named owned と foreign の両方へ出さ**ない**（`pane_id` で潰す）
 - `pane list` の失敗は空集合へ畳まない。`occupancy-unreadable - - -` を出す。agent list の失敗は非 0 のまま
 - conductor の存在は `conductor present` という固定文字列で残す（状態は落とす）。2 本目が居れば同じ行が 2 つ並ぶ
 - **生値をそのまま出す**。分類は `src/observe.ts` の `sessionFromStatus` が持つ
 - **leftover は所有セッションと foreign の行に載せる**。トークンは `leftover` / `-` で、位置は状態の次
-- leftover は turn が終わり背景作業が残っている `working` だけ。
-- 終了行は末尾側の leftover chrome より前で最も近いもの。あいだが空行・空白のみなら ended。
-- 証拠が無い `working` は leftover にしない。
-- `working` 以外は leftover の detection も visible も読ま**ない**。
-- **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄、foreign は 5 欄（cwd が末尾）。detection-derived は `pane_id - - - cwd`
+- leftover は turn が終わり背景作業が残っている `working` だけ。終了行は末尾側の leftover chrome より前で最も近いもの。証拠が無い `working` は leftover にしない。`working` 以外は leftover の detection も visible も読ま**ない**。走査は上の fence
+- **refused は leftover の隣**。トークンは `refused` / `-`。所有は 4 欄。foreign は leftover / refused の次が workspace、cwd が末尾。workspace のトークンは `workspace_id` / `-`
 - leftover でなければ detection を読む（`working` 以外でも）。残量パーセントの閾値では読まない
 - トークンが無い行は拒否ではない。kind は行に載せない
-- **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（cwd つき）
+- **`refine` / `resolve` / `conductor` 以外は状態を問わず出す**（workspace と cwd つき）
 
 worktree 一覧は面ごとの checkout から取る（スクリプトが `--repo` と `--landing` から行う）。
 
