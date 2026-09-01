@@ -520,7 +520,7 @@ claim の条件を足して在庫を待たせるなら、この関数にも足�
 
 ### 同一ブランチ group
 
-Issue 本文の **`Same branch as #N`** で結ばれた集合が group（宣言の定義・代表の決め方・claim 後に引き直さないことは `references/same-branch.md`）。group は 1 単位として claim する —— branch は 1 本、`resolve` には対象集合の全番号を渡す。
+見る集合は `references/same-branch.md`「どちらの集合を見るか」（宣言・代表・claim 後に引き直さないことも同ファイル）。group は 1 単位として claim する —— branch は 1 本、`resolve` には対象集合の全番号を渡す。
 
 - **`alsoResolves` だけでは claim から計画コメント書き込みまでの窓が空く**（`references/same-branch.md`）
 - group の一部だけが計画済みなら claim し**ない**

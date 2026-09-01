@@ -2198,6 +2198,100 @@ describe("group", () => {
     expectConflict([lead, member], "証跡が矛盾している");
   });
 
+  test("12m: claim の members が単独で、記録が absent の相手が Same branch as だけを持つ", () => {
+    const claimed = awaitingLanding({
+      issue: 1,
+      session: session.idle,
+      claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
+    });
+    const peer = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      sameBranchAs: [1],
+    });
+    const membersOf = (rows: readonly IssueObservation[]) =>
+      buildGroups(rows)
+        .map((g) => [...g.members])
+        .sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+    expect(membersOf([claimed, peer])).toEqual([[1], [2]]);
+    expect(membersOf([peer, claimed])).toEqual([[1], [2]]);
+    const d = tick([claimed, peer]);
+    expect(d.outcome.kind === "action" ? d.outcome.target.members : d.outcome.kind).toEqual([1]);
+  });
+
+  test("12n: claim 記録が unobservable のとき、本文の閉包へ落ちない", () => {
+    const unread = observation({
+      issue: 1,
+      ledger: present("計画済み"),
+      claimRecord: unobservable("claim が読めない"),
+      sameBranchAs: [2],
+    });
+    const peer = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      sameBranchAs: [1],
+    });
+    const membersOf = (rows: readonly IssueObservation[]) =>
+      buildGroups(rows)
+        .map((g) => [...g.members])
+        .sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+    expect(membersOf([unread, peer])).toEqual([[1], [2]]);
+    expect(membersOf([peer, unread])).toEqual([[1], [2]]);
+  });
+
+  test("12n2: claim 記録が invalid のとき、本文の閉包へ落ちない", () => {
+    const broken = observation({
+      issue: 1,
+      ledger: present("計画済み"),
+      claimRecord: invalid("members: x", "claim が読めない"),
+      sameBranchAs: [2],
+    });
+    const peer = observation({
+      issue: 2,
+      ledger: present("計画済み"),
+      sameBranchAs: [1],
+    });
+    expect(buildGroups([broken, peer]).map((g) => g.members)).toEqual([[1], [2]]);
+  });
+
+  test("12o: members が交わるのに集合が一致しない claim 記録どうしは Conflict", () => {
+    const a = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    const b = implementing({
+      issue: 2,
+      claimRecord: present({ representative: 2, members: [2, 3], landing: ["control"] }),
+    });
+    const c = observation({ issue: 3, ledger: present("進行中") });
+    expectConflict([a, b, c], "証跡が矛盾している");
+    expectConflict([c, b, a], "証跡が矛盾している");
+    expectIdle([a, b, c]);
+    expectIdle([c, b, a]);
+  });
+
+  test("12p: 代表が members に居ない記録は Conflict にし、lead へ silent fallback しない", () => {
+    const a = implementing({
+      issue: 1,
+      claimRecord: present({ representative: 2, members: [1], landing: ["control"] }),
+    });
+    expectConflict([a], "証跡が矛盾している");
+    const g = buildGroups([a])[0];
+    expect(g?.representative).toBe(2);
+    expect(g?.lead.issue).not.toBe(g?.representative);
+  });
+
+  test("12q: 渡しの issues は記録の members を verbatim で持つ", () => {
+    const claimed = awaitingLanding({
+      issue: 1,
+      session: session.idle,
+      claimRecord: present({ representative: 1, members: [1, 2], landing: ["control"] }),
+    });
+    expect(buildGroups([claimed])[0]?.members).toEqual([1, 2]);
+    const d = tick([claimed]);
+    expect(d.outcome.kind === "action" ? d.outcome.target.members : d.outcome.kind).toEqual([1, 2]);
+  });
+
   test("12: group の一部だけ計画済み。group は claim の候補にしない", () => {
     const planned = observation({ issue: 1, ledger: present("計画済み"), sameBranchAs: [2] });
     const unplanned = observation({ issue: 2, ledger: present("未計画"), sameBranchAs: [1] });

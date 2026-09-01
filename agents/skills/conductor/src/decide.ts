@@ -99,17 +99,9 @@ export type Group = {
   /** 代表の正規化レコード。ラダーの述語はここを読む */
   readonly lead: NormalizedIssue;
   readonly leadObservation: IssueObservation;
+  /** group 組み立てで立てた Conflict。`standingConflicts` が載せる */
+  readonly groupingConflicts: readonly Conflict[];
 };
-
-/**
- * その課題が同じ 1 本で直すと宣言している相手。
- *
- * **claim 済みなら記録の `members`、未 claim なら本文の宣言**（`same-branch.md`
- * 「どちらの集合を見るか」）。記録は代表にしか無いので、成員の側は本文から辿る。
- * **本文にだけ足された番号は claim 済みの対象集合に入らない**（次の着地まで別扱い）。
- */
-const links = (o: IssueObservation): readonly number[] =>
-  o.claimRecord.kind === "present" ? o.claimRecord.value.members : o.sameBranchAs;
 
 /**
  * 共有する実体の観測を、対象集合の全員へ揃える（`same-branch.md`「共有するもの」）。
@@ -161,26 +153,140 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         claimedAt: lead.claimedAt,
       };
 
+const sortedUnique = (xs: readonly number[]): number[] => [...new Set(xs)].sort((a, b) => a - b);
+
+const sameMembers = (a: readonly number[], b: readonly number[]): boolean => {
+  const x = sortedUnique(a);
+  const y = sortedUnique(b);
+  return x.length === y.length && x.every((n, i) => n === y[i]);
+};
+
+const membersOverlap = (a: readonly number[], b: readonly number[]): boolean =>
+  a.some((n) => b.includes(n));
+
+const presentClaim = (o: IssueObservation) =>
+  o.claimRecord.kind === "present" ? o.claimRecord.value : undefined;
+
+const finishGroup = (args: {
+  readonly representative: number;
+  readonly members: readonly number[];
+  readonly seed: readonly IssueObservation[];
+  readonly share: boolean;
+  readonly groupingConflicts: readonly Conflict[];
+}): Group | undefined => {
+  if (args.seed.length === 0) return undefined;
+  const leadObservation = args.seed.find((x) => x.issue === args.representative) ?? args.seed[0];
+  if (leadObservation === undefined) return undefined;
+  const groupObservations = args.share
+    ? args.seed.map((x) => shareEvidence(x, leadObservation))
+    : args.seed;
+  const records = groupObservations.map(normalize);
+  const leadIndex = groupObservations.findIndex((x) => x.issue === leadObservation.issue);
+  const lead = leadIndex >= 0 ? records[leadIndex] : undefined;
+  if (lead === undefined) return undefined;
+  return {
+    representative: args.representative,
+    members: args.members,
+    observations: groupObservations,
+    records,
+    lead,
+    leadObservation: groupObservations[leadIndex] ?? leadObservation,
+    groupingConflicts: args.groupingConflicts,
+  };
+};
+
 /**
- * 対象集合（claim 済み）または group（未 claim）の連結成分。
+ * 対象集合（claim 記録が `present`）または本文閉包（双方 `absent`）の連結成分。
+ *
+ * **二段。**claim 記録が `present` の集合は記録の `members` だけで group を作る。
+ * 残りは双方の記録が `absent` のときだけ本文の `sameBranchAs` で group を作る。
  * **代表は記録の `representative`、無ければ最小番号**（固定の規約は `same-branch.md`）。
  */
 export const buildGroups = (observations: readonly IssueObservation[]): Group[] => {
   const byIssue = new Map(observations.map((o) => [o.issue, o]));
-  // **無向グラフにしてから辿る。**記録は代表にしか無く、本文の相互記載も漏れうるので、
-  // 片側からしか張られていない辺が実在する。有向のまま辿ると、走査の順で group が割れる。
+  const groups: Group[] = [];
+  const claimed = new Set<number>();
+
+  const presentClaims = observations.filter((o) => presentClaim(o) !== undefined);
+  let clusters: IssueObservation[][] = [];
+  for (const o of presentClaims) {
+    const members = presentClaim(o)?.members ?? [];
+    const hits = clusters.filter((cluster) =>
+      cluster.some((x) => membersOverlap(members, presentClaim(x)?.members ?? [])),
+    );
+    if (hits.length === 0) {
+      clusters = [...clusters, [o]];
+      continue;
+    }
+    clusters = [
+      ...clusters.filter((cluster) => !hits.includes(cluster)),
+      [...new Set([...hits.flat(), o])],
+    ];
+  }
+
+  for (const cluster of clusters) {
+    const memberSet = sortedUnique(cluster.flatMap((o) => presentClaim(o)?.members ?? []));
+    const distinct = cluster.reduce<number[][]>((acc, o) => {
+      const members = presentClaim(o)?.members ?? [];
+      if (acc.some((x) => sameMembers(x, members))) return acc;
+      acc.push(sortedUnique(members));
+      return acc;
+    }, []);
+    const reps = cluster.flatMap((o) => {
+      const claim = presentClaim(o);
+      return claim === undefined ? [] : [claim.representative];
+    });
+    const representative = reps.find((n) => memberSet.includes(n)) ?? reps[0] ?? memberSet[0];
+    if (representative === undefined) continue;
+    const groupingConflicts: Conflict[] = [];
+    if (distinct.length > 1) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の members が交わるのに集合が一致しない"],
+        issues: memberSet,
+      });
+    }
+    if (!memberSet.includes(representative)) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の representative が members に居ない"],
+        issues: memberSet,
+      });
+    }
+    const seedIds = sortedUnique([...memberSet, ...cluster.map((o) => o.issue)]);
+    const seed = seedIds.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
+    const group = finishGroup({
+      representative,
+      members: memberSet,
+      seed,
+      share: true,
+      groupingConflicts,
+    });
+    if (group === undefined) continue;
+    groups.push(group);
+    for (const n of seedIds) claimed.add(n);
+  }
+
+  const remaining = observations.filter((o) => !claimed.has(o.issue));
+  const remainingSet = new Set(remaining.map((o) => o.issue));
   const edges = new Map<number, Set<number>>();
   const link = (a: number, b: number) => {
     if (a === b) return;
     (edges.get(a) ?? edges.set(a, new Set()).get(a))?.add(b);
     (edges.get(b) ?? edges.set(b, new Set()).get(b))?.add(a);
   };
-  for (const o of observations) for (const n of links(o)) link(o.issue, n);
+  for (const o of remaining) {
+    if (o.claimRecord.kind !== "absent") continue;
+    for (const n of o.sameBranchAs) {
+      if (!remainingSet.has(n)) continue;
+      const other = byIssue.get(n);
+      if (other === undefined || other.claimRecord.kind !== "absent") continue;
+      link(o.issue, n);
+    }
+  }
 
   const seen = new Set<number>();
-  const groups: Group[] = [];
-
-  for (const o of observations) {
+  for (const o of remaining) {
     if (seen.has(o.issue)) continue;
     const members: number[] = [];
     const queue = [o.issue];
@@ -192,32 +298,16 @@ export const buildGroups = (observations: readonly IssueObservation[]): Group[] 
       for (const linked of edges.get(current) ?? []) if (!seen.has(linked)) queue.push(linked);
     }
     members.sort((a, b) => a - b);
-    const raw = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
-    if (raw.length === 0) continue;
-
-    const claim = raw.find((x) => x.claimRecord.kind === "present")?.claimRecord;
-    const representative =
-      claim?.kind === "present" ? claim.value.representative : (members[0] ?? o.issue);
-    const leadIndex = Math.max(
-      0,
-      raw.findIndex((g) => g.issue === representative),
-    );
-    const leadObservation = raw[leadIndex];
-    if (leadObservation === undefined) continue;
-    // **共有の反映は claim 済みのときだけ**（claim 前は記録が成員ごとに別々に在る）。
-    const groupObservations =
-      claim?.kind === "present" ? raw.map((x) => shareEvidence(x, leadObservation)) : raw;
-    const records = groupObservations.map(normalize);
-    const lead = records[leadIndex];
-    if (lead === undefined) continue;
-    groups.push({
-      representative,
+    const seed = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
+    const group = finishGroup({
+      representative: members[0] ?? o.issue,
       members,
-      observations: groupObservations,
-      records,
-      lead,
-      leadObservation,
+      seed,
+      share: false,
+      groupingConflicts: [],
     });
+    if (group === undefined) continue;
+    groups.push(group);
   }
   return groups;
 };
@@ -634,6 +724,7 @@ const asSolo = (g: Group): Group[] =>
             records: [record],
             lead: record,
             leadObservation: o,
+            groupingConflicts: [],
           } satisfies Group,
         ];
   });
@@ -820,7 +911,7 @@ const crossingDescribed = (
  * ラダー上に残る（そちらも当たった group を選出対象外にする）。
  */
 const standingConflicts = (g: Group): Conflict[] => {
-  const found: Conflict[] = g.records.flatMap((r) => [...r.conflicts]);
+  const found: Conflict[] = [...g.groupingConflicts, ...g.records.flatMap((r) => [...r.conflicts])];
   if (terminalMixedInGroup(g)) {
     found.push({
       reason: "group の終端が混在",
