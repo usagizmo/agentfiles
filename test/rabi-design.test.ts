@@ -478,7 +478,7 @@ test("statusbar は kicker と併記する", () => {
 const STATE_ATTRIBUTES = ["aria-pressed", "aria-selected", "aria-current"] as const;
 
 /**
- * 選択の印を markup が持つ部品（`DESIGN.md`「Shapes」のチェックの形）。
+ * 選択の印を markup が持つ部品（`DESIGN.md`「図の置き方」のチェックの形）。
  *
  * 行はチェックの要素そのもので選択を示すので、CSS は属性で受け**ない**。
  * 印が在ることは別の gate（「ドロップダウンの選択はチェックで示す」）が見る。
@@ -528,7 +528,7 @@ function uncheckedDropdownItems(html: string): string[] {
     .map((m) => (m[1] as string).trim());
 }
 
-// ドロップダウンの行の選択は作者が書くチェックで示す（`DESIGN.md`「Shapes」）
+// ドロップダウンの行の選択は作者が書くチェックで示す（`DESIGN.md`「図の置き方」）
 test.each(surfaces)("%s のドロップダウンの選択はチェックで示す", (name) => {
   expect(uncheckedDropdownItems(readFileSync(join(DESIGN_DIR, name), "utf8"))).toEqual([]);
 });
