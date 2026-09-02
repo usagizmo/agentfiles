@@ -112,7 +112,7 @@ export type IssueObservation = {
 
   /** open PR があるか */
   readonly openPr: Observed<boolean>;
-  /** `classifyChecks` の判定。**`mergeStateStatus` で代用しない** */
+  /** `classifyChecks` の判定 */
   readonly checks: Observed<{ readonly running: number; readonly green: boolean }>;
   /** open PR が無く、head に紐づく最新 PR が unmerged で closed */
   readonly latestPrClosedUnmerged: Observed<boolean>;

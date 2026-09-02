@@ -86,4 +86,19 @@ describe("classifyChecks", () => {
       ]),
     ).toEqual({ running: 1, green: false });
   });
+
+  test("at が欠落した IN_PROGRESS を、実時刻の過去 SUCCESS より古いとみなさない", () => {
+    expect(
+      classifyChecks([
+        check({ name: "lint", status: "SUCCESS", at: "2026-08-13T00:00:00Z" }),
+        check({ name: "lint", status: "IN_PROGRESS", at: "" }),
+      ]),
+    ).toEqual({ running: 1, green: false });
+    expect(
+      classifyChecks([
+        check({ name: "lint", status: "IN_PROGRESS", at: "" }),
+        check({ name: "lint", status: "SUCCESS", at: "2026-08-13T00:00:00Z" }),
+      ]),
+    ).toEqual({ running: 1, green: false });
+  });
 });

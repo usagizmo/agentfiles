@@ -373,18 +373,7 @@ snapshot() {
   # open PR は正当に 0 件になりうるので非空を要求しない。ただし**打ち切ったラウンドは失敗にする** ——
   # 上限外の PR の checks 変化は指紋に出ず、`提出中` → `着地待ち` が永久に起きない。
   # 不完全な一覧を baseline として受理する方が、ラウンドを捨てるより重い。
-  #
-  # **追跡していない PR の `checks` は固定文字列へ置く。**checks が遷移を駆動するのは PR が Issue に
-  # 紐づくときだけで、紐づけの唯一の手段が branch 名の番号。番号を持たない PR の checks は定義上
-  # どの `progress` も動かせないので、人が自分のブランチで CI を回すたびに conductor が起きる。
-  # **field は削らない** —— 落とすと「追跡していない」と「checks が無い」が区別できなくなる。
-  # 判定は**形だけ**（`<prefix>/<番号>-`）。prefix の集合は project が変えてよいと規約が明示して
-  # いるので、`feat|fix|chore` のような allowlist を焼き込まない —— project が prefix を 1 つ足した
-  # 瞬間、その課題だけ `提出中` → `着地待ち` が永久に起きなくなる。
-  # **判定できないものは残す側（fail-open）へ倒す** —— `headRefName` が取れないときは追跡中として
-  # 扱い、checks をそのまま指紋へ入れる。
-  # **畳みと分類は `src/checks.ts`。**ここは identity と status を落とさずに出す。
-  # CheckRun の実行中は `status` を読まないと空になり、pending が消える。
+  # 行の抽出は `pr-list.jq`。畳みと分類は `src/checks.ts`。
   prs_json=$(gh pr list --repo "$GH_REPO" --state open --limit "$PR_LIMIT" \
     --json number,headRefName,state,isDraft,statusCheckRollup) || return 1
   prs=$(printf '%s' "$prs_json" | jq -r -f "$DIR/pr-list.jq") || return 1
