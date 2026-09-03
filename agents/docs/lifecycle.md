@@ -142,19 +142,20 @@ sequenceDiagram
         R->>GH: 足された分を Issue にする
         Note over R,GH: PR の Closes で着地と同時に閉じる。<br/>元の受入条件が偽になったなら Issue ではなく<br/>本文を更新し、再承認を待って再 plan（PR へは進まない）
     end
-    R->>GH: PR を作る（CI が緑になるまでここ）
-    R->>GH: 緑になったらセッションまとめを PR へコメント
-    R-->>U: 同じ譜面にセッションまとめを載せて提示（可否を決める材料）
-    Note over R,C: PR 作成と CI は integration の外。<br/>write を持ったまま進む
-
     alt 意図の確認が要る変更（述語は intent-record）
         R->>GH: 人待ちを waiting に → 意図の確認を pending に
-        R-->>U: 実物を項目ごとに見せる
+        R-->>U: まだ push していないローカルの実物を項目ごとに見せる
         U->>R: 項目ごとに承認する
         R->>GH: 全項目そろったら confirmed → 人待ちを cleared に
     else それ以外
         R->>GH: 意図の確認を not-required に（理由と revisions つき）
     end
+
+    Note over R,GH: ここまで push しない。<br/>CI 相当の local gate が緑・clean・意図の確認が決着してから提出へ
+    R->>GH: push → PR を作る（CI が緑になるまでここ）
+    R->>GH: 緑になったらセッションまとめを PR へコメント
+    R-->>U: 同じ譜面にセッションまとめを載せて提示（可否を決める材料）
+    Note over R,C: PR 作成と CI は integration の外。<br/>write を持ったまま進む
 
     R-->>C: 待機
     C->>C: integration は claim が最も古い 1 件

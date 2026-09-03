@@ -20,11 +20,25 @@ PR を作り、**merge 可能な状態まで**持っていく。タイトル先�
 
 **base の PR が既に着地しているなら、`gh pr edit <自分> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替えてから rebase する。** 親の head ブランチが残る運用では GitHub は base を付け替えないので、放置すると merge できない。
 
+## 入る条件
+
+呼ぶのは、**CI が通れば merge できる状態になってから**。次が揃う前には呼ば**ない**。
+
+| 揃っているもの            | 確かめ方                                                |
+| ------------------------- | ------------------------------------------------------- |
+| worktree が clean         | `git status`                                            |
+| CI 相当の local gate が緑 | その repo の CI と同じ検査。入口の名前は project 差分   |
+| 意図の確認が決着          | 起動元の工程が持つ（`resolve` なら `intent-record.md`） |
+
+揃う前に呼ぶと、push が先に走り、あとから直すたびに CI が回る。その間 PR は「あるが緑でない」まま残り、PR の存在が状態の材料にならない。
+
+local gate の入口が無い repo では、**CI の定義から同じ検査を組んでローカルで通してから**呼ぶ。
+
 ## フロー
 
 1. **push は `sh <skills root>/pr/scripts/sync-and-push.sh [<base>]` で行う。素の `git push` を使わない。** 衝突が出たら解消して再実行する。**path は skill 側の実体を指す** —— cwd 相対で書くと作業中の repo の下を探して `No such file or directory` で落ち、等価な手順を毎回組み直すことになる
 2. PR が無ければ `gh pr create --base <base>`、あれば `gh pr edit` で title / body を更新
-3. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る
+3. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
 
 **commit を足したら必ず 1 へ戻る。CI が緑になったあとも同じ。**「もう通ったから push だけ」で追随を飛ばすと、base から離れたまま積み上がり、着地の直前に大きな rebase と衝突が出る。実物を見せて直した後の再 push がいちばん飛ばしやすい。
 
