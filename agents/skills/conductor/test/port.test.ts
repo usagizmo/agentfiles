@@ -575,25 +575,37 @@ describe("composer が受け付ける状態での agent prompt", () => {
     expect(harnessMd()).toMatch(/張り直しの `agent prompt` も同じ/);
   });
 
-  test("Workspace Trust は visible 全体の組で引き、片方だけでは送らない", () => {
+  test("Workspace Trust は [a] と spinner の 2 行。見出し必須ではない", () => {
     const md = composerSection();
-    expect(md).toContain("Workspace Trust Required");
     expect(md).toContain("[a] Trust this workspace");
-    expect(md).toMatch(/visible 全体/);
-    expect(md).toMatch(/見出しだけ/);
-    expect(md).toMatch(/選択肢だけ/);
+    expect(md).toContain("Trusting workspace");
+    expect(md).toMatch(/見出し必須/);
+    expect(md).toMatch(/表の Trust の行があるあいだは `agent prompt` を送らない/);
+    expect(md).not.toMatch(/Workspace Trust Required` と `\[a\] Trust this workspace`/);
   });
 
-  test("Trust の組があるとき send-keys a は 1 回。再観測は 3 回まで", () => {
+  test("[q] Quit は Trust の行にしない", () => {
+    const md = composerSection();
+    expect(md).toMatch(/\[q\] Quit[\s\S]*行にしない/);
+  });
+
+  test("Trust の [a] があるとき send-keys a は 1 回。再観測は 3 回まで。残るなら Conflict", () => {
     const md = composerSection();
     expect(md).toMatch(/send-keys <名前> a/);
     expect(md).toMatch(/1 回/);
     expect(md).toMatch(/3 回まで/);
+    expect(md).toMatch(/残るなら Conflict/);
+  });
+
+  test("Trusting workspace は [a] が無いときだけ送らない。spinner だけは送れなかった周", () => {
+    const md = composerSection();
+    expect(md).toMatch(/Trusting workspace[\s\S]*送ら/);
+    expect(md).toMatch(/spinner[\s\S]*送れなかった周|[a][\s\S]*が無い[\s\S]*送れなかった周/);
   });
 
   test("Trust 行は送らない行の後、fail-open の前。scrollback 復帰の順序には載せない", () => {
     const md = composerSection();
-    const trust = md.indexOf("Workspace Trust Required");
+    const trust = md.indexOf("| `[a] Trust this workspace`");
     const failOpen = md.indexOf("表に無い字面");
     expect(trust).toBeGreaterThanOrEqual(0);
     expect(failOpen).toBeGreaterThan(trust);
@@ -602,6 +614,23 @@ describe("composer が受け付ける状態での agent prompt", () => {
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(trust);
     }
+  });
+
+  test("idle から起こす成功は until working だけ。agent_prompted かつ idle は成功にしない", () => {
+    const md = composerSection();
+    expect(md).toMatch(/idle[\s\S]*`--wait --until working`/);
+    expect(md).toMatch(/`agent_prompted` かつ idle は成功にしない/);
+  });
+
+  test("until working の timeout 直後に visible を読み、Trust 面なら送れなかった周", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/timeout[\s\S]*visible/);
+    expect(md).toMatch(/Trust[\s\S]*送れなかった周/);
+  });
+
+  test("composer 表の Conflict は送れなかった周ではない", () => {
+    expect(skillMd()).toMatch(/composer 表が Conflict[\s\S]*送れなかった周ではない/);
+    expect(harnessMd()).toMatch(/表が Conflict と書いた周は送れなかった周ではない/);
   });
 
   test("send-keys の例外は composer の受け入れ表が定めるキー。表に submit キーを置かない", () => {

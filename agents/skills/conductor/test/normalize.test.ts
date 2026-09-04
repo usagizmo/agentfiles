@@ -196,6 +196,18 @@ describe("実行器が消える / 止まる", () => {
     );
   });
 
+  test("7k2: claim 済み。named が idle のまま計画コメントが無い", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        surfaces: [surface({ hasCheckout: present(true) })],
+        session: session.idle,
+      }),
+      { progress: "準備中", runtime: "待機", capacity: "あり", ledger: "進行中" },
+    );
+  });
+
   test("7l: 計画コメントが無いのに dirty か commit がある", () => {
     const o = observation({
       ledger: present("進行中"),

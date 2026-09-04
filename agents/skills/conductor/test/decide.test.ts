@@ -473,6 +473,22 @@ describe("実行器が消える / 止まる", () => {
     ]);
   });
 
+  test("7k2: claim 済み。named が idle のまま計画コメントが無い", () => {
+    const obs = [
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        claimRecord: present({ representative: 1, members: [1], landing: ["control"] }),
+        surfaces: [surface({ hasCheckout: present(true) })],
+        session: session.idle,
+      }),
+    ];
+    expectAction(obs, "解決を起こし直す");
+    const o = tick(obs).outcome;
+    expect(o.kind === "action" ? o.evidence.sessionKind : o.kind).toBe("idle");
+    expectEmptyCycle(obs, true);
+  });
+
   test("7l: 計画コメントが無いのに dirty か commit がある", () => {
     expectConflict(
       [
@@ -1642,7 +1658,7 @@ describe("外から状態が動く", () => {
     expect(d.kind === "action" ? d.params.action : d.kind).not.toBe("差し戻す");
   });
 
-  test("10q: 準備中 のまま枠を渡すが成功し続け、計画コメントも commit も出ない", () => {
+  test("10q: 計画コメントはあるが commit が出ないまま枠を渡すが成功し続ける", () => {
     const obs = [
       observation({
         ledger: present("進行中"),

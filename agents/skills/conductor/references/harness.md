@@ -176,7 +176,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 - `agent prompt` の前段は下の「composer の受け入れ」。張り直しの `agent prompt` も同じ
 - 稼働の確認（`idle` / `done` から起こす）は、前段のあと `agent prompt <名前> <本文> --wait --until working`
 - 既に `working` の受け手（leftover も genuine の休止促しも）は `--wait` / `--until` を付けない。成否は下の「composer の受け入れ」
-- `--until working` の timeout は、既に `working` のセッションに使ったとき成功にも失敗にも**しない**。付けると返らず timeout する。`idle` / `done` からの稼働確認の timeout は失敗
+- `--until working` の timeout は、既に `working` のセッションに使ったとき成功にも失敗にも**しない**。付けると返らず timeout する。`idle` / `done` からの稼働確認の timeout は、直後に visible を読む。Trust 面が在れば送れなかった周（prompt を送ったあと。前段で `[a]` が残った Conflict とは別）。無ければ失敗
 - `agent prompt` / `agent rename` は認識済み agent が要る。`pane current` に `agent` が無ければ `agent_not_found` か `agent_not_ready`。未認識の指定 pane には prompt せず、pane を割って `agent start` する
 - 張り直しの `pane split` は `--pane <対象の pane_id>`。`--current` は使わ**ない**
 - 組み込みの `herdr worktree remove` は片付けの **1 だけ**しか行わない。単体で使わ**ない**
@@ -215,32 +215,35 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 観測は `herdr agent read <名前> --source visible --format text`。入力欄は上の「入力欄の文字列は観測材料ではない」。
 
 - フッター / focus hint の行は末尾で引く
-- Workspace Trust の行は visible 全体で組として引く。見出しだけ、選択肢だけ、では送ら**ない**
+- Workspace Trust は見出し必須では**ない**。行は `[a] Trust this workspace` と `Trusting workspace` の 2 つ。`[q] Quit` は行にしない
 
-| 含まれる字面                                             | 状態                                 | すること                                                                                                |
-| -------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `Tab:next answer`                                        | 質問カードがキーボードを持つ         | 復帰も `agent prompt` も送ら**ない**                                                                    |
-| `Esc:scrollback`                                         | ブロッキングカードがキーボードを持つ | 復帰も `agent prompt` も送ら**ない**                                                                    |
-| `Tab/Space: question`                                    | 質問カードへ park                    | 復帰も `agent prompt` も送ら**ない**                                                                    |
-| 末行に `↑/↓ option` と `Esc to skip`                     | Cursor の質問カード                  | 復帰も `agent prompt` も送ら**ない**                                                                    |
-| `Workspace Trust Required` と `[a] Trust this workspace` | Workspace Trust                      | `herdr agent send-keys <名前> a`。**1 回**。再観測は 3 回まで。受け付けるなら送る。戻らなければ送らない |
-| `Space:prompt` または `j/k:nav`                          | scrollback フォーカス                | `herdr agent send-keys <名前> space`。再観測して受け付けるなら送る。戻らなければ送らない                |
-| 読めない、または表に無い字面                             | —                                    | fail-open。送る                                                                                         |
+| 含まれる字面                         | 状態                                 | すること                                                                                                                                                                                                 |
+| ------------------------------------ | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Tab:next answer`                    | 質問カードがキーボードを持つ         | 復帰も `agent prompt` も送ら**ない**                                                                                                                                                                     |
+| `Esc:scrollback`                     | ブロッキングカードがキーボードを持つ | 復帰も `agent prompt` も送ら**ない**                                                                                                                                                                     |
+| `Tab/Space: question`                | 質問カードへ park                    | 復帰も `agent prompt` も送ら**ない**                                                                                                                                                                     |
+| 末行に `↑/↓ option` と `Esc to skip` | Cursor の質問カード                  | 復帰も `agent prompt` も送ら**ない**                                                                                                                                                                     |
+| `[a] Trust this workspace`           | Workspace Trust                      | `herdr agent send-keys <名前> a`。**1 回**。再観測は 3 回まで。受け付けるなら前段を終わる。send-keys のあと `[a]` が残るなら Conflict（応答へ出す。`cli.ts` は立てない）。戻らなければ prompt を送らない |
+| `Trusting workspace`（`[a]` が無い） | Trust 描画中                         | 送ら**ない**。spinner だけなら送れなかった周                                                                                                                                                             |
+| `Space:prompt` または `j/k:nav`      | scrollback フォーカス                | `herdr agent send-keys <名前> space`。再観測して受け付けるなら送る。戻らなければ送らない                                                                                                                 |
+| 読めない、または表に無い字面         | —                                    | fail-open。送る                                                                                                                                                                                          |
 
 送らない行を先に見る。送らない判定と scrollback 復帰が同時なら、送らない。
 見出し（`Question 1 of 1`）単独では引かない。
-Trust の組があるあいだは `agent prompt` を送らない。
+表の Trust の行があるあいだは `agent prompt` を送らない。
+send-keys のあと `[a]` が残るのと、隣行の spinner だけは同時に立たない。
 表に `enter` / `ctrl+enter` を置か**ない**。
 Tab は使わ**ない**。
 
 表が送らないと決めた周（復帰できず送らなかった周を含む）は成功でも失敗でもない。数え方は `../SKILL.md`「数えない失敗」。
+表が Conflict と書いた周は送れなかった周ではない。数え方は同じ節の隣。
 
 成功:
 
 - leftover / 既に `working`: composer が受け付ける状態での `agent_prompted`（表に無い字面と読めない chrome の fail-open を含む）
 - leftover / 既に `working` で scrollback フォーカスのままの `agent_prompted` は成功にしない
 - leftover / 既に `working`: `state_change_seq` が動かないことを**失敗にしない**
-- `idle` / `done`: 前段のあと `--wait --until working` で稼働へ移ったこと
+- `idle` / `done`: 前段のあと `--wait --until working` で稼働へ移ったこと。**`agent_prompted` かつ idle は成功にしない**
 
 失敗（送った周）は非 0 / `agent_not_found` / `agent_not_ready` / `agent_prompt_stalled` **だけ**。
 

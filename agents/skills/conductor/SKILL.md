@@ -232,6 +232,8 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 - この tick を終える。`cli.ts` を呼び直さない。次の tick で同じ action が当たる
 - 応答へは出さない
 
+composer 表が Conflict と書いた周は送れなかった周ではない。応答へ出してこの tick を終える。`cli.ts` の conflicts には足さない。retry の `count` も `lastAction` も進めない。
+
 失われたセッションへの渡しが観測上の変化を生まなかった失敗は、通常の失敗として 1 回数える。
 
 - 張り直しは同じ周の回復である（手順は `references/harness.md`）
@@ -278,7 +280,7 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 コードに無い規約:
 
-- 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）
+- 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）。**例外は送れなかった周と、composer 表が Conflict と書いた周**
 - `agent prompt` の成否（前段・送れなかった周・張り直し除外を含む）は `references/harness.md`
 - `tab close` を行う入口は計画セッションと計画枠の逼迫の上限到達**だけ**
 - 「実行器だけ止める」は止まったことを `state_change_seq` で確かめてから資源を解放する。**確かめられなければ `Conflict`**。`agent_status` の 5 値を停止の証明に使わない

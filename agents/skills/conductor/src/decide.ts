@@ -358,7 +358,7 @@ const target = (g: Group): Target => ({ representative: g.representative, member
 
 const TERMINAL: readonly Progress[] = ["着地済み", "取り下げ"];
 const WRITE_STAGES: readonly Progress[] = ["準備済み", "実装中", "提出中"];
-/** write を渡す周。`準備中` は保持しないが周には入る（行 10q）。 */
+/** write を渡す周。`準備中` は保持しないが、leftover の `稼働中` では周に入る。 */
 const WRITE_PASS_STAGES: readonly Progress[] = ["準備中", "準備済み", "実装中", "提出中"];
 const RESTART_ACTIONS: readonly ActionName[] = [
   "claim する",
@@ -434,6 +434,13 @@ const validWaiting = (o: IssueObservation): boolean =>
   o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid";
 
 const sessionAlive = (g: Group): boolean => g.leadObservation.session.kind !== "none";
+
+/**
+ * named が idle のまま計画が無い。`/resolve` が届いていない。
+ * `done` は observe が idle に写すので、ここは idle だけ見る。
+ */
+const promptUndelivered = (g: Group): boolean =>
+  g.leadObservation.session.kind === "idle" && value(g.leadObservation.planCommentExists) === false;
 
 /**
  * 実行器が入力を受け取らない。leftover 解除は観測の lift 済み。
@@ -1106,12 +1113,12 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "解決を起こし直す" }),
-    why: "実行器が消えたまま成果物が途中で止まっている",
+    why: "実行器が消えたか、/resolve が届いていない",
     match: (g, ctx) => {
       if (isShelved(g) || receiveRefusedOf(ctx.groups)) return false;
       const r = g.lead;
       if (!IN_FLIGHT.includes(r.progress)) return false;
-      if (sessionAlive(g)) return false;
+      if (sessionAlive(g) && !promptUndelivered(g)) return false;
       if (g.records.some(ledgerBehind)) return false;
       // **checkout が無く、作ると数える本数が目安以上になるなら選ばない** ——
       // ただし論理 lease を保持しているなら、目安を超えても起こす（回収なので）。
