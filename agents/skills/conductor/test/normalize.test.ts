@@ -474,6 +474,70 @@ describe("着地面が制御面と違う", () => {
     );
   });
 
+  const missingTip = (over: Partial<ReturnType<typeof secondary>> = {}) =>
+    secondary({
+      aheadOfIntegration: present(false),
+      containedInIntegration: present(false),
+      terminal: present(false),
+      landable: present(false),
+      ...over,
+    });
+
+  test("17q: T 不在で記録 SHA が統合先に含まれない", () => {
+    const o = observation({
+      open: present(false),
+      ledger: present("完了"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+      surfaces: [missingTip()],
+      submissionEvidence: present(true),
+    });
+    expectFields(o, { progress: "取り下げ", runtime: "無し", capacity: "無し", ledger: "完了" });
+    expectConflict(o, "提出済みだが統合先に含まれていない");
+    const conflict = normalize(o).conflicts.find(
+      (c) => c.reason === "提出済みだが統合先に含まれていない",
+    );
+    expect(conflict?.evidence).toEqual([
+      "記録の SHA が統合先の祖先ではない",
+      "記録の SHA を解決できない",
+    ]);
+  });
+
+  test("17q2: T 不在で記録 SHA が統合先に含まれる", () => {
+    expectFields(
+      observation({
+        ledger: present("進行中"),
+        claimBranchExists: present(true),
+        planCommentExists: present(true),
+        claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+        surfaces: [
+          missingTip({
+            containedInIntegration: present(true),
+            terminal: present(true),
+            landable: present(true),
+          }),
+        ],
+        submissionEvidence: present(true),
+      }),
+      { progress: "着地済み", runtime: "無し", capacity: "無し", ledger: "進行中" },
+    );
+  });
+
+  test("17q3: T 不在で祖先判定不能", () => {
+    const o = observation({
+      open: present(false),
+      ledger: present("完了"),
+      claimBranchExists: present(true),
+      planCommentExists: present(true),
+      claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+      surfaces: [missingTip({ containedInIntegration: unobservable("git merge-base が落ちた") })],
+      submissionEvidence: present(true),
+    });
+    expectFields(o, { progress: "取り下げ", runtime: "無し", capacity: "無し", ledger: "完了" });
+    expectConflict(o, "提出済みだが統合先に含まれていない");
+  });
+
   test("17c8: 透過面と未終端面が同居した Issue を close したら取り下げ", () => {
     expectFields(
       observation({

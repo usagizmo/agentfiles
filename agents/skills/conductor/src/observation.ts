@@ -57,6 +57,11 @@ export type SurfaceObservation = {
   readonly countsCapacity: boolean;
   /** `統合先..branch` が非空か。**branch 上の commit の存在で読まない** */
   readonly aheadOfIntegration: Observed<boolean>;
+  /**
+   * 記録 SHA がいまの統合先に含まれるか。**T 不在かつ記録に head がある面だけ測る。**
+   * 測っていない面は `absent`。`aheadOfIntegration` に載せない。
+   */
+  readonly containedInIntegration: Observed<boolean>;
   /** worktree の dirty。**読めなかった `-` を clean へ畳まない** */
   readonly dirty: Observed<boolean>;
   /** worktree の checkout があるか（`capacity` の `あり` を決める） */

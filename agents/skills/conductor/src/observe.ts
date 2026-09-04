@@ -36,7 +36,7 @@ import {
 import { CONCURRENCY, mapLimit } from "./limit.ts";
 import { normalizeProgress } from "./normalize.ts";
 import { classifyChecks } from "./checks.ts";
-import { deriveSurface } from "./surfaces.ts";
+import { deriveSurface, missingBranchGit } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
 import { reportValid } from "./report.ts";
 import type { Ledger, Observed, Progress } from "./types.ts";
@@ -171,6 +171,7 @@ const unknownSurface = (name: string): SurfaceObservation => {
     usesPr: true,
     countsCapacity: true,
     aheadOfIntegration: unobservable(reason),
+    containedInIntegration: absent(),
     dirty: unobservable(reason),
     hasCheckout: unobservable(reason),
     terminal: unobservable(reason),
@@ -566,6 +567,14 @@ export const observeTick = async (
           usesPr,
           countsCapacity,
           aheadOfIntegration: git.ahead,
+          containedInIntegration: await containedInIntegrationOf(
+            port,
+            name,
+            usesPr,
+            git.head,
+            report,
+            tips,
+          ),
           head: git.head,
           // **worktree が無いことは「読めなかった」ではない。**checkout が無い面には
           // 未コミットの変更が存在しえないので `false` で確定する —— `absent` にすると
@@ -738,10 +747,36 @@ const submissionEvidenceOf = async (
 };
 
 /**
+ * T 不在の包含。**`aheadOfIntegration` に載せない。**記録に head が無い面へは git を引かない。
+ * PR を使う面は `merged` で着地するので測らない。
+ */
+const containedInIntegrationOf = async (
+  port: ObservePort,
+  name: string,
+  usesPr: boolean,
+  head: Observed<string>,
+  report: Observed<ReportRecord>,
+  tips: ReadonlyMap<string, string>,
+): Promise<Observed<boolean>> => {
+  if (usesPr) return absent();
+  if (head.kind !== "absent") return absent();
+  if (report.kind === "unobservable") return unobservable(report.reason);
+  if (report.kind !== "present") return absent();
+  const recorded = report.value.heads[name];
+  if (recorded === undefined) return absent();
+  const tip = tips.get(name);
+  if (tip === undefined || tip === "-") return unobservable("統合先の tip を読めない");
+  if (recorded === tip) return present(true);
+  return port.isAncestor(name, recorded, tip);
+};
+
+/**
  * branch の有無と head は snapshot に在る。**無い / tip と同じなら git を引き直さない。**
  * SHA が tip と違うときだけ `統合先..branch` を測る（behind だけの非空はここでは分からない）。
  *
  * **tip が `-` なら ahead を false へ畳まない。**畳むと読めない面が透過し、終端へ上がる。
+ *
+ * **無い branch を包含の証明にしない。**記録 SHA の包含は `containedInIntegrationOf`。
  */
 const surfaceGitOf = async (
   port: ObservePort,
@@ -760,7 +795,7 @@ const surfaceGitOf = async (
   const branch = locals.find(
     (b) => b.surface === surface && new RegExp(`^[^/]+/${issue}-`).test(b.branch),
   );
-  if (branch === undefined) return { ahead: present(false), head: absent() };
+  if (branch === undefined) return missingBranchGit();
   if (branch.sha === tip) return { ahead: present(false), head: present(branch.sha) };
   return port.surfaceGit(issue, surface);
 };

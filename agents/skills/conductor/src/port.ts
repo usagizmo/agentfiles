@@ -7,6 +7,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
+import { missingBranchGit } from "./surfaces.ts";
 import type { ObservePort } from "./observe.ts";
 import {
   carriesReportOrHalt,
@@ -284,7 +285,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       const branch = branches.stdout
         .split("\n")
         .find((b) => new RegExp(`^[^/]+/${issue}-`).test(b.trim()));
-      if (branch === undefined) return { ahead: present(false), head: absent() };
+      if (branch === undefined) return missingBranchGit();
 
       const head = await run(["git", "rev-parse", branch.trim()], surface.repoPath);
       const ahead = await run(

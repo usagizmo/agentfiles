@@ -3355,6 +3355,62 @@ describe("着地面が制御面と違う（action）", () => {
       "片付ける",
     );
   });
+
+  const missingTip = (over: Partial<ReturnType<typeof secondary>> = {}) =>
+    secondary({
+      aheadOfIntegration: present(false),
+      containedInIntegration: present(false),
+      terminal: present(false),
+      landable: present(false),
+      ...over,
+    });
+
+  const dangling = (over: Partial<IssueObservation> = {}) =>
+    landed({
+      open: present(false),
+      ledger: present("完了"),
+      claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+      surfaces: [missingTip()],
+      submissionEvidence: present(true),
+      session: session.none,
+      ...over,
+    });
+
+  test("17q: T 不在で記録 SHA が統合先に含まれない", () => {
+    const obs = [dangling()];
+    expectIdle(obs);
+    expectConflict(obs, "提出済みだが統合先に含まれていない");
+  });
+
+  test("17q2: T 不在で記録 SHA が統合先に含まれる", () => {
+    expectAction(
+      [
+        landed({
+          claimRecord: present({ representative: 1, members: [1], landing: ["skills"] }),
+          surfaces: [
+            missingTip({
+              containedInIntegration: present(true),
+              terminal: present(true),
+              landable: present(true),
+            }),
+          ],
+          submissionEvidence: present(true),
+          session: session.none,
+        }),
+      ],
+      "片付ける",
+    );
+  });
+
+  test("17q3: T 不在で祖先判定不能", () => {
+    const obs = [
+      dangling({
+        surfaces: [missingTip({ containedInIntegration: unobservable("git merge-base が落ちた") })],
+      }),
+    ];
+    expectIdle(obs);
+    expectConflict(obs, "提出済みだが統合先に含まれていない");
+  });
 });
 
 describe("容量と供給", () => {

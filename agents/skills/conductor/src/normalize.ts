@@ -32,11 +32,19 @@ const reasonOf = (o: Observed<unknown>): string | undefined =>
   o.kind === "unobservable" || o.kind === "invalid" ? o.reason : undefined;
 
 /**
- * **commit が 0 の面は透過する**。予定した面に結局書かなかったことは通常運用で、
+ * **書かなかった面は透過する**。予定した面に結局書かなかったことは通常運用で、
  * 透過させないと成果物が別 repo にある課題が終端から締め出される。
  * **透過は commit 包含の判定にだけ効かせる**（dirty は下の `allSurfacesClean` が別に見る）。
+ *
+ * **T 不在の透過は `containedInIntegration === true` だけ。**無い branch の
+ * `ahead === false` は包含の証明ではない。
  */
-const isTransparent = (s: SurfaceObservation): boolean => value(s.aheadOfIntegration) === false;
+const isTransparent = (s: SurfaceObservation): boolean => {
+  if (s.containedInIntegration.kind !== "absent") {
+    return value(s.containedInIntegration) === true;
+  }
+  return value(s.aheadOfIntegration) === false;
+};
 
 /** **dirty は全面の共通前提**（`0` のみ。`1` も、読めなかった `-` も不可）。 */
 export const allSurfacesClean = (surfaces: readonly SurfaceObservation[]): boolean =>
@@ -335,6 +343,22 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
         "同じ worktree に所有外セッションがある",
         n,
         "同じ worktree に refine / resolve / conductor 以外のセッションが居る",
+      ),
+    );
+  }
+
+  // **提出済みだが統合先に含まれていない。**`exemptSettled` / `nothingLeft` を掛けない。
+  // 掛けると `片付ける` が提出記録を消す。
+  for (const s of o.surfaces) {
+    if (s.usesPr) continue;
+    if (s.containedInIntegration.kind === "absent") continue;
+    if (value(s.containedInIntegration) === true) continue;
+    found.push(
+      conflict(
+        "提出済みだが統合先に含まれていない",
+        n,
+        "記録の SHA が統合先の祖先ではない",
+        "記録の SHA を解決できない",
       ),
     );
   }

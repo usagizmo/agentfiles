@@ -871,6 +871,98 @@ partners:
     expect(find(rows, 34).surfaces.map((s) => s.aheadOfIntegration)).toEqual([present(false)]);
   });
 
+  const otherClaim = claimComment.replace("landing: [o/control]", "landing: [o/other]");
+  const otherReport = (head: string) => `<!-- report -->
+
+\`\`\`yaml
+heads:
+  o/other: "${head}"
+bases:
+  o/other: "111222"
+\`\`\`
+
+<!-- /report -->`;
+  const noOtherBranch = SNAP.replace("o/other feat/12-x bbb\n", "");
+
+  test("記録に head が無い面へは包含の git を引かない", async () => {
+    const seen: string[] = [];
+    const rows = await observe(
+      port({
+        snapshot: async () => noOtherBranch,
+        issueComments: async () =>
+          new Map([
+            [12, comment(otherClaim)],
+            [34, present([])],
+          ]),
+        isAncestor: async (surface, ancestor, descendant) => {
+          seen.push(`${surface}:${ancestor}:${descendant}`);
+          return present(true);
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen).toEqual([]);
+    expect(find(rows, 12).surfaces[0]?.containedInIntegration).toEqual(absent());
+  });
+
+  test("T 不在で記録 SHA が統合先に含まれるなら contained は真", async () => {
+    const seen: string[] = [];
+    const rows = await observe(
+      port({
+        snapshot: async () => noOtherBranch,
+        issueComments: async () =>
+          new Map([
+            [12, comment(`${otherClaim}\n\n${otherReport("abc999")}`)],
+            [34, present([])],
+          ]),
+        isAncestor: async (surface, ancestor, descendant) => {
+          seen.push(`${surface}:${ancestor}:${descendant}`);
+          return present(ancestor === "abc999" && descendant === "111222");
+        },
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(seen).toContain("o/other:abc999:111222");
+    expect(find(rows, 12).surfaces[0]?.containedInIntegration).toEqual(present(true));
+    expect(find(rows, 12).surfaces[0]?.aheadOfIntegration).toEqual(present(false));
+  });
+
+  test("T 不在で記録 SHA が統合先に含まれなければ contained は偽", async () => {
+    const rows = await observe(
+      port({
+        snapshot: async () => noOtherBranch,
+        issueComments: async () =>
+          new Map([
+            [12, comment(`${otherClaim}\n\n${otherReport("abc999")}`)],
+            [34, present([])],
+          ]),
+        isAncestor: async () => present(false),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).surfaces[0]?.containedInIntegration).toEqual(present(false));
+  });
+
+  test("T 不在で祖先判定不能なら contained は unobservable", async () => {
+    const rows = await observe(
+      port({
+        snapshot: async () => noOtherBranch,
+        issueComments: async () =>
+          new Map([
+            [12, comment(`${otherClaim}\n\n${otherReport("abc999")}`)],
+            [34, present([])],
+          ]),
+        isAncestor: async () => unobservable("git merge-base が落ちた"),
+      }),
+      STATUS,
+      SURFACES,
+    );
+    expect(find(rows, 12).surfaces[0]?.containedInIntegration.kind).toBe("unobservable");
+  });
+
   test("branch の SHA が統合先の tip と同じなら surfaceGit を呼ばない", async () => {
     const same = SNAP.replace("o/control feat/12-x aaa", "o/control feat/12-x def456").replace(
       "o/other feat/12-x bbb",
