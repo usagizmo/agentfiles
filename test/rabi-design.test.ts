@@ -866,38 +866,63 @@ test("accent を沈める状態は AA を満たす", () => {
   }
 });
 
-/**
- * accent へ寄せる状態は AA を割る。**原典（製品側のカタログ）の混色率**で、
- * 変えるかはユーザーの判断。ここで測って固定し、勝手に動いたら落とす。
- */
-test("accent へ寄せる状態の実測値が動いたら落ちる", () => {
-  const d = derived("light");
-  expect(d["button-on-accent-hover"].toFixed(2)).toBe("4.37");
-  expect(d["button-outline-hover"].toFixed(2)).toBe("4.44");
+test("accent へ寄せる状態も AA を満たす", () => {
+  for (const theme of ["light", "dark"] as const) {
+    const d = derived(theme);
+    const fails = (["button-on-accent-hover", "button-outline-hover"] as const)
+      .filter((n) => d[n] < 4.5)
+      .map((n) => `${theme} ${n}: ${d[n].toFixed(2)}:1`);
+    expect(fails).toEqual([]);
+  }
+});
+
+test("outline の枠が accent 地から 3:1 で立つ", () => {
+  const fails = (["light", "dark"] as const)
+    .map((theme) => ({
+      theme,
+      r: ratioOf(derivedColor(theme, "outline-edge"), channels(value(design, "accent", theme))),
+    }))
+    .filter(({ r }) => r < 3)
+    .map(({ theme, r }) => `${theme}: ${r.toFixed(2)}:1`);
+  expect(fails).toEqual([]);
+});
+
+/** 操作の縁は、載り得る面すべてから 3:1 で立つ（WCAG 1.4.11）。 */
+test("`edge` が紙・沈んだ紙・地から 3:1 で立つ", () => {
+  const fails = (["light", "dark"] as const).flatMap((theme) =>
+    ["paper", "paper-2", "ground"]
+      .map((on) => ({
+        on,
+        theme,
+        r: ratio(value(design, "edge", theme), value(design, on, theme)),
+      }))
+      .filter(({ r }) => r < 3)
+      .map(({ on, theme, r }) => `${theme} edge on ${on}: ${r.toFixed(2)}:1`),
+  );
+  expect(fails).toEqual([]);
 });
 
 /**
- * `outline` の枠（`outline-edge`）が accent 地から立つか。**原典の混色率**で 3:1 に届かない。
- * 変えるかはユーザーの判断。ここで測って固定し、勝手に動いたら落とす。
+ * range の進捗（accent）と未進捗（`edge`）は互いに 3:1 を持た**ない**。
+ *
+ * 値を示すのはつまみで、線の色差は補助。1.4.11 が要るのは「状態を示すのに必要な部分」なので、
+ * つまみと線がそれぞれ**周りの面から** 3:1 で立っていれば足りる。それを検査する。
  */
-test("outline の枠と accent 地の差が動いたら落ちる", () => {
-  const seen = (["light", "dark"] as const).map((theme) =>
-    ratioOf(derivedColor(theme, "outline-edge"), channels(value(design, "accent", theme))).toFixed(
-      2,
-    ),
+test("range のつまみと線が周りの面から 3:1 で立つ", () => {
+  const fails = (["light", "dark"] as const).flatMap((theme) =>
+    [
+      { what: "つまみ", color: "accent" },
+      { what: "線", color: "edge" },
+    ]
+      .map(({ what, color }) => ({
+        what,
+        theme,
+        r: ratio(value(design, color, theme), value(design, "paper", theme)),
+      }))
+      .filter(({ r }) => r < 3)
+      .map(({ what, theme, r }) => `${theme} ${what}: ${r.toFixed(2)}:1`),
   );
-  expect(seen).toEqual(["2.27", "2.27"]);
-});
-
-/**
- * range の進捗（accent）と未進捗（`edge`）の差。**原典の色**で、3:1 に届かない。
- * 変えるかはユーザーの判断。ここで測って固定し、勝手に動いたら落とす。
- */
-test("range の進捗と未進捗の差が動いたら落ちる", () => {
-  const seen = (["light", "dark"] as const).map((theme) =>
-    ratio(value(design, "accent", theme), value(design, "edge", theme)).toFixed(2),
-  );
-  expect(seen).toEqual(["1.82", "1.30"]);
+  expect(fails).toEqual([]);
 });
 
 test("混色が oklab の手順どおりである", () => {

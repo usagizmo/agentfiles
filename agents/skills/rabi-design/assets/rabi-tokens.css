@@ -13,13 +13,13 @@
   --rabi-soft: light-dark(#575757, #aaaaaa);
   --rabi-faint: light-dark(#6e6e6e, #888888);
   --rabi-divider: light-dark(#d3d3d3, #3e3e3e);
-  --rabi-edge: light-dark(#9c9c9c, #5e5e5e);
+  --rabi-edge: light-dark(#8b8b8b, #696969);
   --rabi-line: light-dark(#e9e9e9, #2c2c2c);
   --rabi-accent-hover: color-mix(in oklab, var(--rabi-accent) 88%, var(--rabi-shade));
   --rabi-accent-active: color-mix(in oklab, var(--rabi-accent) 76%, var(--rabi-shade));
-  --rabi-on-accent-hover: color-mix(in oklab, var(--rabi-on-accent) 90%, var(--rabi-accent));
-  --rabi-outline-hover: color-mix(in oklab, var(--rabi-on-accent) 12%, transparent);
-  --rabi-outline-edge: color-mix(in oklab, var(--rabi-on-accent) 55%, transparent);
+  --rabi-on-accent-hover: color-mix(in oklab, var(--rabi-on-accent) 93%, var(--rabi-accent));
+  --rabi-outline-hover: color-mix(in oklab, var(--rabi-on-accent) 10%, transparent);
+  --rabi-outline-edge: color-mix(in oklab, var(--rabi-on-accent) 71%, transparent);
   --rabi-head-veil: color-mix(in oklab, var(--rabi-ground) 82%, transparent);
   --rabi-grid-dot: color-mix(in oklab, var(--rabi-divider) 62%, transparent);
   --rabi-board-dot: color-mix(in oklab, var(--rabi-divider) 55%, transparent);

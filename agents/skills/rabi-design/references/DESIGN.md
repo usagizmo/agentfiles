@@ -15,7 +15,7 @@ colors:
   soft: "#575757"
   faint: "#6e6e6e"
   divider: "#d3d3d3"
-  edge: "#9c9c9c"
+  edge: "#8b8b8b"
   line: "#e9e9e9"
 typography:
   body:
@@ -288,7 +288,7 @@ extensions:
     soft: "#aaaaaa"
     faint: "#888888"
     divider: "#3e3e3e"
-    edge: "#5e5e5e"
+    edge: "#696969"
     line: "#2c2c2c"
   fonts:
     webfont:
@@ -348,9 +348,9 @@ extensions:
   derive:
     accent-hover: { from: accent, to: shade, keep: 88 }
     accent-active: { from: accent, to: shade, keep: 76 }
-    on-accent-hover: { from: on-accent, to: accent, keep: 90 }
-    outline-hover: { from: on-accent, to: transparent, keep: 12 }
-    outline-edge: { from: on-accent, to: transparent, keep: 55 }
+    on-accent-hover: { from: on-accent, to: accent, keep: 93 }
+    outline-hover: { from: on-accent, to: transparent, keep: 10 }
+    outline-edge: { from: on-accent, to: transparent, keep: 71 }
     head-veil: { from: ground, to: transparent, keep: 82 }
     grid-dot: { from: divider, to: transparent, keep: 62 }
     board-dot: { from: divider, to: transparent, keep: 55 }
