@@ -180,7 +180,7 @@ skill 固有の `references/`:
 | `conductor`   | `harness.md` / `protocols.md` / `intake.md` / `tick.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 正規化と action の論証 / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
 | `resolve`     | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `written-record.md`              | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
 | `docs`        | `review-prompt.md`                                                                        | 更新判定用                                                                                                                                   |
-| `rabi-design` | `DESIGN.md` / `EVAL.md`                                                                   | ブランドと情報層の仕様 / 評価の固定シナリオ                                                                                                  |
+| `rabi-design` | `DESIGN.md`                                                                               | ブランドの仕様。front matter が SSOT                                                                                                         |
 
 skill 固有の `scripts/`:
 
@@ -189,29 +189,24 @@ skill 固有の `scripts/`:
 | `conductor`   | `watch.sh` + `watch.test.sh` / `complete-rest-list.sh` + `complete-rest-list.test.sh` / `ensure-integration-ref.test.sh`（共有実体の検査。回すのは `conductor` だけ） / `pr-list.jq` / `comment-fingerprint.jq` / `issue-fingerprint.py` / `cycle-mark.py` + `cycle-mark.test.py` / `project-status.graphql` / `restrict-to-board.awk`                                                                                                                            | 起床監視・REST 一覧の完全性照合・共有の統合先 ref ensure の検査・checks 抽出・コメント指紋・本文 digest・成果の指紋・台帳クエリ・issues を board へ絞る |
 | `docs`        | `audit-skills.sh` / `check-emphasis.ts` / `check-hard-wrap.ts`                                                                                                                                                                                                                                                                                                                                                                                                    | 品質パスの機械検査。層の定義 `layers.tsv` を伴う                                                                                                        |
 | `resolve`     | `serialize-plan.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                               | 計画コメントの投稿ゲート。marker 抽出と YAML parse と path の round-trip                                                                                |
-| `rabi-design` | `gen-tokens.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `rabi.css` から `DESIGN.md` の front matter を書き戻す（`--check` は差分を落とす）                                                                      |
+| `rabi-design` | `gen-css.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `DESIGN.md` の front matter から `assets/` を生成する（`--check` は差分を落とす）                                                                       |
 | `pr`          | `sync-and-push.sh` + `sync-and-push.test.sh`                                                                                                                                                                                                                                                                                                                                                                                                                      | base への追随と origin の同名への push（素の `git push` を使わせない）                                                                                  |
 | 共有          | `shared/advisors.json` + `shared/advisors.ts` + `shared/advisors.sh`（`consult` / `zero-base-loop` の `scripts/` から symlink）+ `shared/jsonc.ts`（同 `scripts/` と `conductor/src` から symlink）+ `shared/queue/standalone-line.ts`（`conductor/src` と `resolve/scripts/` から symlink）+ `shared/sync-local-default.sh`（`pr` / `ship` の `scripts/` から symlink） + `shared/ensure-integration-ref.sh`（`conductor` / `merge` の `scripts/` から symlink） | 候補表・JSONC・選出・起動と回収・固定 marker の単独行・ローカル default の ff・統合先 ref の ensure                                                     |
 
 skill 固有の `assets/`:
 
-| skill         | 実体                  | 何を持つか                                   |
-| ------------- | --------------------- | -------------------------------------------- |
-| `rabi-design` | `rabi.css`            | ブランド層の値の SSOT と文書の部品           |
-| `rabi-design` | `rabi-components.css` | UI 部品の実装。値はトークンを引く            |
-| `rabi-design` | `rabi-role.css`       | 情報層の値の SSOT と 3 ロールの variant      |
-| `rabi-design` | `rabi-mermaid.js`     | mermaid をトークンで塗る初期化（CDN を引く） |
+| skill         | 実体              | 何を持つか                         |
+| ------------- | ----------------- | ---------------------------------- |
+| `rabi-design` | `rabi-tokens.css` | 生成物。`@font-face` と `--rabi-*` |
+| `rabi-design` | `rabi-head.html`  | 生成物。webfont の `<link>`        |
 
 ## skill を参照する repo 側の実体
 
 skill の外に在り、skill 側からは参照し**ない**。役割は [`../../AGENTS.md`](../../AGENTS.md) の配置方針。
 
-| 実体         | 何を参照するか                                                  |
-| ------------ | --------------------------------------------------------------- |
-| `../design/` | `rabi-design` の `assets/`                                      |
-| `../test/`   | `bun test` の gate。範囲は [`../../AGENTS.md`](../../AGENTS.md) |
-
-置き場の判定は [`../../AGENTS.md`](../../AGENTS.md) の配置方針。
+| 実体       | 何を参照するか                                                  |
+| ---------- | --------------------------------------------------------------- |
+| `../test/` | `bun test` の gate。範囲は [`../../AGENTS.md`](../../AGENTS.md) |
 
 ## 追加・変更するとき
 
