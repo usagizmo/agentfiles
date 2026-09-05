@@ -1,0 +1,114 @@
+/* Rabi design tokens。../references/DESIGN.md から生成する。手で直さない。 */
+
+:root {
+  color-scheme: light dark;
+  --rabi-accent: #dc143c;
+  --rabi-accent-text: light-dark(#d0123a, #ff3b5c);
+  --rabi-on-accent: #ffffff;
+  --rabi-shade: #000000;
+  --rabi-ground: light-dark(#f1f1f1, #111111);
+  --rabi-paper: light-dark(#ffffff, #181818);
+  --rabi-paper-2: light-dark(#f4f4f4, #1f1f1f);
+  --rabi-ink: light-dark(#222222, #f2f2f2);
+  --rabi-soft: light-dark(#575757, #aaaaaa);
+  --rabi-faint: light-dark(#6e6e6e, #888888);
+  --rabi-divider: light-dark(#d3d3d3, #3e3e3e);
+  --rabi-edge: light-dark(#9c9c9c, #5e5e5e);
+  --rabi-line: light-dark(#e9e9e9, #2c2c2c);
+  --rabi-accent-hover: color-mix(in oklab, var(--rabi-accent) 88%, var(--rabi-shade));
+  --rabi-accent-active: color-mix(in oklab, var(--rabi-accent) 76%, var(--rabi-shade));
+  --rabi-on-accent-hover: color-mix(in oklab, var(--rabi-on-accent) 90%, var(--rabi-accent));
+  --rabi-outline-hover: color-mix(in oklab, var(--rabi-on-accent) 12%, transparent);
+  --rabi-outline-edge: color-mix(in oklab, var(--rabi-on-accent) 55%, transparent);
+  --rabi-head-veil: color-mix(in oklab, var(--rabi-ground) 82%, transparent);
+  --rabi-grid-dot: color-mix(in oklab, var(--rabi-divider) 62%, transparent);
+  --rabi-board-dot: color-mix(in oklab, var(--rabi-divider) 55%, transparent);
+  --rabi-focus: var(--rabi-accent);
+  --rabi-focus-width: 2px;
+  --rabi-focus-offset: 2px;
+  --rabi-e-inset: inset 0 1px 2px rgb(0 0 0 / 0.08);
+  --rabi-e1: 0 1px 3px light-dark(rgb(34 34 34 / 0.07), rgb(0 0 0 / 0.49));
+  --rabi-e2: 0 5px 14px light-dark(rgb(34 34 34 / 0.1), rgb(0 0 0 / 0.56));
+  --rabi-e3: 0 12px 28px light-dark(rgb(34 34 34 / 0.16), rgb(0 0 0 / 0.63));
+  --rabi-e1-accent: 0 3px 6px rgb(88 6 22 / 0.18);
+  --rabi-e2-accent: 0 5px 14px rgb(88 6 22 / 0.34);
+  --rabi-e3-accent: 0 12px 28px rgb(88 6 22 / 0.4);
+  --rabi-r-none: 0px;
+  --rabi-r-sm: 6px;
+  --rabi-r-md: 16px;
+  --rabi-r-full: 999px;
+  --rabi-gap-1: 4px;
+  --rabi-gap-1_5: 6px;
+  --rabi-gap-2: 8px;
+  --rabi-gap-2_5: 10px;
+  --rabi-gap-3: 12px;
+  --rabi-gap-3_5: 14px;
+  --rabi-gap-4: 16px;
+  --rabi-gap-4_5: 18px;
+  --rabi-gap-5: 20px;
+  --rabi-gap-6: 24px;
+  --rabi-gap-8: 32px;
+  --rabi-gap-10: 40px;
+  --rabi-gap-12: 48px;
+  --rabi-gap-14: 56px;
+  --rabi-control-xs: 24px;
+  --rabi-control-sm: 28px;
+  --rabi-control: 32px;
+  --rabi-control-lg: 36px;
+  --rabi-pad-x: var(--rabi-gap-12);
+  --rabi-pad-x-narrow: var(--rabi-gap-6);
+  --rabi-content-max: 1280px;
+  --rabi-ff-body: var(--rabi-font);
+  --rabi-t-body: 14px;
+  --rabi-fw-body: 400;
+  --rabi-lh-body: 1.5;
+  --rabi-ff-subheading: var(--rabi-font);
+  --rabi-t-subheading: 16px;
+  --rabi-fw-subheading: 600;
+  --rabi-lh-subheading: 1.4;
+  --rabi-ff-prose: var(--rabi-font);
+  --rabi-t-prose: 15px;
+  --rabi-fw-prose: 400;
+  --rabi-lh-prose: 1.7;
+  --rabi-ff-prose-h2: var(--rabi-font);
+  --rabi-t-prose-h2: 21px;
+  --rabi-fw-prose-h2: 600;
+  --rabi-lh-prose-h2: 1.4;
+  --rabi-ff-label: var(--rabi-font);
+  --rabi-t-label: 12px;
+  --rabi-fw-label: 400;
+  --rabi-lh-label: 1.4;
+  --rabi-ff-label-sm: var(--rabi-font);
+  --rabi-t-label-sm: 11px;
+  --rabi-fw-label-sm: 400;
+  --rabi-lh-label-sm: 1.4;
+  --rabi-ff-label-xs: var(--rabi-font);
+  --rabi-t-label-xs: 10px;
+  --rabi-fw-label-xs: 400;
+  --rabi-lh-label-xs: 1.4;
+  --rabi-ff-meta: var(--rabi-mono);
+  --rabi-t-meta: 10px;
+  --rabi-fw-meta: 400;
+  --rabi-lh-meta: 1.4;
+  --rabi-ls-meta: 0.14em;
+  --rabi-motion: 0.1s;
+  --rabi-motion-lift: 0.28s;
+  --rabi-motion-reveal: 0.7s;
+  --rabi-font: Inter, system-ui, 'Helvetica Neue', Arial, 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'BIZ UDPGothic', sans-serif;
+  --rabi-mono: Menlo, 'Roboto Mono', Consolas, 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'BIZ UDPGothic', monospace;
+}
+
+/* 明示の切り替え。既定は OS に従う。 */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* @media は変数を取らないので、切り替え幅はここに出る。 */
+@media (max-width: 860px) {
+  :root {
+    --rabi-pad-x: var(--rabi-pad-x-narrow);
+  }
+}
