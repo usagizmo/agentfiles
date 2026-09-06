@@ -59,4 +59,13 @@ inventory_define() {
   inv_home "$HOME/.config/opencode"
   inv_symlink agents/AGENTS.md "$HOME/.config/opencode/AGENTS.md"
   inv_symlink harnesses/opencode/opencode.json "$HOME/.config/opencode/opencode.json"
+
+  # --- Command Code ---
+  # home は `~/.commandcode`（auth / sessions / history を同居させる）。tracked な葉だけ symlink
+  # memory は `~/.commandcode/AGENTS.md`。`CLAUDE.md` は読まない
+  # Command Code は `~/.agents/skills` をネイティブに読む（`commandcode skills list` の Global）。union は張らない
+  inv_section "command-code"
+  inv_home "$HOME/.commandcode"
+  inv_symlink agents/AGENTS.md "$HOME/.commandcode/AGENTS.md"
+  inv_symlink harnesses/command-code/settings.json "$HOME/.commandcode/settings.json"
 }

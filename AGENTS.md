@@ -49,14 +49,15 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 ### スコープ
 
-| スコープ     | 対象                                                                                                      |
-| ------------ | --------------------------------------------------------------------------------------------------------- |
-| `[agents]`   | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
-| `[claude]`   | `harnesses/claude` / `~/.claude` 配下の Claude Code 設定                                                  |
-| `[codex]`    | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
-| `[grok]`     | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
-| `[opencode]` | `~/.config/opencode` 配下の opencode 設定                                                                 |
-| `[lint]`     | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
+| スコープ         | 対象                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `[agents]`       | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
+| `[claude]`       | `harnesses/claude` / `~/.claude` 配下の Claude Code 設定                                                  |
+| `[codex]`        | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
+| `[grok]`         | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
+| `[opencode]`     | `~/.config/opencode` 配下の opencode 設定                                                                 |
+| `[command-code]` | `harnesses/command-code` / `~/.commandcode` 配下の Command Code 設定                                      |
+| `[lint]`         | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 
 複数スコープにまたがるときは並べる（例: `[agents][claude]`）。どのスコープにも入らない変更はスコープを省く。
 
