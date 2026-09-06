@@ -29,7 +29,7 @@ const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 test("実体の宣言 file が検証を通る", () => {
   expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "cursor"]);
   expect(roster[2]?.members).toEqual(["grok", "cursor"]);
-  expect(roster[2]?.args).toEqual(["--model", "grok-4.6[effort=high]"]);
+  expect(roster[2]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
 });
 
 test("claude は codex + cursor", () => {
@@ -176,12 +176,12 @@ test("grok の read-only は plan と --no-subagents", () => {
 test("cursor の read-only は --mode plan", () => {
   expect(readOnlyArgs("cursor")).toEqual(["--mode", "plan"]);
   const argv = herdrStartArgv(
-    { kind: "cursor", args: ["--model", "grok-4.6[effort=high]"], members: ["grok", "cursor"] },
+    { kind: "cursor", args: ["--model", "cursor-grok-4.6-high"], members: ["grok", "cursor"] },
     { name: "a-cursor-x", pane: "w1:p1" },
   );
   expect(argv.slice(argv.indexOf("--") + 1)).toEqual([
     "--model",
-    "grok-4.6[effort=high]",
+    "cursor-grok-4.6-high",
     "--mode",
     "plan",
   ]);

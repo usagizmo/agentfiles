@@ -9,7 +9,7 @@
   //
   // cursor（実行ファイルは cursor-agent。kind は cursor）/ grok-4.6 high:
   //   "kind": "cursor",
-  //   "args": ["--model", "grok-4.6[effort=high]"]
+  //   "args": ["--model", "cursor-grok-4.6-high"]
   //
   // claude / opus 5 high:
   //   "kind": "claude",
@@ -22,7 +22,7 @@
   { "kind": "codex", "args": [] },
   {
     "kind": "cursor",
-    "args": ["--model", "grok-4.6[effort=high]"],
+    "args": ["--model", "cursor-grok-4.6-high"],
     // grok を起こすときは kind と args を差し替える。members は変えない。
     // "kind": "grok",
     // "args": ["--model", "grok-4.6", "--effort", "high"],
