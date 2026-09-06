@@ -93,7 +93,7 @@ flowchart TB
 | `resolve`   | 課題 1 件の進行・計画の外部化・停止条件・作業単位の運用 | 資源を誰が出すか                             |
 | `finish`    | 規模別の仕上げフロー                                    | —                                            |
 
-**skill をまたぐ不変条件**（未計画 → 計画済みを進める主体、Status の単調性、multiplexer 操作の隔離）は [`../AGENTS.md`](../AGENTS.md) と各 `SKILL.md` が持つ。ここには写さない。
+**skill をまたぐ不変条件**（未計画 → 計画済みを進める主体、Status の単調性、multiplexer 操作の隔離）は各 `SKILL.md` と `shared/queue/` が持つ。ここには写さない。
 
 ## leaf の対比
 
