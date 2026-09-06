@@ -180,6 +180,17 @@ const normalizeSnapshotLine = (line: string): string =>
  */
 const INPUT_CARET = /^(?:[│|]\s*[›❯>]|[›❯])(?:\s|$)/u;
 
+const isInputLine = (lines: readonly string[], index: number): boolean => {
+  const line = lines[index] ?? "";
+  if (INPUT_CARET.test(line)) return true;
+  // 横罫線に囲まれた入力欄だけを取る。本文の矢印行は残す。
+  return (
+    /^→(?:\s|$)/u.test(line) &&
+    /^▄{3,}$/u.test(lines[index - 1] ?? "") &&
+    /^▀{3,}$/u.test(lines[index + 1] ?? "")
+  );
+};
+
 export const isChromeLine = (line: string): boolean => {
   const trimmed = line.trim();
   if (trimmed === "") return true;
@@ -205,7 +216,7 @@ export const lastContentLine = (text: string): string | undefined => {
   const lines = text.split(/\r?\n/).map(normalizeSnapshotLine);
   let end = lines.length;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (INPUT_CARET.test(lines[i] ?? "")) {
+    if (isInputLine(lines, i)) {
       end = i;
       break;
     }

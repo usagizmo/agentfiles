@@ -301,6 +301,40 @@ test.each(["codex", "grok"] as const)("%s の pane から marker を読める", 
   expect(advisorComplete(pane, "ADVISOR-DONE-heaaqd")).toEqual({ ok: true });
 });
 
+const CURSOR_MARKER = "ADVISOR-DONE-gmjsqm";
+// 実 pane の応答以降を採録し、作業ディレクトリだけ匿名化する。
+const CURSOR_SNAPSHOT = readFileSync(`${ROOT}test/fixtures/advisor-pane/cursor`, "utf8");
+
+test("上下の罫線に囲まれた矢印入力欄から応答の末尾を読める", () => {
+  expect(advisorComplete(CURSOR_SNAPSHOT, CURSOR_MARKER)).toEqual({ ok: true });
+});
+
+test("矢印入力欄があっても marker の無い応答は未完", () => {
+  expect(advisorComplete(CURSOR_SNAPSHOT.replace(CURSOR_MARKER, ""), CURSOR_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test("marker の後から矢印入力欄までの本文は省略しない", () => {
+  const snapshot = CURSOR_SNAPSHOT.replace(CURSOR_MARKER, `${CURSOR_MARKER}\n  追加の指摘`);
+  expect(advisorComplete(snapshot, CURSOR_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test.each([
+  "→ 本文の続きを確認する",
+  "▄▄▄▄\n→ 本文の続きを確認する",
+  "→ 本文の続きを確認する\n▀▀▀▀",
+])("上下の罫線が揃わない矢印行は本文: %s", (content) => {
+  expect(advisorComplete(`${CURSOR_MARKER}\n${content}`, CURSOR_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
 test("TUI 枠だけは出力なし", () => {
   const chrome = `
   ╭─────────────────────────────────────────╮
