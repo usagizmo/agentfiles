@@ -2,7 +2,7 @@
 
 **人が全体を把握し、整合性を監査するための資料**。agent は読まない（`~/.agents/` へ投影しない）ので、図も表も必要なだけ細かく書いてよい。
 
-**規約の本体はここに無い**。ここにあるのは skills から導出した図と索引だけで、**矛盾を見つけたら skills が正**。直すのは skills 側で、ここはその後に引き直す。
+規約の本体はここに無い。skills から導出した図と索引を置く。不一致は資料側を直す。規約そのものを変える場合は、SSOT を直してから資料を引き直す。
 
 | 資料                           | 何が分かるか                                              |
 | ------------------------------ | --------------------------------------------------------- |
@@ -30,7 +30,7 @@ flowchart TB
     U -->|/refine Issue を直接渡す| G
 
     subgraph AP["conductor — 1 つだけ・常駐"]
-        TICK["tick<br/>観測 → 正規化 → action を 1 つ"]
+        TICK["tick<br/>観測 → 正規化 → action を 1 つ<br/>上限まで繰り返して watcher へ"]
     end
 
     TICK -->|応答<br/>outcome・conflicts・stalls・receiveRefusal| U
@@ -59,7 +59,7 @@ flowchart TB
 
 読み方は 4 つ。
 
-- **人が返すのは製品判断だけ** — 計画中（`refine`）と実装中（`resolve`）で聞かれ、`conductor` は outcome と `conflicts` と `stalls` と `receiveRefusal` を応答に出す。それ以外はエージェントが決めきる
+- 技術案はエージェントが決め、製品判断は人へ聞く。実装プランの承認は `consult` の gate に従う。`conductor` は outcome と `conflicts` と `stalls` と `receiveRefusal` を応答に出す
 - **`refine` / `resolve` は単体でも起動できる** — 常時運転では conductor が起こすが、人が直接渡す経路も等価に存在する。違いは「枠が空くのを待つかどうか」だけ（claim 済みとして渡されたときだけ待つ。`resolve` の variant → [`glossary.md`](glossary.md)）
 - **並列できるかは資源が決める** — `#B` が待っているのは人の判断待ちではなく枠の空き待ち。貸出を記録した台帳は持たず、今ある実体を数えれば貸出状況が分かる（→ [`glossary.md`](glossary.md) の「資源」）
 - **着地は必ず 1 本ずつ** — 実装が何本並んでも default に入るのは直列。ここが本当のボトルネック

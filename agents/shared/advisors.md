@@ -1,22 +1,20 @@
 # アドバイザー起動表
 
-候補表は起動スクリプトと同じディレクトリの `advisors.json`（JSONC）。選出は `advisors.ts`。自己 kind は herdr の pane 観測。実行中の LLM の自己申告では判定しない。
-
-枠の `kind` が起こす実行器、`args` がモデルと effort、`members` は同一視（省略時は kind 自身）。自己 kind を含む枠は丸ごと選出から外れる。観測できないとき（`pane.agent` が空）は start が失敗する。表に無い kind は選出上限まで取り、警告する。上限は `advisors.ts` の `MAX_ADVISORS`。
+候補表は起動スクリプトと同じディレクトリの `advisors.json`（JSONC）。設定の解釈・選出・上限は `advisors.ts`、自己 kind の観測と起動条件は `advisors.sh` が SSOT。実行中の LLM の自己申告では判定しない。
 
 アドバイザーは consult を起動しない。agent を start しない。判断を応答に出す。
 
-Herdr の外では立てない。`HERDR_ENV` が 1 でない、または `herdr` が無いときは start が失敗する。`claude -p` / `codex exec` へ倒さ**ない**。
+起動できなくても別の起動方式へ倒さ**ない**。
 
 ## 起動と回収
 
 **起動と回収は別コマンドで実行する**。
 
-この skill の `scripts/advisors.sh` を使う。
+`<skill-name>` は呼び出し元 skill の名前。起動と回収には同じ skill の script を使う。
 
 ```
-scripts/advisors.sh start <prompt-file>    # run dir を stdout へ返す
-scripts/advisors.sh collect <run-dir> [秒] # 出揃うまで待って出力
+<skills root>/<skill-name>/scripts/advisors.sh start <prompt-file>    # run dir を stdout へ返す
+<skills root>/<skill-name>/scripts/advisors.sh collect <run-dir> [秒] # 出揃うまで待って出力
 ```
 
 - **prompt は `mktemp` で作ったファイルに書いて渡す**。`PROMPT=$(mktemp "${TMPDIR:-/tmp}/<skill 名>-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、**出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、以降の各コマンドで再設定する）

@@ -403,15 +403,11 @@ front matter の `colors` が light の値、`extensions.dark` が同名の dark
 
 ## Typography
 
-Inter が本文、Roboto Mono がメタ情報。和文は Noto Sans JP を取り寄せる。実際にどの和文が当たるかは OS のフォント設定が決める —— スタックは欧文を先に解決するので、`system-ui` が和文も覆う環境ではそちらへ落ちる。
-
-読み込みは 2 段。webfont を取り寄せ、取れなければ OS のフォントへ落ちる。sans は `system-ui` → `Helvetica Neue` → `Arial`、和文は `Hiragino Kaku Gothic ProN` → `Hiragino Sans` → `BIZ UDPGothic`。
-
-mono だけ順が違う。`Menlo` が先頭に来る。macOS では Menlo、無ければ Roboto Mono、Windows でネットが無ければ `Consolas` へ落ちる。
+読み込む webfont は `extensions.fonts.webfont`、媒体ごとの書体と fallback の順序は `extensions.fonts.stack` に従う。
 
 `local()` だけを `src` に持つ別名を作ら**ない**。install 済みの和文が weight を 1 つしか持たないと、600 と 700 が擬似太字になる。
 
-`<head>` に貼る `<link>` は [`../assets/rabi-head.html`](../assets/rabi-head.html)。`@font-face` とスタックは [`../assets/rabi-tokens.css`](../assets/rabi-tokens.css)。どちらも front matter の `extensions.fonts` から生成する。
+`<head>` に貼る webfont の `<link>` は [`../assets/rabi-head.html`](../assets/rabi-head.html)、フォントスタックは [`../assets/rabi-tokens.css`](../assets/rabi-tokens.css)。どちらも front matter の `extensions.fonts` から生成する。
 
 規模の規則:
 
@@ -500,12 +496,12 @@ accent で塗った部品の影は `e1-accent` 〜 `e3-accent`。accent を沈�
 
 hover はどの変種も地を 1 段動かす。active は `primary` だけが `accent-active` まで沈み、全変種が 1px 下がる。
 
-| 変種        | hover の地        |
-| ----------- | ----------------- |
-| `primary`   | `accent-hover`    |
-| `ghost`     | `paper-2`         |
-| `on-accent` | `on-accent-hover` |
-| `outline`   | `outline-hover`   |
+| 変種        | hover の地                                      |
+| ----------- | ----------------------------------------------- |
+| `primary`   | `accent-hover`                                  |
+| `ghost`     | `components.button-ghost-hover.backgroundColor` |
+| `on-accent` | `on-accent-hover`                               |
+| `outline`   | `outline-hover`                                 |
 
 枠は component のプロパティで表せ**ない**。`ghost` は `edge`、`outline` は `outline-edge`、`badge-outline` と `chip` は `edge`。
 
@@ -587,9 +583,9 @@ native の UA 描画は `appearance: none` で外してから描く。描画は 
 
 ### 重なり
 
-`menu` は紙 + `divider` + `e3`。項目の丈は `control-xs`、hover 地は `paper-2`。チェック位置を空の slot で揃える。
+`menu` と項目の値は `components.menu` / `components.menu-item` / `components.menu-item-hover` に従う。menu の枠は `divider`、影は `e3`。チェック位置を空の slot で揃える。
 
-`tooltip` は `ink` 地に `paper` 文字。0.5s のホバー遅延で出す。
+`tooltip` の値は `components.tooltip` に従う。0.5s のホバー遅延で出す。
 
 ### 動き
 

@@ -55,7 +55,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 | `[claude]`       | `harnesses/claude` / `~/.claude` 配下の Claude Code 設定                                                  |
 | `[codex]`        | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
 | `[grok]`         | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
-| `[opencode]`     | `~/.config/opencode` 配下の opencode 設定                                                                 |
+| `[opencode]`     | `harnesses/opencode` / `~/.config/opencode` 配下の opencode 設定                                          |
 | `[command-code]` | `harnesses/command-code` / `~/.commandcode` 配下の Command Code 設定                                      |
 | `[lint]`         | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 
@@ -135,7 +135,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 hooks の tripwire:
 
-- **`harnesses/<agent>/hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外**。空であること自体が基準線なので、中身を埋めたり配線を外したりしない
+- `harnesses/<agent>/` 配下の空の `hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外。中身を埋めたり配線を外したりしない
 - 外部ツールによる上書きを 3 経路で検知する —— symlink 経由の in-place 書き込みは repo 側の git diff、unlink して実ファイルで置換は doctor の ❌、別名ファイルの投下は `inv_guard_dir` の ⚠️
 - **管理下 symlink 以外の投下を検知したい collection dir に `inv_guard_dir` を張る**（各 harness の hooks dir）。read-only で、自動削除はしない
 - 設定が harness home 直下に置かれる場合（codex）は vendor ファイルと同居するため張ら**ない**。symlink check だけで守る

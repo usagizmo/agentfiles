@@ -201,7 +201,6 @@ const NON_TOKEN_WORDS = [
   "screen",
   "src",
   "stitch",
-  "system-ui",
   "tabular-nums",
   "transparent",
 ];

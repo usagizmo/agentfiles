@@ -270,8 +270,6 @@ retry の `count` を 0 に戻すのは、action が成功したときと、`led
 
 action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER`、期待は `test/decide.test.ts`。**ここに写さない**。選んだ後の手順は `references/protocols.md`。
 
-同じ課題に 1 tick で 2 つの action を出さ**ない**。上から最初に当たったものを 1 つだけ実行する。「1 tick で」を落とさ**ない**。
-
 適用の単位と帰属は `references/same-branch.md`。実体を触る action は代表の番号で 1 回。終端が混在する group は `Conflict`。
 
 順序: 止める・消えるものを残す → 終わったものを消す → 台帳のずれを直す → 実行器を動かす → 新しく始める。**規約の穴の起票だけは最上段に近い**（次の tick に観測から復元できない**唯一**の行）。
@@ -503,16 +501,7 @@ Status は claim から着地まで単調に進む。戻すのは 5 事象だけ
 
 ### resolve に渡す条件
 
-次を**すべて**満たすものだけ（実体は `src/decide.ts` の `selectable`）。
-
-1. Issue が open
-2. Status が計画済み
-3. まだ claim されていない（下記）
-4. Issue 契約が揃っている
-5. `Depends on #N` の依存がすべて解消している
-6. 着地面が解決できる（宣言された面が project 差分の座標表にあり、group の成員全員で同じ集合。`references/landing-surface.md` と `references/same-branch.md`）
-
-**claim 済みの判定は記録と remote branch**。branch 名には番号が 1 つしか入らないので、記録の `members` と「同じ group の代表が claim されている」も見る（group は `src/decide.ts` の `buildGroups`）。**`alsoResolves` では判定しない**（加入の実体は記録の `members`。`references/same-branch.md`）。
+選出条件は `src/decide.ts` の `selectable`、claim 済みの判定は同ファイルの `buildGroups` と `references/same-branch.md` に従う。
 
 ### claim の構造的な停止
 

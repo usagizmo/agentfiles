@@ -12,7 +12,7 @@ description: >-
 ## 読む順
 
 1. [`references/DESIGN.md`](references/DESIGN.md) —— 仕様の全文
-2. [`assets/rabi-tokens.css`](assets/rabi-tokens.css) —— front matter から生成した `@font-face` と `--rabi-*`
+2. [`assets/rabi-tokens.css`](assets/rabi-tokens.css) —— front matter から生成した `--rabi-*` とテーマ指定
 3. [`assets/rabi-head.html`](assets/rabi-head.html) —— front matter から生成した webfont の `<link>`
 
 SSOT は 1。front matter がトークンの値、本文が適用の規則。2 と 3 は写しで、手で直さ**ない**。

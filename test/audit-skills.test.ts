@@ -208,6 +208,61 @@ async function ownedRepo({ table, extras = [] }: { table: string[]; extras?: str
   return dir;
 }
 
+test("現行 marker の定義と索引列を双方向に検査する", async () => {
+  const dir = await ownedRepo({ table: ["owned"] });
+  try {
+    writeFileSync(
+      join(dir, "agents/skills/owned/SKILL.md"),
+      [
+        "# owned",
+        "",
+        "```markdown",
+        "<!-- entry-block -->",
+        "<!-- /entry-block -->",
+        "  <!-- entry-block -->  ",
+        "  <!-- /entry-block -->  ",
+        "<!-- /orphan -->",
+        "<!-- legacy-name:v1 -->",
+        "<!-- /legacy-name:v1 -->",
+        "```",
+        "",
+        "`<!-- mention -->`",
+        "> <!-- quoted -->",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(dir, "agents/docs/glossary.md"),
+      [
+        "# glossary",
+        "",
+        "entry-block is mentioned outside the index.",
+        "",
+        "| marker | source |",
+        "| --- | --- |",
+        "| `ghost` / `legacy-name:v1` | `entry-block` |",
+        "",
+      ].join("\n"),
+    );
+    const { stdout, exitCode } = await audit(join(dir, "agents/skills"), {}, [
+      "--peer",
+      `${ROOT}agents/skills`,
+    ]);
+    expect(stdout).toContain("REVIEW\tmarker\tentry-block\topen=2");
+    expect(stdout).toContain("VIOLATION\tmarker\torphan\topen/close=0/1");
+    expect(derivedViolations(stdout)).toEqual([
+      "VIOLATION\tderived\tdocs/glossary.md\tnote=marker entry-block が索引に無い",
+      "VIOLATION\tderived\tdocs/glossary.md\tnote=marker orphan が索引に無い",
+      "VIOLATION\tderived\tdocs/glossary.md\tnote=索引の marker ghost は定義が無い",
+    ]);
+    expect(stdout).not.toContain("marker\tmention");
+    expect(stdout).not.toContain("marker\tquoted");
+    expect(exitCode).toBe(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("gitignore された skill の有無で derived の VIOLATION が変わらない", async () => {
   const absent = await ownedRepo({ table: ["owned"] });
   const present = await ownedRepo({ table: ["owned"], extras: ["ghost"] });

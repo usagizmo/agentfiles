@@ -48,7 +48,7 @@ flowchart LR
 
     CO --> RF
     CO --> RS
-    CO -.->|着地後に branch が残ることに依存| SH
+    CO -.->|live checkout の着地検査に依存| ME
     RS -.->|cwd の木しか見ないことに依存| CM
     RF --> CS
     RS --> CS
@@ -63,7 +63,7 @@ flowchart LR
     FI --> CM
 ```
 
-実線は起動、点線は挙動への依存。`conductor` が `ship` を名指しするのはこの 1 箇所だけで、起動はしない。
+実線は起動、点線は挙動への依存。`conductor` は `merge` の着地検査を参照し、起動はしない。
 
 `conductor` が multiplexer の CLI を参照する箇所は **`references/harness.md` に隔離**してあり、本体はそれ以外の場所で multiplexer を知らない。
 

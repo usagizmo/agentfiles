@@ -38,7 +38,7 @@ fencing token（grant 世代つき）は、入力が conductor 経由でしか�
 | `refine`   | 要ら**ない**（読み取りのみ）                                         | `/refine <Issue 番号>`                                                    |
 | `resolve`  | **着地面ごとに** branch と worktree を作る（既にあるなら pane だけ） | `/resolve <代表> [成員…]`（group なら**対象集合の全番号**。復旧時も同じ） |
 
-- 着地面が複数ある課題でも、**セッションを置くのは 1 面だけ**（どの面かは `landing-surface.md`。claim 後は記録の `landing` の先頭で、本文を引き直さない）。残りの面は checkout として作るだけで、pane は持たない
+- 着地面が複数ある課題でも、セッションを置くのは 1 面だけ。選択は `landing-surface.md` の「実行面」に従う。残りの面は checkout として作るだけで、pane は持たない
 - **面ごとにセッションを起こさない**（1 課題 = 1 セッション = 1 計画）
 - どちらも完了を待た**ない**。渡すのは Issue 番号だけで、起こされた側は Issue 本文を読んで自分で文脈を作る
 - **セッション名は `refine-<番号>` / `resolve-<番号>` に固定する**
@@ -469,7 +469,7 @@ done | sort | grep .
 - **生値をそのまま出す**。分類は `src/observe.ts` が leftover 位置 / card と status を合成する。status 欄は上書きしない
 - **leftover 位置は所有セッションと foreign の行に載せる**。トークンは `leftover` / `subagent` / `-` で、位置は状態の次
 - leftover は turn が終わり背景作業が残っている `working` だけ。終了行は末尾側の leftover chrome より前で最も近いもの。証拠が無い `working` は leftover にしない。`working` 以外は leftover の visible を読ま**ない**。走査は上の fence
-- **subagent は leftover より先**。検出 40 行の同一行が `subagents? still running` と `send a message to interrupt` を含むとき。`interrupt` 単独では引かない。leftover の chrome_re と ended 連言は変えない
+- subagent と leftover の検出条件・順序・走査範囲は上の `--sessions-cmd` の fence が持つ
 - **refused は leftover の隣**。トークンは `refused` / `-`。subagent の行は refused 検査を飛ばす
 - **card は refused の隣**。トークンは `card` / `-`。所有は 5 欄、foreign は workspace を 1 つ右へ。workspace のトークンは `workspace_id` / `-`。所有行にだけ足すと `parts[4]` が card と workspace で衝突する
 - **card は `idle` / `done` の所有セッションだけ visible を読み、末行が composer 表の「復帰も送らない」行なら付ける**。leftover の `working` 分岐の外。見出し単独では引かない。scrollback フォーカスは付けない
@@ -515,16 +515,18 @@ worktree 一覧は面ごとの checkout から取る（スクリプトが `--rep
 
 手順（既存の受け口だけで足りる。新しい仕組みを作らない）:
 
-1. `pane split` で pane を作り、`conductor-next` で `agent start`（**同名で立てない**。`--kind` は自分と同じ。配線 file は見ない）
-2. `agent prompt` で `/conductor` を渡す。引き継ぎ本文は原則として付け**ない**
-3. 後継が観測を始めたことを `agent list` で確認する
-4. **自分を `conductor-prev` へ rename してから、後継を `conductor` へ rename する**（逆順だと同名が 2 本並ぶ）
-5. 引き継ぎを応答に残して idle になる。**自分の pane は閉じない**
+1. 現在の action を終え、以後の action と watcher の起動を止める
+2. `pane split` で pane を作り、`conductor-next` で `agent start`。`--kind` は自分と同じにし、配線 file は見ない
+3. 自分を `conductor-prev` へ rename してから、後継を `conductor` へ rename する。両方の成功を確認するまで後継へ `/conductor` を渡さない
+4. `agent prompt` で `/conductor` を渡す。引き継ぎ本文は下の「引き継ぎに何も書かないのが既定」に従う
+5. 後継が稼働へ移ったことを `agent list` で確認し、引き継ぎを応答に残して idle になる。自分の pane は閉じない
+
+途中で失敗したら後続の手順を行わず報告する。旧セッションの action を再開しない。
 
 後継の側:
 
 - **毎 tick、`agent list` で `conductor-prev` を探し、居たら pane を閉じる**（`tab_id` ではなく `pane_id`。交代は pane 単位）
-- **「起動直後に 1 回だけ」にしない**。rename は後継が観測を始めた後なので、起動直後には `conductor-prev` はまだ存在しない
+- 旧セッションの pane が閉じられたことを確認するまで、次の tick でも繰り返す
 - **`agent list` を直接引く**。起床 snapshot は conductor 自身の状態を `conductor present` へ畳むので、`conductor-prev` はそこに現れない
 
 ### 引き継ぎに何も書かないのが既定

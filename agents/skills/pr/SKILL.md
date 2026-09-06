@@ -36,7 +36,7 @@ local gate の入口が無い repo では、**CI の定義から同じ検査を�
 
 ## フロー
 
-1. **push は `sh <skills root>/pr/scripts/sync-and-push.sh [<base>]` で行う。素の `git push` を使わない。** 衝突が出たら解消して再実行する。**path は skill 側の実体を指す** —— cwd 相対で書くと作業中の repo の下を探して `No such file or directory` で落ち、等価な手順を毎回組み直すことになる
+1. `bash <skills root>/pr/scripts/sync-and-push.sh [<base>]` で push する。衝突が出たら解消して再実行する
 2. PR が無ければ `gh pr create --base <base>`、あれば `gh pr edit` で title / body を更新
 3. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
 
