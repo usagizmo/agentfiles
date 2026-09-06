@@ -305,6 +305,43 @@ const CURSOR_MARKER = "ADVISOR-DONE-gmjsqm";
 // 実 pane の応答以降を採録し、作業ディレクトリだけ匿名化する。
 const CURSOR_SNAPSHOT = readFileSync(`${ROOT}test/fixtures/advisor-pane/cursor`, "utf8");
 
+const CLAUDE_MARKER = "ADVISOR-DONE-a4ql68";
+// 実 pane の marker 以降を採録する。
+const CLAUDE_SNAPSHOT = readFileSync(`${ROOT}test/fixtures/advisor-pane/claude`, "utf8");
+
+test.each(["NFC", "NFD"] as const)("%s のアクセント付き完了時間を応答から除く", (form) => {
+  expect(advisorComplete(CLAUDE_SNAPSHOT.normalize(form), CLAUDE_MARKER)).toEqual({ ok: true });
+});
+
+test("完了時間の脚注だけでは marker の欠落を補えない", () => {
+  expect(
+    advisorComplete(CLAUDE_SNAPSHOT.replace(CLAUDE_MARKER, "追加の指摘"), CLAUDE_MARKER),
+  ).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test.each(["before", "after"] as const)("完了時間の %s に続く本文は省略しない", (position) => {
+  const elapsed = "✻ Sautéed for 11m 26s · done 8:38 AM";
+  const content = position === "before" ? `追加の指摘\n${elapsed}` : `${elapsed}\n追加の指摘`;
+  expect(advisorComplete(CLAUDE_SNAPSHOT.replace(elapsed, content), CLAUDE_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test.each([
+  "✻ Sautéed for 11m 26s",
+  "✻ Sautéed for 11m 26s · done",
+  "✻ Sautéed for 11m 26s · done 8:38 AM 追加の指摘",
+])("完了時間の形が揃わない行は本文: %s", (content) => {
+  expect(advisorComplete(`${CLAUDE_MARKER}\n${content}`, CLAUDE_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
 test("上下の罫線に囲まれた矢印入力欄から応答の末尾を読める", () => {
   expect(advisorComplete(CURSOR_SNAPSHOT, CURSOR_MARKER)).toEqual({ ok: true });
 });

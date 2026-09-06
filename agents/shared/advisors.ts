@@ -199,7 +199,11 @@ export const isChromeLine = (line: string): boolean => {
   if (stripped === "") return true;
   // 経過時間の脚注。応答の後ろに出るので、落とさないと marker が最後の行にならない
   if (stripped.startsWith("Worked for ")) return true;
-  if (/^[✻✽✶✳✢✷] \w+ for (?:\d+[hms]\s*)+· done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(trimmed)) {
+  if (
+    /^[✻✽✶✳✢✷] [\w\p{L}\p{M}]+ for (?:\d+[hms]\s*)+· done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(
+      trimmed,
+    )
+  ) {
     return true;
   }
   return BOX.test(line) && /always-approve|shortcuts/.test(line);
