@@ -1,4 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxfmt/configuration_schema.json",
-  "ignorePatterns": ["agents/.skill-lock.json", "test/fixtures/**", "**/*.html"]
+  "ignorePatterns": [
+    "agents/.skill-lock.json",
+    "agents/skills/rabi-design/assets/rabi-tokens.css",
+    "test/fixtures/**",
+    "**/*.html"
+  ]
 }

@@ -1,31 +1,47 @@
 #!/bin/sh
 # watch.sh 用の偽 gh。graphql は watch.sh が自前で jq に通す。
 # issues / comments は JSON を返す（指紋への写しは watch.sh 側）。
+# complete-rest-list.sh は --include で probe する。page 番号方式は --paginate で一覧を取り、
+# cursor 方式は --include で Link を辿る。
 set -eu
 
-case "$1 ${2:-}" in
-  "api graphql")
-    cat <<'JSON'
-{"data":{"rateLimit":{"cost":2},"organization":{"projectV2":{"items":{"nodes":[
+include=0
+graphql=0
+path=""
+for a in "$@"; do
+  case $a in
+    graphql) graphql=1 ;;
+    --include|-i) include=1 ;;
+    --paginate) ;;
+    repos/*) path=$a ;;
+  esac
+done
+
+if [ "$graphql" = 1 ]; then
+  cat <<'JSON'
+{"data":{"rateLimit":{"cost":2},"organization":{"projectV2":{"items":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
   {"content":{"number":1},"fieldValueByName":{"name":"In progress"}}
 ]}}}}}
 JSON
-    ;;
-  "api repos/"*"/issues/comments?"*)
-    cat <<'JSON'
-[{"id":100,"updated_at":"2000-01-01T00:00:00Z","issue_url":"https://api.github.com/repos/o/r/issues/1","body":"<!-- plan -->\n"}]
-JSON
-    ;;
-  "api repos/"*"/issues?"*)
-    cat <<'JSON'
-[{"number":1,"state":"open","body":"","updated_at":"2000-01-01T00:00:00Z","assignees":[{"login":"tester"}]}]
-JSON
-    ;;
-  "pr list")
-    # open PR 0 件は正当。行を出さない
-    ;;
-  *)
-    echo "fake gh: unexpected args: $*" >&2
-    exit 1
-    ;;
+  exit 0
+fi
+
+if [ "${1:-}" = "pr" ] && [ "${2:-}" = "list" ]; then
+  exit 0
+fi
+
+issues='[{"number":1,"state":"open","body":"","updated_at":"2000-01-01T00:00:00Z","assignees":[{"login":"tester"}]}]'
+comments='[{"id":100,"updated_at":"2000-01-01T00:00:00Z","issue_url":"https://api.github.com/repos/o/r/issues/1","body":"<!-- plan -->\n"}]'
+body=$issues
+case $path in
+  */issues/comments*) body=$comments ;;
+  */issues*) body=$issues ;;
+  *) echo "fake gh: unexpected args: $*" >&2; exit 1 ;;
 esac
+
+if [ "$include" = 1 ]; then
+  printf 'HTTP/2.0 200 OK\nContent-Type: application/json\n\n%s\n' "$body"
+  exit 0
+fi
+
+printf '%s\n' "$body"

@@ -36,7 +36,7 @@ import {
 import { CONCURRENCY, mapLimit } from "./limit.ts";
 import { normalizeProgress } from "./normalize.ts";
 import { classifyChecks } from "./checks.ts";
-import { deriveSurface } from "./surfaces.ts";
+import { deriveSurface, missingBranchGit } from "./surfaces.ts";
 import type { SurfaceFacts } from "./surfaces.ts";
 import { reportValid } from "./report.ts";
 import type { Ledger, Observed, Progress } from "./types.ts";
@@ -171,6 +171,7 @@ const unknownSurface = (name: string): SurfaceObservation => {
     usesPr: true,
     countsCapacity: true,
     aheadOfIntegration: unobservable(reason),
+    containedInIntegration: absent(),
     dirty: unobservable(reason),
     hasCheckout: unobservable(reason),
     terminal: unobservable(reason),
@@ -217,14 +218,19 @@ const declarations = (body: string, keyword: "Depends on" | "Same branch as"): n
 };
 
 /**
- * `sessions` 行の leftover / refused トークン。harness の `--sessions-cmd` が書く。
- * トークンが無い行は leftover にも refused にもしない。
+ * `sessions` 行の leftover / refused / card トークン。harness の `--sessions-cmd` が書く。
+ * leftover 位置は `leftover` / `subagent` / `-`。トークンが無い行はどれにもしない。
  */
 type ParsedSessionRow = {
   readonly name: string;
   readonly status: string;
   readonly leftover: boolean;
+  readonly subagent: boolean;
   readonly refused: boolean;
+  /** leftover / refused の次。`card` のときだけ真。欄が無い・`-` は偽。 */
+  readonly card: boolean;
+  /** leftover / refused / card の次。トークンが `-` または欄が無いときは空。 */
+  readonly workspace: string;
   readonly cwd: string;
 };
 
@@ -233,6 +239,15 @@ const sessionFromStatus = (status: string): SessionObservation => {
   if (status === "idle" || status === "done") return { kind: "idle" };
   if (status === "blocked") return { kind: "blocked" };
   return { kind: "unclassifiable", raw: status };
+};
+
+/** status と leftover 位置 / card を合成する。**`unknown` は token があっても素通し。** */
+const sessionFromParsed = (parsed: ParsedSessionRow): SessionObservation => {
+  const fromStatus = sessionFromStatus(parsed.status);
+  if (fromStatus.kind === "unclassifiable") return fromStatus;
+  if (parsed.subagent) return { kind: "running" };
+  if (parsed.card) return { kind: "blocked" };
+  return fromStatus;
 };
 
 /** census / detection が読めないときの sessions 行。**foreign にも所有にもしない。** */
@@ -245,16 +260,36 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
   if (name === OCCUPANCY_UNREADABLE) return undefined;
   const status = parts[1] ?? "";
   const leftoverToken = parts[2];
-  // **トークンの位置で見分ける。**`leftover` / `-` はこの位置にしか来ないので、
-  // トークンを持たない行の cwd（絶対 path）と衝突しない。refused も leftover の隣だけ。
-  if (leftoverToken === "leftover" || leftoverToken === "-") {
+  // **トークンの位置で見分ける。**`leftover` / `subagent` / `-` はこの位置にしか来ないので、
+  // トークンを持たない行の cwd（絶対 path）と衝突しない。refused は leftover の隣、
+  // card はその次。所有行にだけ card を足すと `parts[4]` が card と workspace で衝突する。
+  // card / workspace も照合してから消費する —— 位置だけ当てにすると、card 欄を持たない
+  // 古い sessionsCmd の行で cwd が静かに失われる
+  if (leftoverToken === "leftover" || leftoverToken === "subagent" || leftoverToken === "-") {
     const refusedToken = parts[3];
     if (refusedToken === "refused" || refusedToken === "-") {
+      const cardToken = parts[4];
+      if (cardToken === "card" || cardToken === "-") {
+        const workspaceToken = parts[5];
+        return {
+          name,
+          status,
+          leftover: leftoverToken === "leftover",
+          subagent: leftoverToken === "subagent",
+          refused: refusedToken === "refused",
+          card: cardToken === "card",
+          workspace: workspaceToken === undefined || workspaceToken === "-" ? "" : workspaceToken,
+          cwd: parts.slice(6).join(" ").trim(),
+        };
+      }
       return {
         name,
         status,
         leftover: leftoverToken === "leftover",
+        subagent: leftoverToken === "subagent",
         refused: refusedToken === "refused",
+        card: false,
+        workspace: "",
         cwd: parts.slice(4).join(" ").trim(),
       };
     }
@@ -262,11 +297,23 @@ export const parseSessionRow = (row: string): ParsedSessionRow | undefined => {
       name,
       status,
       leftover: leftoverToken === "leftover",
+      subagent: leftoverToken === "subagent",
       refused: false,
+      card: false,
+      workspace: "",
       cwd: parts.slice(3).join(" ").trim(),
     };
   }
-  return { name, status, leftover: false, refused: false, cwd: parts.slice(2).join(" ").trim() };
+  return {
+    name,
+    status,
+    leftover: false,
+    subagent: false,
+    refused: false,
+    card: false,
+    workspace: "",
+    cwd: parts.slice(2).join(" ").trim(),
+  };
 };
 
 type OwnedClassification = {
@@ -285,7 +332,7 @@ const classifyOwned = (rows: readonly string[], name: string): OwnedClassificati
   if (row === undefined) return noneOwned;
   const parsed = parseSessionRow(row);
   if (parsed === undefined) return noneOwned;
-  return { session: sessionFromStatus(parsed.status), leftover: parsed.leftover };
+  return { session: sessionFromParsed(parsed), leftover: parsed.leftover };
 };
 
 /** leftover は受信可能の正の証拠。どれか 1 本でもあれば拒否を解く。 */
@@ -308,28 +355,52 @@ const cwdOnOwned = (cwd: string, ownedPaths: readonly string[]): boolean =>
     (path) => cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`),
   );
 
+/** pane の workspace_id で workspaces 節を引き、その checkout_path が所有か。**path で結び直さない。** */
+const workspaceOnOwned = (
+  workspace: string,
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): boolean => {
+  if (workspace === "") return false;
+  const row = workspaces.find((w) => w.id === workspace);
+  if (row === undefined) return false;
+  if (row.path === "" || row.path === "-") return false;
+  return cwdOnOwned(row.path, ownedPaths);
+};
+
 type ForeignRow = {
   readonly name: string;
   readonly status: string;
   readonly leftover: boolean;
+  readonly subagent: boolean;
   readonly cwd: string;
 };
 
-/** 所有外で、課題の worktree に cwd が載っている行。**cwd が無い行は入れない。** */
-const foreignOnOwned = (rows: readonly string[], ownedPaths: readonly string[]): ForeignRow[] => {
+/**
+ * 所有外で、課題の worktree に居る行。
+ * 一次は pane の workspace の checkout_path、二次は cwd。**どちらも無い行は入れない。**
+ */
+const foreignOnOwned = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): ForeignRow[] => {
   const out: ForeignRow[] = [];
   for (const row of rows) {
     const parsed = parseSessionRow(row);
     if (parsed === undefined) continue;
     if (OWNED_SESSION.test(parsed.name)) continue;
-    // **cwd が無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
+    const onOwned =
+      (parsed.cwd !== "" && cwdOnOwned(parsed.cwd, ownedPaths)) ||
+      workspaceOnOwned(parsed.workspace, ownedPaths, workspaces);
+    // **cwd も workspace も無い行は同じ worktree と判定しない。**無いことを全所有へ倒すと、
     // 帰属できない 1 本が全課題の write を止める。
-    if (parsed.cwd === "") continue;
-    if (!cwdOnOwned(parsed.cwd, ownedPaths)) continue;
+    if (!onOwned) continue;
     out.push({
       name: parsed.name,
       status: parsed.status,
       leftover: parsed.leftover,
+      subagent: parsed.subagent,
       cwd: parsed.cwd,
     });
   }
@@ -338,25 +409,35 @@ const foreignOnOwned = (rows: readonly string[], ownedPaths: readonly string[]):
 
 /**
  * 同じ worktree で `refine` / `resolve` / `conductor` 以外が genuine-working か。
- * **所有外の leftover は turn 中の証拠にしない。**
+ * **所有外の leftover は turn 中の証拠にしない。**subagent は genuine `working` と同じ。
  */
-export const worktreeBusy = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
-  foreignOnOwned(rows, ownedPaths).some((row) => row.status === "working" && !row.leftover);
+export const worktreeBusy = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): boolean =>
+  foreignOnOwned(rows, ownedPaths, workspaces).some(
+    (row) => (row.status === "working" && !row.leftover) || row.subagent,
+  );
 
 /** 同じ worktree で `refine` / `resolve` / `conductor` 以外が居るか。**状態は問わない。** */
-export const worktreeOccupied = (rows: readonly string[], ownedPaths: readonly string[]): boolean =>
-  foreignOnOwned(rows, ownedPaths).length > 0;
+export const worktreeOccupied = (
+  rows: readonly string[],
+  ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
+): boolean => foreignOnOwned(rows, ownedPaths, workspaces).length > 0;
 
 /** census / detection の失敗。**空集合へ畳まない。** */
 export const occupancyUnreadable = (rows: readonly string[]): boolean =>
   rows.some((row) => row.split(" ")[0] === OCCUPANCY_UNREADABLE);
 
-/** 指紋用。**状態は落とす。**出現・消滅・cwd だけが動く。 */
+/** 指紋用。**状態は落とす。**出現・消滅・cwd だけが動く。workspace は入れない。 */
 export const occupiedSessions = (
   rows: readonly string[],
   ownedPaths: readonly string[],
+  workspaces: readonly WorkspaceRow[],
 ): readonly { readonly name: string; readonly cwd: string }[] =>
-  foreignOnOwned(rows, ownedPaths)
+  foreignOnOwned(rows, ownedPaths, workspaces)
     .map(({ name, cwd }) => ({ name, cwd }))
     .sort((a, b) => a.name.localeCompare(b.name) || a.cwd.localeCompare(b.cwd));
 
@@ -397,6 +478,8 @@ export const observeTick = async (
   );
 
   const workspaceList = workspaceRows(snapshot);
+  const ownedPathsFor = (n: number): readonly string[] =>
+    worktreeRows.filter((w) => ownsWorktreePath(w.path, n)).map((w) => w.path);
 
   // **面ごとの worktree 一覧を読めたか。**`watch.sh` の `plane_unknown` は面ごと `-` で潰すので、
   // 実体が 0 件なのか読めなかったのかを行の有無では区別できない。**dirty を読めない行が
@@ -484,6 +567,14 @@ export const observeTick = async (
           usesPr,
           countsCapacity,
           aheadOfIntegration: git.ahead,
+          containedInIntegration: await containedInIntegrationOf(
+            port,
+            name,
+            usesPr,
+            git.head,
+            report,
+            tips,
+          ),
           head: git.head,
           // **worktree が無いことは「読めなかった」ではない。**checkout が無い面には
           // 未コミットの変更が存在しえないので `false` で確定する —— `absent` にすると
@@ -513,6 +604,7 @@ export const observeTick = async (
     const row = issueRows.get(issue);
     const owned = classifyOwned(sessionRows, `resolve-${issue}`);
     const refine = classifyOwned(sessionRows, `refine-${issue}`);
+    const ownedPaths = ownedPathsFor(issue);
 
     return {
       issue,
@@ -549,18 +641,10 @@ export const observeTick = async (
       leftover: owned.leftover,
       refused: receiveRefused,
       refineSession: refine.session,
-      worktreeBusy: worktreeBusy(
-        sessionRows,
-        worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
-      ),
+      worktreeBusy: worktreeBusy(sessionRows, ownedPaths, workspaceList),
       worktreeOccupied: occupancyUnreadable(sessionRows)
         ? unobservable("pane census / detection を読めない")
-        : present(
-            worktreeOccupied(
-              sessionRows,
-              worktreeRows.filter((w) => ownsWorktreePath(w.path, issue)).map((w) => w.path),
-            ),
-          ),
+        : present(worktreeOccupied(sessionRows, ownedPaths, workspaceList)),
 
       waitRecord: waitRecord(commentText, pause),
       waitRecordCreatedAt: extra.waitRecordCreatedAt,
@@ -639,10 +723,7 @@ export const observeTick = async (
         planComment: plan.kind === "present" ? plan.value : null,
         waitRecord: validWait,
         issueBodies,
-        occupied: occupiedSessions(
-          sessionRows,
-          worktreeRows.filter((w) => ownsWorktreePath(w.path, o.issue)).map((w) => w.path),
-        ),
+        occupied: occupiedSessions(sessionRows, ownedPathsFor(o.issue), workspaceList),
       }),
     );
   });
@@ -666,10 +747,36 @@ const submissionEvidenceOf = async (
 };
 
 /**
+ * T 不在の包含。**`aheadOfIntegration` に載せない。**記録に head が無い面へは git を引かない。
+ * PR を使う面は `merged` で着地するので測らない。
+ */
+const containedInIntegrationOf = async (
+  port: ObservePort,
+  name: string,
+  usesPr: boolean,
+  head: Observed<string>,
+  report: Observed<ReportRecord>,
+  tips: ReadonlyMap<string, string>,
+): Promise<Observed<boolean>> => {
+  if (usesPr) return absent();
+  if (head.kind !== "absent") return absent();
+  if (report.kind === "unobservable") return unobservable(report.reason);
+  if (report.kind !== "present") return absent();
+  const recorded = report.value.heads[name];
+  if (recorded === undefined) return absent();
+  const tip = tips.get(name);
+  if (tip === undefined || tip === "-") return unobservable("統合先の tip を読めない");
+  if (recorded === tip) return present(true);
+  return port.isAncestor(name, recorded, tip);
+};
+
+/**
  * branch の有無と head は snapshot に在る。**無い / tip と同じなら git を引き直さない。**
  * SHA が tip と違うときだけ `統合先..branch` を測る（behind だけの非空はここでは分からない）。
  *
  * **tip が `-` なら ahead を false へ畳まない。**畳むと読めない面が透過し、終端へ上がる。
+ *
+ * **無い branch を包含の証明にしない。**記録 SHA の包含は `containedInIntegrationOf`。
  */
 const surfaceGitOf = async (
   port: ObservePort,
@@ -688,7 +795,7 @@ const surfaceGitOf = async (
   const branch = locals.find(
     (b) => b.surface === surface && new RegExp(`^[^/]+/${issue}-`).test(b.branch),
   );
-  if (branch === undefined) return { ahead: present(false), head: absent() };
+  if (branch === undefined) return missingBranchGit();
   if (branch.sha === tip) return { ahead: present(false), head: present(branch.sha) };
   return port.surfaceGit(issue, surface);
 };

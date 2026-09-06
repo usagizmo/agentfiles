@@ -1,45 +1,62 @@
 ---
 name: rabi-design
 description: >-
-  株式会社ラビのブランドスタイル（カラー・フォント・余白・角丸・影・深さ・トーン）を適用する。
-  Rabi 名義の UI・ドキュメント・スライド・譜面を作るとき、
-  または「Rabiスタイルで」と言われたときに使う。
-  デザイントークンと CSS を含む。
+  Rabi のブランドスタイル（色・フォント・余白・角丸・影・深さ・トーン）を適用する。
+  Rabi 名義の UI・LP・ドキュメント・図を作るとき、
+  または「Rabi スタイルで」と言われたときに使う。
+  デザイントークンと適用の規則を含む。
 ---
 
 # rabi-design
 
 ## 読む順
 
-1. `references/DESIGN.md` —— 仕様の全文。front matter が機械可読なトークン、本文が適用の規則
-2. `assets/rabi.css` —— ブランド層の値の SSOT
-3. `assets/rabi-components.css` —— UI 部品の実装
-4. `assets/rabi-role.css` —— 情報層の値の SSOT と 3 ロールの variant。いつ読むかは `references/DESIGN.md`「情報層」と「Components」
+1. [`references/DESIGN.md`](references/DESIGN.md) —— 仕様の全文
+2. [`assets/rabi-tokens.css`](assets/rabi-tokens.css) —— front matter から生成した `--rabi-*` とテーマ指定
+3. [`assets/rabi-head.html`](assets/rabi-head.html) —— front matter から生成した webfont の `<link>`
 
-値と規則の SSOT は上の 1 と 2 と 4 で、媒体には依ら**ない**。このファイルには写さ**ない**。
+SSOT は 1。front matter がトークンの値、本文が適用の規則。2 と 3 は写しで、手で直さ**ない**。
 
 ## 展開する順
 
-CSS を書く媒体では `assets/rabi.css` を先頭にインライン展開する。
+CSS を書く媒体では `assets/rabi-tokens.css` を先頭にインライン展開する。
 
-UI を組む媒体では続けて `assets/rabi-components.css` を入れる。**`assets/rabi.css` より後に置く**。どの媒体が文書に当たるかは `references/DESIGN.md`「Components」。
+`<head>` を持つ媒体では `assets/rabi-head.html` の `<link>` を入れる。入れなくても OS のフォントへ落ちる。
 
-情報層を使う面では、続けて `assets/rabi-role.css` を入れる。いつ入れるかは `references/DESIGN.md`「Components」の媒体表。
+部品の CSS は配らない。`references/DESIGN.md` の「Components」の規則から、その媒体に要る分だけを書く。
 
-図を描く媒体では `assets/rabi-mermaid.js` も入れる。**`assets/rabi.css` より後に置く**。
+色・余白・角丸・影・書体・丈・時間は `--rabi-*` を引く。**例外はトークンが無い値だけ** —— front matter の component が持つ literal と、本文が定める値。それはその値をそのまま書く。
+
+図を描くライブラリ・アイコンのデータ・テーマ切替の JS も配ら**ない**。同じく規則から組み立てる。
+
+CSS を持たない媒体（docx・スライド）では front matter の値を直に当てる。テーマは light の値だけを使う。
+
+組んだあとに「Do's and Don'ts」で当たりを取る。
 
 ## 値を変えるとき
 
-ブランド層で `assets/rabi.css` と `references/DESIGN.md` の front matter の両方に現れる値は、`assets/rabi.css` だけを直し、次で写しへ書き戻す。
-
-情報層は `assets/rabi-role.css` だけを直す。front matter に写さ**ない**。
+トークンの値は front matter を直し、写しを作り直す。
 
 ```bash
-bun <skills root>/rabi-design/scripts/gen-tokens.ts
+bun <skills root>/rabi-design/scripts/gen-css.ts
 ```
 
-**path は skill 側の実体を指す**。
+**path は skill 側の実体を指す。**
 
-front matter だけが持つ値は `references/DESIGN.md` を直接直す。どの path がそれに当たるかは `scripts/gen-tokens.ts` の `ownedByFrontMatter`。
+front matter に無い値は本文が持つ。本文を直しても生成物は変わら**ない**。
 
-`components` の値は書き戻しの対象外。**front matter と `assets/rabi-components.css` の両方を直す**。
+写しが front matter と食い違っていないかは `--check` で見る。食い違ったら非ゼロで終わる。
+
+```bash
+bun <skills root>/rabi-design/scripts/gen-css.ts --check
+```
+
+CSS の関数（`light-dark()` / `color-mix()` / `clamp()`）を front matter に書か**ない**。組み立ては `scripts/gen-css.ts` と、可変の見出しは `references/DESIGN.md` の「Typography」。
+
+## 射程
+
+対象は Rabi 名義の面 —— 製品 UI・LP・ドキュメント・図。
+
+ブランドの正は製品側のコンポーネントカタログで、この skill の正は `references/DESIGN.md`。食い違いを見つけたらカタログを正として front matter を取り直す。skill の中に正を 2 つ持た**ない**。
+
+カタログの在処はここに書か**ない**（この repo は public）。人に聞く。

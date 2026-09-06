@@ -576,14 +576,13 @@ done
 # marker 名はハードコードせず総なめする（新設 marker でもスクリプトを直さない）。
 : >"$WORK/markers"
 while IFS="	" read -r disp phys; do
-	awk -v disp="$disp" '{
-		while (match($0, /<!--[ ]*\/?[a-z][a-z0-9-]*:v[0-9]+[ ]*-->/)) {
-			tag = substr($0, RSTART, RLENGTH)
-			$0 = substr($0, RSTART + RLENGTH)
-			if (tag ~ /\//) { kind = "close" } else { kind = "open" }
-			gsub(/[^a-z0-9:]/, "", tag)
+	awk -v disp="$disp" '
+		/^[ \t]*<!--[ \t]*\/?[a-z][a-z0-9-]*(:v[0-9]+)?[ \t]*-->[ \t]*$/ {
+			tag = $0
+			sub(/^[ \t]*<!--[ \t]*/, "", tag)
+			sub(/[ \t]*-->[ \t]*$/, "", tag)
+			kind = sub(/^\//, "", tag) ? "close" : "open"
 			print tag "\t" kind "\t" disp ":" NR
-		}
 	}' "$phys" >>"$WORK/markers"
 done <"$WORK/unique"
 
@@ -793,15 +792,30 @@ else
 	# glossary の marker 索引 ↔ 実際の marker 定義（両方向）
 	if [ -f "$DOCS_DIR/glossary.md" ]; then
 		cut -f1 "$WORK/markers" 2>/dev/null | sort -u >"$WORK/marker_real"
+		awk -F "|" '
+			!/^\|/ { marker_col = 0; next }
+			{
+				for (i = 2; i < NF; i++) {
+					cell = $i
+					gsub(/^[ \t]+|[ \t]+$/, "", cell)
+					if (cell == "marker") { marker_col = i; next }
+				}
+				if (!marker_col) next
+				cell = $marker_col
+				while (match(cell, /`[a-z][a-z0-9-]*(:v[0-9]+)?`/)) {
+					print substr(cell, RSTART + 1, RLENGTH - 2)
+					cell = substr(cell, RSTART + RLENGTH)
+				}
+			}
+		' "$DOCS_DIR/glossary.md" | sort -u >"$WORK/marker_index"
 		while read -r m; do
-			grep -qF "$m" "$DOCS_DIR/glossary.md" ||
+			grep -qxF "$m" "$WORK/marker_index" ||
 				emit VIOLATION derived "docs/glossary.md" "note=marker $m が索引に無い"
 		done <"$WORK/marker_real"
-		awk '{ while (match($0, /[a-z][a-z0-9-]*:v[0-9]+/)) { print substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH) } }' \
-			"$DOCS_DIR/glossary.md" | sort -u | while read -r m; do
-			grep -qx "$m" "$WORK/marker_real" ||
+		while read -r m; do
+			grep -qxF "$m" "$WORK/marker_real" ||
 				emit VIOLATION derived "docs/glossary.md" "note=索引の marker $m は定義が無い"
-		done
+		done <"$WORK/marker_index"
 	fi
 fi
 

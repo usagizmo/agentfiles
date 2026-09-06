@@ -1,0 +1,58 @@
+#!/bin/sh
+# 打ち切られた board / REST 一覧を返す偽 gh。watch.sh がラウンドを捨てることを測る。
+set -eu
+
+include=0
+graphql=0
+path=""
+for a in "$@"; do
+  case $a in
+    graphql) graphql=1 ;;
+    --include|-i) include=1 ;;
+    --paginate) ;;
+    repos/*) path=$a ;;
+  esac
+done
+
+mode=${GH_PARTIAL:-board}
+
+if [ "$graphql" = 1 ]; then
+  if [ "$mode" = "board" ]; then
+    cat <<'JSON'
+{"data":{"rateLimit":{"cost":2},"organization":{"projectV2":{"items":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
+  {"content":{"number":1},"fieldValueByName":{"name":"In progress"}}
+]}}}}}
+JSON
+  else
+    cat <<'JSON'
+{"data":{"rateLimit":{"cost":2},"organization":{"projectV2":{"items":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
+  {"content":{"number":1},"fieldValueByName":{"name":"In progress"}}
+]}}}}}
+JSON
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = "pr" ] && [ "${2:-}" = "list" ]; then
+  exit 0
+fi
+
+issues='[{"number":1,"state":"open","body":"","updated_at":"2000-01-01T00:00:00Z","assignees":[{"login":"tester"}]}]'
+comments='[{"id":100,"updated_at":"2000-01-01T00:00:00Z","issue_url":"https://api.github.com/repos/o/r/issues/1","body":"<!-- plan -->\n"}]'
+body=$issues
+case $path in
+  */issues/comments*) body=$comments ;;
+  */issues*) body=$issues ;;
+  *) echo "fake gh: unexpected args: $*" >&2; exit 1 ;;
+esac
+
+if [ "$include" = 1 ]; then
+  if [ "$mode" = "rest" ]; then
+    printf 'HTTP/2.0 200 OK\nLink: <https://api.github.com/%s&page=2>; rel="next", <https://api.github.com/%s&page=3>; rel="last"\nContent-Type: application/json\n\n%s\n' "$path" "$path" "$body"
+    exit 0
+  fi
+  printf 'HTTP/2.0 200 OK\nContent-Type: application/json\n\n%s\n' "$body"
+  exit 0
+fi
+
+printf '%s\n' "$body"

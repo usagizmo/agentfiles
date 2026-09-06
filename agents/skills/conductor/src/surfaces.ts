@@ -10,7 +10,16 @@
 import type { ReportRecord } from "./records.ts";
 import type { SurfaceObservation } from "./observation.ts";
 import type { Observed } from "./types.ts";
-import { present, unobservable } from "./types.ts";
+import { absent, present, unobservable } from "./types.ts";
+
+/** branch が無いときの ahead / head。**包含の証明ではない。**記録 SHA の包含は `isAncestor`。 */
+export const missingBranchGit = (): {
+  readonly ahead: Observed<boolean>;
+  readonly head: Observed<string>;
+} => ({
+  ahead: present(false),
+  head: absent(),
+});
 
 const value = <T>(o: Observed<T>): T | undefined => (o.kind === "present" ? o.value : undefined);
 
@@ -21,6 +30,11 @@ export type SurfaceFacts = {
   readonly countsCapacity: boolean;
   /** `統合先..branch` が非空か */
   readonly aheadOfIntegration: Observed<boolean>;
+  /**
+   * 記録 SHA がいまの統合先に含まれるか。**T 不在かつ記録に head がある面だけ。**
+   * 測っていない面は `absent`。
+   */
+  readonly containedInIntegration: Observed<boolean>;
   /** その面の branch の head。提出の証跡の照合に使う */
   readonly head: Observed<string>;
   readonly dirty: Observed<boolean>;
@@ -64,6 +78,7 @@ export const deriveSurface = (
     usesPr: f.usesPr,
     countsCapacity: f.countsCapacity,
     aheadOfIntegration: f.aheadOfIntegration,
+    containedInIntegration: f.containedInIntegration,
     dirty: f.dirty,
     hasCheckout: f.hasCheckout,
     liveCheckoutHealthy: f.liveCheckoutHealthy,
@@ -103,9 +118,9 @@ export const deriveSurface = (
   if (ahead) {
     return { ...base, terminal: present(false), landable: present(true) };
   }
-  // **T が無いときは統合済みと判定しない。**branch 削除は「読めなかった」ではないが、
-  // 包含の証明にもならない。片付け後の `着地済み` は透過 + 提出証跡が持つ。
-  if (f.head.kind === "absent") {
+  // **T が無いときは `ahead === false` を包含の証明にしない。**branch 削除は
+  // 「読めなかった」ではないが、`統合先..branch` を測れないことにもならない。
+  if (f.head.kind === "absent" && value(f.containedInIntegration) !== true) {
     return { ...base, terminal: present(false), landable: present(false) };
   }
   if (report.kind !== "present") {

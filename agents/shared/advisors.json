@@ -21,11 +21,11 @@
   { "kind": "claude", "args": [] },
   { "kind": "codex", "args": [] },
   {
-    "kind": "grok",
-    "args": ["--model", "grok-4.6", "--effort", "high"],
+    "kind": "cursor",
+    "args": ["--model", "grok-4.6[effort=high]"],
+    // grok を起こすときは kind と args を差し替える。members は変えない。
+    // "kind": "grok",
+    // "args": ["--model", "grok-4.6", "--effort", "high"],
     "members": ["grok", "cursor"]
-    // cursor を起こすときは kind と args を差し替える。members は変えない。
-    // "kind": "cursor",
-    // "args": ["--model", "grok-4.6[effort=high]"]
   }
 ]

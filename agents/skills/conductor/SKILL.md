@@ -26,13 +26,13 @@ description: >-
 
 触る関数の周りだけを読ま**ない**。規則の理由は doc comment にあり、述語の理由は関数の直上、順序と単位の理由は `LADDER` と `Rung` の定義側にある。
 
-| 変えるもの          | 全文を読むファイル                                                                                                                                                                                                                                                                             |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                                                                                                                      |
-| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                                                                                                                         |
-| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                                                                                                                 |
-| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `src/standalone-line.ts` / `scripts/watch.sh` / `scripts/pr-list.jq` / `scripts/comment-fingerprint.jq` / `scripts/issue-fingerprint.py` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
-| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                                                                                                                          |
+| 変えるもの          | 全文を読むファイル                                                                                                                                                                                                                                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正規化              | `src/normalize.ts` + `references/tick.md`                                                                                                                                                                                                                                                                                        |
+| action の選択・順序 | `src/decide.ts` + `references/tick.md`                                                                                                                                                                                                                                                                                           |
+| 資源の保持・交差    | `src/resources.ts` + `references/resources.md`                                                                                                                                                                                                                                                                                   |
+| 観測の境界          | `src/decode.ts` / `src/observe.ts` / `src/checks.ts` / `src/standalone-line.ts` / `scripts/watch.sh` / `scripts/complete-rest-list.sh` / `scripts/pr-list.jq` / `scripts/comment-fingerprint.jq` / `scripts/issue-fingerprint.py` / `scripts/restrict-to-board.awk` / `scripts/project-status.graphql` / `scripts/cycle-mark.py` |
+| 射程と期待          | `references/scenarios.md` + 対応する `test/*.test.ts`                                                                                                                                                                                                                                                                            |
 
 自分が本文を作るのは 4 つ**だけ** —— 実行器へ渡す prompt 本文、応答に出す `Conflict` の人向け説明、`intake` の分類、規約の穴の起票。判断が要るのは後ろ 2 つだけ。Decision の `conflicts[]` と `stalls[]` と `receiveRefusal` は `cli.ts` が出す。
 
@@ -66,7 +66,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 
 観測の最初に、各着地面の統合先を fetch する（snapshot が行う）。
 
-一覧は必ず全件取る。先頭 N 件で打ち切ら**ない**（ページングを最後まで回す。上限つきの API は上限に達したこと自体を失敗として扱う）。
+一覧は全件取る。先頭 N 件で打ち切ら**ない**。`--paginate` の exit 0 を全件の証拠にしない。REST の照合は `scripts/complete-rest-list.sh`。board は最終ページの `hasNextPage`。上限つきの API は上限に達したこと自体を失敗として扱う。
 
 読む先はここからのみ。
 
@@ -90,6 +90,7 @@ Issue の本文で触ってよいのは関係の行**だけ**（宣言と `Refs 
 | 提出                     | 提出のまとめの記録（置き場と読み方は `references/session-report.md`。**述語をここへ再掲しない**）                                                                                                           |
 | 着地                     | PR の `merged` と、各着地面の統合先の SHA（`references/landing-surface.md`）                                                                                                                                |
 | 実行器                   | セッション（状態値の意味は `references/harness.md`）                                                                                                                                                        |
+| occupancy                | 所有 worktree 上の所有外セッション。判定は `src/observe.ts`。行の形は `references/harness.md` の `--sessions-cmd`                                                                                           |
 | live checkout の姿勢     | 着地面ごとの 現在 branch・dirty・統合先との ahead / behind。課題の状態としては見ない。検査の項目は `merge` の「着地の検査」。いつ掛けるかは `references/landing-surface.md`                                 |
 | 容量                     | 着地面ごとの worktree と、repo 非依存の workspace 一覧（1 回）。数える本数は面の属性と runtime / ledger で絞る（live checkout と本体 checkout は数え**ない**）。`prunable` の述語は `references/harness.md` |
 | 台帳                     | Project Status（**排他には使わない**。承認・選出・台帳・退避の制御には使う）                                                                                                                                |
@@ -144,7 +145,7 @@ bun run <skills root>/conductor/src/cli.ts --config <project 差分 skill の co
 
 対で渡す。`<代表>` は実行しなかった action の代表。壊れた渡しは `src/cli.ts` の `specGap` が止める。
 
-座標は **project 差分 skill の `config.json`**（JSON）、配線は隣の untracked `config.local.json`（JSONC。tracked に置かない）。必須項目と検証は `src/config.ts` の `loadProjectFiles` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。project に手で写さ**ない**。
+座標は **project 差分 skill の `config.json`**（JSON）、配線は隣の untracked `config.local.json`（JSONC。tracked に置かない）。必須項目と検証は `src/config.ts` の `loadProjectFiles` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。occupancy の入力でもある（判定は `src/observe.ts`）。project に手で写さ**ない**。
 
 **checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**座標表の全面を 1 つでも渡さなければ exit 2**（Issue 本文の宣言では**ない**）。
 
@@ -216,20 +217,22 @@ conductor は 1 つ**だけ**動かす。起動したら自分のセッション
 
 ### 数えない失敗
 
-`receiveRefusal` は観測の付帯で、実行した action の成否ではない。立っているあいだ prompt 系は選ばれない（条件は `src/decide.ts`）。環境起因の箇条は実行した action の成否だけに掛かる。送れなかった周は実行していない。
+`receiveRefusal` は観測の付帯で、実行した action の成否ではない。立っているあいだ prompt 系は選ばれない（条件は `src/decide.ts`）。
 
 実行環境が操作そのものを拒否した失敗は、retry budget に数え**ない**（`count` を進めず、`lastAction` も書かない）。判定は API へ到達したかどうか —— 応答が返ったなら（4xx / 5xx も含む）通常の失敗、コマンドが起動しない・permission で弾かれて応答が無いなら環境起因。
 
 - action 上限にも数えず、観測もやり直さ**ない**
-- 次の tick でも同じ action を選び続ける
+- この tick を終える。`cli.ts` を呼び直さない。次の tick でも同じ action を選び続ける
 - 応答へ出す。**時間切れで解除しない**
 
-送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった）は実行していない。判定は `references/harness.md`「composer の受け入れ」。
+送れなかった周は実行していない。判定は `references/harness.md`「composer の受け入れ」。
 
 - retry の `count` も `lastAction` も進めない。retry に数え**ない**
 - action 上限に数えない
 - この tick を終える。`cli.ts` を呼び直さない。次の tick で同じ action が当たる
-- 環境起因の箇条は掛けない
+- 応答へは出さない
+
+composer 表が Conflict と書いた周は送れなかった周ではない。応答へ出してこの tick を終える。`cli.ts` の conflicts には足さない。retry の `count` も `lastAction` も進めない。
 
 失われたセッションへの渡しが観測上の変化を生まなかった失敗は、通常の失敗として 1 回数える。
 
@@ -267,8 +270,6 @@ retry の `count` を 0 に戻すのは、action が成功したときと、`led
 
 action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER`、期待は `test/decide.test.ts`。**ここに写さない**。選んだ後の手順は `references/protocols.md`。
 
-同じ課題に 1 tick で 2 つの action を出さ**ない**。上から最初に当たったものを 1 つだけ実行する。「1 tick で」を落とさ**ない**。
-
 適用の単位と帰属は `references/same-branch.md`。実体を触る action は代表の番号で 1 回。終端が混在する group は `Conflict`。
 
 順序: 止める・消えるものを残す → 終わったものを消す → 台帳のずれを直す → 実行器を動かす → 新しく始める。**規約の穴の起票だけは最上段に近い**（次の tick に観測から復元できない**唯一**の行）。
@@ -277,11 +278,11 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 コードに無い規約:
 
-- 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）
+- 起こす・渡す・閉じる action は、結果を観測してから tick を終える。**観測できなければ失敗として扱う**（無言で次へ行かない）。**例外は送れなかった周と、composer 表が Conflict と書いた周**
 - `agent prompt` の成否（前段・送れなかった周・張り直し除外を含む）は `references/harness.md`
 - `tab close` を行う入口は計画セッションと計画枠の逼迫の上限到達**だけ**
 - 「実行器だけ止める」は止まったことを `state_change_seq` で確かめてから資源を解放する。**確かめられなければ `Conflict`**。`agent_status` の 5 値を停止の証明に使わない
-- 意図して稼働中へ送るのは休止を促し直す。伝える 2 つは `canPrompt`。枠を渡すは受信可能を読む
+- 意図して genuine の稼働中へ送るのは休止を促し直す。leftover の `稼働中` は送る対象。伝える 2 つは `canPrompt`。枠を渡すは受信可能を読む
 - 前進と後退を混ぜ**ない**。「台帳を進める」は期待表に向かって進めるだけ、「差し戻す」だけが戻す
 - `stale` は独立した概念では**ない**。`progress` から期待される `runtime` / `capacity` / `ledger` とのずれがそれで、別の表を持た**ない**
 - 「伝える」3 つの加算は「記録の精算」が持つ。ここには写さない。加算の実体は `src/decide.ts` の `countsFailure`
@@ -289,9 +290,9 @@ action の名前と順序と発火条件の実体は `src/decide.ts` の `LADDER
 
 #### 計画セッションを閉じる
 
-非稼働なら閉じる。止まったことを確かめ**ない**。生値は稼働中（`working` / `blocked`）を外すためだけに引き、実行の直前に取り直す。手順は `references/harness.md`「片付ける」。
+非稼働なら閉じる。止まったことを確かめ**ない**。生値は sessions 行を取り直し、`src/observe.ts` と同じ合成を通す。合成後の `running` / `blocked` では実行しない。leftover の `running` も実行しない。分類できない生値では実行しない（`観測できない`）。手順は `references/harness.md`「片付ける」。
 
-- 閉じずに残す退避路を持た**ない**。`resolve` へ広げるのも同じ（未コミットの成果を持つ）
+- 閉じずに残す退避路を持た**ない**。この緩和を `resolve` へ広げ**ない**（未コミットの成果を持つ）
 - 閉じたあとも `ledger` が `未計画` なら「計画を起こす」がまた当たる。往復を止めるのは周回の記録で、失敗の記録では数え**ない**
 - 失敗の記録が上限に達したら順位を譲る。拾うのは「差し戻す」（`退避先` へ落ちる）
 
@@ -308,7 +309,7 @@ tick を終えるときに、最後の観測の snapshot を `--baseline` とし
 - 観測できなかった tick も張る。渡すのは直前に成功した snapshot（`--snapshot` は失敗しても既存の file を壊さない）。**取り直さない**
 - 張らずに終えてよいのは、一度も観測に成功していないときと、`halt` でセッションを止めるときと、exit 2 だけ。1 つめは渡せる baseline が無い。あとの 2 つは人が直すまで動かない
 
-指紋に入れるのは、正規化と action が読むものすべての digest。**項目を列挙して数え上げない**。snapshot の節の一覧は `src/decode.ts` の `SECTIONS`、digest は `src/port.ts`。
+指紋の材料は `watch.sh --snapshot`。**項目を列挙して数え上げない**。snapshot の節の一覧は `src/decode.ts` の `SECTIONS`。比較は `scripts/watch.sh` の `--baseline`。
 
 読むものは「観測」の表がそのまま該当する。**着地面ごとに取る。**
 
@@ -500,16 +501,7 @@ Status は claim から着地まで単調に進む。戻すのは 5 事象だけ
 
 ### resolve に渡す条件
 
-次を**すべて**満たすものだけ（実体は `src/decide.ts` の `selectable`）。
-
-1. Issue が open
-2. Status が計画済み
-3. まだ claim されていない（下記）
-4. Issue 契約が揃っている
-5. `Depends on #N` の依存がすべて解消している
-6. 着地面が解決できる（宣言された面が project 差分の座標表にあり、group の成員全員で同じ集合。`references/landing-surface.md` と `references/same-branch.md`）
-
-**claim 済みの判定は記録と remote branch**。branch 名には番号が 1 つしか入らないので、記録の `members` と「同じ group の代表が claim されている」も見る（group は `src/decide.ts` の `buildGroups`）。**`alsoResolves` では判定しない**（加入の実体は記録の `members`。`references/same-branch.md`）。
+選出条件は `src/decide.ts` の `selectable`、claim 済みの判定は同ファイルの `buildGroups` と `references/same-branch.md` に従う。
 
 ### claim の構造的な停止
 
@@ -519,7 +511,7 @@ claim の条件を足して在庫を待たせるなら、この関数にも足�
 
 ### 同一ブランチ group
 
-Issue 本文の **`Same branch as #N`** で結ばれた集合が group（宣言の定義・代表の決め方・claim 後に引き直さないことは `references/same-branch.md`）。group は 1 単位として claim する —— branch は 1 本、`resolve` には対象集合の全番号を渡す。
+見る集合は `references/same-branch.md`「どちらの集合を見るか」（宣言・代表・claim 後に引き直さないことも同ファイル）。group は 1 単位として claim する —— branch は 1 本、`resolve` には対象集合の全番号を渡す。
 
 - **`alsoResolves` だけでは claim から計画コメント書き込みまでの窓が空く**（`references/same-branch.md`）
 - group の一部だけが計画済みなら claim し**ない**

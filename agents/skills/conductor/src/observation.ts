@@ -57,6 +57,11 @@ export type SurfaceObservation = {
   readonly countsCapacity: boolean;
   /** `統合先..branch` が非空か。**branch 上の commit の存在で読まない** */
   readonly aheadOfIntegration: Observed<boolean>;
+  /**
+   * 記録 SHA がいまの統合先に含まれるか。**T 不在かつ記録に head がある面だけ測る。**
+   * 測っていない面は `absent`。`aheadOfIntegration` に載せない。
+   */
+  readonly containedInIntegration: Observed<boolean>;
   /** worktree の dirty。**読めなかった `-` を clean へ畳まない** */
   readonly dirty: Observed<boolean>;
   /** worktree の checkout があるか（`capacity` の `あり` を決める） */
@@ -112,7 +117,7 @@ export type IssueObservation = {
 
   /** open PR があるか */
   readonly openPr: Observed<boolean>;
-  /** `classifyChecks` の判定。**`mergeStateStatus` で代用しない** */
+  /** `classifyChecks` の判定 */
   readonly checks: Observed<{ readonly running: number; readonly green: boolean }>;
   /** open PR が無く、head に紐づく最新 PR が unmerged で closed */
   readonly latestPrClosedUnmerged: Observed<boolean>;
@@ -196,7 +201,7 @@ export type IssueObservation = {
   readonly claimedAt: Observed<number>;
   /**
    * 同じ worktree に `refine` / `resolve` / `conductor` 以外が genuine-working か。
-   * **所有外の leftover は turn 中の証拠にしない。**
+   * **所有外の leftover は turn 中の証拠にしない。**subagent は genuine `working` と同じ。
    */
   readonly worktreeBusy: boolean;
   /**

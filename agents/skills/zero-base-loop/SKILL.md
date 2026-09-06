@@ -48,7 +48,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-`scripts/advisors.sh start <prompt-file>`。起動・回収と選び方は同ディレクトリの `references/advisors.md`。
+`<skills root>/zero-base-loop/scripts/advisors.sh start <prompt-file>`。起動・回収と選び方は `references/advisors.md`。
 
 ### 4. 精査 → 修正
 

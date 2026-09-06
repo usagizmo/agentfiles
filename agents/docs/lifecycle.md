@@ -25,11 +25,12 @@ stateDiagram-v2
     準備済み --> 実装中: commit があるか worktree が dirty
     実装中 --> 準備済み: worktree ごと失われた（commit 前）
     実装中 --> 提出中: PR を作る
-    提出中 --> 着地待ち: checks が緑
+    提出中 --> 着地待ち: checks が緑 + 提出証跡 + 全面 clean
     着地待ち --> 提出中: checks が緑でなくなった
     着地待ち --> 着地済み: merged
-    実装中 --> 着地待ち: PR 無しの面はまとめを出す
-    着地待ち --> 実装中: また書き始めた（dirty）
+    実装中 --> 着地待ち: PR 無し・提出証跡 + 全面 clean
+    着地待ち --> 実装中: PR 無しで再編集（dirty）
+    着地待ち --> 提出中: open PR があり再編集（dirty）
     着地待ち --> 着地済み: 統合先へ merge
 
     提出中 --> 取り下げ: PR が unmerged で closed
@@ -75,12 +76,12 @@ stateDiagram-v2
     state "runtime" as R {
         無し --> 稼働中: 起こす / 起こし直す
         稼働中 --> 待機: 資源を待って応答を終える
-        待機 --> 稼働中: 資源を渡す
+        待機 --> 稼働中: 資源を渡す / 起こし直す
         稼働中 --> 人待ち: 記録を waiting にする
         人待ち --> 待機: 人が答える → 記録を cleared に
         人待ち --> 人待ち: セッションが死ぬ（記録が残るので値は変わらない）
         稼働中 --> 休止: 休止の記録が書かれ、安全な地点で止まる
-        休止 --> 待機: 先行が着地 → 記録を消して渡す
+        休止 --> 待機: 交差が解消 → 記録を消して渡す
         休止 --> 休止: セッションが死ぬ（記録が残るので値は変わらない）
         稼働中 --> 無し: セッションが死ぬ
         待機 --> 無し: セッションが死ぬ
@@ -142,19 +143,20 @@ sequenceDiagram
         R->>GH: 足された分を Issue にする
         Note over R,GH: PR の Closes で着地と同時に閉じる。<br/>元の受入条件が偽になったなら Issue ではなく<br/>本文を更新し、再承認を待って再 plan（PR へは進まない）
     end
-    R->>GH: PR を作る（CI が緑になるまでここ）
-    R->>GH: 緑になったらセッションまとめを PR へコメント
-    R-->>U: 同じ譜面にセッションまとめを載せて提示（可否を決める材料）
-    Note over R,C: PR 作成と CI は integration の外。<br/>write を持ったまま進む
-
     alt 意図の確認が要る変更（述語は intent-record）
         R->>GH: 人待ちを waiting に → 意図の確認を pending に
-        R-->>U: 実物を項目ごとに見せる
+        R-->>U: まだ push していないローカルの実物を項目ごとに見せる
         U->>R: 項目ごとに承認する
         R->>GH: 全項目そろったら confirmed → 人待ちを cleared に
     else それ以外
         R->>GH: 意図の確認を not-required に（理由と revisions つき）
     end
+
+    Note over R,GH: ここまで push しない。<br/>CI 相当の local gate が緑・clean・意図の確認が決着してから提出へ
+    R->>GH: push → PR を作る（CI が緑になるまでここ）
+    R->>GH: 緑になったらセッションまとめを PR へコメント
+    R-->>U: 同じ譜面にセッションまとめを載せて提示（可否を決める材料）
+    Note over R,C: PR 作成と CI は integration の外。<br/>write を持ったまま進む
 
     R-->>C: 待機
     C->>C: integration は claim が最も古い 1 件

@@ -12,6 +12,7 @@ const facts = (over: Partial<SurfaceFacts> = {}): SurfaceFacts => ({
   usesPr: true,
   countsCapacity: true,
   aheadOfIntegration: present(true),
+  containedInIntegration: absent(),
   head: present("aaa"),
   dirty: present(false),
   hasCheckout: present(true),
@@ -127,6 +128,60 @@ describe("PR を使わない面", () => {
   test("まとめを読めなければ終端にしない", () => {
     const s = deriveSurface(noPr(), unobservable("コメントを読めない"));
     expect(s.terminal.kind).toBe("unobservable");
+  });
+
+  test("T 不在で記録 SHA が統合先に含まれ、heads ≠ bases なら終端", () => {
+    const s = deriveSurface(
+      noPr({
+        aheadOfIntegration: present(false),
+        head: absent(),
+        containedInIntegration: present(true),
+      }),
+      report({ "o/r": "aaa" }, { "o/r": "bbb" }),
+    );
+    expect(s.terminal).toEqual(present(true));
+    expect(s.landable).toEqual(present(true));
+  });
+
+  test("T 不在で記録 SHA が統合先に含まれ、heads = bases なら透過", () => {
+    const s = deriveSurface(
+      noPr({
+        aheadOfIntegration: present(false),
+        head: absent(),
+        containedInIntegration: present(true),
+      }),
+      report({ "o/r": "aaa" }, { "o/r": "aaa" }),
+    );
+    expect(s.terminal).toEqual(present(false));
+    expect(s.landable).toEqual(present(false));
+    expect(s.containedInIntegration).toEqual(present(true));
+  });
+
+  test("T 不在で記録 SHA が統合先に含まれなければ終端にしない", () => {
+    const s = deriveSurface(
+      noPr({
+        aheadOfIntegration: present(false),
+        head: absent(),
+        containedInIntegration: present(false),
+      }),
+      report({ "o/r": "aaa" }, { "o/r": "bbb" }),
+    );
+    expect(s.terminal).toEqual(present(false));
+    expect(s.landable).toEqual(present(false));
+  });
+
+  test("T 不在で祖先判定不能なら終端を unobservable にしない", () => {
+    const s = deriveSurface(
+      noPr({
+        aheadOfIntegration: present(false),
+        head: absent(),
+        containedInIntegration: unobservable("git merge-base が落ちた"),
+      }),
+      report({ "o/r": "aaa" }, { "o/r": "bbb" }),
+    );
+    expect(s.terminal).toEqual(present(false));
+    expect(s.landable).toEqual(present(false));
+    expect(s.containedInIntegration.kind).toBe("unobservable");
   });
 });
 

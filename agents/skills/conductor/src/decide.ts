@@ -99,17 +99,9 @@ export type Group = {
   /** 代表の正規化レコード。ラダーの述語はここを読む */
   readonly lead: NormalizedIssue;
   readonly leadObservation: IssueObservation;
+  /** group 組み立てで立てた Conflict。`standingConflicts` が載せる */
+  readonly groupingConflicts: readonly Conflict[];
 };
-
-/**
- * その課題が同じ 1 本で直すと宣言している相手。
- *
- * **claim 済みなら記録の `members`、未 claim なら本文の宣言**（`same-branch.md`
- * 「どちらの集合を見るか」）。記録は代表にしか無いので、成員の側は本文から辿る。
- * **本文にだけ足された番号は claim 済みの対象集合に入らない**（次の着地まで別扱い）。
- */
-const links = (o: IssueObservation): readonly number[] =>
-  o.claimRecord.kind === "present" ? o.claimRecord.value.members : o.sameBranchAs;
 
 /**
  * 共有する実体の観測を、対象集合の全員へ揃える（`same-branch.md`「共有するもの」）。
@@ -161,26 +153,178 @@ const shareEvidence = (member: IssueObservation, lead: IssueObservation): IssueO
         claimedAt: lead.claimedAt,
       };
 
+const sortedUnique = (xs: readonly number[]): number[] => [...new Set(xs)].sort((a, b) => a - b);
+
+const sameMembers = (a: readonly number[], b: readonly number[]): boolean => {
+  const x = sortedUnique(a);
+  const y = sortedUnique(b);
+  return x.length === y.length && x.every((n, i) => n === y[i]);
+};
+
+const membersOverlap = (a: readonly number[], b: readonly number[]): boolean =>
+  a.some((n) => b.includes(n));
+
+const presentClaim = (o: IssueObservation) =>
+  o.claimRecord.kind === "present" ? o.claimRecord.value : undefined;
+
+const finishGroup = (args: {
+  readonly representative: number;
+  readonly members: readonly number[];
+  readonly seed: readonly IssueObservation[];
+  readonly share: boolean;
+  readonly groupingConflicts: readonly Conflict[];
+}): Group | undefined => {
+  if (args.seed.length === 0) return undefined;
+  const leadObservation = args.seed.find((x) => x.issue === args.representative) ?? args.seed[0];
+  if (leadObservation === undefined) return undefined;
+  const groupObservations = args.share
+    ? args.seed.map((x) => shareEvidence(x, leadObservation))
+    : args.seed;
+  const records = groupObservations.map(normalize);
+  const leadIndex = groupObservations.findIndex((x) => x.issue === leadObservation.issue);
+  const lead = leadIndex >= 0 ? records[leadIndex] : undefined;
+  if (lead === undefined) return undefined;
+  return {
+    representative: args.representative,
+    members: args.members,
+    observations: groupObservations,
+    records,
+    lead,
+    leadObservation: groupObservations[leadIndex] ?? leadObservation,
+    groupingConflicts: args.groupingConflicts,
+  };
+};
+
 /**
- * 対象集合（claim 済み）または group（未 claim）の連結成分。
+ * 対象集合（claim 記録が `present`）または本文閉包（双方 `absent`）の連結成分。
+ *
+ * **二段。**claim 記録が `present` の集合は members・代表・持ち主の 3 軸で結んだ cluster で group を作る。
+ * 残りは双方の記録が `absent` のときだけ本文の `sameBranchAs` で group を作る。
  * **代表は記録の `representative`、無ければ最小番号**（固定の規約は `same-branch.md`）。
  */
 export const buildGroups = (observations: readonly IssueObservation[]): Group[] => {
   const byIssue = new Map(observations.map((o) => [o.issue, o]));
-  // **無向グラフにしてから辿る。**記録は代表にしか無く、本文の相互記載も漏れうるので、
-  // 片側からしか張られていない辺が実在する。有向のまま辿ると、走査の順で group が割れる。
+  const groups: Group[] = [];
+  const claimed = new Set<number>();
+
+  // **同じ group を指す記録は 1 つの cluster へ。**証跡の頂点は members だけで**なく**
+  // representative と記録の持ち主 —— 代表を共有する 2 本の記録は、members が交わら**なくても**
+  // 同じ group の矛盾した証跡なので、別々の cluster に割ると片方だけが Conflict になる
+  const items = observations.flatMap((o) => {
+    const claim = presentClaim(o);
+    return claim === undefined ? [] : [{ o, claim }];
+  });
+  const roots = new Map(items.map((_, i) => [i, i] as const));
+  const find = (i: number): number => {
+    const parent = roots.get(i);
+    if (parent === undefined || parent === i) return i;
+    const root = find(parent);
+    roots.set(i, root);
+    return root;
+  };
+  for (const [i, a] of items.entries()) {
+    for (const [j, b] of items.entries()) {
+      if (j <= i) continue;
+      const shared =
+        membersOverlap(a.claim.members, b.claim.members) ||
+        a.claim.representative === b.claim.representative ||
+        a.claim.representative === b.o.issue ||
+        b.claim.representative === a.o.issue;
+      if (shared) roots.set(find(j), find(i));
+    }
+  }
+  const clusterMap = new Map<number, IssueObservation[]>();
+  for (const [i, item] of items.entries()) {
+    const root = find(i);
+    clusterMap.set(root, [...(clusterMap.get(root) ?? []), item.o]);
+  }
+  const clusters = [...clusterMap.values()];
+
+  for (const cluster of clusters) {
+    const memberSet = sortedUnique(cluster.flatMap((o) => presentClaim(o)?.members ?? []));
+    const distinct = cluster.reduce<number[][]>((acc, o) => {
+      const members = presentClaim(o)?.members ?? [];
+      if (acc.some((x) => sameMembers(x, members))) return acc;
+      acc.push(sortedUnique(members));
+      return acc;
+    }, []);
+    const reps = cluster.flatMap((o) => {
+      const claim = presentClaim(o);
+      return claim === undefined ? [] : [claim.representative];
+    });
+    const representative = reps.find((n) => memberSet.includes(n)) ?? reps[0] ?? memberSet[0];
+    if (representative === undefined) continue;
+    const groupingConflicts: Conflict[] = [];
+    if (distinct.length > 1) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の members の集合が一致しない"],
+        issues: memberSet,
+      });
+    }
+    if (new Set(reps).size > 1) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の representative が一致しない"],
+        issues: memberSet,
+      });
+    }
+    if (cluster.some((o) => !(presentClaim(o)?.members ?? []).includes(o.issue))) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の持ち主が自分の members に居ない"],
+        issues: memberSet,
+      });
+    }
+    // **記録は代表にしか無い**（`same-branch.md`）。成員の側に載った記録は写しでなく矛盾
+    if (cluster.some((o) => presentClaim(o)?.representative !== o.issue)) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim 記録が代表の issue に無い"],
+        issues: memberSet,
+      });
+    }
+    if (!memberSet.includes(representative)) {
+      groupingConflicts.push({
+        reason: "証跡が矛盾している",
+        evidence: ["claim の representative が members に居ない"],
+        issues: memberSet,
+      });
+    }
+    const seedIds = sortedUnique([...memberSet, ...cluster.map((o) => o.issue)]);
+    const seed = seedIds.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
+    const group = finishGroup({
+      representative,
+      members: memberSet,
+      seed,
+      share: true,
+      groupingConflicts,
+    });
+    if (group === undefined) continue;
+    groups.push(group);
+    for (const n of seedIds) claimed.add(n);
+  }
+
+  const remaining = observations.filter((o) => !claimed.has(o.issue));
+  const remainingSet = new Set(remaining.map((o) => o.issue));
   const edges = new Map<number, Set<number>>();
   const link = (a: number, b: number) => {
     if (a === b) return;
     (edges.get(a) ?? edges.set(a, new Set()).get(a))?.add(b);
     (edges.get(b) ?? edges.set(b, new Set()).get(b))?.add(a);
   };
-  for (const o of observations) for (const n of links(o)) link(o.issue, n);
+  for (const o of remaining) {
+    if (o.claimRecord.kind !== "absent") continue;
+    for (const n of o.sameBranchAs) {
+      if (!remainingSet.has(n)) continue;
+      const other = byIssue.get(n);
+      if (other === undefined || other.claimRecord.kind !== "absent") continue;
+      link(o.issue, n);
+    }
+  }
 
   const seen = new Set<number>();
-  const groups: Group[] = [];
-
-  for (const o of observations) {
+  for (const o of remaining) {
     if (seen.has(o.issue)) continue;
     const members: number[] = [];
     const queue = [o.issue];
@@ -192,32 +336,16 @@ export const buildGroups = (observations: readonly IssueObservation[]): Group[] 
       for (const linked of edges.get(current) ?? []) if (!seen.has(linked)) queue.push(linked);
     }
     members.sort((a, b) => a - b);
-    const raw = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
-    if (raw.length === 0) continue;
-
-    const claim = raw.find((x) => x.claimRecord.kind === "present")?.claimRecord;
-    const representative =
-      claim?.kind === "present" ? claim.value.representative : (members[0] ?? o.issue);
-    const leadIndex = Math.max(
-      0,
-      raw.findIndex((g) => g.issue === representative),
-    );
-    const leadObservation = raw[leadIndex];
-    if (leadObservation === undefined) continue;
-    // **共有の反映は claim 済みのときだけ**（claim 前は記録が成員ごとに別々に在る）。
-    const groupObservations =
-      claim?.kind === "present" ? raw.map((x) => shareEvidence(x, leadObservation)) : raw;
-    const records = groupObservations.map(normalize);
-    const lead = records[leadIndex];
-    if (lead === undefined) continue;
-    groups.push({
-      representative,
+    const seed = members.map((n) => byIssue.get(n)).filter((x) => x !== undefined);
+    const group = finishGroup({
+      representative: members[0] ?? o.issue,
       members,
-      observations: groupObservations,
-      records,
-      lead,
-      leadObservation,
+      seed,
+      share: false,
+      groupingConflicts: [],
     });
+    if (group === undefined) continue;
+    groups.push(group);
   }
   return groups;
 };
@@ -230,7 +358,7 @@ const target = (g: Group): Target => ({ representative: g.representative, member
 
 const TERMINAL: readonly Progress[] = ["着地済み", "取り下げ"];
 const WRITE_STAGES: readonly Progress[] = ["準備済み", "実装中", "提出中"];
-/** write を渡す周。`準備中` は保持しないが周には入る（行 10q）。 */
+/** write を渡す周。`準備中` は保持しないが、leftover の `稼働中` では周に入る。 */
 const WRITE_PASS_STAGES: readonly Progress[] = ["準備中", "準備済み", "実装中", "提出中"];
 const RESTART_ACTIONS: readonly ActionName[] = [
   "claim する",
@@ -306,6 +434,13 @@ const validWaiting = (o: IssueObservation): boolean =>
   o.waitRecord.kind === "waiting" && o.waitRecord.validity.kind === "valid";
 
 const sessionAlive = (g: Group): boolean => g.leadObservation.session.kind !== "none";
+
+/**
+ * named が idle のまま計画が無い。`/resolve` が届いていない。
+ * `done` は observe が idle に写すので、ここは idle だけ見る。
+ */
+const promptUndelivered = (g: Group): boolean =>
+  g.leadObservation.session.kind === "idle" && value(g.leadObservation.planCommentExists) === false;
 
 /**
  * 実行器が入力を受け取らない。leftover 解除は観測の lift 済み。
@@ -634,6 +769,7 @@ const asSolo = (g: Group): Group[] =>
             records: [record],
             lead: record,
             leadObservation: o,
+            groupingConflicts: [],
           } satisfies Group,
         ];
   });
@@ -820,7 +956,7 @@ const crossingDescribed = (
  * ラダー上に残る（そちらも当たった group を選出対象外にする）。
  */
 const standingConflicts = (g: Group): Conflict[] => {
-  const found: Conflict[] = g.records.flatMap((r) => [...r.conflicts]);
+  const found: Conflict[] = [...g.groupingConflicts, ...g.records.flatMap((r) => [...r.conflicts])];
   if (terminalMixedInGroup(g)) {
     found.push({
       reason: "group の終端が混在",
@@ -977,12 +1113,12 @@ const LADDER: readonly Rung[] = [
   },
   {
     params: () => ({ action: "解決を起こし直す" }),
-    why: "実行器が消えたまま成果物が途中で止まっている",
+    why: "実行器が消えたか、/resolve が届いていない",
     match: (g, ctx) => {
       if (isShelved(g) || receiveRefusedOf(ctx.groups)) return false;
       const r = g.lead;
       if (!IN_FLIGHT.includes(r.progress)) return false;
-      if (sessionAlive(g)) return false;
+      if (sessionAlive(g) && !promptUndelivered(g)) return false;
       if (g.records.some(ledgerBehind)) return false;
       // **checkout が無く、作ると数える本数が目安以上になるなら選ばない** ——
       // ただし論理 lease を保持しているなら、目安を超えても起こす（回収なので）。

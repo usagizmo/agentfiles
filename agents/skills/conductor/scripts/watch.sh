@@ -336,6 +336,14 @@ snapshot() {
   page_cost=$(printf '%s' "$proj_json" | jq -s '[.[].data.rateLimit.cost] | add // 0') || return 1
   printf '%s\n' "$page_cost" > "$COST_FILE"
 
+  # **`--paginate` の exit 0 は全件の証拠にしない。**最終ページの hasNextPage が真なら
+  # 打ち切り。GraphQL totalCount は使わない。
+  has_next=$(printf '%s' "$proj_json" | jq -s '.[-1].data.organization.projectV2.items.pageInfo.hasNextPage') || return 1
+  if [ "$has_next" != "false" ]; then
+    echo "[watch] board GraphQL の最終ページ hasNextPage が偽でない: $has_next" >&2
+    return 1
+  fi
+
   # **ボード上の並び順が選出の tiebreaker** なので、番号で sort し直さず API の返却順に index を振る。
   proj=$(printf '%s' "$proj_json" | jq -r '
       .data.organization.projectV2.items.nodes[]
@@ -346,7 +354,7 @@ snapshot() {
   # REST（0 pt）。`gh issue list --limit N` は N を超えると**不完全なまま非 0 件で返る**ので使わない。
   # REST の issues は PR も返すため `.pull_request` で落とす。
   # issues 行は `$ISSUE_FP`。コメントの upsert で Issue が動いても起きない。
-  issues_json=$(gh api "repos/$GH_REPO/issues?state=all&per_page=100" --paginate) || return 1
+  issues_json=$(bash "$DIR/complete-rest-list.sh" "repos/$GH_REPO/issues?state=all&per_page=100") || return 1
   issues=$(printf '%s' "$issues_json" | python3 "$ISSUE_FP") || return 1
   issues=$(printf '%s\n' "$issues" | sort -n)
   # ページは最後まで取る。絞るのは出力であって打ち切りではない。
@@ -355,7 +363,7 @@ snapshot() {
   issues=$(printf '%s\n' "$issues" | awk -f "$RESTRICT" "$STATE_DIR/board_nums" -) || return 1
 
   # コメント指紋は `$COMMENT_FP`。ページは最後まで取る。直近 100 件の窓は使わない。
-  comments_json=$(gh api "repos/$GH_REPO/issues/comments?per_page=100" --paginate) || return 1
+  comments_json=$(bash "$DIR/complete-rest-list.sh" "repos/$GH_REPO/issues/comments?per_page=100") || return 1
   comments=$(printf '%s' "$comments_json" | jq -r -f "$COMMENT_FP" --arg board "$board_nums") || return 1
   comments=$(printf '%s\n' "$comments" | sort)
 
@@ -365,18 +373,7 @@ snapshot() {
   # open PR は正当に 0 件になりうるので非空を要求しない。ただし**打ち切ったラウンドは失敗にする** ——
   # 上限外の PR の checks 変化は指紋に出ず、`提出中` → `着地待ち` が永久に起きない。
   # 不完全な一覧を baseline として受理する方が、ラウンドを捨てるより重い。
-  #
-  # **追跡していない PR の `checks` は固定文字列へ置く。**checks が遷移を駆動するのは PR が Issue に
-  # 紐づくときだけで、紐づけの唯一の手段が branch 名の番号。番号を持たない PR の checks は定義上
-  # どの `progress` も動かせないので、人が自分のブランチで CI を回すたびに conductor が起きる。
-  # **field は削らない** —— 落とすと「追跡していない」と「checks が無い」が区別できなくなる。
-  # 判定は**形だけ**（`<prefix>/<番号>-`）。prefix の集合は project が変えてよいと規約が明示して
-  # いるので、`feat|fix|chore` のような allowlist を焼き込まない —— project が prefix を 1 つ足した
-  # 瞬間、その課題だけ `提出中` → `着地待ち` が永久に起きなくなる。
-  # **判定できないものは残す側（fail-open）へ倒す** —— `headRefName` が取れないときは追跡中として
-  # 扱い、checks をそのまま指紋へ入れる。
-  # **畳みと分類は `src/checks.ts`。**ここは identity と status を落とさずに出す。
-  # CheckRun の実行中は `status` を読まないと空になり、pending が消える。
+  # 行の抽出は `pr-list.jq`。畳みと分類は `src/checks.ts`。
   prs_json=$(gh pr list --repo "$GH_REPO" --state open --limit "$PR_LIMIT" \
     --json number,headRefName,state,isDraft,statusCheckRollup) || return 1
   prs=$(printf '%s' "$prs_json" | jq -r -f "$DIR/pr-list.jq") || return 1

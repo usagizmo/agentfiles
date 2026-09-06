@@ -19,8 +19,6 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 **この repo は受け皿を持たない**（GitHub Issues は無効）。`~/.agents/AGENTS.md`「作業単位」の「切り出すと決めたものは受け皿へ置く」は、ここでは成立しない。
 
-気づいたものは現在のブランチで直しきる。直しきれないものだけ、行き先の決定を人へ返す。**まとめに書いて終わりにしない。**
-
 統合は `temp` へ積んで `main` へ落とす。形は `merge` skill。待ち行列では**ない**。
 
 受け皿を持つ project では、その project の AGENTS.md が置き場と最優先の位置を定める。
@@ -49,14 +47,15 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 ### スコープ
 
-| スコープ     | 対象                                                                                                      |
-| ------------ | --------------------------------------------------------------------------------------------------------- |
-| `[agents]`   | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
-| `[claude]`   | `harnesses/claude` / `~/.claude` 配下の Claude Code 設定                                                  |
-| `[codex]`    | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
-| `[grok]`     | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
-| `[opencode]` | `~/.config/opencode` 配下の opencode 設定                                                                 |
-| `[lint]`     | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
+| スコープ         | 対象                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `[agents]`       | `agents/` 配下の共通 instructions / skills（`.skill-lock.json` 等）                                       |
+| `[claude]`       | `harnesses/claude` / `~/.claude` 配下の Claude Code 設定                                                  |
+| `[codex]`        | `harnesses/codex` / `~/.codex` 配下の Codex 設定                                                          |
+| `[grok]`         | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
+| `[opencode]`     | `harnesses/opencode` / `~/.config/opencode` 配下の opencode 設定                                          |
+| `[command-code]` | `harnesses/command-code` / `~/.commandcode` 配下の Command Code 設定                                      |
+| `[lint]`         | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 
 複数スコープにまたがるときは並べる（例: `[agents][claude]`）。どのスコープにも入らない変更はスコープを省く。
 
@@ -74,8 +73,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場が決まる**（読む → `references/`、実行する → `scripts/`、成果物に使う → `assets/`）。大きさでは分けない。何を `references/` へ出すかの判断は `docs` skill の品質基準
 - `./agents/docs/` は人が全体を把握・監査するための資料。**agent へは投影しない**（`lib/inventory.sh` に載せない）。規約の本体は置かず、skills から導出した図と索引だけを持つ
-- `./design/` は人がブラウザで見て規則の組み合わせを確かめる面。agent へは投影し**ない**（`lib/inventory.sh` に載せない）。skill の下には置かない
-- `./test/` は `bun test` の gate。skills の `scripts/` `assets/`・`design/` の面・`.githooks/`・tracked な `*.md` を検査する。agent へは投影し**ない**（`lib/inventory.sh` に載せない）
+- `./test/` は `bun test` の gate。skills の `references/` `scripts/` `assets/`・`.githooks/`・tracked な `*.md` を検査する。agent へは投影し**ない**（`lib/inventory.sh` に載せない）
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置か**ない**
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイルへの symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（**空 overlay を先回りで作らない**）
 - **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。一覧は `lib/inventory.sh`
@@ -135,7 +133,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 
 hooks の tripwire:
 
-- **`harnesses/<agent>/hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外**。空であること自体が基準線なので、中身を埋めたり配線を外したりしない
+- `harnesses/<agent>/` 配下の空の `hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外。中身を埋めたり配線を外したりしない
 - 外部ツールによる上書きを 3 経路で検知する —— symlink 経由の in-place 書き込みは repo 側の git diff、unlink して実ファイルで置換は doctor の ❌、別名ファイルの投下は `inv_guard_dir` の ⚠️
 - **管理下 symlink 以外の投下を検知したい collection dir に `inv_guard_dir` を張る**（各 harness の hooks dir）。read-only で、自動削除はしない
 - 設定が harness home 直下に置かれる場合（codex）は vendor ファイルと同居するため張ら**ない**。symlink check だけで守る

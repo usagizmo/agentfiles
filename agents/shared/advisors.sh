@@ -208,14 +208,29 @@ else:
 		started_one=0
 		while [ "$n" -lt 20 ]; do
 			if python3 -c '
-import json, subprocess, sys
+import json, pathlib, subprocess, sys
 argv = json.load(open(sys.argv[1], encoding="utf-8"))
-raise SystemExit(subprocess.run(argv, stdout=open(sys.argv[2], "w", encoding="utf-8")).returncode)
+result = subprocess.run(argv, capture_output=True, text=True)
+pathlib.Path(sys.argv[2]).write_text(result.stdout, encoding="utf-8")
+sys.stderr.write(result.stderr)
+if result.returncode == 0:
+    raise SystemExit(0)
+try:
+    response = json.loads(result.stderr or result.stdout)
+except (ValueError, TypeError):
+    raise SystemExit(1)
+error = response.get("error") if isinstance(response, dict) else None
+busy = isinstance(error, dict) and error.get("code") == "agent_pane_busy"
+raise SystemExit(75 if busy else 1)
 ' "$run/$a/argv.json" "$run/$a/start.json" 2>>"$run/$a/log"; then
 				started_one=1
 				break
+			else
+				start_result=$?
 			fi
+			[ "$start_result" -eq 75 ] || break
 			n=$((n + 1))
+			[ "$n" -lt 20 ] || break
 			sleep 1
 		done
 		if [ "$started_one" -eq 1 ] && herdr agent prompt "$name" \

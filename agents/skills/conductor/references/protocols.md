@@ -15,7 +15,7 @@ tick の分岐そのものではなく、**その action を選んだ後に何�
 5. **成員側に残った周回の記録と失敗の記録を消す**。代表へ count を写さない。新しい単位では 0 から数える
 6. **記録した全員**の Status を進行中にし、assignee を自分にする（group でも代表だけにしない）
 7. **着地面ごとに** branch と worktree を作る（同じ branch 名。その時点の統合先から切る）
-8. セッションを起こす（`harness.md`）
+8. セッションを起こす（`harness.md`）。観測できなくても claim の記録と branch は残す
 
 - **4 が書けなければ、3 で作った remote branch を消してから終える**。branch を作るのは記録を書く直前で、書けたことを確かめるまでが 1 手
 - **6 が誰か 1 人でも失敗したらセッションを起こさない**。branch は残し、次の tick へ返す
@@ -88,7 +88,7 @@ count: <成果ゼロで回った周の数>
 | `--worktree <repo>:<path>` \| `--no-worktree <repo>` | 解決の周のみ。**着地面ごとにどちらかを 1 回**（省いた面は成果が指紋に出ない） |
 | `--plan-comment <file>` \| `--no-plan-comment`       | 解決の周のみ。file の bytes は下表                                            |
 | `--wait-record <file>` \| `--no-wait-record`         | **有効なときだけ file を渡す**（有効の判定は `wait-record.md`）               |
-| `--occupied <名前>:<cwd>` \| `--no-occupied`         | 解決の周のみ。所有外セッションの name + cwd。**状態は入れない**               |
+| `--occupied <名前>:<cwd>` \| `--no-occupied`         | 解決の周のみ。所有外セッションの name + cwd。**状態も workspace も入れない**  |
 | `--issue-body <番号>:<file>`                         | 計画の周のみ。**その課題自身 1 件**                                           |
 
 **file の bytes**は次の値そのもの。足しも落としもしない。
@@ -113,7 +113,7 @@ count: <成果ゼロで回った周の数>
 **成果物の側だけから作る**。成分の集合と符号化は `scripts/cycle-mark.py` が持つ。
 
 - **`runtime` とセッションの状態は入れない。commit 数でも引かない**（理由は `tick.md`）
-- **所有外セッションの name + cwd を入れる。状態は入れない**
+- **所有外セッションの name + cwd を入れる。状態も workspace も入れない**
 - **変わったかどうかの判定は git に任せる**
 - **中身まで入れる**。真偽値への丸めも不可
 - **git が見える未コミット状態を、置き場所を問わず入れる**。ignore 対象と git の外は入れない
@@ -218,7 +218,7 @@ tips:
 
 - **記録は対象集合の全員から消す**（claim 前に成員へ散った周回の記録と失敗の記録が残っている経路がある）
 - **1 面でも残したら片付いていない**（実 checkout が残る。`progress` は終端なので二度と拾われない）
-- **あわせて制御面の claim branch を消す**（着地面に制御面が含まれるかに依らず）。claim の防壁は常に制御面の remote branch
+- 着地の区分では、着地面に制御面が含まれなくても制御面の claim branch を消す
 - **live checkout は片付けの対象ではない**（`landing-surface.md`）
 
 ### 片付ける前に成果を確認する
@@ -251,7 +251,7 @@ tips:
 - **残る branch の先端が記録した tip と違うなら、消さずに報告する**
 - **dirty なら片付けず報告する**
 - **値が観測できないなら、clean 側へ倒さず消さずに報告する**
-- **所有外セッションが worktree に居れば、退避より前に止まって消さない**
+- **所有外セッションが worktree に居れば、退避より前に止まって消さない**。判定は `src/observe.ts` の `worktreeOccupied`。読めないときも消さない。cwd 一致だけでは居ないにしない
 - **stash が残っていれば報告してから片付ける**。stash は worktree 削除では消えない。pop / drop しない
 - checkout が既に無い孤児では dirty は見ない。stash は面の live checkout から見る（`landing-surface.md`）
 - 記録が無い開始（claim も無い残骸）では、集合の照合を省略する
@@ -312,12 +312,15 @@ tips:
 
 ## 解決を起こし直す
 
-手順は `harness.md` の起こす表。**実行直前に、観測時点と同じ不在の正の証拠を取り直す。**
+手順は `harness.md` の起こす表。
 
-1. `--sessions-cmd` と同じ観測を 1 回取り直す
+**named が居るとき**はセッションを作り直さない（この action の `evidence.sessionKind` は `idle`）。張り直しには当てない。前段を通して起こす表の `/resolve` を 1 回送る。
+
+**named が無いとき**は、実行直前に観測時点と同じ不在の正の証拠を取り直す。
+
+1. `--sessions-cmd` と `--workspaces-cmd` と同じ観測を 1 回取り直す
 2. `evidence.sessionKind` が `none` のままであること（named `resolve-<番号>` が現れていない）
-3. `evidence.occupancy` が `absent` のままであること（foreign / detection-derived が所有 worktree に居ない）
-4. occupancy が読めること（`occupancy-unreadable` が無い）
+3. `evidence.occupancy` が `absent` のままであること（`src/observe.ts` の `worktreeOccupied` が偽。`absent` は読めて居ないこと。cwd 一致だけでは `absent` にしない）
 
 どれかが外れたら実行しない。取れないことを空の不在へ畳まない。
 named が無いので張り直しには当たらない。起こす表の `/resolve` を 1 回送る。

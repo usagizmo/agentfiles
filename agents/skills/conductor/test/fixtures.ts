@@ -22,6 +22,7 @@ export const surface = (over: Partial<SurfaceObservation> = {}): SurfaceObservat
   usesPr: true,
   countsCapacity: true,
   aheadOfIntegration: present(false),
+  containedInIntegration: absent(),
   dirty: present(false),
   hasCheckout: present(false),
   terminal: present(false),

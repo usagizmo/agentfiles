@@ -7,6 +7,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
+import { missingBranchGit } from "./surfaces.ts";
 import type { ObservePort } from "./observe.ts";
 import {
   carriesReportOrHalt,
@@ -31,6 +32,7 @@ type RunResult =
 const run = async (cmd: readonly string[], cwd?: string): Promise<RunResult> => {
   const proc = Bun.spawn([...cmd], {
     ...(cwd === undefined ? {} : { cwd }),
+    env: { ...process.env },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -121,8 +123,14 @@ export const createPort = (options: PortOptions): ObservePort => {
   const control = surfaces[0]?.name ?? "";
 
   /**
+   * REST 一覧。helper が全件取得と件数照合まで済ませる。**`--paginate` をここへ出さない。**
+   */
+  const restList = <T>(apiPath: string) =>
+    json<T>([WATCH_SHELL, `${scriptsDir}/complete-rest-list.sh`, apiPath]);
+
+  /**
    * repo の全 PR。**tick に 1 回しか取らない。**`issueFacts` は Issue ごとに呼ばれるので、
-   * 都度 `--paginate` しない。
+   * 都度一覧を取らない。
    */
   let prsOnce:
     | Promise<
@@ -132,9 +140,9 @@ export const createPort = (options: PortOptions): ObservePort => {
       >
     | undefined;
   const allPrs = () =>
-    (prsOnce ??= json<
+    (prsOnce ??= restList<
       { number: number; merged_at: string | null; state: string; head: { ref: string } }[]
-    >(["gh", "api", `repos/${config.ghRepo}/pulls?state=all&per_page=100`, "--paginate"]));
+    >(`repos/${config.ghRepo}/pulls?state=all&per_page=100`));
 
   const bodies = new Map<number, Observed<string>>();
   const comments = new Map<number, readonly string[]>();
@@ -177,15 +185,12 @@ export const createPort = (options: PortOptions): ObservePort => {
 
     // **Issue ごとに引かない。**repo 単位の bulk 1 系統にする。
     //
-    // **打ち切りは fail-closed。**`--paginate` が途中で落ちたら、欠けた分を「無い」と
-    // 読むことになる —— 記録が無い課題として claim や差し戻しが走る。
+    // **打ち切りは fail-closed。**件数照合に落ちた一覧は、渡された番号のすべてが同じ
+    // 観測失敗である。欠けた分を「一覧に居ない」へ分解しない。
     issueBodies: async (numbers) => {
-      const all = await json<{ number: number; body: string | null }[]>([
-        "gh",
-        "api",
-        "--paginate",
+      const all = await restList<{ number: number; body: string | null }[]>(
         `repos/${config.ghRepo}/issues?state=all&per_page=100`,
-      ]);
+      );
       const map = new Map<number, Observed<string>>();
       if (all.kind !== "present") {
         for (const n of numbers) {
@@ -209,15 +214,16 @@ export const createPort = (options: PortOptions): ObservePort => {
 
     // **`sort=updated` の窓で切らない。**claim と plan は書いた後に更新されないので、
     // 窓で切ると「計画はあるのに planCommentExists=false」が再発する。marker を持つ限り全ページ辿る。
+    // コメント一覧が不完全なとき、固定 marker を欠落として読まない。
     issueComments: async (numbers) => {
-      const all = await json<
+      const all = await restList<
         {
           issue_url: string;
           body: string | null;
           created_at: string;
           id: number;
         }[]
-      >(["gh", "api", "--paginate", `repos/${config.ghRepo}/issues/comments?per_page=100`]);
+      >(`repos/${config.ghRepo}/issues/comments?per_page=100`);
       const map = new Map<number, Observed<readonly string[]>>();
       if (all.kind !== "present") {
         for (const n of numbers) {
@@ -279,7 +285,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       const branch = branches.stdout
         .split("\n")
         .find((b) => new RegExp(`^[^/]+/${issue}-`).test(b.trim()));
-      if (branch === undefined) return { ahead: present(false), head: absent() };
+      if (branch === undefined) return missingBranchGit();
 
       const head = await run(["git", "rev-parse", branch.trim()], surface.repoPath);
       const ahead = await run(

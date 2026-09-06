@@ -3,7 +3,7 @@
 // **渡し漏れは観測の穴になる。**面を 1 つ落とすとそこで書き進んでいる課題が成果ゼロの周として
 // 数えられ、`--sessions-cmd` / `--workspaces-cmd` を落とすと usage error で 1 度も観測できない。
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -18,6 +18,7 @@ import { parseJsonc } from "../src/jsonc.ts";
 import { readFileSync } from "node:fs";
 import { createPort, snapshotArgs } from "../src/port.ts";
 import { present } from "../src/types.ts";
+import type { Observed } from "../src/types.ts";
 
 const raw = {
   ghRepo: "acme/control",
@@ -165,6 +166,312 @@ describe("設定の fail-closed", () => {
   });
 });
 
+describe("leftover 判定", () => {
+  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+
+  const leftoverPredicate = (cmd: string): string => {
+    const start = cmd.indexOf("    still=0\n");
+    const needle = 'if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi';
+    const end = cmd.indexOf(needle);
+    if (start < 0 || end < 0) throw new Error("leftover 判定が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runLeftover = async (snippet: string, visible: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "leftover-"));
+    try {
+      const snippetPath = join(dir, "snippet");
+      const visiblePath = join(dir, "visible");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(snippetPath, snippet);
+      await writeFile(visiblePath, visible);
+      await writeFile(
+        scriptPath,
+        [
+          'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
+          'visible=$(cat "$2"; printf x); visible=${visible%x}',
+          "leftover=-",
+          leftoverPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$leftover\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, snippetPath, visiblePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`leftover 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const chrome = "1 command still running";
+  const ended = "Worked for 44s";
+  const blanks = (n: number) => Array.from({ length: n }, () => "").join("\n");
+  const dump = (...lines: string[]) => `${lines.join("\n")}\n`;
+
+  test("still は detection 40 行。visible は行数で切らない。連言を落とさない", () => {
+    const cmd = sessionsCmd();
+    expect(cmd).toContain("--source detection --lines 40");
+    expect(cmd).toContain("--source visible --format text");
+    expect(cmd).not.toMatch(/--source visible --lines/);
+    expect(cmd).toContain('if [ "$still" = 1 ] && [ "$ended" = 1 ]; then leftover=leftover; fi');
+  });
+
+  test("契約表に turn 終了と背景残存の区別がある", () => {
+    expect(harnessMd()).toContain("turn の終了を背景作業の残存と区別して観測できる");
+  });
+
+  test("終了行は末尾側 leftover chrome より前で最も近いものを見る", () => {
+    expect(harnessMd()).toContain("末尾側の leftover chrome");
+    expect(harnessMd()).not.toContain("終了行は detection の末尾だけを見る");
+    expect(harnessMd()).not.toContain("末尾以外は見ない");
+  });
+
+  test("終了行が dump 末尾から外れ、chrome とのあいだが空行だけなら leftover", async () => {
+    expect(
+      await runLeftover(dump(chrome), dump(ended, blanks(35), chrome, "composer", "footer")),
+    ).toBe("leftover");
+  });
+
+  test("終了行と leftover chrome のあいだに空でない内容があれば leftover にしない", async () => {
+    expect(await runLeftover(dump(chrome), dump(ended, "assistant text", chrome))).toBe("-");
+  });
+
+  test("leftover chrome が複数あるときは末尾側を見る", async () => {
+    expect(await runLeftover(dump(chrome), dump(chrome, ended, blanks(35), chrome, "footer"))).toBe(
+      "leftover",
+    );
+  });
+
+  test("信号が無い working は leftover にしない", async () => {
+    expect(await runLeftover(dump("thinking"), dump("thinking", "footer"))).toBe("-");
+  });
+
+  test("still だけなら leftover にしない", async () => {
+    expect(await runLeftover(dump(chrome), dump("thinking", chrome))).toBe("-");
+  });
+
+  test("ended だけなら leftover にしない", async () => {
+    expect(await runLeftover(dump("thinking"), dump(ended, blanks(2), chrome))).toBe("-");
+  });
+
+  test("終了行が chrome の直前にあれば leftover のまま", async () => {
+    expect(await runLeftover(dump(chrome), dump(ended, chrome))).toBe("leftover");
+  });
+});
+
+describe("card 判定", () => {
+  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+
+  const cardPredicate = (cmd: string): string => {
+    const start = cmd.indexOf('if [ "$owned" = 1 ] && { [ "$status" = "idle" ]');
+    const needle = "      card=card\n    fi\n  fi";
+    const end = cmd.indexOf(needle, start);
+    if (start < 0 || end < 0) throw new Error("card 判定が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runCard = async (status: string, visible: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "card-"));
+    try {
+      const visiblePath = join(dir, "visible");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(visiblePath, visible);
+      await writeFile(
+        scriptPath,
+        [
+          `status=${JSON.stringify(status)}`,
+          "owned=1",
+          "card=-",
+          'visible=$(cat "$1"; printf x); visible=${visible%x}',
+          cardPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$card\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, visiblePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`card 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const dump = (...lines: string[]) => `${lines.join("\n")}\n`;
+  const cursorFooter = "↑/↓ option · ←/→ question · Space select · Enter next/submit · Esc to skip";
+
+  test("idle/done の所有だけ visible を読む。card 欄は全行", () => {
+    const cmd = sessionsCmd();
+    expect(cmd).toContain(
+      'printf \'%s %s %s %s %s\\n\' "$name" "$status" "$leftover" "$refused" "$card"',
+    );
+    expect(cmd).toContain(
+      'printf \'%s %s %s %s %s %s %s\\n\' "$name" "$status" "$leftover" "$refused" "$card" "$ws" "$cwd"',
+    );
+    expect(cmd).toContain('[ "$status" = "idle" ] || [ "$status" = "done" ]');
+    expect(cmd).not.toContain("Question 1 of 1");
+  });
+
+  test("Cursor 質問カードの末尾 footer なら card", async () => {
+    expect(
+      await runCard("done", dump("Issue #1208 の意図確認", "Question 1 of 1", cursorFooter)),
+    ).toBe("card");
+  });
+
+  test("見出し単独では card にしない", async () => {
+    expect(await runCard("done", dump("Issue #1208 の意図確認", "Question 1 of 1"))).toBe("-");
+  });
+
+  test("composer 表の復帰も送らない末行なら card", async () => {
+    expect(await runCard("idle", dump("body", "Tab:next answer"))).toBe("card");
+    expect(await runCard("done", dump("body", "Esc:scrollback"))).toBe("card");
+    expect(await runCard("idle", dump("body", "Tab/Space: question"))).toBe("card");
+  });
+
+  test("scrollback フォーカスは card にしない", async () => {
+    expect(await runCard("done", dump("body", "Space:prompt"))).toBe("-");
+    expect(await runCard("idle", dump("body", "j/k:nav"))).toBe("-");
+  });
+
+  test("working では card を付けない", async () => {
+    expect(await runCard("working", dump(cursorFooter))).toBe("-");
+  });
+});
+
+describe("subagent 判定", () => {
+  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+
+  const subagentPredicate = (cmd: string): string => {
+    const start = cmd.indexOf("  subagent_re=");
+    const needle = "then leftover=subagent; fi";
+    const end = cmd.indexOf(needle);
+    if (start < 0 || end < 0) throw new Error("subagent 判定が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runSubagent = async (snippet: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "subagent-"));
+    try {
+      const snippetPath = join(dir, "snippet");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(snippetPath, snippet);
+      await writeFile(
+        scriptPath,
+        [
+          'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
+          "leftover=-",
+          subagentPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$leftover\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, snippetPath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`subagent 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const activityPredicate = (cmd: string): string => {
+    const start = cmd.indexOf("  subagent_re=");
+    const needle = "then leftover=leftover; fi\n  fi";
+    const end = cmd.indexOf(needle);
+    if (start < 0 || end < 0)
+      throw new Error("subagent と leftover の連塊が sessions-cmd から切れない");
+    return cmd.slice(start, end + needle.length);
+  };
+
+  const runActivity = async (snippet: string, visible: string): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "activity-"));
+    try {
+      const snippetPath = join(dir, "snippet");
+      const visiblePath = join(dir, "visible");
+      const scriptPath = join(dir, "run.sh");
+      await writeFile(snippetPath, snippet);
+      await writeFile(visiblePath, visible);
+      await writeFile(
+        scriptPath,
+        [
+          'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
+          'visible=$(cat "$2"; printf x); visible=${visible%x}',
+          "leftover=-",
+          "status=working",
+          activityPredicate(sessionsCmd()),
+          "printf '%s\\n' \"$leftover\"",
+          "",
+        ].join("\n"),
+      );
+      const proc = Bun.spawn(["bash", scriptPath, snippetPath, visiblePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, out, err] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(`activity 判定が ${String(code)}: ${err}`);
+      return out.trim();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const dump = (...lines: string[]) => `${lines.join("\n")}\n`;
+  const subagentLine = "○ 1 subagent still running · send a message to interrupt";
+  const leftoverChrome = "1 command still running";
+
+  test("leftover 位置のトークンに subagent がある", () => {
+    const cmd = sessionsCmd();
+    expect(cmd).toContain("leftover=subagent");
+    expect(cmd).toContain("subagents? still running");
+    expect(cmd).toContain("send a message to interrupt");
+    expect(cmd).toContain('if [ "$leftover" = "leftover" ] || [ "$leftover" = "subagent" ]');
+  });
+
+  test("同一行の 2 断片なら subagent。interrupt 単独では引かない", async () => {
+    expect(await runSubagent(dump(subagentLine))).toBe("subagent");
+    expect(await runSubagent(dump("send a message to interrupt"))).toBe("-");
+    expect(await runSubagent(dump("1 subagent still running"))).toBe("-");
+    expect(await runSubagent(dump("1 subagent still running", "send a message to interrupt"))).toBe(
+      "-",
+    );
+  });
+
+  test("subagent は leftover より先。working + leftover chrome でも leftover にしない", async () => {
+    const ended = "Worked for 44s";
+    expect(await runActivity(dump(subagentLine, leftoverChrome), dump(ended, leftoverChrome))).toBe(
+      "subagent",
+    );
+    expect(await runActivity(dump(leftoverChrome), dump(ended, leftoverChrome))).toBe("leftover");
+  });
+});
+
 describe("既に working への agent prompt", () => {
   test("確認は agent_prompted。seq 非変化を失敗にしない", () => {
     const md = harnessMd();
@@ -227,11 +534,18 @@ describe("composer が受け付ける状態での agent prompt", () => {
     const md = composerSection();
     const resume = md.indexOf("Space:prompt");
     expect(resume).toBeGreaterThanOrEqual(0);
-    for (const surface of ["Tab:next answer", "Esc:scrollback", "Tab/Space: question"]) {
+    for (const surface of [
+      "Tab:next answer",
+      "Esc:scrollback",
+      "Tab/Space: question",
+      "↑/↓ option",
+      "Esc to skip",
+    ]) {
       const at = md.indexOf(surface);
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(resume);
     }
+    expect(md).toContain("見出し（`Question 1 of 1`）単独では引かない");
   });
 
   test("chrome が読めない、または表に無い字面は fail-open", () => {
@@ -248,9 +562,8 @@ describe("composer が受け付ける状態での agent prompt", () => {
 
   test("戻れず送れなかった周は retry に数えない", () => {
     expect(skillMd()).toMatch(/retry に数え\*\*ない\*\*/);
-    expect(skillMd()).toContain(
-      "送れなかった周（質問カードがキーボードを持つ、ブロッキングカードがキーボードを持つ、質問カードへ park、scrollback から戻れなかった）は実行していない",
-    );
+    expect(skillMd()).toMatch(/送れなかった周は実行していない/);
+    expect(skillMd()).toContain("composer の受け入れ");
   });
 
   test("live chrome が残る stalled は張り直しに当てない", () => {
@@ -260,6 +573,72 @@ describe("composer が受け付ける状態での agent prompt", () => {
 
   test("張り直しの agent prompt も同じ前段を通す", () => {
     expect(harnessMd()).toMatch(/張り直しの `agent prompt` も同じ/);
+  });
+
+  test("Workspace Trust は [a] と spinner の 2 行。見出し必須ではない", () => {
+    const md = composerSection();
+    expect(md).toContain("[a] Trust this workspace");
+    expect(md).toContain("Trusting workspace");
+    expect(md).toMatch(/見出し必須/);
+    expect(md).toMatch(/表の Trust の行があるあいだは `agent prompt` を送らない/);
+    expect(md).not.toMatch(/Workspace Trust Required` と `\[a\] Trust this workspace`/);
+  });
+
+  test("[q] Quit は Trust の行にしない", () => {
+    const md = composerSection();
+    expect(md).toMatch(/\[q\] Quit[\s\S]*行にしない/);
+  });
+
+  test("Trust の [a] があるとき send-keys a は 1 回。再観測は 3 回まで。残るなら Conflict", () => {
+    const md = composerSection();
+    expect(md).toMatch(/send-keys <名前> a/);
+    expect(md).toMatch(/1 回/);
+    expect(md).toMatch(/3 回まで/);
+    expect(md).toMatch(/残るなら Conflict/);
+  });
+
+  test("Trusting workspace は [a] が無いときだけ送らない。spinner だけは送れなかった周", () => {
+    const md = composerSection();
+    expect(md).toMatch(/Trusting workspace[\s\S]*送ら/);
+    expect(md).toMatch(/spinner[\s\S]*送れなかった周|[a][\s\S]*が無い[\s\S]*送れなかった周/);
+  });
+
+  test("Trust 行は送らない行の後、fail-open の前。scrollback 復帰の順序には載せない", () => {
+    const md = composerSection();
+    const trust = md.indexOf("| `[a] Trust this workspace`");
+    const failOpen = md.indexOf("表に無い字面");
+    expect(trust).toBeGreaterThanOrEqual(0);
+    expect(failOpen).toBeGreaterThan(trust);
+    for (const surface of ["Tab:next answer", "Esc:scrollback", "Tab/Space: question"]) {
+      const at = md.indexOf(surface);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(trust);
+    }
+  });
+
+  test("idle から起こす成功は until working だけ。agent_prompted かつ idle は成功にしない", () => {
+    const md = composerSection();
+    expect(md).toMatch(/idle[\s\S]*`--wait --until working`/);
+    expect(md).toMatch(/`agent_prompted` かつ idle は成功にしない/);
+  });
+
+  test("until working の timeout 直後に visible を読み、Trust 面なら送れなかった周", () => {
+    const md = harnessMd();
+    expect(md).toMatch(/timeout[\s\S]*visible/);
+    expect(md).toMatch(/Trust[\s\S]*送れなかった周/);
+  });
+
+  test("composer 表の Conflict は送れなかった周ではない", () => {
+    expect(skillMd()).toMatch(/composer 表が Conflict[\s\S]*送れなかった周ではない/);
+    expect(harnessMd()).toMatch(/表が Conflict と書いた周は送れなかった周ではない/);
+  });
+
+  test("send-keys の例外は composer の受け入れ表が定めるキー。表に submit キーを置かない", () => {
+    expect(harnessMd()).toMatch(/例外は「composer の受け入れ」表が定めるキー/);
+    const md = composerSection();
+    expect(md).toMatch(/表に `enter` \/ `ctrl\+enter` を置か/);
+    expect(md).not.toMatch(/send-keys <名前> enter/);
+    expect(md).not.toMatch(/send-keys <名前> ctrl\+enter/);
   });
 });
 
@@ -403,5 +782,136 @@ describe("cycleMark の入力 file", () => {
     });
     const extraNl = await markFromExactFiles(scriptsDir, `${body}\n`, null);
     expect(got).not.toEqual(present(extraNl));
+  });
+});
+
+const truncatedGh = `#!/bin/sh
+set -eu
+include=0
+paginate=0
+path=""
+for a in "$@"; do
+  case $a in
+    --include|-i) include=1 ;;
+    --paginate) paginate=1 ;;
+    repos/*) path=$a ;;
+  esac
+done
+issues='[{"number":1,"body":"one"}]'
+comments='[{"id":1,"issue_url":"https://api.github.com/repos/acme/control/issues/1","body":"<!-- plan -->\\n","created_at":"2000-01-01T00:00:00Z"}]'
+prs='[{"number":9,"merged_at":null,"state":"open","head":{"ref":"fix/1-x"}}]'
+body=$issues
+case $path in
+  */issues/comments*) body=$comments ;;
+  */pulls*) body=$prs ;;
+  */issues*) body=$issues ;;
+  *) echo "fake gh: unexpected path: $path ($*)" >&2; exit 1 ;;
+esac
+if [ "$include" = 1 ]; then
+  printf 'HTTP/2.0 200 OK\\nLink: <https://api.github.com/%s&page=2>; rel="next", <https://api.github.com/%s&page=3>; rel="last"\\nContent-Type: application/json\\n\\n%s\\n' "$path" "$path" "$body"
+  exit 0
+fi
+printf '%s\\n' "$body"
+`;
+
+const completeGh = `#!/bin/sh
+set -eu
+include=0
+path=""
+for a in "$@"; do
+  case $a in
+    --include|-i) include=1 ;;
+    --paginate) ;;
+    repos/*) path=$a ;;
+  esac
+done
+issues='[{"number":1,"body":"one"},{"number":2,"body":"two"}]'
+comments='[{"id":1,"issue_url":"https://api.github.com/repos/acme/control/issues/1","body":"<!-- plan -->\\n","created_at":"2000-01-01T00:00:00Z"}]'
+prs='[{"number":9,"merged_at":null,"state":"open","head":{"ref":"fix/1-x"}}]'
+body=$issues
+case $path in
+  */issues/comments*) body=$comments ;;
+  */pulls*) body=$prs ;;
+  */issues*) body=$issues ;;
+  *) echo "fake gh: unexpected path: $path ($*)" >&2; exit 1 ;;
+esac
+if [ "$include" = 1 ]; then
+  printf 'HTTP/2.0 200 OK\\nContent-Type: application/json\\n\\n%s\\n' "$body"
+  exit 0
+fi
+printf '%s\\n' "$body"
+`;
+
+const withFakeGh = async (script: string, fn: () => Promise<void>) => {
+  const dir = await mkdtemp(join(tmpdir(), "gh-"));
+  const prev = process.env["PATH"];
+  try {
+    const bin = join(dir, "bin");
+    await mkdir(bin);
+    await writeFile(join(bin, "gh"), script, { mode: 0o755 });
+    process.env["PATH"] = `${bin}:${prev ?? ""}`;
+    await fn();
+  } finally {
+    if (prev === undefined) delete process.env["PATH"];
+    else process.env["PATH"] = prev;
+    await rm(dir, { recursive: true, force: true });
+  }
+};
+
+const portOf = () => {
+  const config = parseConfig(raw);
+  return createPort({
+    config,
+    surfaces: resolveSurfaces(config.surfaces, PATHS),
+    scriptsDir: join(import.meta.dir, "../scripts"),
+    snapshotPath: "/tmp/snap",
+  });
+};
+
+const reasons = <T>(map: ReadonlyMap<number, Observed<T>>, numbers: readonly number[]) =>
+  numbers.map((n) => {
+    const got = map.get(n);
+    if (got === undefined) return "missing";
+    if (got.kind === "unobservable") return got.reason;
+    return got.kind;
+  });
+
+describe("REST 一覧の打ち切り", () => {
+  test("短い Issue 一覧は渡された番号のすべてが同じ観測失敗である", async () => {
+    await withFakeGh(truncatedGh, async () => {
+      const map = await portOf().issueBodies([1, 2, 3]);
+      const got = reasons(map, [1, 2, 3]);
+      expect(got[0]).not.toBe("present");
+      expect(new Set(got).size).toBe(1);
+      expect(got[0]).not.toBe("Issue 一覧に居ない");
+    });
+  });
+
+  test("件数照合が通ったあと、一覧に無い番号だけが個別の欠落である", async () => {
+    await withFakeGh(completeGh, async () => {
+      const map = await portOf().issueBodies([1, 2, 3]);
+      expect(map.get(1)).toEqual(present("one"));
+      expect(map.get(2)).toEqual(present("two"));
+      expect(map.get(3)?.kind).toBe("unobservable");
+      expect(map.get(3)).toEqual(
+        expect.objectContaining({ kind: "unobservable", reason: "Issue 一覧に居ない" }),
+      );
+    });
+  });
+
+  test("短いコメント一覧は固定 marker を欠落として読まない", async () => {
+    await withFakeGh(truncatedGh, async () => {
+      const map = await portOf().issueComments([1, 2]);
+      const got = reasons(map, [1, 2]);
+      expect(got[0]).not.toBe("present");
+      expect(new Set(got).size).toBe(1);
+    });
+  });
+
+  test("短い PR 一覧は PR を読めない", async () => {
+    await withFakeGh(truncatedGh, async () => {
+      const facts = await portOf().issueFacts(1);
+      expect(facts.prMerged.kind).toBe("unobservable");
+    });
   });
 });

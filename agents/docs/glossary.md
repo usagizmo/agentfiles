@@ -1,6 +1,6 @@
 # 用語
 
-**同じ書体で違う種別の語が混ざると読めなくなる**。`resolve` は skill、`tick` はループ 1 周、`prepare` は工程、`着地待ち` は conductor から見た状態 — 4 つとも種別が違う。
+**同じ書体で違う種別の語が混ざると読めなくなる**。`resolve` は skill、`tick` は watcher 間の処理単位、`prepare` は工程、`着地待ち` は conductor から見た状態 — 4 つとも種別が違う。
 
 規約の本体は各 `SKILL.md`。ここは種別と参照先だけ。
 
@@ -21,11 +21,11 @@
 
 **`resolve` から見た「今どこ」**。課題 1 件の内部進行で、SSOT は `resolve/SKILL.md` の工程表。外部から指すときも名前で指す（番号は増減する）。
 
-`prepare` / `write 待ち` / `実装` / `仕上げ` / `検証` / `提出` / `意図の確認` / `integration 待ち` / `着地`
+`prepare` / `write 待ち` / `実装` / `仕上げ` / `検証` / `意図の確認` / `提出` / `integration 待ち` / `着地`
 
 ## 状態
 
-**`conductor` から見た同じ課題**。観測を正規化した 4 フィールドで、SSOT は `conductor/SKILL.md`。工程より粗い — 仕上げと検証は成果物からは区別できないのでまとめて `実装中` になり、意図の確認は提出の後ろなので `提出中` / `着地待ち` に見える。
+**`conductor` から見た同じ課題**。観測を正規化した 4 フィールドで、SSOT は `conductor/SKILL.md`。工程より粗い — 仕上げ・検証・意図の確認は成果物からは区別できないので、まとめて `実装中` に見える（`提出中` は open PR があること）。
 
 | フィールド | 値                                                                                       |
 | ---------- | ---------------------------------------------------------------------------------------- |
@@ -40,16 +40,16 @@
 
 ## ループ・操作
 
-| 語          | 種別        | 意味                                                                                  |
-| ----------- | ----------- | ------------------------------------------------------------------------------------- |
-| `tick`      | ループ 1 周 | 観測 → 正規化 → action を 1 つ実行。**冪等で、前回の続きを仮定しない**                |
-| `action`    | 1 回の変更  | tick が実行する 1 つの操作。上限は `conductor/SKILL.md`                               |
-| `claim`     | 操作        | 課題を**引き受ける宣言**。二重に着手されないよう、remote branch を 1 つ作れた方が勝つ |
-| `reconcile` | 操作        | 今の状態と**あるべき状態**を見比べて、差を 1 つ埋める                                 |
+| 語          | 種別       | 意味                                                                                  |
+| ----------- | ---------- | ------------------------------------------------------------------------------------- |
+| `tick`      | 処理単位   | watcher から次の watcher まで。CLI の 1 呼び出しを「1 周」とし、上限まで繰り返す      |
+| `action`    | 1 回の変更 | tick が実行する 1 つの操作。上限は `conductor/SKILL.md`                               |
+| `claim`     | 操作       | 課題を**引き受ける宣言**。二重に着手されないよう、remote branch を 1 つ作れた方が勝つ |
+| `reconcile` | 操作       | 今の状態と**あるべき状態**を見比べて、差を 1 つ埋める                                 |
 
 ## 資源
 
-**同時に走れる数を制限するための「枠」**。上限に達したら、空くまで待たされる。守るものが違うので 1 語にまとめない。SSOT は `conductor/SKILL.md` の資源表。
+**同時に走れる数を制限するための「枠」**。上限に達したら、空くまで待たされる。守るものが違うので 1 語にまとめない。SSOT は `conductor/src/resources.ts`。
 
 - **lease（論理 lease）** — 「今この課題が書いてよい」という貸出。明示的に返さなくてよく、状態が進めば自動で移る（`lock` と呼ばないのはこのため）
 - **物理枠** — 実体そのものの数（worktree がいくつあるか、セッションがいくつ動いているか）
@@ -61,7 +61,7 @@
 | write       | 論理 lease | **課題**   |
 | integration | 論理 lease | **課題**   |
 
-**上限値と保持している条件（復元式）は `conductor/SKILL.md` の資源表が SSOT**。ここに写さない。
+上限値は `conductor/src/decide.ts` の `TickConfig` と `DEFAULT_CONFIG`、保持条件は `conductor/src/resources.ts` が SSOT。
 
 ## 記録
 
@@ -70,6 +70,7 @@
 | 語               | marker            | 書く人               | SSOT                                                 |
 | ---------------- | ----------------- | -------------------- | ---------------------------------------------------- |
 | claim の記録     | `claim`           | `conductor`          | `agents/shared/queue/same-branch.md`                 |
+| 入場を止める宣言 | `entry-block`     | 課題を持つ工程       | `agents/shared/queue/issue-contract.md`              |
 | 在庫の鮮度       | `ready`           | `refine`             | `agents/shared/queue/ready-record.md`                |
 | 計画             | `plan`            | `resolve`            | `resolve/SKILL.md`                                   |
 | 人待ちの記録     | `wait`            | `refine` / `resolve` | `agents/shared/queue/wait-record.md`                 |
@@ -78,10 +79,11 @@
 | 休止の記録       | `yield`           | `conductor`          | `conductor/references/protocols.md`                  |
 | 失敗の記録       | `retry`           | `conductor`          | `conductor/references/protocols.md`                  |
 | 周回の記録       | `cycle`           | `conductor`          | `conductor/references/protocols.md`                  |
+| 片付けの記録     | `cleanup`         | `conductor`          | `conductor/references/protocols.md`                  |
 | セッションまとめ | `report` / `halt` | `resolve`            | `agents/shared/queue/session-report.md`              |
 | 書いた commit    | `written`         | `resolve`            | `agents/skills/resolve/references/written-record.md` |
 
-**marker に版番号を付けない**。版で分岐する読み手が要るようになったことが一度も無く、upsert は marker 文字列の一致で既存を探すので、版を上げると古いコメントが見つからなくなって新旧が併存する（移行経路を与えるどころか孤児を作る）。schema の不一致は block の必須キーの有無で検出でき、`conductor` の「計画 schema 不明 → 全体 pause」がそれを受ける。
+marker の名前と形式は各記録の SSOT、更新手順は `agents/shared/queue/marker-upsert.md`。
 
 **譜面は marker コメントではない**。復旧契約ではなく、人が読み返すための面で、そのときの原本から作り直せる projection（履歴を持たない）。譜面は計画から着地まで複数の工程が同じ 1 ファイルを書き直す。規則は `agents/shared/queue/score.md`。
 
@@ -90,6 +92,6 @@
 | 語      | 意味                                                                                                                                                                                                                                                                                                               | SSOT                                 |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
 | 課題    | **1 branch で着地する 1 まとまり**。Issue 1 件とは限らず、group なら全 Issue で 1 件。`resolve` が進める単位・claim / 在庫 / lease を数える単位はこれ。例外は 2 つ —— `conductor` の正規化（一部だけ計画済みの group を表せなくなるため）と、在庫の鮮度（記録が成員ごとに別々に書かれるため）。どちらも Issue 単位 | `conductor/SKILL.md`                 |
-| group   | `Same branch as #N` で結ばれた Issue の集合。**推移的に閉じる**                                                                                                                                                                                                                                                    | `agents/shared/queue/same-branch.md` |
+| group   | `present` は記録の `members`。`absent` は本文の推移閉包。`unobservable` / `invalid` は単独                                                                                                                                                                                                                         | `agents/shared/queue/same-branch.md` |
 | 代表    | group の最小番号。**claim 時点で固定**し、以後引き直さない                                                                                                                                                                                                                                                         | `agents/shared/queue/same-branch.md` |
 | variant | **claim 済みとして渡されたか**。`managed` = 台帳と branch が claim を示す（枠が空くまで待つ）/ `interactive` = そうでない（待たずに進む）。起動主体では決まらない — 人が claim 済みの課題を直接渡せば `managed`                                                                                                    | `resolve/SKILL.md`                   |
