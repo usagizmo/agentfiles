@@ -16,11 +16,11 @@ description: >-
 
 ## project 差分
 
-起票先は課題を置く repo。その制御面 checkout の `.agents/skills/issue-project/` を、cwd で引かずに読む。無ければ差分は無い。あれば手順の前に読む。
+起票先の `<repo>` を確定し、その checkout の `.agents/skills/issue-project/` を手順の前に読む。cwd の repo と同一とは限らない。差分が無ければ共通手順で進める。
 
 ## 手順
 
 1. タイトルを上の形にする
 2. 本文を用意する。project 差分が対象行を要求するなら、その形式で置く
-3. `gh issue create` をこの入口だけが呼ぶ
-4. project 差分が指定した label を付ける
+3. `gh issue create --repo <repo> --title <title> --body-file <body-file>` をこの入口だけが呼び、作成した Issue を控える
+4. project 差分が指定した label を、同じ `<repo>` の作成済み Issue に付ける（`gh issue edit <number> --repo <repo> --add-label <label>`）

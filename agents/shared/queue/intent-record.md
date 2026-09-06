@@ -54,7 +54,7 @@ reason: <要らないと判定した根拠> # not-required のときだけ
 
 ## 提出より前に決着させる
 
-`confirmed` か `not-required` になるまで push し**ない**（工程の順は `resolve/SKILL.md`）。
+`confirmed` か `not-required` になるまで push し**ない**（工程の順は呼び出し元の工程表）。
 
 - 見せるのはローカルの成果物。push も PR も要ら**ない**（`revisions` の head もローカルで取る）
 - `pending` のまま push すると、承認を求めた版と CI が回った版が食い違う

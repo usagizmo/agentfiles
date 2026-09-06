@@ -59,7 +59,7 @@ description: >-
 
 ### 3. アドバイザーに渡す
 
-`scripts/advisors.sh start <prompt-file>`。起動・回収と選び方は同ディレクトリの `references/advisors.md`。
+`<skills root>/consult/scripts/advisors.sh start <prompt-file>`。起動・回収と選び方は `references/advisors.md`。
 
 ### 4. 統合して提示
 

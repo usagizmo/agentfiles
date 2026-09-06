@@ -263,7 +263,7 @@ const collectConflicts = (o: IssueObservation, progress: Progress): Conflict[] =
   // **PR を使わない面には当てない**（あちらは提出の証跡そのものが終端の条件）。
   // 守っているのは台帳が進んでいないことだけなので、`完了` には当てない
   // （`完了` なら依存は `closed かつ 完了` の経路で解ける）。
-  // **claim の remote branch が無い着地済みには当てない**（ship の既定が branch を消す）。
+  // claim の remote branch が無い着地済みには当てない。
   const landedWithoutClaimBranch = value(o.claimBranchExists) === false;
   if (
     !exemptSettled &&
