@@ -248,6 +248,21 @@ test("マーカー付きは完走", () => {
   expect(advisorComplete(MARKER_SNAPSHOT, MARKER)).toEqual({ ok: true });
 });
 
+test("空の入力欄と完了時間の脚注がある pane から marker を読める", () => {
+  const snapshot = `指摘なし
+  ${MARKER}
+
+✻ Churned for 2m 27s · done 11:00 PM
+
+────────────────────
+❯
+────────────────────
+  Model · context 7%
+  ⏸ plan mode on
+`;
+  expect(advisorComplete(snapshot, MARKER)).toEqual({ ok: true });
+});
+
 test("指令行はマーカーと一致しない", () => {
   const text = `応答の最後の行に ${MARKER} をそのまま書け。この指令行は書かない。`;
   expect(advisorComplete(text, MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
