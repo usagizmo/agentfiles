@@ -179,7 +179,7 @@ skill 固有の `references/`:
 | ------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `conductor`   | `harness.md` / `protocols.md` / `intake.md` / `tick.md` / `resources.md` / `scenarios.md` | multiplexer 差分 / 選んだ後の手順 / 人が渡してきたものの扱い / 正規化と action の論証 / 資源の論証 / **tick の意味論を固定する代表シナリオ** |
 | `resolve`     | `replan.md` / `intent.md` / `judgment.md` / `scope.md` / `written-record.md`              | **工程またはイベントの発生時**に読む（入口の SSOT は `SKILL.md` の工程表）                                                                   |
-| `docs`        | `review-prompt.md`                                                                        | 更新判定用                                                                                                                                   |
+| `docs`        | `review-prompt.md` / `review-contract.md` / `style.md`                                    | 更新判定用 / レビュー委譲の契約 / agent-facing 文書の記法                                                                                    |
 | `rabi-design` | `DESIGN.md`                                                                               | ブランドの仕様。front matter が SSOT                                                                                                         |
 
 skill 固有の `scripts/`:

@@ -1,6 +1,6 @@
 // 幅で折った散文の継続行を出す。gate は bun test。
 //
-// 規則の SSOT は agents/AGENTS.md「文章の書き方」。見るのは同一 prose block の継続行だけ。
+// 規則の SSOT は docs skill の references/style.md「形の選び方」。見るのは同一 prose block の継続行だけ。
 // fence / frontmatter / 表 / HTML ブロックの中は見ない。文末で終わる行は通す。
 
 import { marked } from "marked";
