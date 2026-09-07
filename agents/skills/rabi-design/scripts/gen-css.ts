@@ -11,8 +11,6 @@ import { parse } from "yaml";
 
 const SKILL = dirname(import.meta.dir);
 const DESIGN = join(SKILL, "references/DESIGN.md");
-const TOKENS_CSS = join(SKILL, "assets/rabi-tokens.css");
-const HEAD_HTML = join(SKILL, "assets/rabi-head.html");
 
 type Typography = {
   fontFamily: string;
@@ -24,7 +22,7 @@ type Typography = {
 type Shadow = { offset: string; light?: string; dark?: string; color?: string; inset?: boolean };
 type Family = { family: string; weight: string };
 /** component が持てるプロパティ。@google/design.md spec が定める。 */
-type Component = {
+export type Component = {
   backgroundColor?: string;
   textColor?: string;
   typography?: string;
@@ -34,7 +32,7 @@ type Component = {
   height?: string;
   width?: string;
 };
-type Design = {
+export type Design = {
   colors: Record<string, string>;
   typography: Record<string, Typography>;
   rounded: Record<string, string>;
@@ -43,6 +41,7 @@ type Design = {
   extensions: {
     dark: Record<string, string>;
     fonts: {
+      stylesheets: { family: string; href: string }[];
       webfont: { origin: string; assets: string; display: string; families: Family[] };
       stack: Record<"font" | "mono", string[]>;
     };
@@ -113,7 +112,7 @@ function verifyHref(f: Design["extensions"]["fonts"], href: string): void {
 function verifyFonts(d: Design): void {
   const f = d.extensions.fonts;
   const stacks = new Set(Object.values(f.stack).flat());
-  for (const w of f.webfont.families) {
+  for (const w of [...f.webfont.families, ...f.stylesheets]) {
     if (!stacks.has(w.family)) {
       throw new Error(`webfont の ${w.family} をどのスタックも引いていない`);
     }
@@ -211,7 +210,7 @@ const COMPONENT_PROPS: Record<string, { group: string; literal: RegExp }> = {
 };
 
 /** 状態の接尾。基底との差分だけを持ち、この 4 つ以外は作らない。 */
-const STATES = ["hover", "active", "selected", "checked"] as const;
+export const STATES = ["hover", "active", "selected", "checked"] as const;
 
 /** 差分だけの variant が、基底の無いところに浮いていないことを確かめる。 */
 function verifyVariants(d: Design): void {
@@ -386,6 +385,29 @@ function verifyShapes(d: Design): void {
     if (!LENGTH.test(focus[key])) throw bad(`extensions.focus.${key}`, focus[key]);
   }
   const f = d.extensions.fonts;
+  for (const sheet of list("extensions.fonts.stylesheets", f.stylesheets)) {
+    if (sheet === null || typeof sheet !== "object" || !("family" in sheet) || !("href" in sheet)) {
+      throw new Error("Invalid font stylesheet: expected family and href");
+    }
+    if (
+      typeof sheet.family !== "string" ||
+      !FAMILY.test(sheet.family) ||
+      typeof sheet.href !== "string"
+    ) {
+      throw new Error("Invalid font stylesheet: invalid family or href");
+    }
+    // href は HTML 属性へ直接出る。URL の正規化前に属性区切りと空白を拒否する
+    if (/[\s"'<> &]/.test(sheet.href)) throw new Error("Invalid font stylesheet: unsafe href");
+    let url: URL;
+    try {
+      url = new URL(sheet.href);
+    } catch {
+      throw new Error("Invalid font stylesheet: invalid URL");
+    }
+    if (url.protocol !== "https:" || url.username || url.password) {
+      throw new Error("Invalid font stylesheet: expected HTTPS without credentials");
+    }
+  }
   for (const [key, names] of Object.entries(f.stack)) {
     const path = `extensions.fonts.stack.${key}`;
     const items = list(path, names);
@@ -429,8 +451,9 @@ function verifyDark(d: Design): void {
   for (const name of Object.keys(d.extensions.dark)) {
     const light = d.colors[name];
     if (light === undefined) throw new Error(`extensions.dark の ${name} が colors に無い`);
-    // 別名は CSS に出ないので、dark を付けても届かない
-    if (REF.test(light)) throw new Error(`extensions.dark の ${name} は別名で、CSS に出ない`);
+    // 参照のテーマは参照先が持つ。別名側には値を持たせない
+    if (REF.test(light))
+      throw new Error(`extensions.dark の ${name} は別名で、テーマは参照先が持つ`);
   }
 }
 
@@ -445,7 +468,12 @@ function tokensCss(d: Design): string {
   push("  color-scheme: light dark;");
 
   for (const [name, value] of Object.entries(d.colors)) {
-    if (REF.test(value)) continue; // 別名は CSS に出さない
+    if (name === "primary" && REF.test(value)) continue;
+    const reference = REF.exec(value)?.[2];
+    if (reference !== undefined) {
+      push(`  --rabi-${name}: var(--rabi-${reference});`);
+      continue;
+    }
     const d2 = dark[name];
     push(`  --rabi-${name}: ${d2 ? `light-dark(${value}, ${d2})` : value};`);
   }
@@ -523,6 +551,9 @@ function headHtml(d: Design, href: string): string {
     `<link rel="preconnect" href="${origin}" />`,
     `<link rel="preconnect" href="${assets}" crossorigin />`,
     `<link rel="stylesheet" href="${href}" />`,
+    ...d.extensions.fonts.stylesheets.map(
+      (sheet) => `<link rel="stylesheet" href="${sheet.href}" />`,
+    ),
     "",
   ].join("\n");
 }
@@ -571,5 +602,3 @@ if (import.meta.main) {
     process.exit(1);
   }
 }
-
-export { DESIGN, HEAD_HTML, TOKENS_CSS };

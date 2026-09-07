@@ -9,40 +9,15 @@ import { expect, test } from "bun:test";
 import { parse } from "yaml";
 
 import { lint } from "@google/design.md/linter";
+import {
+  generate,
+  STATES,
+  type Component,
+  type Design,
+} from "../agents/skills/rabi-design/scripts/gen-css";
 
 const SKILL = join(import.meta.dir, "../agents/skills/rabi-design");
 const DESIGN_MD = readFileSync(join(SKILL, "references/DESIGN.md"), "utf8");
-
-type Shadow = { offset: string; light?: string; dark?: string; color?: string };
-type Component = {
-  backgroundColor?: string;
-  textColor?: string;
-  typography?: string;
-  rounded?: string;
-  padding?: string;
-  size?: string;
-  height?: string;
-  width?: string;
-};
-type Design = {
-  colors: Record<string, string>;
-  typography: Record<string, { fontFamily: string; fontSize: string }>;
-  rounded: Record<string, string>;
-  spacing: Record<string, string>;
-  components: Record<string, Component>;
-  extensions: {
-    dark: Record<string, string>;
-    fonts: {
-      webfont: { origin: string; families: { family: string; weight: string }[] };
-      stack: Record<string, string[]>;
-    };
-    focus: { color: string; width: string; offset: string };
-    elevation: Record<string, Shadow>;
-    motion: Record<string, string>;
-    derive: Record<string, { from: string; to: string; keep: number }>;
-    layout: Record<string, string>;
-  };
-};
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---/;
 
@@ -108,11 +83,28 @@ test("残す warning は既知の集合だけ。新しい warning が出たら�
   // 枠線にしか出ない色は component が引けない（許可プロパティに borderColor が無い）。
   // extensions は spec のスキーマ外で、export に載らないことを承知で置いている。
   expect(got).toEqual([
+    // transparent の載る面は公式 linter に渡せない。下の両テーマ検査で照合する
+    "contrast-ratio:components.badge-accent",
+    "contrast-ratio:components.badge-ink",
+    "contrast-ratio:components.badge-outline",
+    "contrast-ratio:components.button-ghost",
+    "contrast-ratio:components.button-outline",
+    "contrast-ratio:components.callout",
+    "contrast-ratio:components.chip",
+    "contrast-ratio:components.input",
+    "contrast-ratio:components.select",
     // switch の knob は塗りの差で読ませない。形を出すのは枠と内側の影
     "contrast-ratio:components.switch",
+    "contrast-ratio:components.textarea",
+    "orphaned-tokens:colors.caution",
+    "orphaned-tokens:colors.caution-text",
     "orphaned-tokens:colors.divider",
+    "orphaned-tokens:colors.info",
+    "orphaned-tokens:colors.info-text",
     "orphaned-tokens:colors.line",
     "orphaned-tokens:colors.shade",
+    "orphaned-tokens:colors.success",
+    "orphaned-tokens:colors.success-text",
     "token-like-ignored:extensions",
   ]);
 });
@@ -184,7 +176,6 @@ const NON_TOKEN_WORDS = [
   "focus-offset",
   "focus-width",
   "font-weight",
-  "ghost",
   "h2",
   "h3",
   "letter-spacing",
@@ -196,7 +187,6 @@ const NON_TOKEN_WORDS = [
   "min",
   "multiply",
   "narrow",
-  "outline",
   "rect",
   "screen",
   "src",
@@ -216,6 +206,23 @@ test("トークンを消すと、散文の検査が落ちる", () => {
 });
 
 // ============ 写しが SSOT と一致する ============
+
+test("色の役割参照を CSS へ残し、primary の形式別名だけを除く", () => {
+  const css = generate().find(({ path }) => path.endsWith("rabi-tokens.css"))?.content;
+  expect(css).toContain("--rabi-fill-accent: var(--rabi-accent);");
+  expect(css).toContain("--rabi-on-fill-ink: var(--rabi-paper);");
+  expect(css).not.toContain("--rabi-primary:");
+});
+
+test("追加のフォント stylesheet を head に生成する", async () => {
+  await withSandbox(async (dir) => {
+    edit(dir, (fm) => fm.replace("yakuhanjp@4.1.1", "yakuhanjp@4.1.2"));
+    const head = generate(dir).find(({ path }) => path.endsWith("rabi-head.html"))?.content;
+    expect(head).toContain(
+      'href="https://cdn.jsdelivr.net/npm/yakuhanjp@4.1.2/dist/css/yakuhanjp.css"',
+    );
+  });
+});
 
 test("assets が front matter と一致する", async () => {
   expect((await runCheck(SKILL)).code).toBe(0);
@@ -252,6 +259,16 @@ test("front matter を変えると --check が落ちる", async () => {
 
 const breaks: [string, (fm: string) => string, RegExp][] = [
   [
+    "追加フォントが https でない",
+    (fm) => fm.replace("href: https://cdn.jsdelivr.net", "href: http://cdn.jsdelivr.net"),
+    /Invalid font stylesheet/,
+  ],
+  [
+    "追加フォントがスタックに無い",
+    (fm) => fm.replace("        - YakuHanJP\n", ""),
+    /webfont の YakuHanJP/,
+  ],
+  [
     "dark に colors 外の役",
     (fm) => fm.replace('    ground: "#111111"', '    ground: "#111111"\n    nosuch: "#000000"'),
     /extensions\.dark の nosuch/,
@@ -260,10 +277,10 @@ const breaks: [string, (fm: string) => string, RegExp][] = [
     "component が無い色を引く",
     (fm) =>
       fm.replace(
-        '    backgroundColor: "{colors.accent}"\n    textColor: "{colors.on-accent}"\n    typography: "{typography.body}"',
+        '    backgroundColor: "{colors.fill-accent}"\n    textColor: "{colors.on-fill-accent}"\n    typography: "{typography.body}"',
         '    backgroundColor: "{colors.nosuch}"\n    textColor: "{colors.on-accent}"\n    typography: "{typography.body}"',
       ),
-    /components\.button-primary/,
+    /components\.button-fill/,
   ],
   [
     "focus が実在しない色を引く",
@@ -360,7 +377,7 @@ const breaks: [string, (fm: string) => string, RegExp][] = [
   ],
   [
     "rounded が参照でも var() へ写る",
-    (fm) => fm.replace("  r-md: 16px", '  r-md: "{spacing.gap-4}"'),
+    (fm) => fm.replace("  r-md: 18px", '  r-md: "{spacing.gap-4}"'),
     /stale:/,
   ],
   [
@@ -397,8 +414,8 @@ const breaks: [string, (fm: string) => string, RegExp][] = [
     "variant が基底と同じ値を写す",
     (fm) =>
       fm.replace(
-        '  chip-selected:\n    textColor: "{colors.accent-text}"',
-        '  chip-selected:\n    backgroundColor: "{colors.paper}"\n    textColor: "{colors.accent-text}"',
+        '  chip-selected:\n    backgroundColor: "{colors.fill-accent}"',
+        "  chip-selected:\n    backgroundColor: transparent",
       ),
     /components\.chip-selected が基底と同じ値を写している: backgroundColor/,
   ],
@@ -406,8 +423,8 @@ const breaks: [string, (fm: string) => string, RegExp][] = [
     "variant に差分が無い",
     (fm) =>
       fm.replace(
-        '  chip-selected:\n    textColor: "{colors.accent-text}"',
-        '  chip-selected:\n    backgroundColor: "{colors.paper}"',
+        '  chip-selected:\n    backgroundColor: "{colors.fill-accent}"\n    textColor: "{colors.on-fill-accent}"',
+        "  chip-selected:\n    backgroundColor: transparent",
       ),
     /components\.chip-selected が基底と同じで、差分が無い/,
   ],
@@ -598,15 +615,17 @@ function value(d: Design, name: string, theme: "light" | "dark"): string {
  */
 const COMPONENTS = [
   "badge-accent",
+  "badge-accent-solid",
   "badge-ink",
-  "badge-on-accent",
+  "badge-ink-solid",
   "badge-outline",
   "board",
   "button-ghost",
   "button-ghost-hover",
-  "button-on-accent",
+  "button-fill",
   "button-outline",
-  "button-primary",
+  "button-outline-hover",
+  "callout",
   "caption",
   "card",
   "checkbox",
@@ -622,7 +641,6 @@ const COMPONENTS = [
   "menu",
   "menu-item",
   "menu-item-hover",
-  "note-box",
   "page-title",
   "prose-body",
   "radio",
@@ -664,10 +682,8 @@ const NON_TEXT: { name: string; prop: "backgroundColor" | "textColor"; on: strin
  */
 const SHAPE_ONLY = new Set(["switch"]);
 
-/** 地を持たない component と、その下に来る面。 */
-const ON_SURFACE: Record<string, string> = { "button-outline": "accent" };
-
-const STATES = ["hover", "active", "selected", "checked"] as const;
+/** 透明な部品は紙・沈んだ紙・地の上に載る。accent 地での配色は derived 側で検査する。 */
+const TRANSPARENT_SURFACES = ["paper", "paper-2", "ground"];
 
 /** variant は差分だけを持つので、基底に重ねてから見る。 */
 function composed(d: Design, name: string): Component {
@@ -684,8 +700,11 @@ const withColors = (d: Design) =>
     const c = composed(d, name);
     if (c.textColor === undefined) return [];
     // 塗らない部品は、載る面の色で見る
-    const bg = c.backgroundColor === "transparent" ? ON_SURFACE[name] : c.backgroundColor;
-    return bg === undefined ? [] : [{ name, bg, fg: c.textColor }];
+    const fg = c.textColor;
+    if (c.backgroundColor === "transparent") {
+      return TRANSPARENT_SURFACES.map((bg) => ({ name: `${name} on ${bg}`, bg, fg }));
+    }
+    return c.backgroundColor === undefined ? [] : [{ name, bg: c.backgroundColor, fg }];
   });
 
 /** WCAG AA（通常の文字 4.5:1）を割る対を返す。 */
@@ -694,6 +713,32 @@ const contrastFailures = (d: Design, theme: "light" | "dark"): string[] =>
     .map(({ name, bg, fg }) => ({ name, r: ratio(value(d, bg, theme), value(d, fg, theme)) }))
     .filter(({ r }) => r < 4.5)
     .map(({ name, r }) => `${name}: ${r.toFixed(2)}:1`);
+
+/** 注記は罫と見出しだけが種別色を持つ。地は周囲の面を透かす。 */
+function calloutContrastFailures(d: Design): string[] {
+  return (["light", "dark"] as const).flatMap((theme) =>
+    ["info", "success", "caution", "accent"].flatMap((role) =>
+      TRANSPARENT_SURFACES.flatMap((surface) =>
+        [
+          { color: role, min: 3 },
+          { color: `${role}-text`, min: 4.5 },
+        ]
+          .filter(({ color, min }) => ratio(value(d, color, theme), value(d, surface, theme)) < min)
+          .map(({ color }) => `${theme} ${color} on ${surface}`),
+      ),
+    ),
+  );
+}
+
+test("注記の罫と見出しが両テーマの面から立つ", () => {
+  expect(calloutContrastFailures(design)).toEqual([]);
+});
+
+test("注記のコントラスト検査の characterization: 見出しを紙色にすると落ちる", () => {
+  const broken = structuredClone(design);
+  broken.colors["info-text"] = value(broken, "paper", "light");
+  expect(calloutContrastFailures(broken)).toContain("light info-text on paper");
+});
 
 test("component の顔ぶれが変わったら落ちる", () => {
   expect(Object.keys(design.components).sort()).toEqual([...COMPONENTS].sort());
@@ -839,26 +884,26 @@ function derivedColor(theme: "light" | "dark", name: string): number[] {
 
 /** `transparent` と混ぜた色が載る面。front matter は持てない。 */
 const ON_SURFACE_DERIVED: Record<string, string> = {
-  "outline-hover": "accent",
-  "outline-edge": "accent",
+  "on-accent-wash": "accent",
+  "on-accent-edge": "accent",
 };
 
 const derived = (theme: "light" | "dark") => {
   const onAccent = channels(value(design, "on-accent", theme));
   const accent = channels(value(design, "accent", theme));
   return {
-    "button-primary": ratioOf(accent, onAccent),
-    "button-primary-hover": ratioOf(derivedColor(theme, "accent-hover"), onAccent),
-    "button-primary-active": ratioOf(derivedColor(theme, "accent-active"), onAccent),
-    "button-on-accent-hover": ratioOf(derivedColor(theme, "on-accent-hover"), accent),
-    "button-outline-hover": ratioOf(derivedColor(theme, "outline-hover"), onAccent),
+    "button-fill": ratioOf(accent, onAccent),
+    "button-fill-hover": ratioOf(derivedColor(theme, "accent-hover"), onAccent),
+    "button-fill-active": ratioOf(derivedColor(theme, "accent-active"), onAccent),
+    "accent-surface-fill-hover": ratioOf(derivedColor(theme, "on-accent-hover"), accent),
+    "accent-surface-outline-hover": ratioOf(derivedColor(theme, "on-accent-wash"), onAccent),
   };
 };
 
 test("accent を沈める状態は AA を満たす", () => {
   for (const theme of ["light", "dark"] as const) {
     const d = derived(theme);
-    const fails = (["button-primary", "button-primary-hover", "button-primary-active"] as const)
+    const fails = (["button-fill", "button-fill-hover", "button-fill-active"] as const)
       .filter((n) => d[n] < 4.5)
       .map((n) => `${theme} ${n}: ${d[n].toFixed(2)}:1`);
     expect(fails).toEqual([]);
@@ -868,7 +913,7 @@ test("accent を沈める状態は AA を満たす", () => {
 test("accent へ寄せる状態も AA を満たす", () => {
   for (const theme of ["light", "dark"] as const) {
     const d = derived(theme);
-    const fails = (["button-on-accent-hover", "button-outline-hover"] as const)
+    const fails = (["accent-surface-fill-hover", "accent-surface-outline-hover"] as const)
       .filter((n) => d[n] < 4.5)
       .map((n) => `${theme} ${n}: ${d[n].toFixed(2)}:1`);
     expect(fails).toEqual([]);
@@ -879,7 +924,7 @@ test("outline の枠が accent 地から 3:1 で立つ", () => {
   const fails = (["light", "dark"] as const)
     .map((theme) => ({
       theme,
-      r: ratioOf(derivedColor(theme, "outline-edge"), channels(value(design, "accent", theme))),
+      r: ratioOf(derivedColor(theme, "on-accent-edge"), channels(value(design, "accent", theme))),
     }))
     .filter(({ r }) => r < 3)
     .map(({ theme, r }) => `${theme}: ${r.toFixed(2)}:1`);

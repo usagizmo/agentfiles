@@ -5,6 +5,16 @@
   --rabi-accent: #dc143c;
   --rabi-accent-text: light-dark(#d0123a, #ff3b5c);
   --rabi-on-accent: #ffffff;
+  --rabi-fill-accent: var(--rabi-accent);
+  --rabi-on-fill-accent: var(--rabi-on-accent);
+  --rabi-fill-ink: var(--rabi-ink);
+  --rabi-on-fill-ink: var(--rabi-paper);
+  --rabi-info: light-dark(#4a5a6a, #8fa3b5);
+  --rabi-info-text: light-dark(#3d4d5c, #a8bccc);
+  --rabi-success: light-dark(#009f5b, #3fbe7f);
+  --rabi-success-text: light-dark(#007e47, #57d094);
+  --rabi-caution: light-dark(#bf7a00, #d99a2b);
+  --rabi-caution-text: light-dark(#9a6100, #e5ad4a);
   --rabi-shade: #000000;
   --rabi-ground: light-dark(#f1f1f1, #111111);
   --rabi-paper: light-dark(#ffffff, #181818);
@@ -18,8 +28,8 @@
   --rabi-accent-hover: color-mix(in oklab, var(--rabi-accent) 88%, var(--rabi-shade));
   --rabi-accent-active: color-mix(in oklab, var(--rabi-accent) 76%, var(--rabi-shade));
   --rabi-on-accent-hover: color-mix(in oklab, var(--rabi-on-accent) 93%, var(--rabi-accent));
-  --rabi-outline-hover: color-mix(in oklab, var(--rabi-on-accent) 10%, transparent);
-  --rabi-outline-edge: color-mix(in oklab, var(--rabi-on-accent) 71%, transparent);
+  --rabi-on-accent-wash: color-mix(in oklab, var(--rabi-on-accent) 10%, transparent);
+  --rabi-on-accent-edge: color-mix(in oklab, var(--rabi-on-accent) 71%, transparent);
   --rabi-head-veil: color-mix(in oklab, var(--rabi-ground) 82%, transparent);
   --rabi-grid-dot: color-mix(in oklab, var(--rabi-divider) 62%, transparent);
   --rabi-board-dot: color-mix(in oklab, var(--rabi-divider) 55%, transparent);
@@ -35,8 +45,12 @@
   --rabi-e3-accent: 0 12px 28px rgb(88 6 22 / 0.4);
   --rabi-r-none: 0px;
   --rabi-r-sm: 6px;
-  --rabi-r-md: 16px;
+  --rabi-r-md: 18px;
   --rabi-r-full: 999px;
+  --rabi-hairline: 1px;
+  --rabi-rule: 2px;
+  --rabi-select-bar: 2px;
+  --rabi-gap-0_5: 2px;
   --rabi-gap-1: 4px;
   --rabi-gap-1_5: 6px;
   --rabi-gap-2: 8px;
@@ -58,6 +72,7 @@
   --rabi-pad-x: var(--rabi-gap-12);
   --rabi-pad-x-narrow: var(--rabi-gap-6);
   --rabi-content-max: 1280px;
+  --rabi-header-h: 56px;
   --rabi-ff-body: var(--rabi-font);
   --rabi-t-body: 14px;
   --rabi-fw-body: 400;
@@ -74,6 +89,10 @@
   --rabi-t-prose-h2: 21px;
   --rabi-fw-prose-h2: 600;
   --rabi-lh-prose-h2: 1.4;
+  --rabi-ff-doc: var(--rabi-font);
+  --rabi-t-doc: 15px;
+  --rabi-fw-doc: 400;
+  --rabi-lh-doc: 1.6;
   --rabi-ff-label: var(--rabi-font);
   --rabi-t-label: 12px;
   --rabi-fw-label: 400;
@@ -94,7 +113,7 @@
   --rabi-motion: 0.1s;
   --rabi-motion-lift: 0.28s;
   --rabi-motion-reveal: 0.7s;
-  --rabi-font: Inter, system-ui, 'Helvetica Neue', Arial, 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'BIZ UDPGothic', sans-serif;
+  --rabi-font: Inter, system-ui, 'Helvetica Neue', Arial, YakuHanJP, 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'BIZ UDPGothic', sans-serif;
   --rabi-mono: Menlo, 'Roboto Mono', Consolas, 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'BIZ UDPGothic', monospace;
 }
 

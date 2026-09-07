@@ -57,6 +57,8 @@ CSS の関数（`light-dark()` / `color-mix()` / `clamp()`）を front matter �
 
 対象は Rabi 名義の面 —— 製品 UI・LP・ドキュメント・図。
 
-ブランドの正は製品側のコンポーネントカタログで、この skill の正は `references/DESIGN.md`。食い違いを見つけたらカタログを正として front matter を取り直す。skill の中に正を 2 つ持た**ない**。
+ブランドの照合元は製品側のカタログと、カタログが読むトークン・共通部品・文書の CSS。この skill の SSOT は `references/DESIGN.md`。食い違いはカタログの実表示と CSS を確認し、front matter と本文を更新する。
+
+共有するのはブランドの値と適用規則。製品固有のルート・class API・テーマの起動処理は取り込ま**ない**。生成 CSS は単独の媒体向けで、製品の CSS と全トークン・テーマ属性が一致するとは扱わない。
 
 カタログの在処はここに書か**ない**（この repo は public）。人に聞く。
