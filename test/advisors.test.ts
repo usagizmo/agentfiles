@@ -18,7 +18,7 @@ import {
   readOnlyArgs,
   selectAdvisors,
   type Selection,
-} from "../agents/shared/advisors.ts";
+} from "../agents/skills/consult/scripts/advisors.ts";
 
 const rosterText = await Bun.file(ROSTER_URL).text();
 const roster = parseRoster(rosterText);
@@ -32,7 +32,7 @@ const toml = (json: string): string => {
         .map(([k, v]) => `${k} = ${JSON.stringify(v)}`)
         .join(", ")} }`,
   );
-  return `advisors = [${tables.join(", ")}]\n[executors]\n`;
+  return `advisors = [${tables.join(", ")}]\n`;
 };
 
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
@@ -202,9 +202,7 @@ test("cursor の read-only は --mode plan", () => {
 
 test("実体 file のコメントに grok 差し替えが残っている", () => {
   expect(roster.map((s) => s.kind)).not.toContain("grok");
-  expect(rosterText).toContain(
-    "# grok を起こすときは [executors.resolve] の kind と args に差し替える",
-  );
+  expect(rosterText).toContain('# grok を起こすときは kind = "grok"');
   expect(rosterText).not.toContain("_comment");
 });
 
@@ -218,8 +216,6 @@ args = []
 [[advisors]]
 kind = "cursor"
 args = ["--model", "x # not a comment"]
-
-[executors]
 `;
   const slots = parseRoster(text);
   expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
@@ -227,7 +223,7 @@ args = ["--model", "x # not a comment"]
 });
 
 test("advisors が無ければ止まる", () => {
-  expect(() => parseRoster('[executors.refine]\nkind = "claude"\nargs = []')).toThrow("advisors");
+  expect(() => parseRoster("# nothing\n")).toThrow("advisors");
 });
 
 test("トップレベルの未知キーは止まる", () => {
@@ -417,7 +413,15 @@ test("complete CLI は JSON と終了コードを返す", async () => {
   const output = join(dir, "out");
   await Bun.write(output, MARKER_SNAPSHOT);
   const proc = Bun.spawn(
-    ["bun", "agents/shared/advisors.ts", "complete", "--output", output, "--marker", MARKER],
+    [
+      "bun",
+      "agents/skills/consult/scripts/advisors.ts",
+      "complete",
+      "--output",
+      output,
+      "--marker",
+      MARKER,
+    ],
     { stdout: "pipe", stderr: "pipe", cwd: import.meta.dir + "/.." },
   );
   const [stdout, exited] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);

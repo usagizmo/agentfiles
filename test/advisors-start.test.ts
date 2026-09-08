@@ -62,7 +62,7 @@ path.write_text(str(int(path.read_text()) + 1 if path.exists() else 1))
       const proc = Bun.spawn(
         [
           "sh",
-          new URL("../agents/shared/advisors.sh", import.meta.url).pathname,
+          new URL("../agents/skills/consult/scripts/advisors.sh", import.meta.url).pathname,
           "start",
           join(dir, "prompt"),
         ],
