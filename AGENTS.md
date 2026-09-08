@@ -15,13 +15,13 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - 配布を止めたいなら、別の worktree で作業する（gate は merge ではなくそちら側にある）
 - 共通 `merge` skill の手順と検査（dirty・HEAD・祖先関係・失敗したら止まる）は**そのまま適用する**
 
-## 切り出しの受け皿
+## 統合
 
-**この repo は受け皿を持たない**（GitHub Issues は無効）。`~/.agents/AGENTS.md`「作業単位」の「切り出すと決めたものは受け皿へ置く」は、ここでは成立しない。
+GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。形は `merge` skill。
 
-統合は `temp` へ積んで `main` へ落とす。形は `merge` skill。待ち行列では**ない**。
+## 層契約
 
-受け皿を持つ project では、その project の AGENTS.md が置き場と最優先の位置を定める。
+層契約は `agents/AGENTS.md`。「特定 harness の設定側」はこの repo では `harnesses/<agent>/`。
 
 ## dotfiles への依存
 
@@ -63,9 +63,9 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 ### コミット例
 
 ```
-🤖 [agents] conductor の tick に成果ゼロの周の上限を足す
+🤖 [agents] consult の事後モードを指摘が尽きるまで回す
 
-- 実行器を回しても成果物が動かない周が続いたら選出対象外へ退避する
+- 1 巡で切り上げず、回収ヘッダが全員 rc=0 の巡でだけ打ち切る
 ```
 
 ## agent 設定の配置方針
@@ -73,13 +73,12 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - `./AGENTS.md` はこの repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場が決まる**（読む → `references/`、実行する → `scripts/`、成果物に使う → `assets/`）。大きさでは分けない。何を `references/` へ出すかの判断は `docs` skill の品質基準
-- `./agents/docs/` は人が全体を把握・監査するための資料。**agent へは投影しない**（`lib/inventory.sh` に載せない）。規約の本体は置かず、skills から導出した図と索引だけを持つ
-- `./test/` は `bun test` の gate。skills の `references/` `scripts/` `assets/`・`.githooks/`・tracked な `*.md` を検査する。agent へは投影し**ない**（`lib/inventory.sh` に載せない）
+- `./test/` は `bun test` の gate。skills の `scripts/` `assets/`・`.githooks/`・共通 `AGENTS.md` を検査する。agent へは投影し**ない**（`lib/inventory.sh` に載せない）
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置か**ない**
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイルへの symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（**空 overlay を先回りで作らない**）
 - **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。一覧は `lib/inventory.sh`
 
-共通 `agents/AGENTS.md` に書けるのは、その機能が無い harness でも代替手段で成立するルールまで（例: 譜面を HTML にして `open` する → 開けない環境ではパスを応答に書く）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ。
+共通 `agents/AGENTS.md` に書けるのは、その機能が無い harness でも代替手段で成立するルールまで（例: Plan Mode で提示する → 無い harness では構造化 Markdown + 明示 GO）。**機能が無いと成立しないルール**（harness 名・モデル名を前提にするもの）は該当 harness の overlay へ移す。共通 skills も同じ。
 
 共通 `agents/AGENTS.md` には文字数の上限がある。値・単位・理由・検査は `test/agents-md.test.ts`。
 
@@ -93,26 +92,18 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
 - 参照方向は常に個別 → 共通の**一方通行**。共通が特定 harness を知ってはいけない
-- アドバイザーの起動は `agents/shared/` の単一実体（`advisors.md` + `roster.toml` + `roster.ts` + `advisors.ts` + `advisors.sh`）にし、harness ごとの上書きを置か**ない**
-- **この repo が起こす agent の kind と args は `agents/shared/roster.toml` だけが持つ**（アドバイザー候補と conductor の実行器）。file を表ごとに分け**ない**（`advisors` と `executors` は同じ file）。project 差分に置か**ない**
+- アドバイザーの起動は `consult` skill の単一実体（`references/advisors.md` + `scripts/roster.toml` + `scripts/advisors.ts` + `scripts/advisors.sh`）にし、harness ごとの上書きも project 差分も置か**ない**
 
 ### skill 間で実体を共有するとき
 
 `agents/shared/<name>` を SSOT にし、使う skill から相対 symlink を張る。**どの skill にも所有させない。**
 
-**張り先も同じ規則で決まる**（拡張子ではない）。symlink は実体と同名にし、`../../../shared/<同名>`（queue は `../../../shared/queue/<同名>`）を指す。
+**張り先も同じ規則で決まる**（拡張子ではない）。symlink は実体と同名にし、`../../../shared/<同名>` を指す。
 
 - skill 本文に書くのは自分の相対パス**だけ**。投影先でも repo でも解決できる形にする
-- **`shared/` に置く条件は 1 つ**: 2 つ以上の skill が同じものを使っている。契約でも手順でもよい。1 つの skill しか使わないものは、その skill 側の対応する dir に実体で置く
-- **ドメインで 2 段に分ける**。`shared/` は普遍（どの project でも意味が通る）、`shared/queue/` はキュー機構専用（Issue・Status・claim・着地面・記録 marker を前提にするもの）
-- **`shared/queue/` を張れるのは queue package の構成員だけ**（一覧は `agents/skills/docs/scripts/audit-skills.sh` の `QUEUE_MEMBERS`）
-- **軸は skill の rank ではなくドメイン**。rank は将来ずれる代理でしかない
-- **shared が bare 名で参照する兄弟は、その shared を張った skill にも張る**（同じ `references/` に在ることが bare 名の前提）
-- 層をまたいでも同じ層どうしでも、参照先は `shared/` **だけ**。skill が別の skill の `references/` を覗く形を作らない
+- **`shared/` に置く条件は 1 つ**: 2 つ以上の skill が同じものを使っている。1 つの skill しか使わないものは、その skill 側の対応する dir に実体で置く
+- 参照先は `shared/` **だけ**。skill が別の skill の `references/` を覗く形を作らない
 - `~/.agents/shared` への投影は要ら**ない**（skill が相対 symlink で辿るため）
-- 実体の一覧は `agents/docs/structure.md`（**導出した索引**。規約は本ファイルが SSOT）
-
-**`shared/` は層検査に当たらない**。参照先が skill でなくなるので、キュー専用の概念が leaf へ流れる経路がここ 1 本だけ開いている。上のドメイン分割がその蓋。
 
 ### 配線の SSOT（スケール用）
 

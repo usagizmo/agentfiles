@@ -58,13 +58,13 @@ check_absolute_home_paths
 
 echo ""
 echo "## ランタイム"
-# **conductor の判断は bun が無いと動かない**（tick が `src/cli.ts` を呼ぶ）。
+# **consult のアドバイザー選出は bun が無いと動かない**（advisors.sh が advisors.ts を呼ぶ）。
 # 配線だけ通っていて実行器が無い状態は、走らせて初めて分かるので検査に載せる。
 # **ランタイム自体はこの repo が入れない**（dotfiles の mise が供給する）ので、直し方だけ示す。
 if command -v bun >/dev/null 2>&1; then
-  doctor_pass "bun がある（conductor の tick が動く）"
+  doctor_pass "bun がある（consult のアドバイザー選出が動く）"
 else
-  doctor_fail "bun が無い: conductor の tick が動かない（dotfiles の ./init.sh で mise を入れる）"
+  doctor_fail "bun が無い: consult のアドバイザー選出が動かない（dotfiles の ./init.sh で mise を入れる）"
 fi
 
 echo ""

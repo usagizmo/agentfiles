@@ -13,7 +13,6 @@
       "Read",
       "WebFetch",
       "WebSearch",
-      "Skill(tidy:*)",
       "Skill(docs:*)",
       "Skill(commit:*)"
     ],
