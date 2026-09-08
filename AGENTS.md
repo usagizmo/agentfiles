@@ -2,7 +2,7 @@
 
 ## この repo は public
 
-private な案件の repo 名・Issue / PR 番号・社内固有の文言を、tracked ファイルにも commit message にも書か**ない**。由来を残したいときは、何を直したかだけを書く。
+private な案件の repo 名・Issue / PR 番号・社内固有の文言を、tracked ファイルにも commit message にも**書かない**。由来を残したいときは、何を直したかだけを書く。
 
 **リンクの曖昧さを完全修飾で解こうとしない** —— `#123` を `org/private-repo#123` へ直すと、曖昧さの代わりに repo 名が公開される。
 
@@ -27,14 +27,14 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 
 配線 primitive と inventory API は dotfiles の `lib/links.sh` が SSOT。`lib/bootstrap.sh` が読み込み、在処は `DOTFILES_REPO` > 兄弟ディレクトリ の順に解決する。**見つからなければ止まる。**
 
-参照方向は agentfiles → dotfiles の一方通行。dotfiles 側は agentfiles を知ら**ない**。
+参照方向は agentfiles → dotfiles の一方通行。dotfiles 側は agentfiles を**知らない**。
 
 **次の規約は dotfiles の `AGENTS.md` が SSOT で、ここには写さない** —— symlink の貼り方、配布先に既に何かある場合の扱い、コレクション配線のルール、外部コマンド実行のルール、tracked ファイルに絶対 home パスを書かないこと。
 
 ## コミットメッセージ規約
 
 絵文字は変更の性質を、スコープは触った場所を表す。絵文字の一覧は `commit` skill の `references/gitmoji.md`。
-一覧に**ない**のは 🤖 だけで、agent の判断基準・発火条件を変えるときに使う。
+**一覧にない**のは 🤖 だけで、agent の判断基準・発火条件を変えるときに使う。
 
 ### 形式
 
@@ -73,8 +73,8 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 - `./AGENTS.md` はこの repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場が決まる**（読む → `references/`、実行する → `scripts/`、成果物に使う → `assets/`）。大きさでは分けない。何を `references/` へ出すかの判断は `docs` skill の品質基準
-- `./test/` は `bun test` の gate。skills の `scripts/` `assets/`・`.githooks/`・共通 `AGENTS.md` を検査する。agent へは投影し**ない**（`lib/inventory.sh` に載せない）
-- `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は置か**ない**
+- `./test/` は `bun test` の gate。skills の `scripts/` `assets/`・`.githooks/`・共通 `AGENTS.md` を検査する。agent へは**投影しない**（`lib/inventory.sh` に載せない）
+- `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は**置かない**
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイルへの symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（**空 overlay を先回りで作らない**）
 - **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。一覧は `lib/inventory.sh`
 
@@ -92,7 +92,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
 - 参照方向は常に個別 → 共通の**一方通行**。共通が特定 harness を知ってはいけない
-- アドバイザーの起動は `consult` skill の単一実体（`references/advisors.md` + `scripts/roster.toml` + `scripts/advisors.ts` + `scripts/advisors.sh`）にし、harness ごとの上書きも project 差分も置か**ない**
+- アドバイザーの起動は `consult` skill の単一実体（`references/advisors.md` + `scripts/roster.toml` + `scripts/advisors.ts` + `scripts/advisors.sh`）にし、harness ごとの上書きも project **差分も置かない**
 
 ### skill 間で実体を共有するとき
 
@@ -100,10 +100,10 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 
 **張り先も同じ規則で決まる**（拡張子ではない）。symlink は実体と同名にし、`../../../shared/<同名>` を指す。
 
-- skill 本文に書くのは自分の相対パス**だけ**。投影先でも repo でも解決できる形にする
+- skill 本文に書くのは**自分の相対パスだけ**。投影先でも repo でも解決できる形にする
 - **`shared/` に置く条件は 1 つ**: 2 つ以上の skill が同じものを使っている。1 つの skill しか使わないものは、その skill 側の対応する dir に実体で置く
-- 参照先は `shared/` **だけ**。skill が別の skill の `references/` を覗く形を作らない
-- `~/.agents/shared` への投影は要ら**ない**（skill が相対 symlink で辿るため）
+- 参照先は **`shared/` だけ**。skill が別の skill の `references/` を覗く形を作らない
+- `~/.agents/shared` への投影は**要らない**（skill が相対 symlink で辿るため）
 
 ### 配線の SSOT（スケール用）
 
@@ -129,4 +129,4 @@ hooks の tripwire:
 - `harnesses/<agent>/` 配下の空の `hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外。中身を埋めたり配線を外したりしない
 - 外部ツールによる上書きを 3 経路で検知する —— symlink 経由の in-place 書き込みは repo 側の git diff、unlink して実ファイルで置換は doctor の ❌、別名ファイルの投下は `inv_guard_dir` の ⚠️
 - **管理下 symlink 以外の投下を検知したい collection dir に `inv_guard_dir` を張る**（各 harness の hooks dir）。read-only で、自動削除はしない
-- 設定が harness home 直下に置かれる場合（codex）は vendor ファイルと同居するため張ら**ない**。symlink check だけで守る
+- 設定が harness home 直下に置かれる場合（codex）は vendor ファイルと同居するため**張らない**。symlink check だけで守る
