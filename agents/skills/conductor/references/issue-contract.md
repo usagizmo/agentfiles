@@ -1,1 +1,0 @@
-../../../shared/queue/issue-contract.md
