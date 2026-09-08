@@ -33,7 +33,7 @@ elif args[:2] == ['pane', 'split']:
 elif args[:2] == ['agent', 'start']:
     kind = args[args.index('--kind') + 1]
     attempt = count(kind + '.starts')
-    if kind == 'cursor':
+    if kind == 'grok':
         errors = json.loads((root / 'errors.json').read_text())
         code = errors[min(attempt - 1, len(errors) - 1)]
         print(json.dumps({'error': {'code': code}}), file=sys.stderr)
@@ -86,10 +86,10 @@ path.write_text(str(int(path.read_text()) + 1 if path.exists() else 1))
       expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
       const run = stdout.trim();
       expect(await readFile(join(run, "claude/start.rc"), "utf8")).toBe("0\n");
-      expect(await readFile(join(run, "cursor/start.rc"), "utf8")).toBe("1\n");
+      expect(await readFile(join(run, "grok/start.rc"), "utf8")).toBe("1\n");
       expect(await readFile(join(dir, "claude.prompts"), "utf8")).toBe("1");
-      expect(await Bun.file(join(dir, "cursor.prompts")).exists()).toBe(false);
-      expect(Number(await readFile(join(dir, "cursor.starts"), "utf8"))).toBe(starts);
+      expect(await Bun.file(join(dir, "grok.prompts")).exists()).toBe(false);
+      expect(Number(await readFile(join(dir, "grok.starts"), "utf8"))).toBe(starts);
       const sleepFile = Bun.file(join(dir, "sleeps"));
       expect((await sleepFile.exists()) ? Number(await sleepFile.text()) : 0).toBe(sleeps);
     } finally {

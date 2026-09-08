@@ -3,7 +3,6 @@
 #
 # args は `herdr agent start <名前> --kind <kind> --pane <id> --` 以降。
 # 空配列ならその kind の harness 既定。
-# cursor の実行ファイルは cursor-agent。kind は cursor。
 #
 # claude / opus 5 high:
 #   kind = "claude"
@@ -13,8 +12,10 @@
 #   kind = "codex"
 #   args = ["--model", "gpt-5.6", "-c", "model_reasoning_effort=high"]
 #
-# grok を起こすときは kind = "grok"、args = ["--model", "grok-4.6", "--effort", "high"] に差し替える。
-# members は変えない。
+# 3 枠目は cursor 経由に差し替えられる（members は変えない）:
+#   kind = "cursor"
+#   args = ["--model", "cursor-grok-4.6-high"]
+# cursor の実行ファイルは cursor-agent。kind は cursor。
 
 [[advisors]]
 kind = "claude"
@@ -25,6 +26,6 @@ kind = "codex"
 args = []
 
 [[advisors]]
-kind = "cursor"
-args = ["--model", "cursor-grok-4.6-high"]
+kind = "grok"
+args = ["--model", "grok-4.6", "--effort", "high"]
 members = ["grok", "cursor"]

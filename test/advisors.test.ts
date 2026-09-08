@@ -38,20 +38,20 @@ const toml = (json: string): string => {
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "cursor"]);
+  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "grok"]);
   expect(roster[2]?.members).toEqual(["grok", "cursor"]);
-  expect(roster[2]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
+  expect(roster[2]?.args).toEqual(["--model", "grok-4.6", "--effort", "high"]);
 });
 
-test("claude は codex + cursor", () => {
+test("claude は codex + grok", () => {
   const r = selectAdvisors(roster, "claude");
-  expect(kinds(r)).toEqual(["codex", "cursor"]);
+  expect(kinds(r)).toEqual(["codex", "grok"]);
   expect(r.warning).toBe(false);
 });
 
-test("codex は claude + cursor", () => {
+test("codex は claude + grok", () => {
   const r = selectAdvisors(roster, "codex");
-  expect(kinds(r)).toEqual(["claude", "cursor"]);
+  expect(kinds(r)).toEqual(["claude", "grok"]);
   expect(r.warning).toBe(false);
 });
 
@@ -163,12 +163,12 @@ test("壊れた TOML はパーサの位置を残す", () => {
 });
 
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
-  const cursor = roster.find((s) => s.kind === "cursor");
-  if (cursor === undefined) throw new Error("cursor 枠が無い");
-  const argv = herdrStartArgv(cursor, { name: "a-cursor-x", pane: "w1:p1" });
+  const grok = roster.find((s) => s.kind === "grok");
+  if (grok === undefined) throw new Error("grok 枠が無い");
+  const argv = herdrStartArgv(grok, { name: "a-grok-x", pane: "w1:p1" });
   expect(argv).toContain("--");
   const extra = argv.slice(argv.indexOf("--") + 1);
-  expect(extra).toEqual([...cursor.args, ...readOnlyArgs("cursor")]);
+  expect(extra).toEqual([...grok.args, ...readOnlyArgs("grok")]);
 });
 
 test("空の args でも read-only は付く", () => {
@@ -200,9 +200,9 @@ test("cursor の read-only は --mode plan", () => {
   ]);
 });
 
-test("実体 file のコメントに grok 差し替えが残っている", () => {
-  expect(roster.map((s) => s.kind)).not.toContain("grok");
-  expect(rosterText).toContain('# grok を起こすときは kind = "grok"');
+test("実体 file のコメントに cursor への差し替えが残っている", () => {
+  expect(roster.map((s) => s.kind)).not.toContain("cursor");
+  expect(rosterText).toContain('#   args = ["--model", "cursor-grok-4.6-high"]');
   expect(rosterText).not.toContain("_comment");
 });
 

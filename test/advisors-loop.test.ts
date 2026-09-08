@@ -29,7 +29,7 @@ elif args[:2] == ['pane', 'split']:
     result = {'pane': {'pane_id': 'test-right'}}
 elif args[:2] == ['agent', 'start']:
     kind = args[args.index('--kind') + 1]
-    if kind == 'cursor':
+    if kind == 'grok':
         print(json.dumps({'error': {'code': 'timeout'}}), file=sys.stderr)
         sys.exit(1)
     result = {}
@@ -106,7 +106,7 @@ test("巡をまたいで同じ agent に送り、出力は今の巡だけを返�
     const first = await run(dir, ["collect", runDir, "5"]);
     expect(first.exitCode).toBe(0);
     expect(first.stdout).toContain("=== claude 巡 1 (rc=0) ===");
-    expect(first.stdout).toContain("=== cursor 巡 1 (rc=1 不在) ===");
+    expect(first.stdout).toContain("=== grok 巡 1 (rc=1 不在) ===");
     expect(await readFile(join(runDir, "claude/out.1"), "utf8")).toContain("answer 1");
 
     const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
@@ -115,7 +115,7 @@ test("巡をまたいで同じ agent に送り、出力は今の巡だけを返�
       stdout: "2\n",
     });
     expect(await readFile(join(dir, "claude.prompts"), "utf8")).toBe("2");
-    expect(await Bun.file(join(dir, "cursor.prompts")).exists()).toBe(false);
+    expect(await Bun.file(join(dir, "grok.prompts")).exists()).toBe(false);
 
     const second = await run(dir, ["collect", runDir, "5"]);
     expect(second.exitCode).toBe(0);
