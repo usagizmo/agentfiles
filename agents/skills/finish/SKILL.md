@@ -1,12 +1,12 @@
 ---
 name: finish
-description: 実装が一段落したら必ず実行する仕上げ。規模を判定し、consult（事後）→ docs → commit を順に実行する。
+description: 実装が一段落したら必ず実行する仕上げ。規模を判定し、consult（ループ）→ docs → commit を順に実行する。
 ---
 
 # 仕上げ
 
 1. 規模を判定する（定義は `~/.agents/AGENTS.md` の「規模」）。実装中に `consult` を使ったなら中規模以上
-2. 中規模以上: `consult`（深い・事後）
+2. 中規模以上: `consult`（ループ）
 3. `docs`
 4. `commit`
 

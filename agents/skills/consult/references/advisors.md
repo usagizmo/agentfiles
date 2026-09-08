@@ -6,24 +6,23 @@
 
 **起動できなくても別の起動方式へ倒さない**。
 
-## 起動と回収
-
-**起動と回収は別コマンドで実行する**。
+## 起動・対話・回収・終了
 
 ```
-<skills root>/consult/scripts/advisors.sh start <prompt-file>    # run dir を stdout へ返す
-<skills root>/consult/scripts/advisors.sh collect <run-dir> [秒] # 出揃うまで待って出力
+<skills root>/consult/scripts/advisors.sh start <prompt-file>      # run dir を stdout へ返し、巡 1 を送る
+<skills root>/consult/scripts/advisors.sh collect <run-dir> [秒]   # 今の巡が出揃うまで待って出力
+<skills root>/consult/scripts/advisors.sh ask <run-dir> <prompt-file>  # 次の巡を同じ agent へ送る
+<skills root>/consult/scripts/advisors.sh close <run-dir>          # tab を閉じる
 ```
 
 - **prompt は `mktemp` で作ったファイルに書いて渡す**。`PROMPT=$(mktemp "${TMPDIR:-/tmp}/consult-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、**出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、以降の各コマンドで再設定する）
 - **kind の位置引数は渡さない**
-- **`start` が返した run dir を控え、`collect` にそのまま渡す**（shell 変数はコマンド間で保持されない）
-- **1 run 1 回**。回収済みの run dir を渡すと落ちる。古いパスを貼っても前回の出力は返らない
-- 待ち時間の既定はスクリプト側。足りなければ第 2 引数で伸ばす
-- 完走の述語と未完理由は `advisors.ts` の `complete` と `advisors.sh` の collect
-- 未完了があれば非ゼロで終了する。呼び出し側はマーカーを知らなくてよい
-- 回収したら run dir は消してよい（prompt と各出力が残る）
-- **作った tab は collect が閉じる**
+- **`start` が返した run dir を控え、以降のコマンドにそのまま渡す**
+- 巡は `start` が 1、`ask` のたびに +1。**`ask` は今の巡を `collect` してから**。timeout した agent は確定せず、再 `collect` で続きを待てる。`ask` は、timeout した agent が止まったまま完走していなければ終端して残りで進み、完走していれば `collect` を要求し、まだ働いていれば止まる
+- agent は文脈を保っている。`ask` の本文は 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
+- 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle は読むきっかけであって完了ではない
+- 回収ヘッダの `rc≠0` は未完了。`blocked`（承認待ち）・`done`（pane 喪失）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
+- **どのモードでも最後に `close` を呼ぶ**。失敗で抜けるときも同じ
 
 ## レイアウト
 
