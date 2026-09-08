@@ -423,7 +423,7 @@ light と dark は同じ骨格を持つ。dark は反転ではなく、同じ役
 - **`divider` / `edge` / `line`** —— 線の 3 段。紙の縁 / 操作の縁 / 面の中の区切り
 - **`shade`** —— 混色の相手専用。面・文字・線に直接使わない
 
-`primary` は `accent` の別名で、DESIGN.md 形式（npm の @google/design.md）の推奨名に接続するためだけに在る。CSS には出**ない**。
+`primary` は `accent` の別名で、DESIGN.md 形式（npm の @google/design.md）の推奨名に接続するためだけに在る。CSS には**出ない**。
 
 塗り部品は `fill-accent` と `on-fill-accent`、または `fill-ink` と `on-fill-ink` を対で使う。地だけ・文字だけを差し替えない。これらの役割参照は CSS にも残す。
 
@@ -431,24 +431,24 @@ light と dark は同じ骨格を持つ。dark は反転ではなく、同じ役
 
 front matter の `colors` が light の値、`extensions.dark` が同名の dark の値。両方を持つ役は `light-dark()` で 1 つの `--rabi-*` になる。値を直に持ち `dark` に現れない役はテーマ不変。役割参照のテーマは参照先が持つ。
 
-既定は OS に従う。明示して切り替えるときは `:root` の `data-theme` を `light` か `dark` にする。JS で色を書き換え**ない**。
+既定は OS に従う。明示して切り替えるときは `:root` の `data-theme` を `light` か `dark` にする。JS で**色を書き換えない**。
 
-導出色は色トークンでは**ない**。混ぜる 2 色と割合は `extensions.derive` が持ち、生成 CSS が `color-mix(in oklab, ...)` を組み立てる。`transparent` と混ぜたものは、載る面の色で見え方が決まる。
+**導出色は色トークンではない**。混ぜる 2 色と割合は `extensions.derive` が持ち、生成 CSS が `color-mix(in oklab, ...)` を組み立てる。`transparent` と混ぜたものは、載る面の色で見え方が決まる。
 
-`accent` 地の上での線と枠は `on-accent-edge`、薄い hover 地は `on-accent-wash`。別の色を持ち込ま**ない**。
+`accent` 地の上での線と枠は `on-accent-edge`、薄い hover 地は `on-accent-wash`。**別の色を持ち込まない**。
 
 ## Typography
 
 読み込む webfont は `extensions.fonts.webfont` と `extensions.fonts.stylesheets`、媒体ごとの書体と fallback の順序は `extensions.fonts.stack` に従う。YakuHanJP は和文の約物に使う。
 
-`local()` だけを `src` に持つ別名を作ら**ない**。
+`local()` だけを `src` に持つ**別名を作らない**。
 
 `<head>` に貼る webfont の `<link>` は [`../assets/rabi-head.html`](../assets/rabi-head.html)、フォントスタックは [`../assets/rabi-tokens.css`](../assets/rabi-tokens.css)。どちらも front matter の `extensions.fonts` から生成する。
 
 規模の規則:
 
 - 本文は `body` 固定。文書本文は `prose`、説明・注記の行送りは `doc`
-- 面の見出し（hero・CTA・statement・ページ・セクション）は `clamp()` で可変にする。トークンに**しない** —— 面ごとに下限・上限が違う。文書の見出し（`prose-h2` / `subheading`）は固定で、トークンを引く
+- 面の見出し（hero・CTA・statement・ページ・セクション）は `clamp()` で可変にする。**トークンにしない** —— 面ごとに下限・上限が違う。文書の見出し（`prose-h2` / `subheading`）は固定で、トークンを引く
 - メタは `meta` の mono + `text-transform: uppercase`。字間は `meta` の既定を使い、縦書きの飾りラベル・kicker は 0.2em 以上へ広げる。badge と chip は 0.12em。`label` 系は sans で、mono に**しない**
 - 見出しの `font-weight` は 600 まで。700 は大きく見せる数値だけ
 - 見出しには `letter-spacing` の負値を当てる。大きいほど詰める（-0.01em 〜 -0.03em）
@@ -499,7 +499,7 @@ light と dark で影の色が変わる。light は ink 寄りの薄い影、dar
 
 影を持つ面のうち、accent で塗った面と accent 地に載る白い面は `e1-accent` 〜 `e3-accent` を使う。ニュートラルの影を使い回さない。
 
-内側へ沈める影は `e-inset` の 1 つだけ。外へ出す影と混ぜ**ない**。
+内側へ沈める影は `e-inset` の 1 つだけ。**外へ出す影と混ぜない**。
 
 深さは影だけでは作らない。
 
@@ -509,7 +509,7 @@ light と dark で影の色が変わる。light は ink 寄りの薄い影、dar
 
 ## Shapes
 
-角丸は用途で決まる。大きさでは決まら**ない**。
+角丸は用途で決まる。**大きさでは決まらない**。
 
 | 対象                                                    | 角丸     |
 | ------------------------------------------------------- | -------- |
@@ -518,13 +518,13 @@ light と dark で影の色が変わる。light は ink 寄りの薄い影、dar
 | 大きい面（`board`・`textarea`・composer）               | `r-md`   |
 | 区切り線・レール                                        | `r-none` |
 
-同じ面の中で紙と操作の角丸を揃え**ない**。差が役の違いを表す。
+**同じ面の中で紙と操作の角丸を揃えない**。差が役の違いを表す。
 
 アイコンは lucide の geometry を inline SVG または CSS mask で置き、`currentColor` に追従させる。mask の素材は npm の `lucide-static` から取る。操作内の SVG は幅・高さを 1em に揃える。矢印も icon にし、取れないときは同じ太さの線で描く。絵文字で代用しない。
 
 ## Components
 
-原子だけを規定する。LP の複合ブロック（hero・statement・機能カード・料金表・FAQ・更新履歴・キャンバス盤）は原子の組み合わせで作る。クラス名を API にし**ない**。
+原子だけを規定する。LP の複合ブロック（hero・statement・機能カード・料金表・FAQ・更新履歴・キャンバス盤）は原子の組み合わせで作る。クラス名を API に**しない**。
 
 ### 操作
 
@@ -611,7 +611,7 @@ focus と disabled は component に**持たせない**。全ての操作要素�
 
 印の色は選択後の component から取る。`backgroundColor` が部品の地、`textColor` が**その上に載る印**（チェック・丸・knob）。
 
-寸法は front matter が持つ。ここに書くのは front matter が持て**ない**形だけ。
+寸法は front matter が持つ。ここに書くのは front matter が**持てない**形だけ。
 
 | 部品       | 形                                                                                                                                            |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -700,10 +700,10 @@ scroll-in の要素は既定で表示する。JS が監視を開始したあと�
 
 ## Do's and Don'ts
 
-本文に無い規則だけを置く。本文の規則を写さ**ない**。
+本文に無い規則だけを置く。**本文の規則を写さない**。
 
 - 同じ操作群で強調する fill ボタンは 1 つにする
-- 付箋の回転は ±2.4° まで。傾けすぎ**ない**
+- 付箋の回転は ±2.4° まで。**傾けすぎない**
 - 左レールのラベル・ドットグリッド・グレインは装飾で、情報を載せない。右レールの導線は操作要素として扱う
 - 操作できる要素の当たり判定は `control-xs` 以上にする
-- 色だけで意味を示さ**ない**。形・文字・位置を併せる
+- **色だけで意味を示さない**。形・文字・位置を併せる
