@@ -12,7 +12,7 @@
 //   1  観測に失敗した（**watcher は呼び出し側が直前の snapshot で張る**）
 //   2  設定が壊れている（fail-closed。何も選ばずに止まる）
 
-import { ConfigError, loadProjectFiles, resolveSurfaces } from "./config.ts";
+import { ConfigError, loadExecutors, loadProjectConfig, resolveSurfaces } from "./config.ts";
 import { decide, type TickInput } from "./decide.ts";
 import { observeTick } from "./observe.ts";
 import { createPort } from "./port.ts";
@@ -78,7 +78,9 @@ const runTick = async (): Promise<void> => {
 
   const config = (() => {
     try {
-      return loadProjectFiles(configPath);
+      // 実行器は Decision が参照しない。壊れていれば起こす段で止まるので、周の頭で検証して捨てる。
+      loadExecutors();
+      return loadProjectConfig(configPath);
     } catch (error) {
       return fail(
         2,

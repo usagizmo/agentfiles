@@ -11,7 +11,8 @@ import {
   ConfigError,
   extractHarnessCmd,
   parseConfig,
-  parseWiring,
+  loadExecutors,
+  parseExecutors,
   resolveSurfaces,
 } from "../src/config.ts";
 import { parseJsonc } from "../src/jsonc.ts";
@@ -642,33 +643,37 @@ describe("composer が受け付ける状態での agent prompt", () => {
   });
 });
 
-describe("実行器の配線", () => {
-  const wiring = {
+describe("実行器", () => {
+  const executors = {
     refine: { kind: "claude", args: [] as const },
     resolve: { kind: "grok", args: ["--model", "x"] as const },
   };
 
   test("工程ごとに kind と args を読む", () => {
-    expect(parseWiring(wiring)).toEqual({
+    expect(parseExecutors(executors)).toEqual({
       refine: { kind: "claude", args: [] },
       resolve: { kind: "grok", args: ["--model", "x"] },
     });
   });
 
   test("工程が 1 つでも欠けたら止まる", () => {
-    expect(() => parseWiring({ refine: wiring.refine })).toThrow("resolve");
+    expect(() => parseExecutors({ refine: executors.refine })).toThrow("resolve");
   });
 
   test("kind が空なら止まる（既定へ倒さない）", () => {
-    expect(() => parseWiring({ ...wiring, resolve: { kind: "", args: [] } })).toThrow(ConfigError);
+    expect(() => parseExecutors({ ...executors, resolve: { kind: "", args: [] } })).toThrow(
+      ConfigError,
+    );
   });
 
   test("args の空要素は止まる", () => {
-    expect(() => parseWiring({ ...wiring, resolve: { kind: "grok", args: [""] } })).toThrow("args");
+    expect(() => parseExecutors({ ...executors, resolve: { kind: "grok", args: [""] } })).toThrow(
+      "args",
+    );
   });
 
-  test("配線以外のキーは止まる", () => {
-    expect(() => parseWiring({ ...wiring, ghRepo: "acme/control" })).toThrow("ghRepo");
+  test("実行器以外のキーは止まる", () => {
+    expect(() => parseExecutors({ ...executors, ghRepo: "acme/control" })).toThrow("ghRepo");
   });
 
   test("tracked の executors は未知として止まる", () => {
@@ -682,7 +687,7 @@ describe("実行器の配線", () => {
   });
 });
 
-describe("配線の JSONC", () => {
+describe("実行器の JSONC", () => {
   const body = `{
     // kind は herdr agent start --kind
     "refine": { "kind": "claude", "args": [] },
@@ -694,10 +699,32 @@ describe("配線の JSONC", () => {
   }`;
 
   test("コメントと末尾カンマを読んで args の文字列は残す", () => {
-    expect(parseWiring(parseJsonc(body))).toEqual({
+    expect(parseExecutors(parseJsonc(body))).toEqual({
       refine: { kind: "claude", args: [] },
       resolve: { kind: "grok", args: ["--model", "x // not a comment"] },
     });
+  });
+});
+
+describe("実行器の読み込み", () => {
+  test("references/executors.json は既定の在処で読める", () => {
+    const loaded = loadExecutors();
+    expect(loaded.refine.kind).not.toBe("");
+    expect(loaded.resolve.kind).not.toBe("");
+  });
+
+  test("file が無ければ在処と必要なキーを出して止まる", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "executors-"));
+    const missing = join(dir, "executors.json");
+    expect(() => loadExecutors(missing)).toThrow(missing);
+    expect(() => loadExecutors(missing)).toThrow("必要なキー");
+  });
+
+  test("壊れていれば在処を出して止まる", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "executors-"));
+    const broken = join(dir, "executors.json");
+    await writeFile(broken, "{ not json");
+    expect(() => loadExecutors(broken)).toThrow(broken);
   });
 });
 

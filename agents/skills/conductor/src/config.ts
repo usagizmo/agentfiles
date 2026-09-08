@@ -4,7 +4,7 @@
 // 間違ったものを掴む項目（Status の対応・着地面の座標表）には置かず、欠けたら止まる。
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { parseJsonc } from "./jsonc.ts";
 import type { TickConfig } from "./decide.ts";
 import { DEFAULT_CONFIG } from "./decide.ts";
@@ -51,8 +51,8 @@ export type ExecutorSpec = {
   readonly args: readonly string[];
 };
 
-/** `--config` の隣の untracked `config.local.json`。座標キーを持たない。 */
-export type WiringConfig = {
+/** 工程ごとの実行器。`references/executors.json` が SSOT で、project 差分は持たない。 */
+export type ExecutorsConfig = {
   readonly refine: ExecutorSpec;
   readonly resolve: ExecutorSpec;
 };
@@ -119,13 +119,13 @@ const TRACKED_KEYS = new Set([
   "tick",
 ]);
 
-const WIRING_KEYS = new Set(["refine", "resolve"]);
+const EXECUTORS_KEYS = new Set(["refine", "resolve"]);
 
 const TRACKED_REQUIRED = "ghRepo, projectOrg, projectNumber, statusField, statusMap, surfaces";
-const WIRING_REQUIRED = "refine.kind, refine.args, resolve.kind, resolve.args";
+const EXECUTORS_REQUIRED = "refine.kind, refine.args, resolve.kind, resolve.args";
 
-const wrapLoadError = (label: "設定" | "配線", abs: string, detail: unknown): ConfigError => {
-  const needed = label === "設定" ? TRACKED_REQUIRED : WIRING_REQUIRED;
+const wrapLoadError = (label: "設定" | "実行器", abs: string, detail: unknown): ConfigError => {
+  const needed = label === "設定" ? TRACKED_REQUIRED : EXECUTORS_REQUIRED;
   const msg = detail instanceof ConfigError ? detail.message : String(detail);
   return new ConfigError(`${label}を読めない: ${abs}\n${msg}\n必要なキー: ${needed}`);
 };
@@ -227,32 +227,33 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
 };
 
 const parseExecutor = (stage: "refine" | "resolve", raw: unknown): ExecutorSpec => {
-  if (raw === undefined) throw new ConfigError(`配線に ${stage} が無い`);
+  if (raw === undefined) throw new ConfigError(`実行器に ${stage} が無い`);
   if (typeof raw !== "object" || raw === null)
-    throw new ConfigError(`配線の ${stage} が object ではない`);
+    throw new ConfigError(`実行器の ${stage} が object ではない`);
   const o = raw as Record<string, unknown>;
   for (const key of Object.keys(o)) {
-    if (key !== "kind" && key !== "args") throw new ConfigError(`配線の ${stage}.${key} は未知`);
+    if (key !== "kind" && key !== "args") throw new ConfigError(`実行器の ${stage}.${key} は未知`);
   }
   const kind = o["kind"];
-  if (typeof kind !== "string" || kind === "") throw new ConfigError(`配線の ${stage}.kind が無い`);
+  if (typeof kind !== "string" || kind === "")
+    throw new ConfigError(`実行器の ${stage}.kind が無い`);
   const argsRaw = o["args"];
-  if (!Array.isArray(argsRaw)) throw new ConfigError(`配線の ${stage}.args が配列ではない`);
+  if (!Array.isArray(argsRaw)) throw new ConfigError(`実行器の ${stage}.args が配列ではない`);
   const args: string[] = [];
   for (const item of argsRaw) {
     if (typeof item !== "string" || item === "")
-      throw new ConfigError(`配線の ${stage}.args に空がある`);
+      throw new ConfigError(`実行器の ${stage}.args に空がある`);
     args.push(item);
   }
   return { kind, args };
 };
 
-/** 配線を読む。工程は kind と args の object。文字列は受けない。kind 既定へ倒さない。 */
-export const parseWiring = (raw: unknown): WiringConfig => {
-  if (typeof raw !== "object" || raw === null) throw new ConfigError("配線が object ではない");
+/** 実行器を読む。工程は kind と args の object。文字列は受けない。kind 既定へ倒さない。 */
+export const parseExecutors = (raw: unknown): ExecutorsConfig => {
+  if (typeof raw !== "object" || raw === null) throw new ConfigError("実行器が object ではない");
   const o = raw as Record<string, unknown>;
   for (const key of Object.keys(o)) {
-    if (!WIRING_KEYS.has(key)) throw new ConfigError(`配線の ${key} は未知`);
+    if (!EXECUTORS_KEYS.has(key)) throw new ConfigError(`実行器の ${key} は未知`);
   }
   return {
     refine: parseExecutor("refine", o["refine"]),
@@ -260,39 +261,35 @@ export const parseWiring = (raw: unknown): WiringConfig => {
   };
 };
 
-export const WIRING_FILE = "config.local.json";
+export const EXECUTORS_JSON = `${import.meta.dir}/../references/executors.json`;
 
-/**
- * `--config` と隣の配線を読む。片方に他方のキー、欠落・破損・工程欠けは止まる。
- * 返すのは座標だけ。配線は検証して捨てる（Decision は参照しない）。
- */
-export const loadProjectFiles = (configPath: string): ProjectConfig => {
-  const configAbs = resolve(configPath);
-  const wiringAbs = join(dirname(configAbs), WIRING_FILE);
-
-  const readJson = (abs: string, label: "設定" | "配線"): unknown => {
-    if (!existsSync(abs)) throw wrapLoadError(label, abs, "file が無い");
-    try {
-      const text = readFileSync(abs, "utf8");
-      return (label === "配線" ? parseJsonc(text) : JSON.parse(text)) as unknown;
-    } catch (error) {
-      throw wrapLoadError(label, abs, error);
-    }
-  };
-
-  const trackedRaw = readJson(configAbs, "設定");
-  let config: ProjectConfig;
+const readFile = (abs: string, label: "設定" | "実行器"): string => {
+  if (!existsSync(abs)) throw wrapLoadError(label, abs, "file が無い");
   try {
-    config = parseConfig(trackedRaw);
+    return readFileSync(abs, "utf8");
   } catch (error) {
-    throw wrapLoadError("設定", configAbs, error);
+    throw wrapLoadError(label, abs, error);
   }
+};
 
-  const wiringRaw = readJson(wiringAbs, "配線");
+/** `--config` を読む。実行器のキー・欠落・破損は止まる。 */
+export const loadProjectConfig = (configPath: string): ProjectConfig => {
+  const abs = resolve(configPath);
+  const text = readFile(abs, "設定");
   try {
-    parseWiring(wiringRaw);
+    return parseConfig(JSON.parse(text) as unknown);
   } catch (error) {
-    throw wrapLoadError("配線", wiringAbs, error);
+    throw wrapLoadError("設定", abs, error);
   }
-  return config;
+};
+
+/** 実行器（JSONC）を読む。座標キー・欠落・破損・工程欠けは止まる。 */
+export const loadExecutors = (path: string = EXECUTORS_JSON): ExecutorsConfig => {
+  const abs = resolve(path);
+  const text = readFile(abs, "実行器");
+  try {
+    return parseExecutors(parseJsonc(text));
+  } catch (error) {
+    throw wrapLoadError("実行器", abs, error);
+  }
 };

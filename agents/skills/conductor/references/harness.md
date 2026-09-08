@@ -138,7 +138,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | tab を作る（refine）                           | `herdr tab create --workspace <id> --cwd <repo> --label "refine-<番号>" --no-focus`                                                                                                                                                                                                                                   |
 | pane を作る（振られた作業）                    | `herdr pane split --current --direction right --cwd "$PWD" --no-focus`                                                                                                                                                                                                                                                |
 | pane_id を得る                                 | `pane split` は応答が返す。**`worktree create` と `tab create` は返さない**ので `herdr pane list --workspace <id>` で引く                                                                                                                                                                                             |
-| セッションを起こす                             | `herdr agent start <名前> --kind <配線の kind> --pane <id> --timeout 90000 [-- <args>...]`                                                                                                                                                                                                                            |
+| セッションを起こす                             | `herdr agent start <名前> --kind <工程の実行器の kind> --pane <id> --timeout 90000 [-- <args>...]`                                                                                                                                                                                                                    |
 | 課題を渡す・再開する                           | `herdr agent prompt <名前> "/refine <番号>"`                                                                                                                                                                                                                                                                          |
 | セッションを観測する                           | `herdr agent list`（`name` / `agent_status` / `cwd` / `workspace_id` / `pane_id`）                                                                                                                                                                                                                                    |
 | worktree を作る（claim。二次面）               | **`git -C <その面の checkout> worktree add -b <名> <path> <その面の統合先>`**（**pane を作らない**。`<path>` の決め方は下記）                                                                                                                                                                                         |
@@ -153,7 +153,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 | 退避〜branch の workspace ID                   | checkout があるとき `herdr worktree list --cwd <面の checkout>` の `open_workspace_id`                                                                                                                                                                                                                                |
 | 閉じる段の workspace ID                        | **`herdr workspace list`** を引き直した行の `workspace_id`。`open_workspace_id` からは取ら**ない**                                                                                                                                                                                                                    |
 
-`--kind` は `--config` の隣の `config.local.json` の kind（工程ごと。検証は `src/config.ts` の `parseWiring`）。`--` 以降は同じ file の args を要素ごと 1 argv。kind ごとのフラグ組み立ては持た**ない**。空配列なら `--` を付けない。
+`--kind` は `references/executors.json` の kind（工程ごと。検証は `src/config.ts` の `parseExecutors`）。`--` 以降は同じ file の args を要素ごと 1 argv。kind ごとのフラグ組み立ては持た**ない**。空配列なら `--` を付けない。
 
 **3 つの経路は、それぞれ別の問いに対して権威。1 つに寄せない。**
 
@@ -191,7 +191,7 @@ CLI の構文と状態の読み方は `herdr` skill が SSOT。ここに複製�
 
 名乗る:
 
-- `<kind>` は自分の実行器。`herdr agent start` の `--kind` と同じ語。配線 file は見ない
+- `<kind>` は自分の実行器。`herdr agent start` の `--kind` と同じ語。`executors.json` は見ない
 - `agent` が既にあるときは `report-agent` しない
 - `--current` は `agent rename` に無い。pane ID を渡す
 
@@ -516,7 +516,7 @@ worktree 一覧は面ごとの checkout から取る（スクリプトが `--rep
 手順（既存の受け口だけで足りる。新しい仕組みを作らない）:
 
 1. 現在の action を終え、以後の action と watcher の起動を止める
-2. `pane split` で pane を作り、`conductor-next` で `agent start`。`--kind` は自分と同じにし、配線 file は見ない
+2. `pane split` で pane を作り、`conductor-next` で `agent start`。`--kind` は自分と同じにし、`executors.json` は見ない
 3. 自分を `conductor-prev` へ rename してから、後継を `conductor` へ rename する。両方の成功を確認するまで後継へ `/conductor` を渡さない
 4. `agent prompt` で `/conductor` を渡す。引き継ぎ本文は下の「引き継ぎに何も書かないのが既定」に従う
 5. 後継が稼働へ移ったことを `agent list` で確認し、引き継ぎを応答に残して idle になる。自分の pane は閉じない
