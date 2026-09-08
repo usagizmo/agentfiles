@@ -1,9 +1,8 @@
 // アドバイザー候補表の検証と選出。gate は bun test。
 //
-// 実体の advisors.json 自身も対象。fixture だけ通して実体を外すと、
+// 実体の roster.toml 自身も対象。fixture だけ通して実体を外すと、
 // 宣言 file が壊れていても緑のまま残る。
 
-import { readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,28 +18,40 @@ import {
   readOnlyArgs,
   selectAdvisors,
   type Selection,
-} from "../agents/shared/advisors.ts";
+} from "../agents/skills/consult/scripts/advisors.ts";
 
 const rosterText = await Bun.file(ROSTER_URL).text();
 const roster = parseRoster(rosterText);
 
+/** JSON の枠配列を TOML の `advisors` へ写す（テスト入力を短く保つ）。 */
+const toml = (json: string): string => {
+  const slots = JSON.parse(json) as Record<string, unknown>[];
+  const tables = slots.map(
+    (slot) =>
+      `{ ${Object.entries(slot)
+        .map(([k, v]) => `${k} = ${JSON.stringify(v)}`)
+        .join(", ")} }`,
+  );
+  return `advisors = [${tables.join(", ")}]\n`;
+};
+
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "cursor"]);
+  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "grok"]);
   expect(roster[2]?.members).toEqual(["grok", "cursor"]);
-  expect(roster[2]?.args).toEqual(["--model", "grok-4.6[effort=high]"]);
+  expect(roster[2]?.args).toEqual(["--model", "grok-4.6", "--effort", "high"]);
 });
 
-test("claude は codex + cursor", () => {
+test("claude は codex + grok", () => {
   const r = selectAdvisors(roster, "claude");
-  expect(kinds(r)).toEqual(["codex", "cursor"]);
+  expect(kinds(r)).toEqual(["codex", "grok"]);
   expect(r.warning).toBe(false);
 });
 
-test("codex は claude + cursor", () => {
+test("codex は claude + grok", () => {
   const r = selectAdvisors(roster, "codex");
-  expect(kinds(r)).toEqual(["claude", "cursor"]);
+  expect(kinds(r)).toEqual(["claude", "grok"]);
   expect(r.warning).toBe(false);
 });
 
@@ -64,12 +75,12 @@ test("表に無い kind は先頭 2 枠と警告", () => {
 });
 
 test("members 省略は kind 自身", () => {
-  const slots = parseRoster('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]');
+  const slots = parseRoster(toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'));
   expect(slots[0]?.members).toEqual(["claude"]);
 });
 
 test("起動されないキーは落とす", () => {
-  expect(() => parseRoster('[{"kind":"claude","args":[],"model":"x"}]')).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"claude","args":[],"model":"x"}]'))).toThrow(RosterError);
 });
 
 test("members の交差は落とす", () => {
@@ -77,47 +88,49 @@ test("members の交差は落とす", () => {
     { kind: "claude", args: [], members: ["claude", "cursor"] },
     { kind: "grok", args: [], members: ["grok", "cursor"] },
   ]);
-  expect(() => parseRoster(text)).toThrow(RosterError);
+  expect(() => parseRoster(toml(text))).toThrow(RosterError);
 });
 
 test("members に kind が無い枠は落とす", () => {
-  expect(() => parseRoster('[{"kind":"grok","args":[],"members":["cursor"]}]')).toThrow(
+  expect(() => parseRoster(toml('[{"kind":"grok","args":[],"members":["cursor"]}]'))).toThrow(
     RosterError,
   );
 });
 
 test("read-only を打ち消す args は落とす", () => {
-  expect(() => parseRoster('[{"kind":"claude","args":["--permission-mode","bypass"]}]')).toThrow(
-    RosterError,
-  );
+  expect(() =>
+    parseRoster(toml('[{"kind":"claude","args":["--permission-mode","bypass"]}]')),
+  ).toThrow(RosterError);
 });
 
 test("= 連結と別名の bypass も落とす", () => {
-  expect(() => parseRoster('[{"kind":"claude","args":["--permission-mode=bypass"]}]')).toThrow(
+  expect(() =>
+    parseRoster(toml('[{"kind":"claude","args":["--permission-mode=bypass"]}]')),
+  ).toThrow(RosterError);
+  expect(() =>
+    parseRoster(toml('[{"kind":"codex","args":["--sandbox=workspace-write"]}]')),
+  ).toThrow(RosterError);
+  expect(() =>
+    parseRoster(toml('[{"kind":"codex","args":["--dangerously-bypass-approvals-and-sandbox"]}]')),
+  ).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"claude","args":["--"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"claude","args":["--yolo"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"cursor","args":["--force"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"cursor","args":["--mode","agent"]}]'))).toThrow(
     RosterError,
   );
-  expect(() => parseRoster('[{"kind":"codex","args":["--sandbox=workspace-write"]}]')).toThrow(
+  expect(() => parseRoster(toml('[{"kind":"codex","args":["-sdanger-full-access"]}]'))).toThrow(
     RosterError,
   );
   expect(() =>
-    parseRoster('[{"kind":"codex","args":["--dangerously-bypass-approvals-and-sandbox"]}]'),
+    parseRoster(toml('[{"kind":"codex","args":["-c","sandbox_mode=danger-full-access"]}]')),
   ).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"claude","args":["--"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"claude","args":["--yolo"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"cursor","args":["--force"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"cursor","args":["--mode","agent"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"codex","args":["-sdanger-full-access"]}]')).toThrow(
-    RosterError,
-  );
-  expect(() =>
-    parseRoster('[{"kind":"codex","args":["-c","sandbox_mode=danger-full-access"]}]'),
-  ).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"codex","args":["--full-auto"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"grok","args":["--no-plan"]}]')).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"codex","args":["--full-auto"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"grok","args":["--no-plan"]}]'))).toThrow(RosterError);
 });
 
 test("read-only 手段が無い kind は宣言時に落とす", () => {
-  expect(() => parseRoster('[{"kind":"gemini","args":[]}]')).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"gemini","args":[]}]'))).toThrow(RosterError);
 });
 
 test("起動 argv も bypass を落とす", () => {
@@ -134,28 +147,28 @@ test("起動 argv も bypass を落とす", () => {
 });
 
 test("effort 用の -c は通る", () => {
-  const slots = parseRoster('[{"kind":"codex","args":["-c","model_reasoning_effort=high"]}]');
+  const slots = parseRoster(toml('[{"kind":"codex","args":["-c","model_reasoning_effort=high"]}]'));
   expect(slots[0]?.args).toEqual(["-c", "model_reasoning_effort=high"]);
 });
 
-test("壊れた JSONC はパーサの位置を残す", () => {
+test("壊れた TOML はパーサの位置を残す", () => {
   let message = "";
   try {
-    parseRoster("[invalid");
+    parseRoster("advisors = [invalid");
   } catch (error) {
     if (error instanceof RosterError) message = error.message;
   }
-  expect(message.startsWith("JSONC として読めない:")).toBe(true);
-  expect(message.length).toBeGreaterThan("JSONC として読めない:".length);
+  expect(message.startsWith("TOML として読めない:")).toBe(true);
+  expect(message.length).toBeGreaterThan("TOML として読めない:".length);
 });
 
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
-  const cursor = roster.find((s) => s.kind === "cursor");
-  if (cursor === undefined) throw new Error("cursor 枠が無い");
-  const argv = herdrStartArgv(cursor, { name: "a-cursor-x", pane: "w1:p1" });
+  const grok = roster.find((s) => s.kind === "grok");
+  if (grok === undefined) throw new Error("grok 枠が無い");
+  const argv = herdrStartArgv(grok, { name: "a-grok-x", pane: "w1:p1" });
   expect(argv).toContain("--");
   const extra = argv.slice(argv.indexOf("--") + 1);
-  expect(extra).toEqual([...cursor.args, ...readOnlyArgs("cursor")]);
+  expect(extra).toEqual([...grok.args, ...readOnlyArgs("grok")]);
 });
 
 test("空の args でも read-only は付く", () => {
@@ -176,35 +189,47 @@ test("grok の read-only は plan と --no-subagents", () => {
 test("cursor の read-only は --mode plan", () => {
   expect(readOnlyArgs("cursor")).toEqual(["--mode", "plan"]);
   const argv = herdrStartArgv(
-    { kind: "cursor", args: ["--model", "grok-4.6[effort=high]"], members: ["grok", "cursor"] },
+    { kind: "cursor", args: ["--model", "cursor-grok-4.6-high"], members: ["grok", "cursor"] },
     { name: "a-cursor-x", pane: "w1:p1" },
   );
   expect(argv.slice(argv.indexOf("--") + 1)).toEqual([
     "--model",
-    "grok-4.6[effort=high]",
+    "cursor-grok-4.6-high",
     "--mode",
     "plan",
   ]);
 });
 
-test("実体 file のコメントに grok 差し替えが残っている", () => {
-  expect(roster.map((s) => s.kind)).not.toContain("grok");
-  expect(rosterText).toContain('"kind": "grok"');
-  expect(rosterText).toContain('"--effort", "high"');
+test("実体 file のコメントに cursor への差し替えが残っている", () => {
+  expect(roster.map((s) => s.kind)).not.toContain("cursor");
+  expect(rosterText).toContain('#   args = ["--model", "cursor-grok-4.6-high"]');
   expect(rosterText).not.toContain("_comment");
 });
 
-test("JSONC のコメントと末尾カンマは枠にならない", () => {
+test("TOML のコメントは枠にならず、args の文字列は残す", () => {
   const text = `
-[
-  // kind: ghost
-  { "kind": "claude", "args": [] },
-  { "kind": "cursor", "args": ["--model", "x // not a comment"] },
-]
+# kind = "ghost"
+[[advisors]]
+kind = "claude"
+args = []
+
+[[advisors]]
+kind = "cursor"
+args = ["--model", "x # not a comment"]
 `;
   const slots = parseRoster(text);
   expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
-  expect(slots[1]?.args).toEqual(["--model", "x // not a comment"]);
+  expect(slots[1]?.args).toEqual(["--model", "x # not a comment"]);
+});
+
+test("advisors が無ければ止まる", () => {
+  expect(() => parseRoster("# nothing\n")).toThrow("advisors");
+});
+
+test("トップレベルの未知キーは止まる", () => {
+  expect(() =>
+    parseRoster(`${toml('[{"kind":"claude","args":[]}]')}\n[executor.refine]\nkind = "x"`),
+  ).toThrow("executor");
 });
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -296,9 +321,80 @@ test("枠行の判定は繰り返し呼んでも同じ", () => {
 });
 
 // 手で書いた snapshot は TUI の実物とずれる。実行器から取った pane をそのまま置く
-test.each(["codex", "grok"] as const)("%s の pane から marker を読める", (kind) => {
-  const pane = readFileSync(`${ROOT}test/fixtures/advisor-pane/${kind}`, "utf8");
+test.each(["codex", "grok"] as const)("%s の pane から marker を読める", async (kind) => {
+  const pane = await Bun.file(`${ROOT}test/fixtures/advisor-pane/${kind}`).text();
   expect(advisorComplete(pane, "ADVISOR-DONE-heaaqd")).toEqual({ ok: true });
+});
+
+const CURSOR_MARKER = "ADVISOR-DONE-gmjsqm";
+// 実 pane の応答以降を採録し、作業ディレクトリだけ匿名化する。
+const CURSOR_SNAPSHOT = await Bun.file(`${ROOT}test/fixtures/advisor-pane/cursor`).text();
+
+const CLAUDE_MARKER = "ADVISOR-DONE-a4ql68";
+// 実 pane の marker 以降を採録する。
+const CLAUDE_SNAPSHOT = await Bun.file(`${ROOT}test/fixtures/advisor-pane/claude`).text();
+
+test.each(["NFC", "NFD"] as const)("%s のアクセント付き完了時間を応答から除く", (form) => {
+  expect(advisorComplete(CLAUDE_SNAPSHOT.normalize(form), CLAUDE_MARKER)).toEqual({ ok: true });
+});
+
+test("完了時間の脚注だけでは marker の欠落を補えない", () => {
+  expect(
+    advisorComplete(CLAUDE_SNAPSHOT.replace(CLAUDE_MARKER, "追加の指摘"), CLAUDE_MARKER),
+  ).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test.each(["before", "after"] as const)("完了時間の %s に続く本文は省略しない", (position) => {
+  const elapsed = "✻ Sautéed for 11m 26s · done 8:38 AM";
+  const content = position === "before" ? `追加の指摘\n${elapsed}` : `${elapsed}\n追加の指摘`;
+  expect(advisorComplete(CLAUDE_SNAPSHOT.replace(elapsed, content), CLAUDE_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test.each([
+  "✻ Sautéed for 11m 26s",
+  "✻ Sautéed for 11m 26s · done",
+  "✻ Sautéed for 11m 26s · done 8:38 AM 追加の指摘",
+])("完了時間の形が揃わない行は本文: %s", (content) => {
+  expect(advisorComplete(`${CLAUDE_MARKER}\n${content}`, CLAUDE_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test("上下の罫線に囲まれた矢印入力欄から応答の末尾を読める", () => {
+  expect(advisorComplete(CURSOR_SNAPSHOT, CURSOR_MARKER)).toEqual({ ok: true });
+});
+
+test("矢印入力欄があっても marker の無い応答は未完", () => {
+  expect(advisorComplete(CURSOR_SNAPSHOT.replace(CURSOR_MARKER, ""), CURSOR_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test("marker の後から矢印入力欄までの本文は省略しない", () => {
+  const snapshot = CURSOR_SNAPSHOT.replace(CURSOR_MARKER, `${CURSOR_MARKER}\n  追加の指摘`);
+  expect(advisorComplete(snapshot, CURSOR_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test.each([
+  "→ 本文の続きを確認する",
+  "▄▄▄▄\n→ 本文の続きを確認する",
+  "→ 本文の続きを確認する\n▀▀▀▀",
+])("上下の罫線が揃わない矢印行は本文: %s", (content) => {
+  expect(advisorComplete(`${CURSOR_MARKER}\n${content}`, CURSOR_MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
 });
 
 test("TUI 枠だけは出力なし", () => {
@@ -317,7 +413,15 @@ test("complete CLI は JSON と終了コードを返す", async () => {
   const output = join(dir, "out");
   await Bun.write(output, MARKER_SNAPSHOT);
   const proc = Bun.spawn(
-    ["bun", "agents/shared/advisors.ts", "complete", "--output", output, "--marker", MARKER],
+    [
+      "bun",
+      "agents/skills/consult/scripts/advisors.ts",
+      "complete",
+      "--output",
+      output,
+      "--marker",
+      MARKER,
+    ],
     { stdout: "pipe", stderr: "pipe", cwd: import.meta.dir + "/.." },
   );
   const [stdout, exited] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);

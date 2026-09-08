@@ -10,15 +10,7 @@
 //
 // 実行器を PATH で差し替えて、hook が各段へ実際に渡した環境を読む。
 
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -27,11 +19,11 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const HOOK = `${ROOT}.githooks/pre-commit`;
 
 /** hook が呼ぶ bun を差し替え、段ごとに受け取った GIT_* を書き出す。 */
-function stubBun(dir: string, record: string): string {
+async function stubBun(dir: string, record: string): Promise<string> {
   const bin = join(dir, "bin");
   mkdirSync(bin, { recursive: true });
   const stub = join(bin, "bun");
-  writeFileSync(
+  await Bun.write(
     stub,
     `#!/bin/sh
 stage=$1
@@ -51,7 +43,7 @@ async function runHook(): Promise<Record<string, Stage>> {
   const dir = mkdtempSync(join(tmpdir(), "pre-commit-"));
   try {
     const record = join(dir, "record");
-    const bin = stubBun(dir, record);
+    const bin = await stubBun(dir, record);
     const repo = join(dir, "repo");
     mkdirSync(repo, { recursive: true });
     const isolated = {
@@ -80,7 +72,8 @@ async function runHook(): Promise<Record<string, Stage>> {
     const stages: Record<string, Stage> = {};
     for (const stage of ["lint-staged", "typecheck", "test"]) {
       const path = `${record}.${stage}`;
-      const lines = existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
+      const file = Bun.file(path);
+      const lines = (await file.exists()) ? (await file.text()).split("\n") : [];
       stages[stage] = {
         ran: lines[0] === "ran",
         gitVars: lines.filter((l) => l.startsWith("GIT_")).map((l) => l.split("=")[0] ?? ""),

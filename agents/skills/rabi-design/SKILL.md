@@ -15,7 +15,7 @@ description: >-
 2. [`assets/rabi-tokens.css`](assets/rabi-tokens.css) —— front matter から生成した `--rabi-*` とテーマ指定
 3. [`assets/rabi-head.html`](assets/rabi-head.html) —— front matter から生成した webfont の `<link>`
 
-SSOT は 1。front matter がトークンの値、本文が適用の規則。2 と 3 は写しで、手で直さ**ない**。
+SSOT は 1。front matter がトークンの値、本文が適用の規則。2 と 3 は写しで、**手で直さない**。
 
 ## 展開する順
 
@@ -27,7 +27,7 @@ CSS を書く媒体では `assets/rabi-tokens.css` を先頭にインライン�
 
 色・余白・角丸・影・書体・丈・時間は `--rabi-*` を引く。**例外はトークンが無い値だけ** —— front matter の component が持つ literal と、本文が定める値。それはその値をそのまま書く。
 
-図を描くライブラリ・アイコンのデータ・テーマ切替の JS も配ら**ない**。同じく規則から組み立てる。
+図を描くライブラリ・アイコンのデータ・テーマ切替の JS も**配らない**。同じく規則から組み立てる。
 
 CSS を持たない媒体（docx・スライド）では front matter の値を直に当てる。テーマは light の値だけを使う。
 
@@ -43,7 +43,7 @@ bun <skills root>/rabi-design/scripts/gen-css.ts
 
 **path は skill 側の実体を指す。**
 
-front matter に無い値は本文が持つ。本文を直しても生成物は変わら**ない**。
+front matter に無い値は本文が持つ。**本文を直しても生成物は変わらない**。
 
 写しが front matter と食い違っていないかは `--check` で見る。食い違ったら非ゼロで終わる。
 
@@ -51,12 +51,14 @@ front matter に無い値は本文が持つ。本文を直しても生成物は�
 bun <skills root>/rabi-design/scripts/gen-css.ts --check
 ```
 
-CSS の関数（`light-dark()` / `color-mix()` / `clamp()`）を front matter に書か**ない**。組み立ては `scripts/gen-css.ts` と、可変の見出しは `references/DESIGN.md` の「Typography」。
+CSS の関数（`light-dark()` / `color-mix()` / `clamp()`）を front matter に**書かない**。組み立ては `scripts/gen-css.ts` と、可変の見出しは `references/DESIGN.md` の「Typography」。
 
 ## 射程
 
 対象は Rabi 名義の面 —— 製品 UI・LP・ドキュメント・図。
 
-ブランドの正は製品側のコンポーネントカタログで、この skill の正は `references/DESIGN.md`。食い違いを見つけたらカタログを正として front matter を取り直す。skill の中に正を 2 つ持た**ない**。
+ブランドの照合元は製品側のカタログと、カタログが読むトークン・共通部品・文書の CSS。この skill の SSOT は `references/DESIGN.md`。食い違いはカタログの実表示と CSS を確認し、front matter と本文を更新する。
 
-カタログの在処はここに書か**ない**（この repo は public）。人に聞く。
+共有するのはブランドの値と適用規則。製品固有のルート・class API・テーマの起動処理は**取り込まない**。生成 CSS は単独の媒体向けで、製品の CSS と全トークン・テーマ属性が一致するとは扱わない。
+
+**カタログの在処はここに書かない**（この repo は public）。人に聞く。

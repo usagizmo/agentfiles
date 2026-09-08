@@ -68,4 +68,12 @@ inventory_define() {
   inv_home "$HOME/.commandcode"
   inv_symlink agents/AGENTS.md "$HOME/.commandcode/AGENTS.md"
   inv_symlink harnesses/command-code/settings.json "$HOME/.commandcode/settings.json"
+
+  # --- pi ---
+  # home は `~/.pi/agent`（auth / sessions / cache を同居させる）。tracked な葉だけ symlink
+  # `models.json` の apiKey は `$CMD_API_KEY` 参照。実値は fish の env.fish（untracked）
+  inv_section "pi"
+  inv_home "$HOME/.pi/agent"
+  inv_symlink harnesses/pi/settings.json "$HOME/.pi/agent/settings.json"
+  inv_symlink harnesses/pi/models.json "$HOME/.pi/agent/models.json"
 }
