@@ -93,7 +93,8 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
 - 参照方向は常に個別 → 共通の**一方通行**。共通が特定 harness を知ってはいけない
-- アドバイザーの起動は `agents/shared/` の単一実体（`advisors.md` + `advisors.json` + `advisors.ts` + `advisors.sh`）にし、harness ごとの上書きを置か**ない**
+- アドバイザーの起動は `agents/shared/` の単一実体（`advisors.md` + `roster.toml` + `roster.ts` + `advisors.ts` + `advisors.sh`）にし、harness ごとの上書きを置か**ない**
+- **この repo が起こす agent の kind と args は `agents/shared/roster.toml` だけが持つ**（アドバイザー候補と conductor の実行器）。file を表ごとに分け**ない**（`advisors` と `executors` は同じ file）。project 差分に置か**ない**
 
 ### skill 間で実体を共有するとき
 

@@ -1,5 +1,5 @@
-// アドバイザー候補表の検証と選出。候補 kind の集合は advisors.json だけが持つ。
-// 宣言 file は JSONC（コメントと末尾カンマ）。parse は jsonc.ts。
+// アドバイザー候補表の検証と選出。候補 kind の集合は roster.toml の advisors だけが持つ。
+// 宣言 file は TOML。parse とトップレベルの検査は roster.ts。
 //
 //   bun advisors.ts select --roster <file> --self <kind>
 //   bun advisors.ts start-argv --slot <file> --name <name> --pane <id>
@@ -8,10 +8,10 @@
 // select の stdout は選出した枠の JSON。表に無い self は先頭 2 枠 + stderr へ警告。
 // start-argv の stdout は herdr agent start の argv JSON。read-only 手段を末尾に足す。
 
-import { parseJsonc } from "./jsonc.ts";
+import { parseRosterToml, RosterFormatError } from "./roster.ts";
 
 export const MAX_ADVISORS = 2;
-export const ROSTER_URL = new URL("./advisors.json", import.meta.url);
+export const ROSTER_URL = new URL("./roster.toml", import.meta.url);
 
 export type Slot = {
   readonly kind: string;
@@ -113,13 +113,16 @@ const rejectBypass = (args: readonly string[]): void => {
 };
 
 export const parseRoster = (text: string): Slot[] => {
-  let data: unknown;
   try {
-    data = parseJsonc(text);
+    return parseSlots(parseRosterToml(text).advisors);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new RosterError(`JSONC として読めない: ${detail}`);
+    if (error instanceof RosterFormatError) throw new RosterError(error.message);
+    throw error;
   }
+};
+
+/** 枠配列の検証。`parseRoster` が `advisors` を、`start-argv` が 1 枠を通す。 */
+const parseSlots = (data: unknown): Slot[] => {
   if (!Array.isArray(data) || data.length === 0) {
     throw new RosterError("枠配列が空");
   }
@@ -278,7 +281,7 @@ const flag = (argv: readonly string[], name: string): string | undefined => {
 };
 
 const parseSlot = (raw: unknown): Slot => {
-  const [slot] = parseRoster(JSON.stringify([raw]));
+  const [slot] = parseSlots([raw]);
   if (slot === undefined) throw new RosterError("slot が無い");
   return slot;
 };

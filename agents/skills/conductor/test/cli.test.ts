@@ -169,7 +169,7 @@ describe("設定の fail-closed", () => {
     expect(err).toContain("executors");
   });
 
-  test("tracked の executors.json を読んで観測へ進む", async () => {
+  test("roster.toml の executors を読んで観測へ進む", async () => {
     const path = configFile("executors-ok");
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(1);

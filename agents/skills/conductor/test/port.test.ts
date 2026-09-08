@@ -15,9 +15,9 @@ import {
   parseExecutors,
   resolveSurfaces,
 } from "../src/config.ts";
-import { parseJsonc } from "../src/jsonc.ts";
 import { readFileSync } from "node:fs";
 import { createPort, snapshotArgs } from "../src/port.ts";
+import { parseRosterToml } from "../src/roster.ts";
 import { present } from "../src/types.ts";
 import type { Observed } from "../src/types.ts";
 
@@ -687,27 +687,30 @@ describe("実行器", () => {
   });
 });
 
-describe("実行器の JSONC", () => {
-  const body = `{
-    // kind は herdr agent start --kind
-    "refine": { "kind": "claude", "args": [] },
-    "resolve": {
-      "kind": "grok",
-      /* モデル・effort は kind ごとに違う */
-      "args": ["--model", "x // not a comment"],
-    },
-  }`;
+describe("実行器の TOML", () => {
+  const body = `
+advisors = []
+# kind は herdr agent start --kind
+[executors.refine]
+kind = "claude"
+args = []
 
-  test("コメントと末尾カンマを読んで args の文字列は残す", () => {
-    expect(parseExecutors(parseJsonc(body))).toEqual({
+[executors.resolve]
+kind = "grok"
+# モデル・effort は kind ごとに違う
+args = ["--model", "x # not a comment"]
+`;
+
+  test("コメントを読んで args の文字列は残す", () => {
+    expect(parseExecutors(parseRosterToml(body).executors)).toEqual({
       refine: { kind: "claude", args: [] },
-      resolve: { kind: "grok", args: ["--model", "x // not a comment"] },
+      resolve: { kind: "grok", args: ["--model", "x # not a comment"] },
     });
   });
 });
 
 describe("実行器の読み込み", () => {
-  test("references/executors.json は既定の在処で読める", () => {
+  test("roster.toml は既定の在処で読める", () => {
     const loaded = loadExecutors();
     expect(loaded.refine.kind).not.toBe("");
     expect(loaded.resolve.kind).not.toBe("");
@@ -715,16 +718,30 @@ describe("実行器の読み込み", () => {
 
   test("file が無ければ在処と必要なキーを出して止まる", async () => {
     const dir = await mkdtemp(join(tmpdir(), "executors-"));
-    const missing = join(dir, "executors.json");
+    const missing = join(dir, "roster.toml");
     expect(() => loadExecutors(missing)).toThrow(missing);
     expect(() => loadExecutors(missing)).toThrow("必要なキー");
   });
 
   test("壊れていれば在処を出して止まる", async () => {
     const dir = await mkdtemp(join(tmpdir(), "executors-"));
-    const broken = join(dir, "executors.json");
-    await writeFile(broken, "{ not json");
+    const broken = join(dir, "roster.toml");
+    await writeFile(broken, "= not toml");
     expect(() => loadExecutors(broken)).toThrow(broken);
+  });
+
+  test("executors が無ければ止まる", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "executors-"));
+    const path = join(dir, "roster.toml");
+    await writeFile(path, '[[advisors]]\nkind = "claude"\nargs = []\n');
+    expect(() => loadExecutors(path)).toThrow("executors");
+  });
+
+  test("トップレベルの未知キーは止まる", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "executors-"));
+    const path = join(dir, "roster.toml");
+    await writeFile(path, 'advisors = []\n[executor.refine]\nkind = "claude"\nargs = []\n');
+    expect(() => loadExecutors(path)).toThrow("executor");
   });
 });
 

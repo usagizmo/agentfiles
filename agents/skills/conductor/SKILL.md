@@ -145,7 +145,7 @@ bun run <skills root>/conductor/src/cli.ts --config <project 差分 skill の co
 
 対で渡す。`<代表>` は実行しなかった action の代表。壊れた渡しは `src/cli.ts` の `specGap` が止める。
 
-座標は **project 差分 skill の `config.json`**（JSON）、工程ごとの実行器は **この skill の `references/executors.json`**（JSONC。全 project 共通。project 差分に置か**ない**）。必須項目と検証は `src/config.ts` の `loadProjectConfig` / `loadExecutors` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md`。occupancy の入力でもある（判定は `src/observe.ts`）。project に手で写さ**ない**。
+座標は **project 差分 skill の `config.json`**（JSON）、工程ごとの実行器は **`references/roster.toml` の `executors`**（TOML。project 差分に置か**ない**）。必須項目と検証は `src/config.ts` の `loadProjectConfig` / `loadExecutors` が SSOT で、ここに写さ**ない**（1 つでも欠けたら exit 2 で止まる）。`sessionsCmd` / `workspacesCmd` は省略できる。省略時の中身は `references/harness.md` で、project の `config.json` へ写さ**ない**。この 2 つは occupancy の入力でもある（判定は `src/observe.ts`）。
 
 **checkout path は設定に入れない**。端末ごとに違うので、`--surface-path` で面ごとに渡す（座標表の規則は `references/landing-surface.md`）。**座標表の全面を 1 つでも渡さなければ exit 2**（Issue 本文の宣言では**ない**）。
 

@@ -1,6 +1,6 @@
 # アドバイザー起動表
 
-候補表は起動スクリプトと同じディレクトリの `advisors.json`（JSONC）。設定の解釈・選出・上限は `advisors.ts`、自己 kind の観測と起動条件は `advisors.sh` が SSOT。実行中の LLM の自己申告では判定しない。
+候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。設定の解釈・選出・上限は `advisors.ts`、自己 kind の観測と起動条件は `advisors.sh` が SSOT。実行中の LLM の自己申告では判定しない。
 
 アドバイザーは consult を起動しない。agent を start しない。判断を応答に出す。
 

@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseJsonc } from "./jsonc.ts";
+import { parseRosterToml } from "./roster.ts";
 import type { TickConfig } from "./decide.ts";
 import { DEFAULT_CONFIG } from "./decide.ts";
 import { LEDGER_VALUES } from "./types.ts";
@@ -51,7 +51,7 @@ export type ExecutorSpec = {
   readonly args: readonly string[];
 };
 
-/** 工程ごとの実行器。`references/executors.json` が SSOT で、project 差分は持たない。 */
+/** 工程ごとの実行器。`roster.toml` の `executors` が SSOT で、project 差分は持たない。 */
 export type ExecutorsConfig = {
   readonly refine: ExecutorSpec;
   readonly resolve: ExecutorSpec;
@@ -261,7 +261,7 @@ export const parseExecutors = (raw: unknown): ExecutorsConfig => {
   };
 };
 
-export const EXECUTORS_JSON = `${import.meta.dir}/../references/executors.json`;
+export const ROSTER_TOML = `${import.meta.dir}/../references/roster.toml`;
 
 const readFile = (abs: string, label: "設定" | "実行器"): string => {
   if (!existsSync(abs)) throw wrapLoadError(label, abs, "file が無い");
@@ -283,12 +283,12 @@ export const loadProjectConfig = (configPath: string): ProjectConfig => {
   }
 };
 
-/** 実行器（JSONC）を読む。座標キー・欠落・破損・工程欠けは止まる。 */
-export const loadExecutors = (path: string = EXECUTORS_JSON): ExecutorsConfig => {
+/** `roster.toml` の `executors` を読む。座標キー・欠落・破損・工程欠けは止まる。 */
+export const loadExecutors = (path: string = ROSTER_TOML): ExecutorsConfig => {
   const abs = resolve(path);
   const text = readFile(abs, "実行器");
   try {
-    return parseExecutors(parseJsonc(text));
+    return parseExecutors(parseRosterToml(text).executors);
   } catch (error) {
     throw wrapLoadError("実行器", abs, error);
   }

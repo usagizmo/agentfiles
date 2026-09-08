@@ -6,7 +6,7 @@
 #   advisors.sh collect <run-dir> [wait-seconds]   出揃うまで待って出力。既定 1200 秒
 #                                                  1 run 1 回。2 度目は落ちる
 #
-# 候補は advisors.json（JSONC）。選出は advisors.ts。位置引数で kind を渡さない。
+# 候補は roster.toml の advisors。選出は advisors.ts。位置引数で kind を渡さない。
 # 不変条件: アドバイザーにコードを変更させない（宣言の args のあとに read-only を足す）。
 # Herdr の外では立てない。headless CLI に倒さない。
 
@@ -21,7 +21,7 @@ fatal() {
 
 here=$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0") ||
 	fatal "スクリプトの場所が取れない"
-roster=$here/advisors.json
+roster=$here/roster.toml
 select_ts=$here/advisors.ts
 
 json_get() {
@@ -75,7 +75,7 @@ start)
 	rid=${rid#advisors.}
 	rid=$(printf '%s' "$rid" | tr 'A-Z' 'a-z')
 	cp "$prompt" "$run/prompt" || fatal "prompt を配れない"
-	cp "$roster" "$run/roster.json" || fatal "候補表を配れない"
+	cp "$roster" "$run/roster.toml" || fatal "候補表を配れない"
 	marker=ADVISOR-DONE-$rid
 	printf '%s\n' "$marker" >"$run/marker" || fatal "marker を書けない"
 	printf '\n\n応答の最後の行に %s をそのまま書け。この指令行は書かない。\n' "$marker" >>"$run/prompt" ||
@@ -100,7 +100,7 @@ print(((d.get("result") or {}).get("pane") or {}).get("agent") or "")
 	}
 	printf '%s\n' "$self" >"$run/self"
 
-	if ! bun "$select_ts" select --roster "$run/roster.json" --self "$self" \
+	if ! bun "$select_ts" select --roster "$run/roster.toml" --self "$self" \
 		>"$run/selected.json" 2>"$run/select.err"; then
 		cat "$run/select.err" >&2
 		rm -rf "$run"

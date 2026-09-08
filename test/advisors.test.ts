@@ -1,6 +1,6 @@
 // アドバイザー候補表の検証と選出。gate は bun test。
 //
-// 実体の advisors.json 自身も対象。fixture だけ通して実体を外すと、
+// 実体の roster.toml 自身も対象。fixture だけ通して実体を外すと、
 // 宣言 file が壊れていても緑のまま残る。
 
 import { readFileSync } from "node:fs";
@@ -23,6 +23,18 @@ import {
 
 const rosterText = await Bun.file(ROSTER_URL).text();
 const roster = parseRoster(rosterText);
+
+/** JSON の枠配列を TOML の `advisors` へ写す（テスト入力を短く保つ）。 */
+const toml = (json: string): string => {
+  const slots = JSON.parse(json) as Record<string, unknown>[];
+  const tables = slots.map(
+    (slot) =>
+      `{ ${Object.entries(slot)
+        .map(([k, v]) => `${k} = ${JSON.stringify(v)}`)
+        .join(", ")} }`,
+  );
+  return `advisors = [${tables.join(", ")}]\n[executors]\n`;
+};
 
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
@@ -64,12 +76,12 @@ test("表に無い kind は先頭 2 枠と警告", () => {
 });
 
 test("members 省略は kind 自身", () => {
-  const slots = parseRoster('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]');
+  const slots = parseRoster(toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'));
   expect(slots[0]?.members).toEqual(["claude"]);
 });
 
 test("起動されないキーは落とす", () => {
-  expect(() => parseRoster('[{"kind":"claude","args":[],"model":"x"}]')).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"claude","args":[],"model":"x"}]'))).toThrow(RosterError);
 });
 
 test("members の交差は落とす", () => {
@@ -77,47 +89,49 @@ test("members の交差は落とす", () => {
     { kind: "claude", args: [], members: ["claude", "cursor"] },
     { kind: "grok", args: [], members: ["grok", "cursor"] },
   ]);
-  expect(() => parseRoster(text)).toThrow(RosterError);
+  expect(() => parseRoster(toml(text))).toThrow(RosterError);
 });
 
 test("members に kind が無い枠は落とす", () => {
-  expect(() => parseRoster('[{"kind":"grok","args":[],"members":["cursor"]}]')).toThrow(
+  expect(() => parseRoster(toml('[{"kind":"grok","args":[],"members":["cursor"]}]'))).toThrow(
     RosterError,
   );
 });
 
 test("read-only を打ち消す args は落とす", () => {
-  expect(() => parseRoster('[{"kind":"claude","args":["--permission-mode","bypass"]}]')).toThrow(
-    RosterError,
-  );
+  expect(() =>
+    parseRoster(toml('[{"kind":"claude","args":["--permission-mode","bypass"]}]')),
+  ).toThrow(RosterError);
 });
 
 test("= 連結と別名の bypass も落とす", () => {
-  expect(() => parseRoster('[{"kind":"claude","args":["--permission-mode=bypass"]}]')).toThrow(
+  expect(() =>
+    parseRoster(toml('[{"kind":"claude","args":["--permission-mode=bypass"]}]')),
+  ).toThrow(RosterError);
+  expect(() =>
+    parseRoster(toml('[{"kind":"codex","args":["--sandbox=workspace-write"]}]')),
+  ).toThrow(RosterError);
+  expect(() =>
+    parseRoster(toml('[{"kind":"codex","args":["--dangerously-bypass-approvals-and-sandbox"]}]')),
+  ).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"claude","args":["--"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"claude","args":["--yolo"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"cursor","args":["--force"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"cursor","args":["--mode","agent"]}]'))).toThrow(
     RosterError,
   );
-  expect(() => parseRoster('[{"kind":"codex","args":["--sandbox=workspace-write"]}]')).toThrow(
+  expect(() => parseRoster(toml('[{"kind":"codex","args":["-sdanger-full-access"]}]'))).toThrow(
     RosterError,
   );
   expect(() =>
-    parseRoster('[{"kind":"codex","args":["--dangerously-bypass-approvals-and-sandbox"]}]'),
+    parseRoster(toml('[{"kind":"codex","args":["-c","sandbox_mode=danger-full-access"]}]')),
   ).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"claude","args":["--"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"claude","args":["--yolo"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"cursor","args":["--force"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"cursor","args":["--mode","agent"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"codex","args":["-sdanger-full-access"]}]')).toThrow(
-    RosterError,
-  );
-  expect(() =>
-    parseRoster('[{"kind":"codex","args":["-c","sandbox_mode=danger-full-access"]}]'),
-  ).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"codex","args":["--full-auto"]}]')).toThrow(RosterError);
-  expect(() => parseRoster('[{"kind":"grok","args":["--no-plan"]}]')).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"codex","args":["--full-auto"]}]'))).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"grok","args":["--no-plan"]}]'))).toThrow(RosterError);
 });
 
 test("read-only 手段が無い kind は宣言時に落とす", () => {
-  expect(() => parseRoster('[{"kind":"gemini","args":[]}]')).toThrow(RosterError);
+  expect(() => parseRoster(toml('[{"kind":"gemini","args":[]}]'))).toThrow(RosterError);
 });
 
 test("起動 argv も bypass を落とす", () => {
@@ -134,19 +148,19 @@ test("起動 argv も bypass を落とす", () => {
 });
 
 test("effort 用の -c は通る", () => {
-  const slots = parseRoster('[{"kind":"codex","args":["-c","model_reasoning_effort=high"]}]');
+  const slots = parseRoster(toml('[{"kind":"codex","args":["-c","model_reasoning_effort=high"]}]'));
   expect(slots[0]?.args).toEqual(["-c", "model_reasoning_effort=high"]);
 });
 
-test("壊れた JSONC はパーサの位置を残す", () => {
+test("壊れた TOML はパーサの位置を残す", () => {
   let message = "";
   try {
-    parseRoster("[invalid");
+    parseRoster("advisors = [invalid");
   } catch (error) {
     if (error instanceof RosterError) message = error.message;
   }
-  expect(message.startsWith("JSONC として読めない:")).toBe(true);
-  expect(message.length).toBeGreaterThan("JSONC として読めない:".length);
+  expect(message.startsWith("TOML として読めない:")).toBe(true);
+  expect(message.length).toBeGreaterThan("TOML として読めない:".length);
 });
 
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
@@ -189,22 +203,38 @@ test("cursor の read-only は --mode plan", () => {
 
 test("実体 file のコメントに grok 差し替えが残っている", () => {
   expect(roster.map((s) => s.kind)).not.toContain("grok");
-  expect(rosterText).toContain('"kind": "grok"');
-  expect(rosterText).toContain('"--effort", "high"');
+  expect(rosterText).toContain(
+    "# grok を起こすときは [executors.resolve] の kind と args に差し替える",
+  );
   expect(rosterText).not.toContain("_comment");
 });
 
-test("JSONC のコメントと末尾カンマは枠にならない", () => {
+test("TOML のコメントは枠にならず、args の文字列は残す", () => {
   const text = `
-[
-  // kind: ghost
-  { "kind": "claude", "args": [] },
-  { "kind": "cursor", "args": ["--model", "x // not a comment"] },
-]
+# kind = "ghost"
+[[advisors]]
+kind = "claude"
+args = []
+
+[[advisors]]
+kind = "cursor"
+args = ["--model", "x # not a comment"]
+
+[executors]
 `;
   const slots = parseRoster(text);
   expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
-  expect(slots[1]?.args).toEqual(["--model", "x // not a comment"]);
+  expect(slots[1]?.args).toEqual(["--model", "x # not a comment"]);
+});
+
+test("advisors が無ければ止まる", () => {
+  expect(() => parseRoster('[executors.refine]\nkind = "claude"\nargs = []')).toThrow("advisors");
+});
+
+test("トップレベルの未知キーは止まる", () => {
+  expect(() =>
+    parseRoster(`${toml('[{"kind":"claude","args":[]}]')}\n[executor.refine]\nkind = "x"`),
+  ).toThrow("executor");
 });
 
 const ROOT = new URL("..", import.meta.url).pathname;
