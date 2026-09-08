@@ -1,12 +1,11 @@
 // `scripts/issue-fingerprint.py` の抽出。`updated_at` を指紋に戻さない。
 
-import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
 const PY = join(import.meta.dir, "../scripts/issue-fingerprint.py");
 
-const sha = (body: string) => createHash("sha256").update(body, "utf8").digest("hex");
+const sha = (body: string) => new Bun.CryptoHasher("sha256").update(body).digest("hex");
 
 const fingerprint = async (issues: unknown): Promise<string> => {
   const p = Bun.spawn(["python3", PY], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });

@@ -7,7 +7,6 @@
 // **道具が無いことを skip にしない。**指紋は `python3` が、観測は `bash` が無いと成立しない
 // （どちらも SKILL.md が前提にしている）。無い環境で緑にすると、走らない検査が緑のまま増える。
 
-import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
@@ -58,7 +57,7 @@ describe("scripts の自前テスト", () => {
       "ensure-integration-ref.test.sh",
       "complete-rest-list.test.sh",
     ]);
-    const found = readdirSync(SCRIPTS).filter((f) => /\.test\.[a-z]+$/.test(f));
+    const found = [...new Bun.Glob("*.test.*").scanSync(SCRIPTS)];
     expect([...found].sort()).toEqual([...declared].sort());
   });
 });

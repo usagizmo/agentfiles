@@ -4,7 +4,7 @@
 // ラウンド失敗。REST は件数照合に落ちたらラウンド失敗。
 
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WATCH_SHELL } from "../agents/skills/conductor/src/port.ts";
@@ -18,7 +18,7 @@ const BASELINE = `${ROOT}test/fixtures/watch-baseline/bin`;
 async function snapshot(env: Record<string, string | undefined> = {}) {
   const dir = mkdtempSync(join(tmpdir(), "watch-partial-"));
   const snapshotPath = join(dir, "snapshot");
-  writeFileSync(join(dir, "state"), "resolve-1 working\n");
+  await Bun.write(join(dir, "state"), "resolve-1 working\n");
   const p = Bun.spawn(
     [
       WATCH_SHELL,

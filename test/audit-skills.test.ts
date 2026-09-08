@@ -4,7 +4,7 @@
 // 黙らず SKIP を出すか、SUMMARY が数を持つか。**「違反 0」と「検査していない」を
 // 取り違えると gate が素通りする**ので、そこを実際に走らせて確かめる。
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -180,26 +180,26 @@ async function git(args: string[], cwd: string) {
   return stdout;
 }
 
-function writeLayerReadme(dir: string, skills: string[]) {
+async function writeLayerReadme(dir: string, skills: string[]) {
   const cells = skills.map((s) => `\`${s}\``).join(" ");
-  writeFileSync(
+  await Bun.write(
     join(dir, "agents/docs/README.md"),
     `# docs\n\n## 層構造\n\n| 層 | skills |\n| --- | --- |\n| leaf | ${cells} |\n\n## 次\n`,
   );
 }
 
-function writeSkill(dir: string, name: string) {
+async function writeSkill(dir: string, name: string) {
   mkdirSync(join(dir, "agents/skills", name), { recursive: true });
-  writeFileSync(join(dir, "agents/skills", name, "SKILL.md"), `# ${name}\n`);
+  await Bun.write(join(dir, "agents/skills", name, "SKILL.md"), `# ${name}\n`);
 }
 
 async function ownedRepo({ table, extras = [] }: { table: string[]; extras?: string[] }) {
   const dir = mkdtempSync(join(tmpdir(), "audit-owned-"));
   mkdirSync(join(dir, "agents/docs"), { recursive: true });
-  writeFileSync(join(dir, ".gitignore"), "/agents/skills/ghost/\n");
-  writeSkill(dir, "owned");
-  writeLayerReadme(dir, table);
-  for (const name of extras) writeSkill(dir, name);
+  await Bun.write(join(dir, ".gitignore"), "/agents/skills/ghost/\n");
+  await writeSkill(dir, "owned");
+  await writeLayerReadme(dir, table);
+  for (const name of extras) await writeSkill(dir, name);
   await git(["init"], dir);
   await git(["config", "user.email", "test@example.com"], dir);
   await git(["config", "user.name", "test"], dir);
@@ -211,7 +211,7 @@ async function ownedRepo({ table, extras = [] }: { table: string[]; extras?: str
 test("現行 marker の定義と索引列を双方向に検査する", async () => {
   const dir = await ownedRepo({ table: ["owned"] });
   try {
-    writeFileSync(
+    await Bun.write(
       join(dir, "agents/skills/owned/SKILL.md"),
       [
         "# owned",
@@ -231,7 +231,7 @@ test("現行 marker の定義と索引列を双方向に検査する", async () 
         "",
       ].join("\n"),
     );
-    writeFileSync(
+    await Bun.write(
       join(dir, "agents/docs/glossary.md"),
       [
         "# glossary",
@@ -340,9 +340,9 @@ test("gitignore された skill の shared コピーは VIOLATION に出ない",
   const dir = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
   try {
     mkdirSync(join(dir, "agents/shared"), { recursive: true });
-    writeFileSync(join(dir, "agents/shared/host.md"), "# host\n");
+    await Bun.write(join(dir, "agents/shared/host.md"), "# host\n");
     mkdirSync(join(dir, "agents/skills/ghost/references"), { recursive: true });
-    writeFileSync(join(dir, "agents/skills/ghost/references/host.md"), "# copy\n");
+    await Bun.write(join(dir, "agents/skills/ghost/references/host.md"), "# copy\n");
     const { stdout } = await audit(join(dir, "agents/skills"));
     expect(stdout).not.toContain("VIOLATION\tshared\tghost/");
     expect(derivedViolations(stdout)).toEqual([]);
@@ -354,9 +354,9 @@ test("gitignore された skill の shared コピーは VIOLATION に出ない",
 test("repo が無いときは所有判定を SKIP する", async () => {
   const dir = mkdtempSync(join(tmpdir(), "audit-norepo-"));
   try {
-    writeSkill(dir, "owned");
+    await writeSkill(dir, "owned");
     mkdirSync(join(dir, "agents/docs"), { recursive: true });
-    writeLayerReadme(dir, ["owned"]);
+    await writeLayerReadme(dir, ["owned"]);
     const { stdout } = await audit(join(dir, "agents/skills"));
     expect(stdout).toContain("SKIP\towned");
     expect(stdout).toMatch(/skips=[1-9]/);
@@ -368,9 +368,9 @@ test("repo が無いときは所有判定を SKIP する", async () => {
 test("repo が無いときは所有判定不能として成功終了しない", async () => {
   const dir = mkdtempSync(join(tmpdir(), "audit-norepo-fail-"));
   try {
-    writeSkill(dir, "owned");
+    await writeSkill(dir, "owned");
     mkdirSync(join(dir, "agents/docs"), { recursive: true });
-    writeLayerReadme(dir, ["owned"]);
+    await writeLayerReadme(dir, ["owned"]);
     const { stdout, exitCode } = await audit(join(dir, "agents/skills"));
     expect(stdout).toContain("SKIP\towned");
     expect(exitCode).toBe(2);
@@ -389,9 +389,9 @@ test("所有外 skill を先頭にする参照はディスク有無で色が変�
   const absent = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
   const present = await ownedRepo({ table: ["owned"], extras: ["ghost"] });
   try {
-    writeFileSync(join(absent, "agents/skills/owned/SKILL.md"), "# owned\n\n`ghost/gone.md`\n");
-    writeFileSync(join(present, "agents/skills/owned/SKILL.md"), "# owned\n\n`ghost/gone.md`\n");
-    writeFileSync(join(present, "agents/skills/ghost/gone.md"), "# gone\n");
+    await Bun.write(join(absent, "agents/skills/owned/SKILL.md"), "# owned\n\n`ghost/gone.md`\n");
+    await Bun.write(join(present, "agents/skills/owned/SKILL.md"), "# owned\n\n`ghost/gone.md`\n");
+    await Bun.write(join(present, "agents/skills/ghost/gone.md"), "# gone\n");
     const a = await audit(join(absent, "agents/skills"));
     const b = await audit(join(present, "agents/skills"));
     expect(refLines(a.stdout)).toEqual(refLines(b.stdout));
@@ -404,12 +404,12 @@ test("所有外 skill を先頭にする参照はディスク有無で色が変�
 async function skillRepo(skills: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), "audit-skills-"));
   mkdirSync(join(dir, "agents/docs"), { recursive: true });
-  writeFileSync(join(dir, ".gitignore"), "\n");
+  await Bun.write(join(dir, ".gitignore"), "\n");
   for (const [name, body] of Object.entries(skills)) {
     mkdirSync(join(dir, "agents/skills", name), { recursive: true });
-    writeFileSync(join(dir, "agents/skills", name, "SKILL.md"), body);
+    await Bun.write(join(dir, "agents/skills", name, "SKILL.md"), body);
   }
-  writeLayerReadme(dir, Object.keys(skills));
+  await writeLayerReadme(dir, Object.keys(skills));
   await git(["init"], dir);
   await git(["config", "user.email", "test@example.com"], dir);
   await git(["config", "user.name", "test"], dir);

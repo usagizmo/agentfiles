@@ -2,7 +2,7 @@
 //
 // **通ることは何も証明しない**ので、front matter と写しを壊した複製で落ちることまで実測する。
 
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -17,7 +17,7 @@ import {
 } from "../agents/skills/rabi-design/scripts/gen-css";
 
 const SKILL = join(import.meta.dir, "../agents/skills/rabi-design");
-const DESIGN_MD = readFileSync(join(SKILL, "references/DESIGN.md"), "utf8");
+const DESIGN_MD = await Bun.file(join(SKILL, "references/DESIGN.md")).text();
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---/;
 
@@ -59,11 +59,11 @@ const runCheck = async (dir: string) => {
   return { code, output: `${out}${err}` };
 };
 
-const edit = (dir: string, replace: (fm: string) => string) => {
+const edit = async (dir: string, replace: (fm: string) => string) => {
   const path = join(dir, "references/DESIGN.md");
-  const md = readFileSync(path, "utf8");
+  const md = await Bun.file(path).text();
   const fm = fmText(md);
-  writeFileSync(path, md.replace(fm, replace(fm)));
+  await Bun.write(path, md.replace(fm, replace(fm)));
 };
 
 // ============ 公式 linter ============
@@ -207,8 +207,8 @@ test("トークンを消すと、散文の検査が落ちる", () => {
 
 // ============ 写しが SSOT と一致する ============
 
-test("色の役割参照を CSS へ残し、primary の形式別名だけを除く", () => {
-  const css = generate().find(({ path }) => path.endsWith("rabi-tokens.css"))?.content;
+test("色の役割参照を CSS へ残し、primary の形式別名だけを除く", async () => {
+  const css = (await generate()).find(({ path }) => path.endsWith("rabi-tokens.css"))?.content;
   expect(css).toContain("--rabi-fill-accent: var(--rabi-accent);");
   expect(css).toContain("--rabi-on-fill-ink: var(--rabi-paper);");
   expect(css).not.toContain("--rabi-primary:");
@@ -216,8 +216,8 @@ test("色の役割参照を CSS へ残し、primary の形式別名だけを除�
 
 test("追加のフォント stylesheet を head に生成する", async () => {
   await withSandbox(async (dir) => {
-    edit(dir, (fm) => fm.replace("yakuhanjp@4.1.1", "yakuhanjp@4.1.2"));
-    const head = generate(dir).find(({ path }) => path.endsWith("rabi-head.html"))?.content;
+    await edit(dir, (fm) => fm.replace("yakuhanjp@4.1.1", "yakuhanjp@4.1.2"));
+    const head = (await generate(dir)).find(({ path }) => path.endsWith("rabi-head.html"))?.content;
     expect(head).toContain(
       'href="https://cdn.jsdelivr.net/npm/yakuhanjp@4.1.2/dist/css/yakuhanjp.css"',
     );
@@ -231,7 +231,7 @@ test("assets が front matter と一致する", async () => {
 test("生成 CSS を書き換えると --check が落ちる", async () => {
   await withSandbox(async (dir) => {
     const path = join(dir, "assets/rabi-tokens.css");
-    writeFileSync(path, readFileSync(path, "utf8").replace("#dc143c", "#ff0000"));
+    await Bun.write(path, (await Bun.file(path).text()).replace("#dc143c", "#ff0000"));
     const { code, output } = await runCheck(dir);
     expect(code).not.toBe(0);
     expect(output).toContain("rabi-tokens.css");
@@ -241,7 +241,7 @@ test("生成 CSS を書き換えると --check が落ちる", async () => {
 test("生成 HTML を書き換えると --check が落ちる", async () => {
   await withSandbox(async (dir) => {
     const path = join(dir, "assets/rabi-head.html");
-    writeFileSync(path, readFileSync(path, "utf8").replace("display=swap", "display=block"));
+    await Bun.write(path, (await Bun.file(path).text()).replace("display=swap", "display=block"));
     const { code, output } = await runCheck(dir);
     expect(code).not.toBe(0);
     expect(output).toContain("rabi-head.html");
@@ -250,7 +250,7 @@ test("生成 HTML を書き換えると --check が落ちる", async () => {
 
 test("front matter を変えると --check が落ちる", async () => {
   await withSandbox(async (dir) => {
-    edit(dir, (fm) => fm.replace('accent: "#dc143c"', 'accent: "#00ff00"'));
+    await edit(dir, (fm) => fm.replace('accent: "#dc143c"', 'accent: "#00ff00"'));
     expect((await runCheck(dir)).code).not.toBe(0);
   });
 });
@@ -570,7 +570,7 @@ const breaks: [string, (fm: string) => string, RegExp][] = [
 for (const [name, mutate, expected] of breaks) {
   test(`生成器が落ちる: ${name}`, async () => {
     await withSandbox(async (dir) => {
-      edit(dir, mutate);
+      await edit(dir, mutate);
       const { code, output } = await runCheck(dir);
       expect(code).not.toBe(0);
       expect(output).toMatch(expected);

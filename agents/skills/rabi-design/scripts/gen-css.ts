@@ -5,7 +5,6 @@
 // トークンの型に合わず、@google/design.md の linter も落とす。color-mix() はその Color parser が
 // oklab を読めない。どちらもここで組み立てる。
 
-import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parse } from "yaml";
 
@@ -558,9 +557,9 @@ function headHtml(d: Design, href: string): string {
   ].join("\n");
 }
 
-export function generate(root = SKILL): { path: string; content: string }[] {
+export async function generate(root = SKILL): Promise<{ path: string; content: string }[]> {
   const design = join(root, "references/DESIGN.md");
-  const d = frontMatter(readFileSync(design, "utf8"));
+  const d = frontMatter(await Bun.file(design).text());
   verifyRequired(d);
   verifyNames(d);
   verifyRefs(d);
@@ -581,17 +580,13 @@ if (import.meta.main) {
   const check = process.argv.includes("--check");
   const root = SKILL;
   let stale = 0;
-  for (const { path, content } of generate(root)) {
+  for (const { path, content } of await generate(root)) {
     if (!check) {
-      writeFileSync(path, content);
+      await Bun.write(path, content);
       continue;
     }
-    let current = "";
-    try {
-      current = readFileSync(path, "utf8");
-    } catch {
-      current = "";
-    }
+    const file = Bun.file(path);
+    const current = (await file.exists()) ? await file.text() : "";
     if (current !== content) {
       console.error(`stale: ${path}`);
       stale += 1;

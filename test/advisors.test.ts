@@ -3,7 +3,6 @@
 // 実体の roster.toml 自身も対象。fixture だけ通して実体を外すと、
 // 宣言 file が壊れていても緑のまま残る。
 
-import { readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -326,18 +325,18 @@ test("枠行の判定は繰り返し呼んでも同じ", () => {
 });
 
 // 手で書いた snapshot は TUI の実物とずれる。実行器から取った pane をそのまま置く
-test.each(["codex", "grok"] as const)("%s の pane から marker を読める", (kind) => {
-  const pane = readFileSync(`${ROOT}test/fixtures/advisor-pane/${kind}`, "utf8");
+test.each(["codex", "grok"] as const)("%s の pane から marker を読める", async (kind) => {
+  const pane = await Bun.file(`${ROOT}test/fixtures/advisor-pane/${kind}`).text();
   expect(advisorComplete(pane, "ADVISOR-DONE-heaaqd")).toEqual({ ok: true });
 });
 
 const CURSOR_MARKER = "ADVISOR-DONE-gmjsqm";
 // 実 pane の応答以降を採録し、作業ディレクトリだけ匿名化する。
-const CURSOR_SNAPSHOT = readFileSync(`${ROOT}test/fixtures/advisor-pane/cursor`, "utf8");
+const CURSOR_SNAPSHOT = await Bun.file(`${ROOT}test/fixtures/advisor-pane/cursor`).text();
 
 const CLAUDE_MARKER = "ADVISOR-DONE-a4ql68";
 // 実 pane の marker 以降を採録する。
-const CLAUDE_SNAPSHOT = readFileSync(`${ROOT}test/fixtures/advisor-pane/claude`, "utf8");
+const CLAUDE_SNAPSHOT = await Bun.file(`${ROOT}test/fixtures/advisor-pane/claude`).text();
 
 test.each(["NFC", "NFD"] as const)("%s のアクセント付き完了時間を応答から除く", (form) => {
   expect(advisorComplete(CLAUDE_SNAPSHOT.normalize(form), CLAUDE_MARKER)).toEqual({ ok: true });

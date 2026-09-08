@@ -3,8 +3,6 @@
 // **失敗を `false` へ倒さない。**コマンドが落ちたら `unobservable` を返す ——
 // 倒すと、観測できなかったことが「そうではない」として遷移を通す。
 
-import { createHash, randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { ProjectConfig, ResolvedSurface } from "./config.ts";
 import { missingBranchGit } from "./surfaces.ts";
@@ -57,7 +55,7 @@ const json = async <T>(cmd: readonly string[], cwd?: string): Promise<Observed<T
 };
 
 /** **本文はそのまま UTF-8 で SHA-256。正規化しない**（`body-digest.md`）。 */
-const digest = (body: string): string => createHash("sha256").update(body, "utf8").digest("hex");
+const digest = (body: string): string => new Bun.CryptoHasher("sha256").update(body).digest("hex");
 
 export type PortOptions = {
   readonly config: ProjectConfig;
@@ -330,7 +328,7 @@ export const createPort = (options: PortOptions): ObservePort => {
           args.push(absentFlag);
           return;
         }
-        const path = `${tmpdir()}/conductor-${input.issue}-${flag.replace(/^--/, "")}-${randomUUID()}`;
+        const path = `${tmpdir()}/conductor-${input.issue}-${flag.replace(/^--/, "")}-${crypto.randomUUID()}`;
         // bytes は `protocols.md` の「file の bytes」。
         await Bun.write(path, body);
         files.push(path);
@@ -339,7 +337,7 @@ export const createPort = (options: PortOptions): ObservePort => {
 
       if (input.ledger === "未計画") {
         for (const b of input.issueBodies) {
-          const path = `${tmpdir()}/conductor-body-${b.issue}-${randomUUID()}`;
+          const path = `${tmpdir()}/conductor-body-${b.issue}-${crypto.randomUUID()}`;
           // bytes は `protocols.md` の「file の bytes」。
           await Bun.write(path, b.body);
           files.push(path);
@@ -384,7 +382,7 @@ export const createPort = (options: PortOptions): ObservePort => {
       await fileArg("--wait-record", input.waitRecord, "--no-wait-record");
 
       const result = await run(args);
-      await Promise.all(files.map((f) => rm(f, { force: true })));
+      await Promise.all(files.map((f) => Bun.file(f).delete()));
       // **指紋を作れない周でも action の選択は続ける**（照合を飛ばすだけ）。
       return result.ok ? present(result.stdout.trim()) : unobservable(result.reason);
     },

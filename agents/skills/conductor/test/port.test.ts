@@ -15,7 +15,6 @@ import {
   parseExecutors,
   resolveSurfaces,
 } from "../src/config.ts";
-import { readFileSync } from "node:fs";
 import { createPort, snapshotArgs } from "../src/port.ts";
 import { parseRosterToml } from "../src/roster.ts";
 import { present } from "../src/types.ts";
@@ -47,7 +46,7 @@ const PATHS = new Map([
 ]);
 
 const argsOf = (input: typeof raw, paths: ReadonlyMap<string, string> = PATHS) => {
-  const config = parseConfig(input);
+  const config = parseConfig(input, HARNESS_MD);
   return snapshotArgs(config, resolveSurfaces(config.surfaces, paths), "/s", "/tmp/snap");
 };
 
@@ -87,7 +86,7 @@ describe("watch.sh の引数", () => {
   });
 
   test("制御面以外の着地面を 1 つも落とさない", () => {
-    const declared = parseConfig(raw).surfaces.slice(1);
+    const declared = parseConfig(raw, HARNESS_MD).surfaces.slice(1);
     expect(valuesOf("--landing")).toHaveLength(declared.length);
   });
 
@@ -105,14 +104,14 @@ describe("watch.sh の引数", () => {
 
 describe("checkout path の解決", () => {
   test("面が 1 つでも欠けたら止まる（観測の穴になる）", () => {
-    const config = parseConfig(raw);
+    const config = parseConfig(raw, HARNESS_MD);
     expect(() =>
       resolveSurfaces(config.surfaces, new Map([["acme/control", "/w/control"]])),
     ).toThrow("acme/skills");
   });
 
   test("空文字は渡していないものとして扱う", () => {
-    const config = parseConfig(raw);
+    const config = parseConfig(raw, HARNESS_MD);
     expect(() =>
       resolveSurfaces(
         config.surfaces,
@@ -125,23 +124,26 @@ describe("checkout path の解決", () => {
   });
 });
 
-const harnessMd = () => readFileSync(join(import.meta.dir, "../references/harness.md"), "utf8");
-const skillMd = () => readFileSync(join(import.meta.dir, "../SKILL.md"), "utf8");
+const HARNESS_MD = await Bun.file(join(import.meta.dir, "../references/harness.md")).text();
+const SKILL_MD = await Bun.file(join(import.meta.dir, "../SKILL.md")).text();
 
 describe("設定の fail-closed", () => {
   test("面の名前が重複したら止まる", () => {
     expect(() =>
-      parseConfig({
-        ...raw,
-        surfaces: [raw.surfaces[0], { ...raw.surfaces[1], name: "acme/control" }],
-      }),
+      parseConfig(
+        {
+          ...raw,
+          surfaces: [raw.surfaces[0], { ...raw.surfaces[1], name: "acme/control" }],
+        },
+        HARNESS_MD,
+      ),
     ).toThrow("name が重複");
   });
 
   test("sessionsCmd を省略したら harness.md の code block を使う", () => {
     const { sessionsCmd: _drop, ...without } = raw;
-    const cmd = parseConfig(without).sessionsCmd;
-    expect(cmd).toBe(extractHarnessCmd(harnessMd(), "sessions-cmd"));
+    const cmd = parseConfig(without, HARNESS_MD).sessionsCmd;
+    expect(cmd).toBe(extractHarnessCmd(HARNESS_MD, "sessions-cmd"));
     expect(cmd).toContain("leftover=leftover");
     expect(cmd).toContain("refused=refused");
     expect(cmd).toContain("refused=-");
@@ -153,22 +155,22 @@ describe("設定の fail-closed", () => {
 
   test("workspacesCmd を省略したら harness.md の code block を使う", () => {
     const { workspacesCmd: _drop, ...without } = raw;
-    expect(parseConfig(without).workspacesCmd).toBe(
-      extractHarnessCmd(harnessMd(), "workspaces-cmd"),
+    expect(parseConfig(without, HARNESS_MD).workspacesCmd).toBe(
+      extractHarnessCmd(HARNESS_MD, "workspaces-cmd"),
     );
   });
 
   test("sessionsCmd が空文字なら止まる", () => {
-    expect(() => parseConfig({ ...raw, sessionsCmd: "" })).toThrow("sessionsCmd");
+    expect(() => parseConfig({ ...raw, sessionsCmd: "" }, HARNESS_MD)).toThrow("sessionsCmd");
   });
 
   test("workspacesCmd が空文字なら止まる", () => {
-    expect(() => parseConfig({ ...raw, workspacesCmd: "" })).toThrow("workspacesCmd");
+    expect(() => parseConfig({ ...raw, workspacesCmd: "" }, HARNESS_MD)).toThrow("workspacesCmd");
   });
 });
 
 describe("leftover 判定", () => {
-  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+  const sessionsCmd = () => extractHarnessCmd(HARNESS_MD, "sessions-cmd");
 
   const leftoverPredicate = (cmd: string): string => {
     const start = cmd.indexOf("    still=0\n");
@@ -184,9 +186,9 @@ describe("leftover 判定", () => {
       const snippetPath = join(dir, "snippet");
       const visiblePath = join(dir, "visible");
       const scriptPath = join(dir, "run.sh");
-      await writeFile(snippetPath, snippet);
-      await writeFile(visiblePath, visible);
-      await writeFile(
+      await Bun.write(snippetPath, snippet);
+      await Bun.write(visiblePath, visible);
+      await Bun.write(
         scriptPath,
         [
           'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
@@ -227,13 +229,13 @@ describe("leftover 判定", () => {
   });
 
   test("契約表に turn 終了と背景残存の区別がある", () => {
-    expect(harnessMd()).toContain("turn の終了を背景作業の残存と区別して観測できる");
+    expect(HARNESS_MD).toContain("turn の終了を背景作業の残存と区別して観測できる");
   });
 
   test("終了行は末尾側 leftover chrome より前で最も近いものを見る", () => {
-    expect(harnessMd()).toContain("末尾側の leftover chrome");
-    expect(harnessMd()).not.toContain("終了行は detection の末尾だけを見る");
-    expect(harnessMd()).not.toContain("末尾以外は見ない");
+    expect(HARNESS_MD).toContain("末尾側の leftover chrome");
+    expect(HARNESS_MD).not.toContain("終了行は detection の末尾だけを見る");
+    expect(HARNESS_MD).not.toContain("末尾以外は見ない");
   });
 
   test("終了行が dump 末尾から外れ、chrome とのあいだが空行だけなら leftover", async () => {
@@ -270,7 +272,7 @@ describe("leftover 判定", () => {
 });
 
 describe("card 判定", () => {
-  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+  const sessionsCmd = () => extractHarnessCmd(HARNESS_MD, "sessions-cmd");
 
   const cardPredicate = (cmd: string): string => {
     const start = cmd.indexOf('if [ "$owned" = 1 ] && { [ "$status" = "idle" ]');
@@ -285,8 +287,8 @@ describe("card 判定", () => {
     try {
       const visiblePath = join(dir, "visible");
       const scriptPath = join(dir, "run.sh");
-      await writeFile(visiblePath, visible);
-      await writeFile(
+      await Bun.write(visiblePath, visible);
+      await Bun.write(
         scriptPath,
         [
           `status=${JSON.stringify(status)}`,
@@ -356,7 +358,7 @@ describe("card 判定", () => {
 });
 
 describe("subagent 判定", () => {
-  const sessionsCmd = () => extractHarnessCmd(harnessMd(), "sessions-cmd");
+  const sessionsCmd = () => extractHarnessCmd(HARNESS_MD, "sessions-cmd");
 
   const subagentPredicate = (cmd: string): string => {
     const start = cmd.indexOf("  subagent_re=");
@@ -371,8 +373,8 @@ describe("subagent 判定", () => {
     try {
       const snippetPath = join(dir, "snippet");
       const scriptPath = join(dir, "run.sh");
-      await writeFile(snippetPath, snippet);
-      await writeFile(
+      await Bun.write(snippetPath, snippet);
+      await Bun.write(
         scriptPath,
         [
           'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
@@ -413,9 +415,9 @@ describe("subagent 判定", () => {
       const snippetPath = join(dir, "snippet");
       const visiblePath = join(dir, "visible");
       const scriptPath = join(dir, "run.sh");
-      await writeFile(snippetPath, snippet);
-      await writeFile(visiblePath, visible);
-      await writeFile(
+      await Bun.write(snippetPath, snippet);
+      await Bun.write(visiblePath, visible);
+      await Bun.write(
         scriptPath,
         [
           'snippet=$(cat "$1"; printf x); snippet=${snippet%x}',
@@ -475,20 +477,20 @@ describe("subagent 判定", () => {
 
 describe("既に working への agent prompt", () => {
   test("確認は agent_prompted。seq 非変化を失敗にしない", () => {
-    const md = harnessMd();
+    const md = HARNESS_MD;
     expect(md).toContain("agent_prompted");
     expect(md).not.toContain("state_change_seq` が動いたことを確認する。動かなければ失敗");
   });
 
   test("張り直しと実行器だけ止めるの seq 確認は残る", () => {
-    const md = harnessMd();
+    const md = HARNESS_MD;
     expect(md).toMatch(/実行器だけ止める[\s\S]*state_change_seq/);
     expect(md).toMatch(/失われた resolve を張り直す[\s\S]*state_change_seq/);
   });
 });
 
 const composerSection = () => {
-  const md = harnessMd();
+  const md = HARNESS_MD;
   const start = md.indexOf("### composer の受け入れ");
   const end = md.indexOf("### 失われた resolve を張り直す");
   return md.slice(start, end);
@@ -496,11 +498,11 @@ const composerSection = () => {
 
 describe("composer が受け付ける状態での agent prompt", () => {
   test("契約表に受け付ける状態で submit できたことの観測がある", () => {
-    expect(harnessMd()).toContain("composer が受け付ける状態で submit できたことを観測できる");
+    expect(HARNESS_MD).toContain("composer が受け付ける状態で submit できたことを観測できる");
   });
 
   test("前段は visible のフッターで、入力欄は見ない", () => {
-    const md = harnessMd();
+    const md = HARNESS_MD;
     expect(md).toMatch(/agent read[\s\S]*--source visible/);
     expect(md).toContain("Space:prompt");
     expect(md).toContain("j/k:nav");
@@ -550,30 +552,30 @@ describe("composer が受け付ける状態での agent prompt", () => {
   });
 
   test("chrome が読めない、または表に無い字面は fail-open", () => {
-    expect(harnessMd()).toMatch(/表に無い字面[\s\S]*fail-open/);
+    expect(HARNESS_MD).toMatch(/表に無い字面[\s\S]*fail-open/);
   });
 
   test("leftover 成功は受け付ける状態での agent_prompted", () => {
-    expect(harnessMd()).toMatch(/受け付ける状態での `agent_prompted`/);
+    expect(HARNESS_MD).toMatch(/受け付ける状態での `agent_prompted`/);
   });
 
   test("送れなかった周は成功でも失敗でもない", () => {
-    expect(harnessMd()).toContain("成功でも失敗でもない");
+    expect(HARNESS_MD).toContain("成功でも失敗でもない");
   });
 
   test("戻れず送れなかった周は retry に数えない", () => {
-    expect(skillMd()).toMatch(/retry に数え\*\*ない\*\*/);
-    expect(skillMd()).toMatch(/送れなかった周は実行していない/);
-    expect(skillMd()).toContain("composer の受け入れ");
+    expect(SKILL_MD).toMatch(/retry に数え\*\*ない\*\*/);
+    expect(SKILL_MD).toMatch(/送れなかった周は実行していない/);
+    expect(SKILL_MD).toContain("composer の受け入れ");
   });
 
   test("live chrome が残る stalled は張り直しに当てない", () => {
-    const md = harnessMd();
+    const md = HARNESS_MD;
     expect(md).toMatch(/live な composer \/ nav chrome[\s\S]*張り直しに当てない/);
   });
 
   test("張り直しの agent prompt も同じ前段を通す", () => {
-    expect(harnessMd()).toMatch(/張り直しの `agent prompt` も同じ/);
+    expect(HARNESS_MD).toMatch(/張り直しの `agent prompt` も同じ/);
   });
 
   test("Workspace Trust は [a] と spinner の 2 行。見出し必須ではない", () => {
@@ -624,18 +626,18 @@ describe("composer が受け付ける状態での agent prompt", () => {
   });
 
   test("until working の timeout 直後に visible を読み、Trust 面なら送れなかった周", () => {
-    const md = harnessMd();
+    const md = HARNESS_MD;
     expect(md).toMatch(/timeout[\s\S]*visible/);
     expect(md).toMatch(/Trust[\s\S]*送れなかった周/);
   });
 
   test("composer 表の Conflict は送れなかった周ではない", () => {
-    expect(skillMd()).toMatch(/composer 表が Conflict[\s\S]*送れなかった周ではない/);
-    expect(harnessMd()).toMatch(/表が Conflict と書いた周は送れなかった周ではない/);
+    expect(SKILL_MD).toMatch(/composer 表が Conflict[\s\S]*送れなかった周ではない/);
+    expect(HARNESS_MD).toMatch(/表が Conflict と書いた周は送れなかった周ではない/);
   });
 
   test("send-keys の例外は composer の受け入れ表が定めるキー。表に submit キーを置かない", () => {
-    expect(harnessMd()).toMatch(/例外は「composer の受け入れ」表が定めるキー/);
+    expect(HARNESS_MD).toMatch(/例外は「composer の受け入れ」表が定めるキー/);
     const md = composerSection();
     expect(md).toMatch(/表に `enter` \/ `ctrl\+enter` を置か/);
     expect(md).not.toMatch(/send-keys <名前> enter/);
@@ -677,13 +679,13 @@ describe("実行器", () => {
   });
 
   test("tracked の executors は未知として止まる", () => {
-    expect(() => parseConfig({ ...raw, executors: { refine: "claude", resolve: "grok" } })).toThrow(
-      "executors",
-    );
+    expect(() =>
+      parseConfig({ ...raw, executors: { refine: "claude", resolve: "grok" } }, HARNESS_MD),
+    ).toThrow("executors");
   });
 
   test("tracked の未知キーは止まる", () => {
-    expect(() => parseConfig({ ...raw, extra: 1 })).toThrow("未知");
+    expect(() => parseConfig({ ...raw, extra: 1 }, HARNESS_MD)).toThrow("未知");
   });
 });
 
@@ -710,8 +712,8 @@ args = ["--model", "x # not a comment"]
 });
 
 describe("実行器の読み込み", () => {
-  test("roster.toml は既定の在処で読める", () => {
-    const loaded = loadExecutors();
+  test("roster.toml は既定の在処で読める", async () => {
+    const loaded = await loadExecutors();
     expect(loaded.refine.kind).not.toBe("");
     expect(loaded.resolve.kind).not.toBe("");
   });
@@ -719,29 +721,29 @@ describe("実行器の読み込み", () => {
   test("file が無ければ在処と必要なキーを出して止まる", async () => {
     const dir = await mkdtemp(join(tmpdir(), "executors-"));
     const missing = join(dir, "roster.toml");
-    expect(() => loadExecutors(missing)).toThrow(missing);
-    expect(() => loadExecutors(missing)).toThrow("必要なキー");
+    await expect(loadExecutors(missing)).rejects.toThrow(missing);
+    await expect(loadExecutors(missing)).rejects.toThrow("必要なキー");
   });
 
   test("壊れていれば在処を出して止まる", async () => {
     const dir = await mkdtemp(join(tmpdir(), "executors-"));
     const broken = join(dir, "roster.toml");
-    await writeFile(broken, "= not toml");
-    expect(() => loadExecutors(broken)).toThrow(broken);
+    await Bun.write(broken, "= not toml");
+    await expect(loadExecutors(broken)).rejects.toThrow(broken);
   });
 
   test("executors が無ければ止まる", async () => {
     const dir = await mkdtemp(join(tmpdir(), "executors-"));
     const path = join(dir, "roster.toml");
-    await writeFile(path, '[[advisors]]\nkind = "claude"\nargs = []\n');
-    expect(() => loadExecutors(path)).toThrow("executors");
+    await Bun.write(path, '[[advisors]]\nkind = "claude"\nargs = []\n');
+    await expect(loadExecutors(path)).rejects.toThrow("executors");
   });
 
   test("トップレベルの未知キーは止まる", async () => {
     const dir = await mkdtemp(join(tmpdir(), "executors-"));
     const path = join(dir, "roster.toml");
-    await writeFile(path, 'advisors = []\n[executor.refine]\nkind = "claude"\nargs = []\n');
-    expect(() => loadExecutors(path)).toThrow("executor");
+    await Bun.write(path, 'advisors = []\n[executor.refine]\nkind = "claude"\nargs = []\n');
+    await expect(loadExecutors(path)).rejects.toThrow("executor");
   });
 });
 
@@ -753,7 +755,7 @@ const markFromExactFiles = async (
   const dir = await mkdtemp(join(tmpdir(), "cycle-mark-exact-"));
   try {
     const bodyPath = join(dir, "body");
-    await writeFile(bodyPath, issueBody);
+    await Bun.write(bodyPath, issueBody);
     const argv = [
       "python3",
       `${scriptsDir}/cycle-mark.py`,
@@ -766,7 +768,7 @@ const markFromExactFiles = async (
       argv.push("--no-wait-record");
     } else {
       const waitPath = join(dir, "wait");
-      await writeFile(waitPath, waitRecord);
+      await Bun.write(waitPath, waitRecord);
       argv.push("--wait-record", waitPath);
     }
     const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
@@ -785,7 +787,7 @@ const markFromExactFiles = async (
 describe("cycleMark の入力 file", () => {
   const scriptsDir = join(import.meta.dir, "../scripts");
   const portOf = () => {
-    const config = parseConfig(raw);
+    const config = parseConfig(raw, HARNESS_MD);
     return createPort({
       config,
       surfaces: resolveSurfaces(config.surfaces, PATHS),
@@ -892,7 +894,7 @@ const withFakeGh = async (script: string, fn: () => Promise<void>) => {
   try {
     const bin = join(dir, "bin");
     await mkdir(bin);
-    await writeFile(join(bin, "gh"), script, { mode: 0o755 });
+    await writeFile(join(bin, "gh"), script, { mode: 0o755 }); // Bun.write は mode を持たない
     process.env["PATH"] = `${bin}:${prev ?? ""}`;
     await fn();
   } finally {
@@ -903,7 +905,7 @@ const withFakeGh = async (script: string, fn: () => Promise<void>) => {
 };
 
 const portOf = () => {
-  const config = parseConfig(raw);
+  const config = parseConfig(raw, HARNESS_MD);
   return createPort({
     config,
     surfaces: resolveSurfaces(config.surfaces, PATHS),

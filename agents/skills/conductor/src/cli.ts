@@ -76,11 +76,11 @@ const runTick = async (): Promise<void> => {
 
   const scriptsDir = new URL("../scripts", import.meta.url).pathname;
 
-  const config = (() => {
+  const config = await (async () => {
     try {
       // 実行器は Decision が参照しない。壊れていれば起こす段で止まるので、周の頭で検証して捨てる。
-      loadExecutors();
-      return loadProjectConfig(configPath);
+      await loadExecutors();
+      return await loadProjectConfig(configPath);
     } catch (error) {
       return fail(
         2,

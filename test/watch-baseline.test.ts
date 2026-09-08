@@ -9,7 +9,7 @@
 // 偽装を増やさずに「窓に入った遷移」を再現できる。
 
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WATCH_SHELL } from "../agents/skills/conductor/src/port.ts";
@@ -18,10 +18,10 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const WATCH = `${ROOT}agents/skills/conductor/scripts/watch.sh`;
 const SHIM = `${ROOT}test/fixtures/watch-baseline/bin`;
 
-function sandbox() {
+async function sandbox() {
   const dir = mkdtempSync(join(tmpdir(), "watch-baseline-"));
   const state = join(dir, "state");
-  writeFileSync(state, "resolve-1 working\n");
+  await Bun.write(state, "resolve-1 working\n");
   return { dir, state, snapshot: join(dir, "snapshot") };
 }
 
@@ -67,14 +67,14 @@ async function watch(
 }
 
 test("tick が観測した後・watcher を張る前に起きた変化を、fallback を待たずに差分へ出す", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const snap = await watch(["--snapshot", box.snapshot], box);
   expect(snap.exitCode).toBe(0);
-  expect(readFileSync(box.snapshot, "utf8")).toContain("resolve-1 working");
+  expect(await Bun.file(box.snapshot).text()).toContain("resolve-1 working");
 
   // ここが窓。tick は "working" を見て action を決め、watcher を張る前に "done" へ落ちた
-  writeFileSync(box.state, "resolve-1 done\n");
+  await Bun.write(box.state, "resolve-1 done\n");
 
   const started = Date.now();
   const run = await watch(["--baseline", box.snapshot, "--interval", "1", "--max", "30"], box);
@@ -89,7 +89,7 @@ test("tick が観測した後・watcher を張る前に起きた変化を、fall
 }, 40_000);
 
 test("渡した観測から何も動いていなければ、fallback まで起こさない", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const snap = await watch(["--snapshot", box.snapshot], box);
   expect(snap.exitCode).toBe(0);
@@ -101,7 +101,7 @@ test("渡した観測から何も動いていなければ、fallback まで起�
 }, 20_000);
 
 test("baseline を渡さずに監視は始められない", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const none = await watch([], box);
   expect(none.exitCode).toBe(2);
@@ -113,30 +113,30 @@ test("baseline を渡さずに監視は始められない", async () => {
 });
 
 test("観測に失敗しても、既存の snapshot を壊さない", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const ok = await watch(["--snapshot", box.snapshot], box);
   expect(ok.exitCode).toBe(0);
-  const kept = readFileSync(box.snapshot, "utf8");
+  const kept = await Bun.file(box.snapshot).text();
 
   // 注入したコマンドが落ちる = 観測の失敗。**壊すと、観測できなかった tick が
   // 渡せる baseline を失い、誰も conductor を起こせなくなる**（起床漏れが最も重い障害）
   const broken = { ...box, state: "/dev/null; false" };
   const failed = await watch(["--snapshot", box.snapshot], broken);
   expect(failed.exitCode).toBe(1);
-  expect(readFileSync(box.snapshot, "utf8")).toBe(kept);
+  expect(await Bun.file(box.snapshot).text()).toBe(kept);
 });
 
 test("呼び出し側へ渡せなかった観測は、置いてある snapshot を置き換えない", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const ok = await watch(["--snapshot", box.snapshot], box);
   expect(ok.exitCode).toBe(0);
-  const kept = readFileSync(box.snapshot, "utf8");
+  const kept = await Bun.file(box.snapshot).text();
 
   // stdout を閉じてから起動する = 受け取り側が居ない。**置き換わると、誰も評価していない
   // 観測が「直前に成功した snapshot」として baseline に渡り、そこまでの遷移が吸われる**
-  writeFileSync(box.state, "resolve-1 done\n");
+  await Bun.write(box.state, "resolve-1 done\n");
   const cmd =
     `exec 1>&-; exec ${WATCH_SHELL} '${WATCH}' --snapshot '${box.snapshot}'` +
     ` --repo /fake/repo --gh-repo o/r --project-org o --project-number 7 --status-field Status` +
@@ -151,7 +151,7 @@ test("呼び出し側へ渡せなかった観測は、置いてある snapshot �
 
   expect(exitCode).toBe(1);
   expect(stderr).toContain("failed to hand the snapshot to the caller");
-  expect(readFileSync(box.snapshot, "utf8")).toBe(kept);
+  expect(await Bun.file(box.snapshot).text()).toBe(kept);
 });
 
 test("値の無い option は、観測の失敗と区別できる終了コードで落ちる", async () => {
@@ -168,7 +168,7 @@ test("値の無い option は、観測の失敗と区別できる終了コード
 });
 
 test("baseline の 1 周ごとのコスト行はモニター出力に出さない。超過は残す", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const snap = await watch(["--snapshot", box.snapshot], box);
   expect(snap.exitCode).toBe(0);
@@ -185,7 +185,7 @@ test("baseline の 1 周ごとのコスト行はモニター出力に出さな�
 }, 20_000);
 
 test("fetch 失敗を毎周 stdout に出さない", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const snap = await watch(["--snapshot", box.snapshot], box);
   expect(snap.exitCode).toBe(0);
@@ -200,14 +200,14 @@ test("fetch 失敗を毎周 stdout に出さない", async () => {
 }, 20_000);
 
 test("読めない baseline は自分で取り直さず起動を止める", async () => {
-  const box = sandbox();
+  const box = await sandbox();
 
   const missing = await watch(["--baseline", join(box.dir, "nope")], box);
   expect(missing.exitCode).toBe(2);
   expect(missing.stderr).toContain("baseline not found");
 
   const empty = join(box.dir, "empty");
-  writeFileSync(empty, "");
+  await Bun.write(empty, "");
   const blank = await watch(["--baseline", empty], box);
   expect(blank.exitCode).toBe(2);
   expect(blank.stderr).toContain("baseline is empty");

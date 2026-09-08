@@ -3,7 +3,6 @@
 // **既定値を置くのは、推測が外れても待ちが伸びるだけの項目まで。**
 // 間違ったものを掴む項目（Status の対応・着地面の座標表）には置かず、欠けたら止まる。
 
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseRosterToml } from "./roster.ts";
 import type { TickConfig } from "./decide.ts";
@@ -92,18 +91,11 @@ export const extractHarnessCmd = (md: string, heading: string): string => {
   return body;
 };
 
-const readHarnessCmds = (): { readonly sessionsCmd: string; readonly workspacesCmd: string } => {
-  let md: string;
-  try {
-    md = readFileSync(HARNESS_MD, "utf8");
-  } catch {
-    throw new ConfigError(`harness.md を読めない: ${HARNESS_MD}`);
-  }
-  return {
-    sessionsCmd: extractHarnessCmd(md, "sessions-cmd"),
-    workspacesCmd: extractHarnessCmd(md, "workspaces-cmd"),
-  };
-};
+/** `references/harness.md` の本文から省略時のコマンドを切る。 */
+export const harnessCmds = (md: string): Pick<ProjectConfig, "sessionsCmd" | "workspacesCmd"> => ({
+  sessionsCmd: extractHarnessCmd(md, "sessions-cmd"),
+  workspacesCmd: extractHarnessCmd(md, "workspaces-cmd"),
+});
 
 const isLedger = (v: unknown): v is Ledger => LEDGER_VALUES.includes(v as Ledger);
 
@@ -133,8 +125,9 @@ const wrapLoadError = (label: "設定" | "実行器", abs: string, detail: unkno
 /**
  * 設定 JSON を読む。**欠けたら止まる**（fail-closed）——
  * 既定へ倒すと、対応表に無い Status を持つ Issue が黙って `未計画` として計画される。
+ * `harnessMd` は `sessionsCmd` / `workspacesCmd` を省略したときだけ切る。省略していて無ければ止まる。
  */
-export const parseConfig = (raw: unknown): ProjectConfig => {
+export const parseConfig = (raw: unknown, harnessMd?: string): ProjectConfig => {
   if (typeof raw !== "object" || raw === null) throw new ConfigError("設定が object ではない");
   const o = raw as Record<string, unknown>;
   for (const key of Object.keys(o)) {
@@ -147,9 +140,12 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     return v;
   };
 
-  const optionalCmd = (key: string, fallback: () => string): string => {
+  const optionalCmd = (key: string, fallback: (md: string) => string): string => {
     const v = o[key];
-    if (v === undefined) return fallback();
+    if (v === undefined) {
+      if (harnessMd === undefined) throw new ConfigError(`${key} の省略時に harness.md が要る`);
+      return fallback(harnessMd);
+    }
     if (typeof v !== "string" || v === "") throw new ConfigError(`設定の ${key} が空`);
     return v;
   };
@@ -206,8 +202,8 @@ export const parseConfig = (raw: unknown): ProjectConfig => {
     statusField: String(required("statusField")),
     statusMap,
     surfaces,
-    sessionsCmd: optionalCmd("sessionsCmd", () => readHarnessCmds().sessionsCmd),
-    workspacesCmd: optionalCmd("workspacesCmd", () => readHarnessCmds().workspacesCmd),
+    sessionsCmd: optionalCmd("sessionsCmd", (md) => harnessCmds(md).sessionsCmd),
+    workspacesCmd: optionalCmd("workspacesCmd", (md) => harnessCmds(md).workspacesCmd),
     // 硬い上限は既定を持つ（推測が外れても待ちが伸びるだけ）。
     tick: (() => {
       const rawTick = o["tick"];
@@ -263,30 +259,43 @@ export const parseExecutors = (raw: unknown): ExecutorsConfig => {
 
 export const ROSTER_TOML = `${import.meta.dir}/../references/roster.toml`;
 
-const readFile = (abs: string, label: "設定" | "実行器"): string => {
-  if (!existsSync(abs)) throw wrapLoadError(label, abs, "file が無い");
+const readText = async (abs: string, label: "設定" | "実行器"): Promise<string> => {
+  const file = Bun.file(abs);
+  if (!(await file.exists())) throw wrapLoadError(label, abs, "file が無い");
   try {
-    return readFileSync(abs, "utf8");
+    return await file.text();
   } catch (error) {
     throw wrapLoadError(label, abs, error);
   }
 };
 
-/** `--config` を読む。実行器のキー・欠落・破損は止まる。 */
-export const loadProjectConfig = (configPath: string): ProjectConfig => {
-  const abs = resolve(configPath);
-  const text = readFile(abs, "設定");
+/** 省略した cmd があるときだけ harness.md を読む（両方指定なら読まない）。 */
+const harnessMdFor = async (raw: unknown): Promise<string | undefined> => {
+  const o = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+  if (o["sessionsCmd"] !== undefined && o["workspacesCmd"] !== undefined) return undefined;
   try {
-    return parseConfig(JSON.parse(text) as unknown);
+    return await Bun.file(HARNESS_MD).text();
+  } catch {
+    throw new ConfigError(`harness.md を読めない: ${HARNESS_MD}`);
+  }
+};
+
+/** `--config` を読む。実行器のキー・欠落・破損は止まる。 */
+export const loadProjectConfig = async (configPath: string): Promise<ProjectConfig> => {
+  const abs = resolve(configPath);
+  const text = await readText(abs, "設定");
+  try {
+    const raw = JSON.parse(text) as unknown;
+    return parseConfig(raw, await harnessMdFor(raw));
   } catch (error) {
     throw wrapLoadError("設定", abs, error);
   }
 };
 
 /** `roster.toml` の `executors` を読む。座標キー・欠落・破損・工程欠けは止まる。 */
-export const loadExecutors = (path: string = ROSTER_TOML): ExecutorsConfig => {
+export const loadExecutors = async (path: string = ROSTER_TOML): Promise<ExecutorsConfig> => {
   const abs = resolve(path);
-  const text = readFile(abs, "実行器");
+  const text = await readText(abs, "実行器");
   try {
     return parseExecutors(parseRosterToml(text).executors);
   } catch (error) {

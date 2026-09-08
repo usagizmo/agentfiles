@@ -7,15 +7,14 @@
 // **UNPORTED は正確に一致させる**（部分集合では通さない）。緩めると、移していない行が
 // 増えても緑のままになり、ラチェットが逆回りする。
 
-import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
 const HERE = import.meta.dir;
 
 /** 表の行 ID。行頭が `| <数字>` の行だけを見る（節見出しと説明行を拾わない）。 */
-const rowIds = (): Set<string> => {
-  const md = readFileSync(join(HERE, "../references/scenarios.md"), "utf8");
+const rowIds = async (): Promise<Set<string>> => {
+  const md = await Bun.file(join(HERE, "../references/scenarios.md")).text();
   const ids = new Set<string>();
   for (const line of md.split("\n")) {
     const m = /^\|\s*([0-9]+[a-z]?[0-9]?)\s*\|/.exec(line);
@@ -25,11 +24,10 @@ const rowIds = (): Set<string> => {
 };
 
 /** テスト名の先頭に置いた行 ID。`test("8d: ...")` の形だけを拾う。 */
-const testedIds = (): Set<string> => {
+const testedIds = async (): Promise<Set<string>> => {
   const ids = new Set<string>();
-  for (const file of readdirSync(HERE)) {
-    if (!file.endsWith(".test.ts")) continue;
-    const src = readFileSync(join(HERE, file), "utf8");
+  for (const file of new Bun.Glob("*.test.ts").scanSync(HERE)) {
+    const src = await Bun.file(join(HERE, file)).text();
     for (const m of src.matchAll(/\btest\(\s*"([0-9]+[a-z]?[0-9]?):/g)) {
       if (m[1] !== undefined) ids.add(m[1]);
     }
@@ -73,19 +71,19 @@ const UNPORTED: readonly string[] = [];
 const sorted = (s: Iterable<string>) => [...s].sort();
 
 describe("代表シナリオとテストの対応", () => {
-  test("テストの無い行は UNPORTED と正確に一致する", () => {
-    const rows = rowIds();
-    const tested = testedIds();
+  test("テストの無い行は UNPORTED と正確に一致する", async () => {
+    const rows = await rowIds();
+    const tested = await testedIds();
     const missing = sorted([...rows].filter((id) => !tested.has(id)));
     expect(missing).toEqual(sorted([...UNPORTED, ...OUT_OF_KERNEL]));
   });
 
-  test("表に無い行 ID を名乗るテストは無い", () => {
-    const rows = rowIds();
-    expect(sorted([...testedIds()].filter((id) => !rows.has(id)))).toEqual([]);
+  test("表に無い行 ID を名乗るテストは無い", async () => {
+    const rows = await rowIds();
+    expect(sorted([...(await testedIds())].filter((id) => !rows.has(id)))).toEqual([]);
   });
 
-  test("表の行を 1 件も読めていない状態を成功にしない", () => {
-    expect(rowIds().size).toBeGreaterThan(100);
+  test("表の行を 1 件も読めていない状態を成功にしない", async () => {
+    expect((await rowIds()).size).toBeGreaterThan(100);
   });
 });

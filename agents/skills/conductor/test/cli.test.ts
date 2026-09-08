@@ -10,7 +10,7 @@
 //
 // `cli.ts` はトップレベルで実行して `process.exit` するので、import では試せない。
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, test } from "bun:test";
@@ -39,13 +39,11 @@ const VALID = {
 };
 
 /** 設定を dir に書く。`over` を undefined にした key は落とす。 */
-const configFile = (name: string, over: Record<string, unknown> = {}): string => {
-  const dir = join(TMP, name);
-  mkdirSync(dir, { recursive: true });
+const configFile = async (name: string, over: Record<string, unknown> = {}): Promise<string> => {
   const merged: Record<string, unknown> = { ...VALID, ...over };
   for (const [k, v] of Object.entries(over)) if (v === undefined) delete merged[k];
-  const path = join(dir, "config.json");
-  writeFileSync(path, JSON.stringify(merged));
+  const path = join(TMP, name, "config.json");
+  await Bun.write(path, JSON.stringify(merged));
   return path;
 };
 
@@ -74,7 +72,7 @@ describe("引数", () => {
   });
 
   test("--snapshot-out が無ければ 2 で止まる", async () => {
-    const { code, err } = await run(["--config", configFile("a"), ...SURFACE]);
+    const { code, err } = await run(["--config", await configFile("a"), ...SURFACE]);
     expect(code).toBe(2);
     expect(err).toContain("usage");
   });
@@ -99,7 +97,7 @@ describe("設定の fail-closed", () => {
 
   test("JSON として壊れていれば 2 で止まる", async () => {
     const path = join(TMP, "broken.json");
-    writeFileSync(path, "{ not json");
+    await Bun.write(path, "{ not json");
     const { code } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
   });
@@ -115,7 +113,7 @@ describe("設定の fail-closed", () => {
     "surfaces",
   ]) {
     test(`${key} が欠けたら 2 で止まる`, async () => {
-      const path = configFile(`no-${key}`, { [key]: undefined });
+      const path = await configFile(`no-${key}`, { [key]: undefined });
       const { code, err } = await run([
         "--config",
         path,
@@ -129,7 +127,7 @@ describe("設定の fail-closed", () => {
   }
 
   test("statusMap に 5 値のどれかが写らなければ 2 で止まる", async () => {
-    const path = configFile("partial-status", {
+    const path = await configFile("partial-status", {
       statusMap: { Backlog: "未計画", Ready: "計画済み" },
     });
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
@@ -138,20 +136,20 @@ describe("設定の fail-closed", () => {
   });
 
   test("surfaces が空なら 2 で止まる", async () => {
-    const path = configFile("no-surface", { surfaces: [] });
+    const path = await configFile("no-surface", { surfaces: [] });
     const { code } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
   });
 
   test("19q: tick.readyStockLimit が残っていれば 2 で止まる", async () => {
-    const path = configFile("old-stock", { tick: { readyStockLimit: 5 } });
+    const path = await configFile("old-stock", { tick: { readyStockLimit: 5 } });
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
     expect(err).toContain("readyStockLimit");
   });
 
   test("19s: countsCapacity が無ければ 2 で止まる", async () => {
-    const path = configFile("no-counts", {
+    const path = await configFile("no-counts", {
       surfaces: [{ name: "acme/control", usesPr: true, integrationRef: "origin/main" }],
     });
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
@@ -160,7 +158,7 @@ describe("設定の fail-closed", () => {
   });
 
   test("tracked に executors があれば 2 で止まる", async () => {
-    const path = configFile("tracked-executors", {
+    const path = await configFile("tracked-executors", {
       executors: { refine: "claude", resolve: "claude" },
     });
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
@@ -170,15 +168,15 @@ describe("設定の fail-closed", () => {
   });
 
   test("roster.toml の executors を読んで観測へ進む", async () => {
-    const path = configFile("executors-ok");
+    const path = await configFile("executors-ok");
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(1);
     expect(err).toContain("観測に失敗した");
   });
 
   test("座標の JSONC は通さない", async () => {
-    const path = configFile("jsonc-tracked");
-    writeFileSync(path, `{\n  // no\n  "ghRepo": "acme/control"\n}`);
+    const path = await configFile("jsonc-tracked");
+    await Bun.write(path, `{\n  // no\n  "ghRepo": "acme/control"\n}`);
     const { code, err } = await run(["--config", path, "--snapshot-out", "/dev/null", ...SURFACE]);
     expect(code).toBe(2);
     expect(err).toContain(path);
@@ -189,7 +187,7 @@ describe("checkout path", () => {
   test("--surface-path が無ければ 2 で止まる", async () => {
     const { code, err } = await run([
       "--config",
-      configFile("no-path"),
+      await configFile("no-path"),
       "--snapshot-out",
       "/dev/null",
     ]);
@@ -200,7 +198,7 @@ describe("checkout path", () => {
   test("<name>=<path> の形でなければ 2 で止まる", async () => {
     const { code } = await run([
       "--config",
-      configFile("bad-path"),
+      await configFile("bad-path"),
       "--snapshot-out",
       "/dev/null",
       "--surface-path",
@@ -211,10 +209,10 @@ describe("checkout path", () => {
 });
 
 describe("規約の穴", () => {
-  const gap = (extra: string[]) =>
+  const gap = async (extra: string[]) =>
     run([
       "--config",
-      configFile(`gap-${extra.join("-").slice(0, 40)}`),
+      await configFile(`gap-${extra.join("-").slice(0, 40)}`),
       "--snapshot-out",
       "/dev/null",
       ...SURFACE,
@@ -261,7 +259,7 @@ describe("観測の失敗", () => {
   test("設定は正しく観測だけ落ちたら 1 で止まる", async () => {
     const { code, err } = await run([
       "--config",
-      configFile("valid"),
+      await configFile("valid"),
       "--snapshot-out",
       join(TMP, "snap.txt"),
       ...SURFACE,
@@ -273,7 +271,7 @@ describe("観測の失敗", () => {
   test("観測に失敗しても Decision を stdout へ出さない", async () => {
     const { out } = await run([
       "--config",
-      configFile("valid2"),
+      await configFile("valid2"),
       "--snapshot-out",
       join(TMP, "snap2.txt"),
       ...SURFACE,
