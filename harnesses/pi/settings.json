@@ -1,0 +1,8 @@
+{
+  "lastChangelogVersion": "0.85.1",
+  "theme": "dark",
+  "defaultProvider": "command-code",
+  "defaultModel": "z-ai/glm-5.3-flash",
+  "defaultThinkingLevel": "high",
+  "defaultProjectTrust": "always"
+}

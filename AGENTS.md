@@ -55,6 +55,7 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 | `[grok]`         | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
 | `[opencode]`     | `harnesses/opencode` / `~/.config/opencode` 配下の opencode 設定                                          |
 | `[command-code]` | `harnesses/command-code` / `~/.commandcode` 配下の Command Code 設定                                      |
+| `[pi]`           | `harnesses/pi` / `~/.pi/agent` 配下の pi 設定                                                             |
 | `[lint]`         | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 
 複数スコープにまたがるときは並べる（例: `[agents][claude]`）。どのスコープにも入らない変更はスコープを省く。
