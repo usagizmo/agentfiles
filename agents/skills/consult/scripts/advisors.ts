@@ -1,4 +1,4 @@
-// アドバイザー候補表の検証と選出。候補 kind の集合は roster.toml の advisors だけが持つ。
+// アドバイザーの選出と完走判定。roster の解釈は roster.ts。
 //
 //   bun advisors.ts select --roster <file> --self <kind>
 //   bun advisors.ts start-argv --slot <file> --name <name> --pane <id>
@@ -7,16 +7,9 @@
 // select の stdout は選出した枠の JSON。表に無い self は先頭 2 枠 + stderr へ警告。
 // start-argv の stdout は herdr agent start の argv JSON。read-only 手段を末尾に足す。
 
-import { TOML } from "bun";
+import { RosterError, type Slot, flag, herdrStartArgv, parseRoster, parseSlot } from "./roster.ts";
 
 export const MAX_ADVISORS = 2;
-export const ROSTER_URL = new URL("./roster.toml", import.meta.url);
-
-export type Slot = {
-  readonly kind: string;
-  readonly args: readonly string[];
-  readonly members: readonly string[];
-};
 
 export type Selection = {
   readonly chosen: readonly Slot[];
@@ -31,142 +24,6 @@ export type CompleteResult =
 
 const BOX = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯]/u;
 const BOX_STRIP = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯·]/gu;
-
-const SLOT_KEYS = new Set(["kind", "args", "members"]);
-const KIND_RE = /^[a-z][a-z0-9_-]*$/;
-const BYPASS = new Set([
-  "--dangerously-skip-permissions",
-  "--dangerously-bypass-approvals-and-sandbox",
-  "--yolo",
-  "--full-auto",
-  "--force",
-  "-f",
-  "--always-approve",
-  "--trust",
-  "--auto-review",
-  "--approve-mcps",
-  "--no-plan",
-]);
-const DENIED_CONFIG = new Set(["sandbox_mode", "approval_policy"]);
-
-export class RosterError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RosterError";
-  }
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-
-const isStringArray = (v: unknown): v is string[] =>
-  Array.isArray(v) && v.every((a) => typeof a === "string");
-
-export const readOnlyArgs = (kind: string): readonly string[] => {
-  if (kind === "codex") return ["-s", "read-only"];
-  if (kind === "claude") return ["--permission-mode", "plan"];
-  if (kind === "grok") return ["--permission-mode", "plan", "--no-subagents"];
-  if (kind === "cursor") return ["--mode", "plan"];
-  throw new RosterError(`read-only 手段が無い kind: ${kind}`);
-};
-
-const fail = (message: string, path: string): never => {
-  throw new RosterError(`${path}: ${message}`);
-};
-
-const splitFlag = (
-  token: string,
-  next: string | undefined,
-): { name: string; value: string | undefined } => {
-  if (!token.startsWith("-") || token === "--") return { name: token, value: undefined };
-  const eq = token.indexOf("=");
-  if (eq >= 1) return { name: token.slice(0, eq), value: token.slice(eq + 1) };
-  if (!token.startsWith("--") && token.length > 2) {
-    return { name: token.slice(0, 2), value: token.slice(2) };
-  }
-  return { name: token, value: next };
-};
-
-const rejectBypass = (args: readonly string[]): void => {
-  for (let i = 0; i < args.length; i++) {
-    const token = args[i] ?? "";
-    if (token === "--") throw new RosterError("args に -- は置けない");
-    const { name, value } = splitFlag(token, args[i + 1]);
-    if (BYPASS.has(name)) throw new RosterError(`read-only を打ち消す flag: ${token}`);
-    if (name === "--permission-mode" && value !== "plan") {
-      throw new RosterError(`--permission-mode は plan だけ: ${value ?? "(無し)"}`);
-    }
-    if (name === "--mode" && value !== "plan") {
-      throw new RosterError(`--mode は plan だけ: ${value ?? "(無し)"}`);
-    }
-    if ((name === "-s" || name === "--sandbox") && value !== "read-only") {
-      throw new RosterError(`sandbox は read-only だけ: ${value ?? "(無し)"}`);
-    }
-    if (name === "-c" || name === "--config") {
-      const key = (value ?? "").split("=")[0] ?? "";
-      if (DENIED_CONFIG.has(key) || key.startsWith("sandbox_")) {
-        throw new RosterError(`read-only を打ち消す config: ${value ?? "(無し)"}`);
-      }
-    }
-  }
-};
-
-/** TOML を読む。壊れた TOML・未知のトップレベルキー・`advisors` の欠落は止まる。 */
-export const parseRoster = (text: string): Slot[] => {
-  let doc: unknown;
-  try {
-    doc = TOML.parse(text);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new RosterError(`TOML として読めない: ${detail}`);
-  }
-  if (!isRecord(doc)) throw new RosterError("roster が table ではない");
-  for (const key of Object.keys(doc)) {
-    if (key !== "advisors") throw new RosterError(`roster の ${key} は未知`);
-  }
-  if (doc["advisors"] === undefined) throw new RosterError("roster に advisors が無い");
-  return parseSlots(doc["advisors"]);
-};
-
-/** 枠配列の検証。`parseRoster` が `advisors` を、`start-argv` が 1 枠を通す。 */
-const parseSlots = (data: unknown): Slot[] => {
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new RosterError("枠配列が空");
-  }
-  const slots: Slot[] = [];
-  const seenKinds = new Set<string>();
-  const seenMembers = new Set<string>();
-  for (let i = 0; i < data.length; i++) {
-    const item: unknown = data[i];
-    const at = `[${i}]`;
-    if (!isRecord(item)) return fail("object ではない", at);
-    for (const key of Object.keys(item)) {
-      if (!SLOT_KEYS.has(key)) throw new RosterError(`${at}: 起動されないキー: ${key}`);
-    }
-    const kind = item["kind"];
-    if (typeof kind !== "string" || !KIND_RE.test(kind)) return fail("kind が不正", at);
-    if (seenKinds.has(kind)) throw new RosterError(`${at}: kind が重複: ${kind}`);
-    seenKinds.add(kind);
-    const rawArgs = item["args"];
-    if (!isStringArray(rawArgs)) return fail("args が string[] ではない", at);
-    rejectBypass(rawArgs);
-    const rawMembers = item["members"] === undefined ? [kind] : item["members"];
-    if (!isStringArray(rawMembers) || rawMembers.length === 0) return fail("members が空", at);
-    if (!rawMembers.every((m) => KIND_RE.test(m))) return fail("members が不正", at);
-    if (!rawMembers.includes(kind)) {
-      throw new RosterError(`${at}: members に kind が無い`);
-    }
-    for (const member of rawMembers) {
-      if (seenMembers.has(member)) {
-        throw new RosterError(`${at}: members が交差: ${member}`);
-      }
-      seenMembers.add(member);
-    }
-    slots.push({ kind, args: rawArgs, members: rawMembers });
-  }
-  for (const slot of slots) readOnlyArgs(slot.kind);
-  return slots;
-};
 
 /**
  * 行頭の字下げと箇条書きの点、行末の幅埋め・カーソル・右端の時刻を落とす。
@@ -263,36 +120,6 @@ export const selectAdvisors = (slots: readonly Slot[], selfKind: string): Select
   return { chosen, warning: matched === undefined };
 };
 
-export const herdrStartArgv = (slot: Slot, start: { name: string; pane: string }): string[] => {
-  rejectBypass(slot.args);
-  return [
-    "herdr",
-    "agent",
-    "start",
-    start.name,
-    "--kind",
-    slot.kind,
-    "--pane",
-    start.pane,
-    "--timeout",
-    "90000",
-    "--",
-    ...slot.args,
-    ...readOnlyArgs(slot.kind),
-  ];
-};
-
-const flag = (argv: readonly string[], name: string): string | undefined => {
-  const i = argv.indexOf(name);
-  return i < 0 ? undefined : argv[i + 1];
-};
-
-const parseSlot = (raw: unknown): Slot => {
-  const [slot] = parseSlots([raw]);
-  if (slot === undefined) throw new RosterError("slot が無い");
-  return slot;
-};
-
 const main = async (): Promise<void> => {
   const argv = process.argv.slice(2);
   const cmd = argv[0];
@@ -302,8 +129,8 @@ const main = async (): Promise<void> => {
       const selfKind = flag(argv, "--self");
       if (rosterPath === undefined) throw new RosterError("--roster が無い");
       if (selfKind === undefined || selfKind === "") throw new RosterError("--self が無い");
-      const slots = parseRoster(await Bun.file(rosterPath).text());
-      const { chosen, warning } = selectAdvisors(slots, selfKind);
+      const { advisors } = parseRoster(await Bun.file(rosterPath).text());
+      const { chosen, warning } = selectAdvisors(advisors, selfKind);
       if (warning) {
         console.error(`WARN\t自己 kind が候補表に無い: ${selfKind}`);
       }

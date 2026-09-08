@@ -9,21 +9,28 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import {
   MAX_ADVISORS,
-  ROSTER_URL,
-  RosterError,
   advisorComplete,
   isChromeLine,
-  herdrStartArgv,
-  parseRoster,
-  readOnlyArgs,
   selectAdvisors,
   type Selection,
 } from "../agents/skills/consult/scripts/advisors.ts";
+import {
+  ROSTER_URL,
+  RosterError,
+  herdrResolveArgv,
+  herdrStartArgv,
+  parseRoster,
+  readOnlyArgs,
+  type Roster,
+} from "../agents/shared/roster.ts";
 
 const rosterText = await Bun.file(ROSTER_URL).text();
-const roster = parseRoster(rosterText);
+const parsed = parseRoster(rosterText);
+const roster = parsed.advisors;
 
-/** JSON の枠配列を TOML の `advisors` へ写す（テスト入力を短く保つ）。 */
+const RESOLVE_TOML = '[resolve]\nkind = "claude"\nargs = []\n';
+
+/** JSON の枠配列を TOML の `advisors` へ写し、resolve を添える（テスト入力を短く保つ）。 */
 const toml = (json: string): string => {
   const slots = JSON.parse(json) as Record<string, unknown>[];
   const tables = slots.map(
@@ -32,36 +39,90 @@ const toml = (json: string): string => {
         .map(([k, v]) => `${k} = ${JSON.stringify(v)}`)
         .join(", ")} }`,
   );
-  return `advisors = [${tables.join(", ")}]\n`;
+  return `advisors = [${tables.join(", ")}]\n${RESOLVE_TOML}`;
 };
+
+/** resolve table だけ差し替えて読む。 */
+const withResolve = (resolve: string): Roster =>
+  parseRoster(
+    `${toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]').replace(RESOLVE_TOML, "")}${resolve}`,
+  );
 
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "grok"]);
+  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "cursor"]);
   expect(roster[2]?.members).toEqual(["grok", "cursor"]);
-  expect(roster[2]?.args).toEqual(["--model", "grok-4.6", "--effort", "high"]);
+  expect(roster[2]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
+  expect(parsed.resolve).toEqual({
+    kind: "grok",
+    args: ["--model", "grok-4.6", "--effort", "high"],
+  });
 });
 
-test("claude は codex + grok", () => {
+test("resolve は無いと止まり、未知キー・承認を飛ばす flag も止まる", () => {
+  expect(() => withResolve("")).toThrow("resolve");
+  expect(() => withResolve('[resolve]\nkind = "grok"\nargs = []\nmodel = "x"\n')).toThrow("model");
+  expect(() => withResolve('[resolve]\nkind = "Grok"\nargs = []\n')).toThrow("kind");
+  expect(() => withResolve('[resolve]\nkind = "grok"\nargs = ["--yolo"]\n')).toThrow("--yolo");
+  expect(() => withResolve('[resolve]\nkind = "grok"\nargs = ["--"]\n')).toThrow(RosterError);
+});
+
+test("resolve でも承認を飛ばす指定は止まる", () => {
+  expect(() =>
+    withResolve('[resolve]\nkind = "codex"\nargs = ["-c", "approval_policy=never"]\n'),
+  ).toThrow("approval_policy");
+  expect(() =>
+    withResolve('[resolve]\nkind = "claude"\nargs = ["--permission-mode", "bypassPermissions"]\n'),
+  ).toThrow("bypassPermissions");
+  expect(() =>
+    withResolve('[resolve]\nkind = "claude"\nargs = ["--permission-mode=dontAsk"]\n'),
+  ).toThrow("dontAsk");
+  expect(() => withResolve('[resolve]\nkind = "codex"\nargs = ["-a", "never"]\n')).toThrow(
+    "ask-for-approval",
+  );
+  expect(() =>
+    herdrResolveArgv(
+      { kind: "claude", args: ["--permission-mode", "bypassPermissions"] },
+      { name: "r", pane: "w1:p1" },
+    ),
+  ).toThrow(RosterError);
+});
+
+test("resolve の起動 argv は args をそのまま渡し read-only を足さない", () => {
+  const argv = herdrResolveArgv(parsed.resolve, { name: "r-grok-x", pane: "w1:p1" });
+  expect(argv.slice(0, 3)).toEqual(["herdr", "agent", "start"]);
+  expect(argv.slice(argv.indexOf("--") + 1)).toEqual([...parsed.resolve.args]);
+});
+
+test("resolve は read-only を要求しない", () => {
+  const r = withResolve('[resolve]\nkind = "codex"\nargs = ["-s", "workspace-write"]\n');
+  expect(r.resolve.args).toEqual(["-s", "workspace-write"]);
+  const c = withResolve(
+    '[resolve]\nkind = "claude"\nargs = ["--permission-mode", "acceptEdits"]\n',
+  );
+  expect(c.resolve.kind).toBe("claude");
+});
+
+test("claude は codex + cursor", () => {
   const r = selectAdvisors(roster, "claude");
-  expect(kinds(r)).toEqual(["codex", "grok"]);
+  expect(kinds(r)).toEqual(["codex", "cursor"]);
   expect(r.warning).toBe(false);
 });
 
-test("codex は claude + grok", () => {
+test("codex は claude + cursor", () => {
   const r = selectAdvisors(roster, "codex");
-  expect(kinds(r)).toEqual(["claude", "grok"]);
+  expect(kinds(r)).toEqual(["claude", "cursor"]);
   expect(r.warning).toBe(false);
 });
 
-test("grok は claude + codex", () => {
+test("grok は cursor 枠ごと外れ claude + codex", () => {
   const r = selectAdvisors(roster, "grok");
   expect(kinds(r)).toEqual(["claude", "codex"]);
   expect(r.warning).toBe(false);
 });
 
-test("cursor は grok 枠ごと外れ claude + codex", () => {
+test("cursor は claude + codex", () => {
   const r = selectAdvisors(roster, "cursor");
   expect(kinds(r)).toEqual(["claude", "codex"]);
   expect(r.warning).toBe(false);
@@ -75,7 +136,9 @@ test("表に無い kind は先頭 2 枠と警告", () => {
 });
 
 test("members 省略は kind 自身", () => {
-  const slots = parseRoster(toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'));
+  const slots = parseRoster(
+    toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'),
+  ).advisors;
   expect(slots[0]?.members).toEqual(["claude"]);
 });
 
@@ -147,7 +210,9 @@ test("起動 argv も bypass を落とす", () => {
 });
 
 test("effort 用の -c は通る", () => {
-  const slots = parseRoster(toml('[{"kind":"codex","args":["-c","model_reasoning_effort=high"]}]'));
+  const slots = parseRoster(
+    toml('[{"kind":"codex","args":["-c","model_reasoning_effort=high"]}]'),
+  ).advisors;
   expect(slots[0]?.args).toEqual(["-c", "model_reasoning_effort=high"]);
 });
 
@@ -163,12 +228,12 @@ test("壊れた TOML はパーサの位置を残す", () => {
 });
 
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
-  const grok = roster.find((s) => s.kind === "grok");
-  if (grok === undefined) throw new Error("grok 枠が無い");
-  const argv = herdrStartArgv(grok, { name: "a-grok-x", pane: "w1:p1" });
+  const cursor = roster.find((s) => s.kind === "cursor");
+  if (cursor === undefined) throw new Error("cursor 枠が無い");
+  const argv = herdrStartArgv(cursor, { name: "a-cursor-x", pane: "w1:p1" });
   expect(argv).toContain("--");
   const extra = argv.slice(argv.indexOf("--") + 1);
-  expect(extra).toEqual([...grok.args, ...readOnlyArgs("grok")]);
+  expect(extra).toEqual([...cursor.args, ...readOnlyArgs("cursor")]);
 });
 
 test("空の args でも read-only は付く", () => {
@@ -200,9 +265,9 @@ test("cursor の read-only は --mode plan", () => {
   ]);
 });
 
-test("実体 file のコメントに cursor への差し替えが残っている", () => {
-  expect(roster.map((s) => s.kind)).not.toContain("cursor");
-  expect(rosterText).toContain('#   args = ["--model", "cursor-grok-4.6-high"]');
+test("実体 file のコメントに grok 直への差し替えが残っている", () => {
+  expect(roster.map((s) => s.kind)).not.toContain("grok");
+  expect(rosterText).toContain('#   args = ["--model", "grok-4.6", "--effort", "high"]');
   expect(rosterText).not.toContain("_comment");
 });
 
@@ -216,8 +281,8 @@ args = []
 [[advisors]]
 kind = "cursor"
 args = ["--model", "x # not a comment"]
-`;
-  const slots = parseRoster(text);
+${RESOLVE_TOML}`;
+  const slots = parseRoster(text).advisors;
   expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
   expect(slots[1]?.args).toEqual(["--model", "x # not a comment"]);
 });

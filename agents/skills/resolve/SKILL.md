@@ -9,7 +9,7 @@ description: >-
 
 1. **選出**: 引数が無ければ計画済みの先頭を取る（並びと Status 名は project 差分。無ければ聞く）
 2. **場所**: 計画も実装も課題用の worktree で行う。cwd が linked worktree（`git rev-parse --git-dir` と `--git-common-dir` が異なる）なら既にその場所にいるので 3 へ
-   - Herdr 内（`HERDR_ENV=1`）: **このセッションでは計画も実装もしない**。`herdr worktree create` で worktree と workspace を作り、その pane に自分と同じ kind の agent を起動し（kind と pane ID は応答から読む。native args は渡さない）、prompt で本 skill を呼ばせる。prompt には選出済みの課題・ユーザーの元の制約・「2 を飛ばして 3 から」を入れる。`--wait` しない。agent が working になったのを確かめ、workspace ID と「GO・承認はそこで起きる」を報告して終える。失敗したら作成済み ID と失敗箇所を報告する。CLI の作法は `herdr` skill（この step ではユーザーの言及が無くても使う）
+   - Herdr 内（`HERDR_ENV=1`）: **このセッションでは計画も実装もしない**。`herdr worktree create` で worktree と workspace を作り、その pane に `bun <skills root>/resolve/scripts/roster.ts resolve-argv --name <名前> --pane <id>` が stdout へ返す argv（JSON 配列）で agent を起動し（pane ID は応答から読む。kind と args は roster が持つ）、prompt で本 skill を呼ばせる。prompt には選出済みの課題・ユーザーの元の制約・「2 を飛ばして 3 から」を入れる。`--wait` しない。agent が working になったのを確かめ、workspace ID と「GO・承認はそこで起きる」を報告して終える。失敗したら作成済み ID と失敗箇所を報告する。CLI の作法は `herdr` skill（この step ではユーザーの言及が無くても使う）
    - Herdr 外: `git worktree add` で切って cd し、3 へ
    - 複数 repo を変える課題は、主 repo の worktree から `git worktree add` で他 repo の worktree を切る（workspace は増やさない）
 3. **計画**: Issue と関連コードを読み、`consult`（深い・事前）で GO を得る。既に方針が本文にあるなら、書く範囲と検証方針だけを出す

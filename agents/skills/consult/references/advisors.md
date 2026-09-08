@@ -1,6 +1,6 @@
 # アドバイザー起動表
 
-候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。設定の解釈・選出・上限は `advisors.ts`、自己 kind の観測と起動条件は `advisors.sh` が SSOT。実行中の LLM の自己申告では判定しない。
+候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。表の解釈と起動 args の検証は `roster.ts`、選出・上限は `advisors.ts`、自己 kind の観測と起動条件は `advisors.sh` が SSOT。実行中の LLM の自己申告では判定しない。
 
 アドバイザーは consult を起動しない。agent を start しない。判断を応答に出す。
 
@@ -39,7 +39,7 @@
 
 ## 不変条件
 
-**アドバイザーにコードを変更させない**。read-only 手段と、それを打ち消す args の棄却は `advisors.ts` の `readOnlyArgs` / `rejectBypass`。`--tools` は調査に使うツールの絞り込みであって担保ではない。
+**アドバイザーにコードを変更させない**。read-only 手段と、それを打ち消す args の棄却は `roster.ts` の `readOnlyArgs` / `rejectBypass`。`--tools` は調査に使うツールの絞り込みであって担保ではない。
 
 ## 失敗時
 
