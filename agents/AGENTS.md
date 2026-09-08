@@ -41,12 +41,12 @@
 
 ## 層契約
 
-| 気づきの性質                                           | 反映先                                                |
-| ------------------------------------------------------ | ----------------------------------------------------- |
-| 製品非依存の原則・作業衛生・default stack（TS/Svelte） | 本ファイル                                            |
-| skill の手順・基準・skill 間の棲み分け                 | 該当する共通 skill                                    |
-| その project 固有                                      | project の AGENTS.md / skills（上の追加・具体化のみ） |
-| 特定 harness の起動・配線に依存する                    | その harness の設定側。本ファイルには書かない         |
+| 気づきの性質                                                      | 反映先                                                |
+| ----------------------------------------------------------------- | ----------------------------------------------------- |
+| 製品非依存の原則・作業衛生・default stack（「コーディング規約」） | 本ファイル                                            |
+| skill の手順・基準・skill 間の棲み分け                            | 該当する共通 skill                                    |
+| その project 固有                                                 | project の AGENTS.md / skills（上の追加・具体化のみ） |
+| 特定 harness の起動・配線に依存する                               | その harness の設定側。本ファイルには書かない         |
 
 - 両書き禁止。矛盾を見つけたら適用せず報告する（**例外は成立条件を明示**したとき）
 - 上げるのは再利用できる判断だけ
@@ -91,18 +91,25 @@
 - 確立した技術用語は訳さない（`dead code` `stale` `advisory` `lease`）。助詞は削らない。略語を新造しない（`cfg` `impl` `req`）
 - 文書を編集したら、触った範囲をこの形へ寄せる（範囲の切り分けは「作業単位」）。記法（強調・表・折り返し・Markdown）と理由を別ファイルへ出す条件は agent-facing 文書**だけ**の規則で、`docs` skill が持つ
 
-## コーディング規約（default stack: TypeScript / Svelte 5）
+## コーディング規約（default stack: Bun / TypeScript / Svelte 5）
 
-常時適用の薄い default。プロジェクト差分は各 repo の AGENTS.md / skills。
+ツール（runtime / test runner / linter / formatter）は新規に入れるときの default。既に採用済みのものがある repo はそれに従う。採用済みの判定は repo 内の設定ファイル・lockfile・`packageManager`で、コマンドが在ることは根拠に**ならない**。言語・書き方の規則は常時適用する。
 
 ### lint / format
 
 - linter / formatter は repo の依存に入れ、global に**置かない**。global に置くのはランタイム（node / bun 等）まで
-- 設定ファイルが在る repo でだけ走らせる。コマンドが在ることは採用の根拠に**ならない**
-- 新規に入れるなら oxlint / oxfmt。既に ESLint / Prettier がある repo はそれに従う
+- 設定ファイルが在る repo でだけ走らせる
+- oxlint / oxfmt を使う
 
-### TypeScript/JavaScript
+### ランタイム（Bun）
 
+- test runner は `bun test`
+- Bun 組み込み（`Bun.*` / `bun:*`。例: `Bun.file` `Bun.Glob` `Bun.TOML` `bun:sqlite`）に対応物が無いものだけ、依存または `node:*` を使う
+- 成果物が Node で動く code（判定: `engines.node` / Node adapter / 公開ライブラリの dist）では Node 互換 API だけを使う
+
+### TypeScript
+
+- ソースは `.ts` で書く。`.js` / `.mjs` / `.cjs` を書か**ない**（ツールが拡張子を要求する設定ファイルは除く）
 - `any` **禁止** → `unknown` または適切な型
 - `interface` より `type` を優先
 - デバッグログは `console.debug`
@@ -110,5 +117,5 @@
 ### Svelte 5 Runes
 
 - 派生値は `$derived` / `$derived.by`（getter で代替**しない**）
-- リアクティブな Map/Set は `SvelteMap` / `SvelteSet`（リアクティビティ不要なら `new Map` / `new Set` で可。ESLint 抑止時は理由を書く）
+- リアクティブな Map/Set は `SvelteMap` / `SvelteSet`（リアクティビティ不要なら `new Map` / `new Set` で可。lint 抑止時は理由を書く）
 - Rune を使う TS ファイルは `.svelte.ts`
