@@ -93,7 +93,7 @@
 
 ## コーディング規約（default stack: Bun / TypeScript / Svelte 5）
 
-ツール（runtime / test runner / linter / formatter）は新規に入れるときの default。既に採用済みのものがある repo はそれに従う。採用済みの判定は repo 内の設定ファイル・lockfile・`packageManager`で、コマンドが在ることは根拠に**ならない**。言語・書き方の規則は常時適用する。
+言語とツール（TypeScript / runtime / test runner / linter / formatter）は新規に入れるときの default。既に採用済みのものがある repo はそれに従う。採用済みの判定は repo 内の設定ファイル・lockfile・`packageManager` で、コマンドが在ることは根拠に**ならない**。書き方の規則は常時適用する。
 
 ### lint / format
 
