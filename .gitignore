@@ -6,7 +6,6 @@
 
 # externally installed agent skills
 /agents/skills/agent-browser/
-/agents/skills/eli5/
+/agents/skills/grilling/
 /agents/skills/herdr/
-/agents/skills/show-me/
 /agents/skills/skill-creator/
