@@ -13,9 +13,12 @@ UPDATE_FAILED=0
 echo "## agent skills (external)"
 
 # agents/.skill-lock.json 管理の外部 skill を更新する
+# **global scope で更新する。** 実体は `~/.agents`（この repo への symlink）にあり、
+# project scope では別形式の lock（skills-lock.json）を見て 1 件も更新しない。
+# `-g` は cwd を見ないので cd しない
 if [ -x "$(command -v bunx)" ]; then
   echo "📦 外部取得の agent skills を更新しています..."
-  if (cd "$REPO_DIR/agents" && bunx skills update -y); then
+  if bunx skills update -g -y; then
     echo "✅ agent skills を更新しました"
   else
     echo "⚠️ agent skills の更新に失敗しました"
