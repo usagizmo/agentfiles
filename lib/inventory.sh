@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# **この repo が何を配線するかの SSOT。**追加・変更は原則ここだけ。
+# この repo が何を配線するかの SSOT。追加・変更は原則ここだけ。
 # inv_* の実装と run_inventory は dotfiles の lib/links.sh（lib/bootstrap.sh が読む）。
 #
 # 使い方:

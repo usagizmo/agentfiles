@@ -13,7 +13,7 @@ UPDATE_FAILED=0
 echo "## agent skills (external)"
 
 # agents/.skill-lock.json 管理の外部 skill を更新する
-# **global scope で更新する。** 実体は `~/.agents`（この repo への symlink）にあり、
+# global scope で更新する。 実体は `~/.agents`（この repo への symlink）にあり、
 # project scope では別形式の lock（skills-lock.json）を見て 1 件も更新しない。
 # `-g` は cwd を見ないので cd しない
 if [ -x "$(command -v bunx)" ]; then
@@ -30,10 +30,10 @@ else
   UPDATE_FAILED=1
 fi
 
-# herdr skill は git 管理外。**HEAD から取らず、入っている binary から出す**
+# herdr skill は git 管理外。HEAD から取らず、入っている binary から出す
 # （HEAD は binary より先行しうるので、無い CLI を説明する skill が配られる）
 if [ -x "$(command -v herdr)" ]; then
-  # **直接リダイレクトしない。**`>` は herdr を起動する前にファイルを 0 バイトへ切り詰めるので、
+  # 直接リダイレクトしない。`>` は herdr を起動する前にファイルを 0 バイトへ切り詰めるので、
   # 生成に失敗すると既存の skill が消える（git 管理外なので戻せない）
   HERDR_SKILL_TMP="$(mktemp)"
   HERDR_SKILL_ERR="$(mktemp)"
@@ -48,7 +48,7 @@ if [ -x "$(command -v herdr)" ]; then
   fi
   rm -f "$HERDR_SKILL_TMP" "$HERDR_SKILL_ERR"
 else
-  # 更新の**対象そのもの**が無いので、更新すべき skill も存在しない（道具の欠落とは別）
+  # 更新の対象そのものが無いので、更新すべき skill も存在しない（道具の欠落とは別）
   echo "⚠️ herdr が無いので skill の更新をスキップします"
 fi
 
@@ -63,7 +63,7 @@ echo ""
 echo "## dev dependencies"
 
 # package.json の範囲（^）内で上げ、bun.lock を書き換える。差分が出たら commit が要る。
-# **bun 自体はこの repo が上げない。**ランタイムは dotfiles の ./up.sh が mise で上げる
+# bun 自体はこの repo が上げない。ランタイムは dotfiles の ./up.sh が mise で上げる
 if [ -x "$(command -v bun)" ]; then
   echo "📦 この repo の開発依存を更新しています..."
   if (cd "$REPO_DIR" && bun update); then

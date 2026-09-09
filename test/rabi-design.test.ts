@@ -1,6 +1,6 @@
 // rabi-design の SSOT（DESIGN.md の front matter）と、そこから作る写しを bun test から検査する。
 //
-// **通ることは何も証明しない**ので、front matter と写しを壊した複製で落ちることまで実測する。
+// 通ることは何も証明しないので、front matter と写しを壊した複製で落ちることまで実測する。
 
 import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -162,9 +162,9 @@ function danglingTokens(md: string): string[] {
 }
 
 /**
- * 散文に出る、トークンでは**ない**語。CSS のプロパティ・値・要素名。
+ * 散文に出る、トークンではない語。CSS のプロパティ・値・要素名。
  *
- * **固定する。**トークンを消すとここに増えて落ちる。語を足したときも落ちるので、
+ * 固定する。トークンを消すとここに増えて落ちる。語を足したときも落ちるので、
  * 「トークンのつもりで書いた語が front matter に無い」を見逃さない。
  */
 const NON_TOKEN_WORDS = [
@@ -611,7 +611,7 @@ function value(d: Design, name: string, theme: "light" | "dark"): string {
 /**
  * component の顔ぶれ。
  *
- * **静かに減らせないよう固定する。**フィルタだけだと、消えた component が黙って検査から外れる。
+ * 静かに減らせないよう固定する。フィルタだけだと、消えた component が黙って検査から外れる。
  */
 const COMPONENTS = [
   "badge-accent",
@@ -676,9 +676,9 @@ const NON_TEXT: { name: string; prop: "backgroundColor" | "textColor"; on: strin
 ];
 
 /**
- * `textColor` が文字では**なく**形を指す component。文字の 4.5:1 も、印の 3:1 も当てない。
+ * `textColor` が文字ではなく形を指す component。文字の 4.5:1 も、印の 3:1 も当てない。
  *
- * `switch` の knob は塗りの差で読ませ**ない**。形を出すのは枠と内側の影。
+ * `switch` の knob は塗りの差で読ませない。形を出すのは枠と内側の影。
  */
 const SHAPE_ONLY = new Set(["switch"]);
 
@@ -947,10 +947,10 @@ test("`edge` が紙・沈んだ紙・地から 3:1 で立つ", () => {
 });
 
 /**
- * range の進捗（accent）と未進捗（`edge`）は互いに 3:1 を持た**ない**。
+ * range の進捗（accent）と未進捗（`edge`）は互いに 3:1 を持たない。
  *
  * 値を示すのはつまみで、線の色差は補助。1.4.11 が要るのは「状態を示すのに必要な部分」なので、
- * つまみと線がそれぞれ**周りの面から** 3:1 で立っていれば足りる。それを検査する。
+ * つまみと線がそれぞれ周りの面から 3:1 で立っていれば足りる。それを検査する。
  */
 test("range のつまみと線が周りの面から 3:1 で立つ", () => {
   const fails = (["light", "dark"] as const).flatMap((theme) =>
