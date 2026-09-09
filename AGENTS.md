@@ -73,7 +73,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 - `./AGENTS.md` はこの repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場が決まる**（読む → `references/`、実行する → `scripts/`、成果物に使う → `assets/`）。大きさでは分けない。何を `references/` へ出すかの判断は `docs` skill の品質基準
-- `./test/` は `bun test` の gate。skills の `scripts/` `assets/`・`.githooks/`・共通 `AGENTS.md` を検査する。agent へは**投影しない**（`lib/inventory.sh` に載せない）
+- `./test/` は `bun test` の gate。skills の `scripts/` `assets/`・`.githooks/`・共通 `AGENTS.md`・tracked ファイルのコメントを検査する。agent へは**投影しない**（`lib/inventory.sh` に載せない）
 - `./harnesses/<agent>/` は agent 固有の tracked overlay のみを置く。runtime / cache / auth / logs / generated files は**置かない**
 - harness ごとの instructions 入口（`~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` 等）は、harness 固有ルールがある場合は `harnesses/<agent>/` の overlay ファイルへの symlink とし、固有ルールが無い間は共通 `agents/AGENTS.md` への直接 symlink のままにする（**空 overlay を先回りで作らない**）
 - **harness home（`~/.claude` / `~/.codex` 等）は実ディレクトリにし、tracked な葉だけを `init.sh` で symlink する**（harness が cache / auth / vendor を同居させるため）。一覧は `lib/inventory.sh`
