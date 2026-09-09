@@ -153,3 +153,43 @@ test("blocked はその巡で終端し、次の巡へ送らない", async () => 
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("timeout は結果未作成でもエラーを増やさず、同じ巡を回収できる", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    const runDir = started.stdout.trim();
+    const pending = await run(dir, ["collect", runDir, "0"]);
+    expect(pending.exitCode).toBe(1);
+    expect(pending.stderr).toBe("");
+    expect(pending.stdout).not.toContain("FileNotFoundError");
+    expect(await Bun.file(join(runDir, "claude/rc.1")).exists()).toBe(false);
+    expect(await Bun.file(join(runDir, "claude/dead")).exists()).toBe(false);
+    const finished = await run(dir, ["collect", runDir, "5"]);
+    expect(finished.exitCode).toBe(0);
+    expect(finished.stdout).toContain("answer 1");
+    expect(await readFile(join(dir, "claude.prompts"), "utf8")).toBe("1");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("done は pane 喪失ではなく、marker がまだ無ければ同じ巡を待つ", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "status"), "done\n");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    const runDir = started.stdout.trim();
+    const pending = await run(dir, ["collect", runDir, "1"]);
+    expect(pending.exitCode).toBe(1);
+    expect(await Bun.file(join(runDir, "claude/dead")).exists()).toBe(false);
+    expect(await Bun.file(join(runDir, "claude/rc.1")).exists()).toBe(false);
+    const marker = await readFile(join(runDir, "marker.1"), "utf8");
+    await Bun.write(join(dir, "claude.screen"), `answer 1\n${marker}`);
+    const finished = await run(dir, ["collect", runDir, "5"]);
+    expect(finished.exitCode).toBe(0);
+    expect(finished.stdout).toContain("answer 1");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
