@@ -21,7 +21,7 @@
 - 巡は `start` が 1、`ask` のたびに +1。**`ask` は今の巡を `collect` してから**。timeout した agent は確定せず、再 `collect` で続きを待てる。`ask` は、timeout した agent が止まったまま完走していなければ終端して残りで進み、完走していれば `collect` を要求し、まだ働いていれば止まる
 - agent は文脈を保っている。`ask` の本文は 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
 - 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle / done は読むきっかけであって完了ではない
-- 回収ヘッダの `rc≠0` は未完了。`blocked`（承認待ち）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
+- 回収ヘッダの `rc≠0` は未完了。`blocked`（承認待ち）・`消失`（agent が居なくなった）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
 - timeout の巡は `herdr agent get` / `herdr agent read` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
 - **どのモードでも最後に `close` を呼ぶ**。完了・終端を確認してから閉じる
 

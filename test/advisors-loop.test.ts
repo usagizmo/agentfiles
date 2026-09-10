@@ -44,7 +44,15 @@ elif args[:2] == ['agent', 'prompt']:
     tail = ('\\n' + marker + '\\n') if status == 'idle' else '\\n'
     screen.write_text(prev + line + tail)
     result = {}
+elif args[:2] == ['agent', 'get']:
+    if (root / 'gone').exists():
+        print(json.dumps({'error': {'code': 'agent_not_found'}}), file=sys.stderr)
+        sys.exit(1)
+    result = {'agent': {'agent_status': status}}
 elif args[:2] == ['agent', 'wait']:
+    if (root / 'gone').exists():
+        print(json.dumps({'error': {'code': 'agent_not_found'}}), file=sys.stderr)
+        sys.exit(1)
     if '--until' in args and args[args.index('--until') + 1] == 'working' and len(args) < 8:
         print(json.dumps({'error': {'code': 'timeout'}}), file=sys.stderr)
         sys.exit(1)
@@ -146,6 +154,25 @@ test("blocked はその巡で終端し、次の巡へ送らない", async () => 
     expect(first.exitCode).toBe(1);
     expect(first.stdout).toContain("=== claude 巡 1 (rc=1 blocked) ===");
     expect(await Bun.file(join(runDir, "claude/dead")).exists()).toBe(true);
+    const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
+    expect(asked.exitCode).toBe(2);
+    expect(asked.stderr).toContain("生きている advisor が無い");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("消えた agent はその巡で終端する。timeout として次の collect を待たない", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    const runDir = started.stdout.trim();
+    await Bun.write(join(dir, "gone"), "1\n");
+    const first = await run(dir, ["collect", runDir, "5"]);
+    expect(first.exitCode).toBe(1);
+    expect(first.stdout).toContain("=== claude 巡 1 (rc=1 消失) ===");
+    expect(await Bun.file(join(runDir, "claude/dead")).exists()).toBe(true);
+    // 終端していないと ask が「まだ処理中」で永久に止まる
     const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
     expect(asked.exitCode).toBe(2);
     expect(asked.stderr).toContain("生きている advisor が無い");

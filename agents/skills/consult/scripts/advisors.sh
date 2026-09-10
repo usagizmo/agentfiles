@@ -354,7 +354,12 @@ collect)
 			# idle / done は応答を読む契機。完了は今の巡の marker で判定する。
 			if ! herdr agent wait "$name" --until idle --until done --until blocked \
 				--timeout "$((remain * 1000))" >"$wait_json" 2>>"$run/$a/log"; then
-				reason=timeout
+				# 居なくなった agent は待ち直しても戻らない。timeout と分けて終端する
+				if herdr agent get "$name" >/dev/null 2>>"$run/$a/log"; then
+					reason=timeout
+				else
+					reason=消失
+				fi
 				break
 			fi
 			status=$(json_get "$wait_json" result.agent.agent_status 2>/dev/null) || status=""
@@ -404,7 +409,7 @@ open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
 			printf '%s\n' 0 >"$run/$a/rc.$n"
 			: >"$run/$a/reason.$n"
 			;;
-		blocked)
+		blocked | 消失)
 			printf '%s\n' 1 >"$run/$a/rc.$n"
 			printf '%s\n' "$reason" >"$run/$a/reason.$n"
 			: >"$run/$a/dead"
