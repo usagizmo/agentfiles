@@ -28,7 +28,7 @@ CONSULT_BACKEND=tmux \
 
 `advisors.sh` / `advisors-tmux.sh` を直接呼んでもよい。直接呼ぶ場合も、もう一方へ**倒さない**。
 
-tmux backend の session primitive は `tmux-session.sh`（create / paste-file / capture / kill）。dispatch（Layer B）も同じ primitive を再利用する前提。
+tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult / dispatch が共有）。dispatch（Layer B）の入口と permission 差は `dispatch.md`。
 
 ## 起動・対話・回収・終了
 

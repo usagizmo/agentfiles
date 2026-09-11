@@ -224,6 +224,12 @@ export const directLaunchArgv = (slot: Slot): string[] => {
   return [directBinary(slot.kind), ...slot.args, ...readOnlyArgs(slot.kind)];
 };
 
+/** resolve / dispatch 用。read-only を足さない（実装役。bypass と -p は拒否）。 */
+export const directResolveLaunchArgv = (worker: Worker): string[] => {
+  rejectBypass(worker.args, false);
+  return [directBinary(worker.kind), ...worker.args];
+};
+
 /** JSON 1 枠を advisors と同じ検証で通す。 */
 export const parseSlot = (raw: unknown): Slot => {
   const [slot] = parseSlots([raw]);
@@ -268,7 +274,26 @@ const main = async (): Promise<void> => {
       process.stdout.write(`${JSON.stringify(herdrResolveArgv(resolve, { name, pane }))}\n`);
       return;
     }
-    throw new RosterError("使い方: roster.ts resolve-argv");
+    if (argv[0] === "resolve-launch-argv") {
+      // tmux dispatch 用。--kind があればその kind を空 args で起動（roster resolve を上書き）
+      const kindOverride = flag(argv, "--kind");
+      const rosterPath = flag(argv, "--roster") ?? ROSTER_URL.pathname;
+      const { resolve } = parseRoster(await Bun.file(rosterPath).text());
+      const worker: Worker =
+        kindOverride === undefined || kindOverride === ""
+          ? resolve
+          : { kind: kindOverride, args: [] };
+      if (kindOverride !== undefined && kindOverride !== "") {
+        // kind の形式だけ先に検証（read-only 表は dispatch では使わない）
+        if (!/^[a-z][a-z0-9_-]*$/.test(kindOverride)) {
+          throw new RosterError(`kind が不正: ${kindOverride}`);
+        }
+        directBinary(worker.kind);
+      }
+      process.stdout.write(`${JSON.stringify(directResolveLaunchArgv(worker))}\n`);
+      return;
+    }
+    throw new RosterError("使い方: roster.ts resolve-argv | resolve-launch-argv");
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);
     console.error(`FATAL\t${message}`);

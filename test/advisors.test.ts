@@ -19,6 +19,7 @@ import {
   RosterError,
   directBinary,
   directLaunchArgv,
+  directResolveLaunchArgv,
   herdrResolveArgv,
   herdrStartArgv,
   parseRoster,
@@ -274,6 +275,15 @@ test("directLaunchArgv は kind バイナリ + args + read-only（Herdr 無し�
     ...cursor.args,
     ...readOnlyArgs("cursor"),
   ]);
+});
+
+test("directResolveLaunchArgv は read-only を付けない（dispatch / 実装役）", () => {
+  expect(directResolveLaunchArgv({ kind: "claude", args: ["--model", "claude-opus-5"] })).toEqual([
+    "claude",
+    "--model",
+    "claude-opus-5",
+  ]);
+  expect(directResolveLaunchArgv({ kind: "grok", args: [] })).toEqual(["grok"]);
 });
 
 test("codex の read-only は -s read-only", () => {
