@@ -52,7 +52,7 @@ const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 test("実体の宣言 file が検証を通る", () => {
   expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "cursor"]);
-  expect(roster[2]?.members).toEqual(["grok", "cursor"]);
+  expect(roster[2]?.members).toEqual(["grok", "cursor", "opencode", "command-code"]);
   expect(roster[2]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
   expect(parsed.resolve).toEqual({
     kind: "grok",
@@ -124,6 +124,18 @@ test("grok は cursor 枠ごと外れ claude + codex", () => {
 
 test("cursor は claude + codex", () => {
   const r = selectAdvisors(roster, "cursor");
+  expect(kinds(r)).toEqual(["claude", "codex"]);
+  expect(r.warning).toBe(false);
+});
+
+test("opencode は cursor 枠ごと外れ claude + codex", () => {
+  const r = selectAdvisors(roster, "opencode");
+  expect(kinds(r)).toEqual(["claude", "codex"]);
+  expect(r.warning).toBe(false);
+});
+
+test("command-code は cursor 枠ごと外れ claude + codex", () => {
+  const r = selectAdvisors(roster, "command-code");
   expect(kinds(r)).toEqual(["claude", "codex"]);
   expect(r.warning).toBe(false);
 });
@@ -254,7 +266,11 @@ test("grok の read-only は plan と --no-subagents", () => {
 test("cursor の read-only は --mode plan", () => {
   expect(readOnlyArgs("cursor")).toEqual(["--mode", "plan"]);
   const argv = herdrStartArgv(
-    { kind: "cursor", args: ["--model", "cursor-grok-4.6-high"], members: ["grok", "cursor"] },
+    {
+      kind: "cursor",
+      args: ["--model", "cursor-grok-4.6-high"],
+      members: ["grok", "cursor", "opencode", "command-code"],
+    },
     { name: "a-cursor-x", pane: "w1:p1" },
   );
   expect(argv.slice(argv.indexOf("--") + 1)).toEqual([
