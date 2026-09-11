@@ -7,8 +7,7 @@
 # tmux  → advisors-tmux.sh（CONSULT_SELF_KIND が別途必要）
 
 set -u
-LC_ALL=C
-export LC_ALL
+# 子 process に LC_ALL を渡さない（tmux server / harness を C locale にしない）
 
 fatal() {
 	printf 'FATAL\t%s\n' "$1" >&2
@@ -30,6 +29,6 @@ tmux)
 	fatal "CONSULT_BACKEND が無い（herdr|tmux）。別の起動方式へ倒さない"
 	;;
 *)
-	fatal "未知の CONSULT_BACKEND: $backend（herdr|tmux）"
+	fatal "未知の CONSULT_BACKEND: ${backend} (herdr|tmux)"
 	;;
 esac

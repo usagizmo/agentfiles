@@ -9,11 +9,12 @@
 ## Backend 選択
 
 入口は `consult-backend.sh`。`CONSULT_BACKEND` で経路を明示する（未設定・未知は fatal。黙って切替しない）。
+選び方: `HERDR_ENV=1` なら `herdr`、それ以外は `tmux`。`CONSULT_SELF_KIND` は呼び出し側が明示する（harness overlay の env 注入が揃うまでの間。LLM の自己申告では決めない）。
 
-| `CONSULT_BACKEND` | script             | 追加の必須 env                       | transport                                        |
-| ----------------- | ------------------ | ------------------------------------ | ------------------------------------------------ |
-| `tmux`            | `advisors-tmux.sh` | `CONSULT_SELF_KIND`（自己 kind）     | tmux / pty interactive（本命。Claude `-p` 不可） |
-| `herdr`           | `advisors.sh`      | `HERDR_ENV=1` / `HERDR_WORKSPACE_ID` | Herdr pane（移行期互換）                         |
+| `CONSULT_BACKEND` | script             | 追加の必須 env                       | transport                                  |
+| ----------------- | ------------------ | ------------------------------------ | ------------------------------------------ |
+| `tmux`            | `advisors-tmux.sh` | `CONSULT_SELF_KIND`（自己 kind）     | tmux / pty interactive（Claude `-p` 不可） |
+| `herdr`           | `advisors.sh`      | `HERDR_ENV=1` / `HERDR_WORKSPACE_ID` | Herdr pane                                 |
 
 ```
 CONSULT_BACKEND=tmux CONSULT_SELF_KIND=cursor \
@@ -28,7 +29,7 @@ CONSULT_BACKEND=tmux \
 
 `advisors.sh` / `advisors-tmux.sh` を直接呼んでもよい。直接呼ぶ場合も、もう一方へ**倒さない**。
 
-tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult / dispatch が共有）。dispatch（Layer B）の入口と permission 差は `dispatch.md`。
+tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult / dispatch が共有）。実装役は `dispatch` skill。
 
 ## 起動・対話・回収・終了
 
@@ -64,7 +65,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 
 ### tmux
 
-選出された kind ごとに **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`（herdr と同じ）。人が `tmux attach -t <session>` で覗ける。Claude の workspace trust 対話が出た場合は `tmux-session.sh accept-trust` が Yes を選ぶ。
+選出された kind ごとに **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`（herdr と同じ）。人が `tmux -L agentfiles attach -t <session>` で覗ける。Claude の workspace trust 対話が出た場合は `tmux-session.sh accept-trust` が Yes を選ぶ。
 
 ## 不変条件
 

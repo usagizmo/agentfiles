@@ -85,13 +85,14 @@ const splitFlag = (
 };
 
 /** 承認を飛ばす flag を止める。readOnly なら read-only を弱める指定も止める。 */
-const rejectBypass = (args: readonly string[], readOnly: boolean): void => {
+const rejectBypass = (args: readonly string[], readOnly: boolean, kind: string): void => {
   for (let i = 0; i < args.length; i++) {
     const token = args[i] ?? "";
     if (token === "--") throw new RosterError("args に -- は置けない");
     const { name, value } = splitFlag(token, args[i + 1]);
     if (BYPASS.has(name)) throw new RosterError(`承認を飛ばす flag: ${token}`);
-    if (name === "-p" || name === "--print") {
+    // interactive TUI のみ。--print は拒否。-p は Codex の --profile だけ許可
+    if (name === "--print" || (name === "-p" && kind !== "codex")) {
       throw new RosterError(`interactive 以外の起動: ${token}`);
     }
     if (name === "--permission-mode" && APPROVAL_SKIPPING_MODES.has(value ?? "")) {
@@ -149,7 +150,7 @@ const parseWorker = (data: unknown): Worker => {
   if (typeof kind !== "string" || !KIND_RE.test(kind)) return fail("kind が不正", at);
   const args = data["args"];
   if (!isStringArray(args)) return fail("args が string[] ではない", at);
-  rejectBypass(args, false);
+  rejectBypass(args, false, kind);
   return { kind, args };
 };
 
@@ -174,7 +175,7 @@ const parseSlots = (data: unknown): Slot[] => {
     seenKinds.add(kind);
     const rawArgs = item["args"];
     if (!isStringArray(rawArgs)) return fail("args が string[] ではない", at);
-    rejectBypass(rawArgs, true);
+    rejectBypass(rawArgs, true, kind);
     const rawMembers = item["members"] === undefined ? [kind] : item["members"];
     if (!isStringArray(rawMembers) || rawMembers.length === 0) return fail("members が空", at);
     if (!rawMembers.every((m) => KIND_RE.test(m))) return fail("members が不正", at);
@@ -194,7 +195,7 @@ const parseSlots = (data: unknown): Slot[] => {
 };
 
 export const herdrStartArgv = (slot: Slot, start: { name: string; pane: string }): string[] => {
-  rejectBypass(slot.args, true);
+  rejectBypass(slot.args, true, slot.kind);
   return [
     "herdr",
     "agent",
@@ -220,13 +221,13 @@ export const directBinary = (kind: string): string => {
 
 /** Herdr を経由せず interactive CLI を起動する argv（read-only を末尾に足す）。 */
 export const directLaunchArgv = (slot: Slot): string[] => {
-  rejectBypass(slot.args, true);
+  rejectBypass(slot.args, true, slot.kind);
   return [directBinary(slot.kind), ...slot.args, ...readOnlyArgs(slot.kind)];
 };
 
-/** resolve / dispatch 用。read-only を足さない（実装役。bypass と -p は拒否）。 */
+/** resolve / dispatch 用。read-only を足さない（実装役。bypass と --print は拒否。-p は Codex の --profile だけ）。 */
 export const directResolveLaunchArgv = (worker: Worker): string[] => {
-  rejectBypass(worker.args, false);
+  rejectBypass(worker.args, false, worker.kind);
   return [directBinary(worker.kind), ...worker.args];
 };
 
@@ -241,7 +242,7 @@ export const herdrResolveArgv = (
   worker: Worker,
   start: { name: string; pane: string },
 ): string[] => {
-  rejectBypass(worker.args, false);
+  rejectBypass(worker.args, false, worker.kind);
   return [
     "herdr",
     "agent",
@@ -275,21 +276,18 @@ const main = async (): Promise<void> => {
       return;
     }
     if (argv[0] === "resolve-launch-argv") {
-      // tmux dispatch 用。--kind があればその kind を空 args で起動（roster resolve を上書き）
+      // tmux dispatch 用。--kind があればその kind で起動（同じ kind なら roster args を引き継ぐ）
       const kindOverride = flag(argv, "--kind");
       const rosterPath = flag(argv, "--roster") ?? ROSTER_URL.pathname;
       const { resolve } = parseRoster(await Bun.file(rosterPath).text());
-      const worker: Worker =
-        kindOverride === undefined || kindOverride === ""
-          ? resolve
-          : { kind: kindOverride, args: [] };
+      let worker: Worker = resolve;
       if (kindOverride !== undefined && kindOverride !== "") {
-        // kind の形式だけ先に検証（read-only 表は dispatch では使わない）
-        if (!/^[a-z][a-z0-9_-]*$/.test(kindOverride)) {
+        if (!KIND_RE.test(kindOverride)) {
           throw new RosterError(`kind が不正: ${kindOverride}`);
         }
-        directBinary(worker.kind);
+        worker = kindOverride === resolve.kind ? resolve : { kind: kindOverride, args: [] };
       }
+      // directBinary は argv[0] に使う（PATH 検査は呼び出し側）
       process.stdout.write(`${JSON.stringify(directResolveLaunchArgv(worker))}\n`);
       return;
     }

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 
-const SCRIPT = new URL("../agents/skills/consult/scripts/dispatch-backend.sh", import.meta.url)
+const SCRIPT = new URL("../agents/skills/dispatch/scripts/dispatch-backend.sh", import.meta.url)
   .pathname;
 
 const run = async (dir: string, env: Record<string, string | undefined>, argv: string[]) => {

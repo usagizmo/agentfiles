@@ -13,7 +13,7 @@ import {
   isChromeLine,
   selectAdvisors,
   type Selection,
-} from "../agents/skills/consult/scripts/advisors.ts";
+} from "../agents/shared/advisors.ts";
 import {
   ROSTER_URL,
   RosterError,
@@ -181,9 +181,14 @@ test("read-only を打ち消す args は落とす", () => {
   ).toThrow(RosterError);
 });
 
-test("-p / --print は interactive 以外として落とす", () => {
+test("--print は拒否し、-p は Codex の --profile だけ通す", () => {
   expect(() => parseRoster(toml('[{"kind":"claude","args":["-p"]}]'))).toThrow(/interactive/);
   expect(() => parseRoster(toml('[{"kind":"claude","args":["--print"]}]'))).toThrow(/interactive/);
+  expect(() => parseRoster(toml('[{"kind":"cursor","args":["-p"]}]'))).toThrow(/interactive/);
+  expect(() => parseRoster(toml('[{"kind":"grok","args":["-p"]}]'))).toThrow(/interactive/);
+  expect(() =>
+    parseRoster(toml('[{"kind":"codex","args":["-p","foo"],"members":["codex"]}]')),
+  ).not.toThrow();
 });
 
 test("= 連結と別名の bypass も落とす", () => {
@@ -525,15 +530,7 @@ test("complete CLI は JSON と終了コードを返す", async () => {
   const output = join(dir, "out");
   await Bun.write(output, MARKER_SNAPSHOT);
   const proc = Bun.spawn(
-    [
-      "bun",
-      "agents/skills/consult/scripts/advisors.ts",
-      "complete",
-      "--output",
-      output,
-      "--marker",
-      MARKER,
-    ],
+    ["bun", "agents/shared/advisors.ts", "complete", "--output", output, "--marker", MARKER],
     { stdout: "pipe", stderr: "pipe", cwd: import.meta.dir + "/.." },
   );
   const [stdout, exited] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);

@@ -1,5 +1,5 @@
 # consult のアドバイザー候補（advisors）と resolve の実装役（resolve）。
-# 解釈と検証は roster.ts の parseRoster。選出と members の意味は consult の advisors.ts の selectAdvisors。
+# 解釈と検証は roster.ts の parseRoster。選出と members の意味は agents/shared/advisors.ts の selectAdvisors。
 # advisors の read-only 手段は roster.ts の readOnlyArgs が末尾に足す。resolve には足さない。
 #
 # args は `herdr agent start <名前> --kind <kind> --pane <id> --` 以降。

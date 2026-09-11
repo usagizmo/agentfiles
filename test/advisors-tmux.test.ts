@@ -13,6 +13,8 @@ const FAKE_TMUX = `#!/usr/bin/env python3
 import pathlib, re, sys
 root = pathlib.Path(__file__).parent
 args = sys.argv[1:]
+if args[:1] == ["-L"]:
+    args = args[2:]
 
 def session_dir(name: str) -> pathlib.Path:
     d = root / ("sess-" + name)
@@ -48,6 +50,7 @@ if args[0] == "load-buffer":
     raise SystemExit(0)
 
 if args[0] == "paste-buffer":
+    # -p / -d は本番と同じく受け取る（無視）
     b = args[args.index("-b") + 1]
     name = target_session(args[args.index("-t") + 1])
     d = session_dir(name)
@@ -87,7 +90,7 @@ raise SystemExit("Unexpected tmux: " + repr(args))
 `;
 
 const FAKE_BIN = `#!/bin/sh
-# PATH 上の偽 claude / 偽 codex。実体は不要（tmux create が send-keys するだけ）
+# PATH 上の偽 claude / 偽 codex。create が直接 exec するので実バイナリが要る
 exit 0
 `;
 

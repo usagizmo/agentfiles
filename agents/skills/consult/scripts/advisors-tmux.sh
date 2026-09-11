@@ -14,8 +14,6 @@
 # silent fallback しない。
 
 set -u
-LC_ALL=C
-export LC_ALL
 
 fatal() {
 	printf 'FATAL\t%s\n' "$1" >&2

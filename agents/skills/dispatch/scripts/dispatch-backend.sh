@@ -1,14 +1,13 @@
 #!/bin/sh
 # dispatch の明示 backend セレクタ。黙って別経路へ倒さない。
 #
-#   DISPATCH_BACKEND=tmux|herdr <skills root>/consult/scripts/dispatch-backend.sh <start|collect|ask|close> ...
+#   DISPATCH_BACKEND=tmux|herdr <skills root>/dispatch/scripts/dispatch-backend.sh <start|collect|ask|close> ...
 #
 # tmux  → worker-tmux.sh（DISPATCH_KIND 任意）
 # herdr → いまはセレクタ上の互換入口のみ。実体は resolve skill の HERDR_ENV=1 手順が SSOT
 
 set -u
-LC_ALL=C
-export LC_ALL
+# 子 process に LC_ALL を渡さない（tmux server / harness を C locale にしない）
 
 fatal() {
 	printf 'FATAL\t%s\n' "$1" >&2
@@ -30,6 +29,6 @@ herdr)
 	fatal "DISPATCH_BACKEND が無い（tmux|herdr）。別の起動方式へ倒さない"
 	;;
 *)
-	fatal "未知の DISPATCH_BACKEND: $backend（tmux|herdr）"
+	fatal "未知の DISPATCH_BACKEND: ${backend} (tmux|herdr)"
 	;;
 esac

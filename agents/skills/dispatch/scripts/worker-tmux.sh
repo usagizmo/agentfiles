@@ -10,15 +10,21 @@
 # env:
 #   DISPATCH_KIND   任意。roster の [resolve] を上書きする kind（例: claude / codex）
 #
-# 完走述語は consult の advisors.ts complete（marker SSOT）。
+# 完走述語は advisors.ts complete（consult と共有。marker SSOT）。
 
 set -u
-LC_ALL=C
-export LC_ALL
 
 fatal() {
 	printf 'FATAL\t%s\n' "$1" >&2
 	exit 2
+}
+
+fail_start() {
+	msg=$1
+	printf '(log の末尾)\n' >&2
+	tail -n 20 "$run/log" 2>/dev/null >&2 || true
+	rm -rf "$run"
+	fatal "$msg"
 }
 
 here=$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0") ||
@@ -101,14 +107,12 @@ start)
 		printf '%s\n' "$DISPATCH_KIND" >"$run/worker"
 		if ! bun "$roster_ts" resolve-launch-argv --roster "$run/roster.toml" --kind "$DISPATCH_KIND" \
 			>"$run/argv.json" 2>>"$run/log"; then
-			rm -rf "$run"
-			fatal "resolve-launch-argv に失敗"
+			fail_start "resolve-launch-argv に失敗"
 		fi
 	else
 		if ! bun "$roster_ts" resolve-launch-argv --roster "$run/roster.toml" \
 			>"$run/argv.json" 2>>"$run/log"; then
-			rm -rf "$run"
-			fatal "resolve-launch-argv に失敗"
+			fail_start "resolve-launch-argv に失敗"
 		fi
 		python3 -c '
 import sys
@@ -130,15 +134,13 @@ if not kind:
     raise SystemExit(1)
 open(sys.argv[2], "w", encoding="utf-8").write(kind + "\n")
 ' "$run/roster.toml" "$run/worker" || {
-			rm -rf "$run"
-			fatal "resolve.kind が読めない"
+			fail_start "resolve.kind が読めない"
 		}
 	fi
 
 	bin=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))[0])' "$run/argv.json") || bin=""
 	if [ -z "$bin" ] || ! command -v "$bin" >/dev/null 2>&1; then
-		rm -rf "$run"
-		fatal "実行ファイルが PATH に無い: ${bin:-?}"
+		fail_start "実行ファイルが PATH に無い: ${bin:-?}"
 	fi
 
 	session=d-$(cat "$run/worker")-$rid
@@ -151,19 +153,22 @@ argv = json.load(open(sys.argv[1], encoding="utf-8"))
 cmd = ["sh", sys.argv[2], "create", sys.argv[3], sys.argv[4], "--", *argv]
 raise SystemExit(subprocess.call(cmd))
 ' "$run/argv.json" "$tmux_sh" "$session" "$caller_cwd" >>"$run/log" 2>&1; then
-		rm -rf "$run"
-		fatal "tmux create に失敗"
+		fail_start "tmux create に失敗"
 	fi
-	sh "$tmux_sh" accept-trust "$session" 20 >>"$run/log" 2>&1 || true
-	if ! sh "$tmux_sh" wait-ready "$session" 45 >>"$run/log" 2>&1; then
+	# dispatch は trust を自動承認しない（未 trust なら wait-ready が即失敗する）
+	sh "$tmux_sh" wait-ready "$session" 45 >>"$run/log" 2>&1
+	wr=$?
+	if [ "$wr" -eq 3 ]; then
 		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
-		rm -rf "$run"
-		fatal "wait-ready に失敗（TUI 未準備）"
+		fail_start "未 trust: $PWD（先に trust してから再実行）"
+	fi
+	if [ "$wr" -ne 0 ]; then
+		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
+		fail_start "wait-ready に失敗（TUI 未準備）"
 	fi
 	if ! send_round "$run" 1; then
 		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
-		rm -rf "$run"
-		fatal "初回 prompt 送信に失敗"
+		fail_start "初回 prompt 送信に失敗"
 	fi
 	printf '%s\n' 0 >"$run/start.rc"
 	printf '%s\n' "$run"

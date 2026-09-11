@@ -6,12 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 
-const SCRIPT = new URL("../agents/skills/consult/scripts/worker-tmux.sh", import.meta.url).pathname;
+const SCRIPT = new URL("../agents/skills/dispatch/scripts/worker-tmux.sh", import.meta.url)
+  .pathname;
 
 const FAKE_TMUX = `#!/usr/bin/env python3
 import pathlib, re, sys
 root = pathlib.Path(__file__).parent
 args = sys.argv[1:]
+if args[:1] == ["-L"]:
+    args = args[2:]
 
 def session_dir(name: str) -> pathlib.Path:
     d = root / ("sess-" + name)
@@ -45,6 +48,7 @@ if args[0] == "load-buffer":
     raise SystemExit(0)
 
 if args[0] == "paste-buffer":
+    # -p / -d は本番と同じく受け取る（無視）
     b = args[args.index("-b") + 1]
     name = target_session(args[args.index("-t") + 1])
     d = session_dir(name)
