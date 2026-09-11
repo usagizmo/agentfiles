@@ -18,7 +18,7 @@ PR を作り、**merge 可能な状態まで**持っていく。タイトル先�
 
 **依存しないブランチを他のフィーチャーブランチへ rebase しない**。偽の依存が生まれ、本来不要な直列化を招く。
 
-**base の PR が既に着地しているなら、`gh pr edit <自分> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替えてから rebase する。** 親の head ブランチが残る運用では GitHub は base を付け替えないので、放置すると merge できない。
+**base の PR が既に着地しているなら、`gh pr edit <自分> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替えてから rebase する。** 放置すると merge できない。
 
 ## 入る条件
 

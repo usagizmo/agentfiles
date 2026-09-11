@@ -1,6 +1,6 @@
 # アドバイザー起動表
 
-候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。設定の解釈・選出・上限は `advisors.ts`、自己 kind の観測と起動条件は `advisors.sh` が SSOT。実行中の LLM の自己申告では判定しない。
+候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。表の解釈と起動 args の検証は `roster.ts`、選出・上限は `advisors.ts`、自己 kind の観測と起動条件は `advisors.sh` が SSOT。実行中の LLM の自己申告では判定しない。
 
 アドバイザーは consult を起動しない。agent を start しない。判断を応答に出す。
 
@@ -20,9 +20,10 @@
 - **`start` が返した run dir を控え、以降のコマンドにそのまま渡す**
 - 巡は `start` が 1、`ask` のたびに +1。**`ask` は今の巡を `collect` してから**。timeout した agent は確定せず、再 `collect` で続きを待てる。`ask` は、timeout した agent が止まったまま完走していなければ終端して残りで進み、完走していれば `collect` を要求し、まだ働いていれば止まる
 - agent は文脈を保っている。`ask` の本文は 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
-- 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle は読むきっかけであって完了ではない
-- 回収ヘッダの `rc≠0` は未完了。`blocked`（承認待ち）・`done`（pane 喪失）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
-- **どのモードでも最後に `close` を呼ぶ**。失敗で抜けるときも同じ
+- 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle / done は読むきっかけであって完了ではない
+- 回収ヘッダの `rc≠0` は未完了。`blocked`（承認待ち）・`消失`（agent が居なくなった）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
+- timeout の巡は `herdr agent get` / `herdr agent read` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
+- **どのモードでも最後に `close` を呼ぶ**。完了・終端を確認してから閉じる
 
 ## レイアウト
 
@@ -39,7 +40,7 @@
 
 ## 不変条件
 
-**アドバイザーにコードを変更させない**。read-only 手段と、それを打ち消す args の棄却は `advisors.ts` の `readOnlyArgs` / `rejectBypass`。`--tools` は調査に使うツールの絞り込みであって担保ではない。
+**アドバイザーにコードを変更させない**。read-only 手段と、それを打ち消す args の棄却は `roster.ts` の `readOnlyArgs` / `rejectBypass`。`--tools` は調査に使うツールの絞り込みであって担保ではない。
 
 ## 失敗時
 

@@ -7,7 +7,7 @@ import { join } from "node:path";
 const SCRIPTS = join(import.meta.dir, "../agents/skills/pr/scripts");
 
 test("sync-and-push は origin の同名へ送りきる", async () => {
-  // **GIT_* の剥がしは呼び先が持つ**（sync-and-push.test.sh の冒頭）。ここで先回りすると
+  // GIT_* の剥がしは呼び先が持つ（sync-and-push.test.sh の冒頭）。ここで先回りすると
   // 同じ規則が 2 つになり、呼び先だけを直したときに片方が古いまま残る。
   const p = Bun.spawn(["sh", "sync-and-push.test.sh"], {
     cwd: SCRIPTS,

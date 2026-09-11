@@ -1,7 +1,7 @@
 #!/bin/sh
 # PR を使わない面の統合先 ref を、無ければ origin/HEAD から作る。
 #
-# **作業 branch の「在れば checkout、無ければ統合先から作る」とは別名。**こちらは統合先
+# 作業 branch の「在れば checkout、無ければ統合先から作る」とは別名。こちらは統合先
 # そのものを作る。
 #
 # 作成と live の switch は別操作。switch が失敗しても、作った ref は戻さない。
@@ -38,9 +38,9 @@ esac
 }
 
 # GIT_DIR が効いていると -C が無視され、別の repo を触る。
-# **repo-local な変数は git 自身に列挙させる。**手書きの allowlist は git が版で
+# repo-local な変数は git 自身に列挙させる。手書きの allowlist は git が版で
 # 増やすたびに漏れる。`GIT_CEILING_DIRECTORIES` は宣言に無いので合併する。
-# **`GIT_AUTHOR_*` / `GIT_COMMITTER_*` は宣言に含まれない** —— ここは commit を作るので
+# `GIT_AUTHOR_*` / `GIT_COMMITTER_*` は宣言に含まれない —— ここは commit を作るので
 # 落ちると author が変わる。
 git_local_env_strip() {
   if [ -z "${GIT_ENV_STRIP:-}" ]; then

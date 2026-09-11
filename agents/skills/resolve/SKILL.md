@@ -2,18 +2,23 @@
 name: resolve
 description: >-
   課題 1 件を計画 → 実装 → 仕上げ → 検証 → 着地まで一気通貫で進める。
-  ユーザーが /resolve で課題（Issue 番号・タスク説明）を渡したときに実行する。
+  ユーザーが /resolve で課題（Issue 番号・タスク説明）を渡したとき、
+  または「次を進めて」のように暗黙で課題対応を頼まれたときに、課題 1 件ごとに実行する。
 ---
 
 # 課題解決
 
 1. **選出**: 引数が無ければ計画済みの先頭を取る（並びと Status 名は project 差分。無ければ聞く）
-2. **計画**: Issue と関連コードを読み、`consult`（深い・事前）で GO を得る。既に方針が本文にあるなら、書く範囲と検証方針だけを出す
-3. **実装**: 課題ごとに別 worktree を切る。複数 repo を変える課題は repo ごとに worktree を切る
-4. **仕上げ**: 編集した repo ごとに、その worktree を cwd にして `finish`。規模の判定は課題全体で 1 回
-5. **検証**: project の検証 skill があればそれ。無ければ CI と同じ検査をローカルで通す。**CI を検査の代わりに使わない**
-6. **実物の承認**: 人に見せる面（UI・公開 API・設計骨格）を変えたなら、push 前にローカルの実物を見せて明示承認を待つ。**沈黙は承認ではない**。承認後に対象を変えたら再確認する
-7. **着地**: 統合先へ追随してから、project が定める経路で着地する。PR を使う面は `pr` → `ship`、使わない面は `merge`。追随で前提が変わったら 2 に戻る
+2. **場所**: 計画も実装も課題用の worktree で行う。subagent（Agent tool）に委譲しない。cwd が本 step で課題用に作られた linked worktree（`git rev-parse --git-dir` と `--git-common-dir` が異なり、prompt に「2 を飛ばして 3 から」がある）なら既にその場所にいるので 3 へ
+   - Herdr 内（`HERDR_ENV=1`）: **このセッションでは計画も実装もしない**。`herdr worktree create` で worktree と workspace を作り、その pane に `bun <skills root>/resolve/scripts/roster.ts resolve-argv --name <名前> --pane <id>` が stdout へ返す argv（JSON 配列）で agent を起動し（pane ID は応答から読む。kind と args は roster が持つ）、prompt で本 skill を呼ばせる。prompt には選出済みの課題・ユーザーの元の制約・「2 を飛ばして 3 から」を入れる。`--wait` しない。agent が working になったのを確かめ、workspace ID と「GO・承認はそこで起きる」を報告して終える。失敗したら作成済み ID と失敗箇所を報告する。CLI の作法は `herdr` skill（この step ではユーザーの言及が無くても使う）
+   - Herdr 外: `git worktree add` で切って cd し、3 へ
+   - 複数 repo を変える課題は、主 repo の worktree から `git worktree add` で他 repo の worktree を切る（workspace は増やさない）
+3. **計画**: Issue と関連コードを読み、`consult`（深い・事前）で GO を得る。既に方針が本文にあるなら、書く範囲と検証方針だけを出す
+4. **実装**
+5. **仕上げ**: 編集した repo ごとに、その worktree を cwd にして `finish`。規模の判定は課題全体で 1 回
+6. **検証**: project の検証 skill があればそれ。無ければ CI と同じ検査をローカルで通す。**CI を検査の代わりに使わない**
+7. **実物の承認**: 人に見せる面（UI・公開 API・設計骨格）を変えたなら、push 前にローカルの実物を見せて明示承認を待つ。**沈黙は承認ではない**。承認後に対象を変えたら再確認する
+8. **着地**: 統合先へ追随してから、project が定める経路で着地する。PR を使う面は `pr` → `ship`、使わない面は `merge`。追随で前提が変わったら 3 に戻る。**複数 repo なら主 repo を最後に着地する**。依存順がそれを許さないなら止めて確認する
 
 受入条件を満たし検証が pass したら着地を先延ばししない。今回変更由来の回帰は直しきる。スコープを超える発見は `~/.agents/AGENTS.md` のボーイスカウトルール。
 

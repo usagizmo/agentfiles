@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // DESIGN.md の front matter から assets/ を生成する。`--check` は差分を見つけたら非ゼロで終わる。
 //
-// **CSS の関数を front matter に置かない理由。**light-dark() は 1 トークン 1 色という
+// CSS の関数を front matter に置かない理由。light-dark() は 1 トークン 1 色という
 // トークンの型に合わず、@google/design.md の linter も落とす。color-mix() はその Color parser が
 // oklab を読めない。どちらもここで組み立てる。
 
@@ -342,7 +342,7 @@ function verifyShapes(d: Design): void {
       throw bad(path, mix.keep);
     for (const key of ["from", "to"] as const) {
       const color = mix[key];
-      // transparent だけは色トークンで**ない**。重ねる先の面が地を決める
+      // transparent だけは色トークンでない。重ねる先の面が地を決める
       if (color !== "transparent" && d.colors[color] === undefined) throw bad(path, color);
     }
   }

@@ -9,7 +9,7 @@
 #   advisors.sh close <run-dir>                    tab を閉じる。どのモードでも最後に呼ぶ
 #
 # 状態は run dir のファイルだけ: round / marker.<n> / prompt.<n> / <a>/{start.rc,sent.<n>,rc.<n>,reason.<n>,out.<n>,dead}
-# rc.<n> があればその巡は確定（0 = 完走、1 = blocked / done で終端）。timeout は書かない。
+# rc.<n> があればその巡は確定（0 = 完走、1 = blocked で終端）。timeout は書かない。
 #
 # 候補は roster.toml の advisors。選出は advisors.ts。位置引数で kind を渡さない。
 # 不変条件: アドバイザーにコードを変更させない（宣言の args のあとに read-only を足す）。
@@ -351,10 +351,15 @@ collect)
 				break
 			fi
 			wait_json=$run/$a/wait.$n.json
-			# blocked は承認待ち、done は pane 喪失。どちらも今の巡の完了ではない
+			# idle / done は応答を読む契機。完了は今の巡の marker で判定する。
 			if ! herdr agent wait "$name" --until idle --until done --until blocked \
 				--timeout "$((remain * 1000))" >"$wait_json" 2>>"$run/$a/log"; then
-				reason=timeout
+				# 居なくなった agent は待ち直しても戻らない。timeout と分けて終端する
+				if herdr agent get "$name" >/dev/null 2>>"$run/$a/log"; then
+					reason=timeout
+				else
+					reason=消失
+				fi
 				break
 			fi
 			status=$(json_get "$wait_json" result.agent.agent_status 2>/dev/null) || status=""
@@ -365,7 +370,7 @@ collect)
 				break
 			fi
 			case $status in
-			blocked | done)
+			blocked)
 				reason=$status
 				break
 				;;
@@ -387,7 +392,8 @@ collect)
 			fi
 		done
 		# 前の巡の marker より後ろだけを今の巡の出力にする
-		python3 -c '
+		if [ -f "$run/$a/raw.$n" ]; then
+			python3 -c '
 import sys
 raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
 prev = sys.argv[3]
@@ -397,12 +403,13 @@ if prev:
         raw = raw[i + len(prev):]
 open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
 ' "$run/$a/raw.$n" "$run/$a/out.$n" "$prev" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
+		fi
 		case $reason in
 		"")
 			printf '%s\n' 0 >"$run/$a/rc.$n"
 			: >"$run/$a/reason.$n"
 			;;
-		blocked | done)
+		blocked | 消失)
 			printf '%s\n' 1 >"$run/$a/rc.$n"
 			printf '%s\n' "$reason" >"$run/$a/reason.$n"
 			: >"$run/$a/dead"

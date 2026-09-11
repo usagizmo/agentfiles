@@ -4,12 +4,12 @@
 # 宛先は常に origin の refs/heads/<branch>。base へは送らない。空範囲では push
 # しない。lease 無しで他人の tip は上書きしない。
 #
-# **ネットワークに出ない。**origin は一時 dir の bare repo。base 名は引数で渡す。
+# ネットワークに出ない。origin は一時 dir の bare repo。base 名は引数で渡す。
 
 set -u
 
-# **周りの git 環境を持ち込まない。**呼び出し元が GIT_DIR を立てていると、-C を付けても
-# 本番の repo へ書く。**repo-local な変数は git 自身に列挙させる** —— 手書きの allowlist は
+# 周りの git 環境を持ち込まない。呼び出し元が GIT_DIR を立てていると、-C を付けても
+# 本番の repo へ書く。repo-local な変数は git 自身に列挙させる —— 手書きの allowlist は
 # git が版で増やすたびに漏れる。identity はこの下で立て直すので、落ちても困らない。
 for git_env_var in $(git rev-parse --local-env-vars) GIT_CEILING_DIRECTORIES; do
   unset "$git_env_var"

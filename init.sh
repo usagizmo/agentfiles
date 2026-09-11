@@ -48,7 +48,7 @@ echo ""
 echo "## dev dependencies"
 
 # commit gate（lint-staged → oxfmt / oxlint）と test が使う。
-# **bun 自体はこの repo が入れない。**ランタイムは dotfiles の mise が供給する
+# bun 自体はこの repo が入れない。ランタイムは dotfiles の mise が供給する
 if [ -x "$(command -v bun)" ]; then
   install_step "この repo の開発依存を" bun install --cwd "$REPO_DIR" --frozen-lockfile
 else

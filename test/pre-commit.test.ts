@@ -1,11 +1,11 @@
 // commit gate が各段へ渡す環境。
 //
-// **hook には GIT_DIR が入っている。**そのまま `bun test` へ渡すと、sandbox repo へ
+// hook には GIT_DIR が入っている。そのまま `bun test` へ渡すと、sandbox repo へ
 // `git -C <tmp> config user.email ...` を撃つ test の書き込み先が、-C を付けても
 // この repo の .git/config になる。一度当たると以後の commit の author が入れ替わり、
-// **`git log` を見るまで気づけない**。
+// `git log` を見るまで気づけない。
 //
-// **落とす位置も固定する。**lint-staged より前で落とすと、partial commit
+// 落とす位置も固定する。lint-staged より前で落とすと、partial commit
 // （`git commit -- <path>`）の一時 index を見失い、整形結果が commit されない。
 //
 // 実行器を PATH で差し替えて、hook が各段へ実際に渡した環境を読む。
@@ -87,7 +87,7 @@ async function runHook(): Promise<Record<string, Stage>> {
 
 test("commit gate は GIT_* を落としてから test を起動する", async () => {
   const stages = await runHook();
-  // **「呼ばれなかった」を緑にしない。**stub に届いていなければ環境も見えない
+  // 「呼ばれなかった」を緑にしない。stub に届いていなければ環境も見えない
   expect(stages["test"]?.ran).toBe(true);
   expect(stages["test"]?.gitVars).toEqual([]);
 });
