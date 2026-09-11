@@ -22,7 +22,7 @@ description: >-
 
 1. 自分の判断を書く（モードの「出すもの」）
 2. プロンプトを `mktemp` のファイルへ書く（下記。書き方は `references/advisors.md`）
-3. `<skills root>/consult/scripts/advisors.sh start <prompt-file>` → `collect <run-dir>`
+3. `CONSULT_BACKEND` を明示して `<skills root>/consult/scripts/consult-backend.sh start <prompt-file>` → `collect <run-dir>`（起動表・backend 切替は `references/advisors.md`）
 4. 統合する。論点ごとに 一致 / 取り込み / 不採用（理由）/ ユーザー判断が要る点。複数アドバイザーなら出典タグを付す。矛盾したら自分が仲裁し、同じ要約を全員へ送る（相互には話させない）
 5. ループなら往復する（下記）。軽量・事前はここで終える
 6. `close <run-dir>`

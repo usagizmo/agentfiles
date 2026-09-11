@@ -92,7 +92,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
 - 参照方向は常に個別 → 共通の**一方通行**。共通が特定 harness を知ってはいけない
-- アドバイザーの起動は `consult` skill の単一実体（`references/advisors.md` + `scripts/advisors.ts` + `scripts/advisors.sh`）にし、harness ごとの上書きも project **差分も置かない**。kind と起動 args の表とその解釈は `agents/shared/roster.toml` / `roster.ts`（`advisors` = consult の相談役、`resolve` = resolve の実装役）
+- アドバイザーの起動は `consult` skill の単一実体（`references/advisors.md` + `scripts/consult-backend.sh` + `advisors.sh` / `advisors-tmux.sh` + `tmux-session.sh` + `advisors.ts`）にし、harness ごとの上書きも project **差分も置かない**。backend は `CONSULT_BACKEND` で明示（silent fallback 禁止）。kind と起動 args の表とその解釈は `agents/shared/roster.toml` / `roster.ts`（`advisors` = consult の相談役、`resolve` = resolve の実装役）
 
 ### skill 間で実体を共有するとき
 

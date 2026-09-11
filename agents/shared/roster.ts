@@ -91,6 +91,9 @@ const rejectBypass = (args: readonly string[], readOnly: boolean): void => {
     if (token === "--") throw new RosterError("args に -- は置けない");
     const { name, value } = splitFlag(token, args[i + 1]);
     if (BYPASS.has(name)) throw new RosterError(`承認を飛ばす flag: ${token}`);
+    if (name === "-p" || name === "--print") {
+      throw new RosterError(`interactive 以外の起動: ${token}`);
+    }
     if (name === "--permission-mode" && APPROVAL_SKIPPING_MODES.has(value ?? "")) {
       throw new RosterError(`承認を飛ばす --permission-mode: ${value}`);
     }
@@ -207,6 +210,18 @@ export const herdrStartArgv = (slot: Slot, start: { name: string; pane: string }
     ...slot.args,
     ...readOnlyArgs(slot.kind),
   ];
+};
+
+/** tmux / 直接 CLI 起動時の実行ファイル名。kind とバイナリ名が違う枠だけ写す。 */
+export const directBinary = (kind: string): string => {
+  if (kind === "cursor") return "cursor-agent";
+  return kind;
+};
+
+/** Herdr を経由せず interactive CLI を起動する argv（read-only を末尾に足す）。 */
+export const directLaunchArgv = (slot: Slot): string[] => {
+  rejectBypass(slot.args, true);
+  return [directBinary(slot.kind), ...slot.args, ...readOnlyArgs(slot.kind)];
 };
 
 /** JSON 1 枠を advisors と同じ検証で通す。 */

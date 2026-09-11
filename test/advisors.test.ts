@@ -17,6 +17,8 @@ import {
 import {
   ROSTER_URL,
   RosterError,
+  directBinary,
+  directLaunchArgv,
   herdrResolveArgv,
   herdrStartArgv,
   parseRoster,
@@ -178,6 +180,11 @@ test("read-only を打ち消す args は落とす", () => {
   ).toThrow(RosterError);
 });
 
+test("-p / --print は interactive 以外として落とす", () => {
+  expect(() => parseRoster(toml('[{"kind":"claude","args":["-p"]}]'))).toThrow(/interactive/);
+  expect(() => parseRoster(toml('[{"kind":"claude","args":["--print"]}]'))).toThrow(/interactive/);
+});
+
 test("= 連結と別名の bypass も落とす", () => {
   expect(() =>
     parseRoster(toml('[{"kind":"claude","args":["--permission-mode=bypass"]}]')),
@@ -253,6 +260,20 @@ test("空の args でも read-only は付く", () => {
   if (claude === undefined) throw new Error("claude 枠が無い");
   const argv = herdrStartArgv(claude, { name: "a-claude-x", pane: "w1:p1" });
   expect(argv.slice(argv.indexOf("--") + 1)).toEqual([...readOnlyArgs("claude")]);
+});
+
+test("directLaunchArgv は kind バイナリ + args + read-only（Herdr 無し）", () => {
+  const claude = roster.find((s) => s.kind === "claude");
+  if (claude === undefined) throw new Error("claude 枠が無い");
+  expect(directLaunchArgv(claude)).toEqual(["claude", ...readOnlyArgs("claude")]);
+  expect(directBinary("cursor")).toBe("cursor-agent");
+  const cursor = roster.find((s) => s.kind === "cursor");
+  if (cursor === undefined) throw new Error("cursor 枠が無い");
+  expect(directLaunchArgv(cursor)).toEqual([
+    "cursor-agent",
+    ...cursor.args,
+    ...readOnlyArgs("cursor"),
+  ]);
 });
 
 test("codex の read-only は -s read-only", () => {

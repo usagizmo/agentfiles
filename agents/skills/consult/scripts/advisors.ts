@@ -2,12 +2,22 @@
 //
 //   bun advisors.ts select --roster <file> --self <kind>
 //   bun advisors.ts start-argv --slot <file> --name <name> --pane <id>
+//   bun advisors.ts launch-argv --slot <file>
 //   bun advisors.ts complete --output <file> --marker <token>
 //
 // select の stdout は選出した枠の JSON。表に無い self は先頭 2 枠 + stderr へ警告。
 // start-argv の stdout は herdr agent start の argv JSON。read-only 手段を末尾に足す。
+// launch-argv の stdout は tmux / 直接 CLI 起動の argv JSON（Herdr を経由しない）。
 
-import { RosterError, type Slot, flag, herdrStartArgv, parseRoster, parseSlot } from "./roster.ts";
+import {
+  RosterError,
+  type Slot,
+  directLaunchArgv,
+  flag,
+  herdrStartArgv,
+  parseRoster,
+  parseSlot,
+} from "./roster.ts";
 
 export const MAX_ADVISORS = 2;
 
@@ -162,7 +172,15 @@ const main = async (): Promise<void> => {
       process.stdout.write(`${JSON.stringify(herdrStartArgv(slot, { name, pane }))}\n`);
       return;
     }
-    throw new RosterError("使い方: advisors.ts select | start-argv | complete");
+    if (cmd === "launch-argv") {
+      const slotPath = flag(argv, "--slot");
+      if (slotPath === undefined) throw new RosterError("--slot が必要");
+      const raw: unknown = JSON.parse(await Bun.file(slotPath).text());
+      const slot = parseSlot(raw);
+      process.stdout.write(`${JSON.stringify(directLaunchArgv(slot))}\n`);
+      return;
+    }
+    throw new RosterError("使い方: advisors.ts select | start-argv | launch-argv | complete");
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);
     console.error(`FATAL\t${message}`);

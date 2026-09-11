@@ -1,6 +1,7 @@
 #!/bin/sh
 # アドバイザーの起動・対話・回収。同じ pane を巡をまたいで使い回し、文脈を保つ。
 # Herdr の tab 1 + 左右 pane で interactive に立て、思考が見えるようにする。
+# CONSULT_BACKEND=herdr の実体。tmux 経路は advisors-tmux.sh（ここへ黙って倒さない）。
 #
 #   advisors.sh start <prompt-file>                run dir を作って起動し、巡 1 を送る。run dir を stdout へ
 #   advisors.sh collect <run-dir> [wait-seconds]   今の巡が出揃うまで待って出力。既定 1200 秒
@@ -90,6 +91,9 @@ place_prompt() {
 require_run() {
 	[ -n "$1" ] && [ -d "$1" ] && [ -f "$1/advisors" ] && [ -f "$1/round" ] || fatal "run dir が不正: ${1:-未指定}"
 	[ -f "$1/closed" ] && fatal "この run は close 済み: $1"
+	if [ -f "$1/backend" ] && [ "$(cat "$1/backend")" != herdr ]; then
+		fatal "herdr backend の run ではない: $1"
+	fi
 }
 
 # 起動できた agent の一覧（dead を除く）
@@ -128,6 +132,7 @@ start)
 	rid=${rid#advisors.}
 	rid=$(printf '%s' "$rid" | tr 'A-Z' 'a-z')
 	printf '%s\n' "$rid" >"$run/rid" || fatal "rid を書けない"
+	printf '%s\n' herdr >"$run/backend" || fatal "backend を書けない"
 	cp "$roster" "$run/roster.toml" || fatal "候補表を配れない"
 	place_prompt "$run" "$prompt" 1
 	printf '%s\n' 1 >"$run/round" || fatal "round を書けない"
@@ -490,6 +495,9 @@ close)
 	run=${1:-}
 	[ -n "$run" ] && [ -d "$run" ] || fatal "run dir が不正: ${run:-未指定}"
 	[ -f "$run/closed" ] && exit 0
+	if [ -f "$run/backend" ] && [ "$(cat "$run/backend")" != herdr ]; then
+		fatal "herdr backend の run ではない: $run"
+	fi
 	tab_id=""
 	[ -f "$run/tab_id" ] && tab_id=$(cat "$run/tab_id")
 	if [ -n "$tab_id" ] && ! herdr tab close "$tab_id" >/dev/null 2>&1; then
