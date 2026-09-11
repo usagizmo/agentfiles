@@ -1,0 +1,14 @@
+{
+  "installed": true,
+  "provider": "command-code",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "firstMessageSent": true,
+  "theme": "auto",
+  "tasteLearning": false,
+  "compactMode": "default",
+  "defaultExportFormat": "html",
+  "imageVisionEnabled": true,
+  "reasoningEffort": {
+    "deepseek/deepseek-v4.1-flash": "max"
+  }
+}

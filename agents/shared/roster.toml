@@ -20,6 +20,9 @@
 # grok を cursor 経由で（実行ファイルは cursor-agent。kind は cursor）:
 #   kind = "cursor"
 #   args = ["--model", "cursor-grok-4.6-high"]
+#
+# 3 枠目の members 同グループ: grok / cursor / opencode / command-code。
+# 起動は cursor のまま。OpenCode Go / Command Code の既定モデルは各 harness overlay。
 
 [[advisors]]
 kind = "claude"
@@ -32,7 +35,7 @@ args = []
 [[advisors]]
 kind = "cursor"
 args = ["--model", "cursor-grok-4.6-high"]
-members = ["grok", "cursor"]
+members = ["grok", "cursor", "opencode", "command-code"]
 
 [resolve]
 kind = "grok"
