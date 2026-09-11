@@ -64,10 +64,12 @@ inventory_define() {
   # home は `~/.commandcode`（auth / sessions / history を同居させる）。tracked な葉だけ symlink
   # memory は `~/.commandcode/AGENTS.md`。`CLAUDE.md` は読まない
   # Command Code は `~/.agents/skills` をネイティブに読む（`commandcode skills list` の Global）。union は張らない
+  # config.json は model / effort / theme の保存先。settings.json とは別ファイル（auth.json は鍵なので配らない）
   inv_section "command-code"
   inv_home "$HOME/.commandcode"
   inv_symlink agents/AGENTS.md "$HOME/.commandcode/AGENTS.md"
   inv_symlink harnesses/command-code/settings.json "$HOME/.commandcode/settings.json"
+  inv_symlink harnesses/command-code/config.json "$HOME/.commandcode/config.json"
 
   # --- pi ---
   # home は `~/.pi/agent`（auth / sessions / cache を同居させる）。tracked な葉だけ symlink
