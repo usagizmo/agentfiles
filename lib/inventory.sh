@@ -31,8 +31,6 @@ inventory_define() {
   inv_symlink harnesses/claude/settings.json "$HOME/.claude/settings.json"
   inv_symlink harnesses/claude/statusline.py "$HOME/.claude/statusline.py"
   inv_home "$HOME/.claude/hooks"
-  inv_symlink harnesses/claude/hooks/herdr-agent-state.sh \
-    "$HOME/.claude/hooks/herdr-agent-state.sh"
   inv_guard_dir "$HOME/.claude/hooks"
 
   # --- Codex ---

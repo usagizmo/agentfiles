@@ -3,7 +3,7 @@ name: dispatch
 description: >-
   明示した harness（claude / codex 等）に実装・調査などの作業を interactive で渡す。
   「claude で実装して」「codex で調べて」など harness + 作業指示があるとき、
-  または resolve が Herdr 無しで実装役を立てるときに使う。consult（助言）とは別層。
+  または resolve が実装役を別 harness に渡すときに使う。consult（助言）とは別層。
 ---
 
 # 作業ディスパッチ
@@ -19,5 +19,4 @@ DISPATCH_BACKEND=tmux DISPATCH_KIND=<kind> \
 ```
 
 - `DISPATCH_BACKEND` 未設定・未知は fatal（silent fallback 禁止）
-- Herdr 面の実装役は `resolve` skill の既存手順（本 script の `herdr` は未配線）
 - interactive TUI のみ（`--print` は拒否。`-p` は Codex の `--profile` だけ）

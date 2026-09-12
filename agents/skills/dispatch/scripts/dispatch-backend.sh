@@ -1,10 +1,10 @@
 #!/bin/sh
 # dispatch の明示 backend セレクタ。黙って別経路へ倒さない。
 #
-#   DISPATCH_BACKEND=tmux|herdr <skills root>/dispatch/scripts/dispatch-backend.sh <start|collect|ask|close> ...
+#   DISPATCH_BACKEND=tmux <skills root>/dispatch/scripts/dispatch-backend.sh <start|collect|ask|close> ...
 #
-# tmux  → worker-tmux.sh（DISPATCH_KIND 任意）
-# herdr → いまはセレクタ上の互換入口のみ。実体は resolve skill の HERDR_ENV=1 手順が SSOT
+# tmux → worker-tmux.sh（DISPATCH_KIND 任意）
+# 将来の backend（例: cloud）はここに足す。未設定・未知は fatal。
 
 set -u
 # 子 process に LC_ALL を渡さない（tmux server / harness を C locale にしない）
@@ -22,13 +22,10 @@ case "$backend" in
 tmux)
 	exec sh "$here/worker-tmux.sh" "$@"
 	;;
-herdr)
-	fatal "DISPATCH_BACKEND=herdr の script 実体は未配線。resolve skill の HERDR_ENV=1 手順（herdr worktree + resolve-argv）を使え"
-	;;
 "")
-	fatal "DISPATCH_BACKEND が無い（tmux|herdr）。別の起動方式へ倒さない"
+	fatal "DISPATCH_BACKEND が無い（tmux）。別の起動方式へ倒さない"
 	;;
 *)
-	fatal "未知の DISPATCH_BACKEND: ${backend} (tmux|herdr)"
+	fatal "未知の DISPATCH_BACKEND: ${backend} (tmux)"
 	;;
 esac

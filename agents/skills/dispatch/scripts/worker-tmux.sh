@@ -155,12 +155,13 @@ raise SystemExit(subprocess.call(cmd))
 ' "$run/argv.json" "$tmux_sh" "$session" "$caller_cwd" >>"$run/log" 2>&1; then
 		fail_start "tmux create に失敗"
 	fi
-	# dispatch は trust を自動承認しない（未 trust なら wait-ready が即失敗する）
+	# detached のため Claude workspace trust 対話が出たら Yes を選ぶ（consult と同じ）
+	sh "$tmux_sh" accept-trust "$session" 20 >>"$run/log" 2>&1 || true
 	sh "$tmux_sh" wait-ready "$session" 45 >>"$run/log" 2>&1
 	wr=$?
 	if [ "$wr" -eq 3 ]; then
 		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
-		fail_start "未 trust: $PWD（先に trust してから再実行）"
+		fail_start "trust 対話を越えられない: $PWD"
 	fi
 	if [ "$wr" -ne 0 ]; then
 		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true

@@ -1,6 +1,6 @@
 // consult-backend.sh の明示セレクタ。未設定・未知は fatal。黙って倒さない。
 
-import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -51,22 +51,6 @@ test("CONSULT_BACKEND=tmux は advisors-tmux へ委譲する", async () => {
     const r = await run(dir, { CONSULT_BACKEND: "tmux" }, ["start", "/dev/null"]);
     expect(r.exitCode).toBe(2);
     expect(r.stderr).toContain("CONSULT_SELF_KIND が無い");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
-
-test("CONSULT_BACKEND=herdr は advisors.sh へ委譲する", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "consult-backend-"));
-  try {
-    await Bun.write(join(dir, "herdr"), "#!/bin/sh\necho unexpected >&2\nexit 1\n");
-    await chmod(join(dir, "herdr"), 0o755);
-    const r = await run(dir, { CONSULT_BACKEND: "herdr", HERDR_ENV: undefined }, [
-      "start",
-      "/dev/null",
-    ]);
-    expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain("Herdr の外ではアドバイザーを立てない");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

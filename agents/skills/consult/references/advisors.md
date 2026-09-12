@@ -9,12 +9,11 @@
 ## Backend 選択
 
 入口は `consult-backend.sh`。`CONSULT_BACKEND` で経路を明示する（未設定・未知は fatal。黙って切替しない）。
-選び方: `HERDR_ENV=1` なら `herdr`、それ以外は `tmux`。`CONSULT_SELF_KIND` は呼び出し側が明示する（harness overlay の env 注入が揃うまでの間。LLM の自己申告では決めない）。
+`CONSULT_SELF_KIND` は呼び出し側が明示する（harness overlay の env 注入が揃うまでの間。LLM の自己申告では決めない）。
 
-| `CONSULT_BACKEND` | script             | 追加の必須 env                       | transport                                  |
-| ----------------- | ------------------ | ------------------------------------ | ------------------------------------------ |
-| `tmux`            | `advisors-tmux.sh` | `CONSULT_SELF_KIND`（自己 kind）     | tmux / pty interactive（Claude `-p` 不可） |
-| `herdr`           | `advisors.sh`      | `HERDR_ENV=1` / `HERDR_WORKSPACE_ID` | Herdr pane                                 |
+| `CONSULT_BACKEND` | script             | 追加の必須 env                   | transport              |
+| ----------------- | ------------------ | -------------------------------- | ---------------------- |
+| `tmux`            | `advisors-tmux.sh` | `CONSULT_SELF_KIND`（自己 kind） | tmux / pty interactive |
 
 ```
 CONSULT_BACKEND=tmux CONSULT_SELF_KIND=cursor \
@@ -27,7 +26,7 @@ CONSULT_BACKEND=tmux \
   <skills root>/consult/scripts/consult-backend.sh close <run-dir>
 ```
 
-`advisors.sh` / `advisors-tmux.sh` を直接呼んでもよい。直接呼ぶ場合も、もう一方へ**倒さない**。
+`advisors-tmux.sh` を直接呼んでもよい（その場合も `CONSULT_BACKEND` 経由と同じ契約）。
 
 tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult / dispatch が共有）。実装役は `dispatch` skill。
 
@@ -46,26 +45,13 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 - 巡は `start` が 1、`ask` のたびに +1。**`ask` は今の巡を `collect` してから**。timeout した agent は確定せず、再 `collect` で続きを待てる。`ask` は、timeout した agent が止まったまま完走していなければ終端して残りで進み、完走していれば `collect` を要求し、まだ働いていれば止まる
 - agent は文脈を保っている。`ask` の本文は 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
 - 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle / done は読むきっかけであって完了ではない
-- 回収ヘッダの `rc≠0` は未完了。`blocked`（承認待ち・herdr）・`消失`（session/agent が居なくなった）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
+- 回収ヘッダの `rc≠0` は未完了。`消失`（session/agent が居なくなった）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
 - timeout の巡は pane / `tmux capture` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
 - **どのモードでも最後に `close` を呼ぶ**。完了・終端を確認してから閉じる
 
 ## レイアウト
 
-### herdr
-
-新しい tab を 1 つ。今の会話 pane を**分割しない**。
-
-| 人数 | 中身                                |
-| ---- | ----------------------------------- |
-| 2    | 左右 2 pane。選出の先頭が左、次が右 |
-| 1    | root pane だけ                      |
-
-`--no-focus`。cwd は呼び出し元の `$PWD`。エージェント名は `a-<kind>-<id>`。
-
-### tmux
-
-選出された kind ごとに **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`（herdr と同じ）。人が `tmux -L agentfiles attach -t <session>` で覗ける。Claude の workspace trust 対話が出た場合は `tmux-session.sh accept-trust` が Yes を選ぶ。
+選出された kind ごとに **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`。人が `tmux -L agentfiles attach -t <session>` で覗ける。Claude の workspace trust 対話が出た場合は `tmux-session.sh accept-trust` が Yes を選ぶ。
 
 ## 不変条件
 

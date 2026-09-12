@@ -20,8 +20,6 @@ import {
   directBinary,
   directLaunchArgv,
   directResolveLaunchArgv,
-  herdrResolveArgv,
-  herdrStartArgv,
   parseRoster,
   readOnlyArgs,
   type Roster,
@@ -85,17 +83,16 @@ test("resolve でも承認を飛ばす指定は止まる", () => {
     "ask-for-approval",
   );
   expect(() =>
-    herdrResolveArgv(
-      { kind: "claude", args: ["--permission-mode", "bypassPermissions"] },
-      { name: "r", pane: "w1:p1" },
-    ),
+    directResolveLaunchArgv({
+      kind: "claude",
+      args: ["--permission-mode", "bypassPermissions"],
+    }),
   ).toThrow(RosterError);
 });
 
-test("resolve の起動 argv は args をそのまま渡し read-only を足さない", () => {
-  const argv = herdrResolveArgv(parsed.resolve, { name: "r-grok-x", pane: "w1:p1" });
-  expect(argv.slice(0, 3)).toEqual(["herdr", "agent", "start"]);
-  expect(argv.slice(argv.indexOf("--") + 1)).toEqual([...parsed.resolve.args]);
+test("resolve の起動 argv は binary + args で read-only を足さない", () => {
+  const argv = directResolveLaunchArgv(parsed.resolve);
+  expect(argv).toEqual([directBinary(parsed.resolve.kind), ...parsed.resolve.args]);
 });
 
 test("resolve は read-only を要求しない", () => {
@@ -223,15 +220,15 @@ test("read-only 手段が無い kind は宣言時に落とす", () => {
 
 test("起動 argv も bypass を落とす", () => {
   const skip = { kind: "claude", args: ["--dangerously-skip-permissions"], members: ["claude"] };
-  expect(() => herdrStartArgv(skip, { name: "a-claude-x", pane: "w1:p1" })).toThrow(RosterError);
+  expect(() => directLaunchArgv(skip)).toThrow(RosterError);
   const glued = { kind: "codex", args: ["-sdanger-full-access"], members: ["codex"] };
-  expect(() => herdrStartArgv(glued, { name: "a-codex-x", pane: "w1:p1" })).toThrow(RosterError);
+  expect(() => directLaunchArgv(glued)).toThrow(RosterError);
   const cfg = {
     kind: "codex",
     args: ["-c", "sandbox_mode=danger-full-access"],
     members: ["codex"],
   };
-  expect(() => herdrStartArgv(cfg, { name: "a-codex-x", pane: "w1:p1" })).toThrow(RosterError);
+  expect(() => directLaunchArgv(cfg)).toThrow(RosterError);
 });
 
 test("effort 用の -c は通る", () => {
@@ -255,20 +252,18 @@ test("壊れた TOML はパーサの位置を残す", () => {
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
   const cursor = roster.find((s) => s.kind === "cursor");
   if (cursor === undefined) throw new Error("cursor 枠が無い");
-  const argv = herdrStartArgv(cursor, { name: "a-cursor-x", pane: "w1:p1" });
-  expect(argv).toContain("--");
-  const extra = argv.slice(argv.indexOf("--") + 1);
-  expect(extra).toEqual([...cursor.args, ...readOnlyArgs("cursor")]);
+  const argv = directLaunchArgv(cursor);
+  expect(argv).toEqual([directBinary("cursor"), ...cursor.args, ...readOnlyArgs("cursor")]);
 });
 
 test("空の args でも read-only は付く", () => {
   const claude = roster.find((s) => s.kind === "claude");
   if (claude === undefined) throw new Error("claude 枠が無い");
-  const argv = herdrStartArgv(claude, { name: "a-claude-x", pane: "w1:p1" });
-  expect(argv.slice(argv.indexOf("--") + 1)).toEqual([...readOnlyArgs("claude")]);
+  const argv = directLaunchArgv(claude);
+  expect(argv).toEqual([directBinary("claude"), ...readOnlyArgs("claude")]);
 });
 
-test("directLaunchArgv は kind バイナリ + args + read-only（Herdr 無し）", () => {
+test("directLaunchArgv は kind バイナリ + args + read-only", () => {
   const claude = roster.find((s) => s.kind === "claude");
   if (claude === undefined) throw new Error("claude 枠が無い");
   expect(directLaunchArgv(claude)).toEqual(["claude", ...readOnlyArgs("claude")]);
@@ -301,15 +296,13 @@ test("grok の read-only は plan と --no-subagents", () => {
 
 test("cursor の read-only は --mode plan", () => {
   expect(readOnlyArgs("cursor")).toEqual(["--mode", "plan"]);
-  const argv = herdrStartArgv(
-    {
-      kind: "cursor",
-      args: ["--model", "cursor-grok-4.6-high"],
-      members: ["grok", "cursor", "opencode", "command-code"],
-    },
-    { name: "a-cursor-x", pane: "w1:p1" },
-  );
-  expect(argv.slice(argv.indexOf("--") + 1)).toEqual([
+  const argv = directLaunchArgv({
+    kind: "cursor",
+    args: ["--model", "cursor-grok-4.6-high"],
+    members: ["grok", "cursor", "opencode", "command-code"],
+  });
+  expect(argv).toEqual([
+    directBinary("cursor"),
     "--model",
     "cursor-grok-4.6-high",
     "--mode",

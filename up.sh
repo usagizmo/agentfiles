@@ -30,27 +30,6 @@ else
   UPDATE_FAILED=1
 fi
 
-# herdr skill は git 管理外。HEAD から取らず、入っている binary から出す
-# （HEAD は binary より先行しうるので、無い CLI を説明する skill が配られる）
-if [ -x "$(command -v herdr)" ]; then
-  # 直接リダイレクトしない。`>` は herdr を起動する前にファイルを 0 バイトへ切り詰めるので、
-  # 生成に失敗すると既存の skill が消える（git 管理外なので戻せない）
-  HERDR_SKILL_TMP="$(mktemp)"
-  HERDR_SKILL_ERR="$(mktemp)"
-  if herdr --skill >"$HERDR_SKILL_TMP" 2>"$HERDR_SKILL_ERR" && [ -s "$HERDR_SKILL_TMP" ]; then
-    mkdir -p "$REPO_DIR/agents/skills/herdr"
-    install -m 644 "$HERDR_SKILL_TMP" "$REPO_DIR/agents/skills/herdr/SKILL.md"
-    echo "✅ herdr skill を $(herdr --version) から更新しました"
-  else
-    # 原因を捨てない。socket 断・権限でも同じ文言になると切り分けができない
-    echo "⚠️ herdr skill を生成できませんでした: $(head -n 1 "$HERDR_SKILL_ERR")"
-    UPDATE_FAILED=1
-  fi
-  rm -f "$HERDR_SKILL_TMP" "$HERDR_SKILL_ERR"
-else
-  # 更新の対象そのものが無いので、更新すべき skill も存在しない（道具の欠落とは別）
-  echo "⚠️ herdr が無いので skill の更新をスキップします"
-fi
 
 # 新規 skill ディレクトリが増えた場合に harness 側 symlink を追随させる
 # full reconcile（partial API は作らない = up 専用経路の drift を防ぐ）

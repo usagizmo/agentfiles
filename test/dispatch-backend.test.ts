@@ -44,17 +44,6 @@ test("未知の DISPATCH_BACKEND は fatal", async () => {
   }
 });
 
-test("DISPATCH_BACKEND=herdr は未配線を明示して止まる", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "dispatch-backend-"));
-  try {
-    const r = await run(dir, { DISPATCH_BACKEND: "herdr" }, ["start", "/dev/null"]);
-    expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain("未配線");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
-
 test("DISPATCH_BACKEND=tmux は worker-tmux へ委譲する", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dispatch-backend-"));
   try {

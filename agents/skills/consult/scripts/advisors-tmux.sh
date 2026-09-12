@@ -1,6 +1,6 @@
 #!/bin/sh
-# consult の tmux / pty ConsultBackend。Herdr を使わず interactive harness を実端末で駆動する。
-# advisors.sh（herdr）とは別経路。CONSULT_BACKEND=tmux 経由、または本 script を直接呼ぶ。
+# consult の tmux / pty ConsultBackend。interactive harness を実端末で駆動する。
+# CONSULT_BACKEND=tmux 経由、または本 script を直接呼ぶ。
 #
 #   advisors-tmux.sh start <prompt-file>                run dir を stdout へ。巡 1 を送る
 #   advisors-tmux.sh collect <run-dir> [wait-seconds]   今の巡の marker 完走を待って出力。既定 1200 秒
@@ -10,7 +10,7 @@
 # 必須 env:
 #   CONSULT_SELF_KIND  自己 kind（観測は env。LLM 自己申告は禁止）
 #
-# 状態ファイル契約は advisors.sh と同じ（round / marker / prompt / <a>/{start.rc,sent,rc,reason,out,dead}）。
+# 状態ファイル契約（round / marker / prompt / <a>/{start.rc,sent,rc,reason,out,dead}）。
 # silent fallback しない。
 
 set -u
@@ -130,7 +130,7 @@ for s in json.load(open(sys.argv[1], encoding="utf-8")):
 ' "$run/selected.json" >"$run/advisors" || fatal "選出結果が読めない"
 	[ -s "$run/advisors" ] || fatal "選出結果が空"
 
-	# 選出された kind ごとに独立 session。cwd は呼び出し元（herdr と同じ）
+	# 選出された kind ごとに独立 session。cwd は呼び出し元
 	caller_cwd=$PWD
 	started=0
 	while IFS= read -r a; do

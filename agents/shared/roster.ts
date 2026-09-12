@@ -1,15 +1,13 @@
 // roster.toml の解釈と検証。consult の advisors と resolve の実装役の kind / 起動 args を持つ。
 //
-//   bun roster.ts resolve-argv --name <name> --pane <id>
+//   bun roster.ts resolve-launch-argv [--kind <kind>] [--roster <file>]
 //
-// resolve-argv の stdout は実装役を起動する herdr agent start の argv JSON。
-// consult 側の select / start-argv は advisors.ts。
+// resolve-launch-argv の stdout は実装役を直接 CLI 起動する argv JSON（tmux dispatch）。
+// consult 側の select / launch-argv は advisors.ts。
 
 import { TOML } from "bun";
 
 export const ROSTER_URL = new URL("./roster.toml", import.meta.url);
-export const START_TIMEOUT_MS = 90000;
-
 export type Slot = {
   readonly kind: string;
   readonly args: readonly string[];
@@ -154,7 +152,7 @@ const parseWorker = (data: unknown): Worker => {
   return { kind, args };
 };
 
-/** 枠配列の検証。`parseRoster` が `advisors` を、`start-argv` が 1 枠を通す。 */
+/** 枠配列の検証。`parseRoster` が `advisors` を、`launch-argv` が 1 枠を通す。 */
 const parseSlots = (data: unknown): Slot[] => {
   if (!Array.isArray(data) || data.length === 0) {
     throw new RosterError("枠配列が空");
@@ -194,32 +192,13 @@ const parseSlots = (data: unknown): Slot[] => {
   return slots;
 };
 
-export const herdrStartArgv = (slot: Slot, start: { name: string; pane: string }): string[] => {
-  rejectBypass(slot.args, true, slot.kind);
-  return [
-    "herdr",
-    "agent",
-    "start",
-    start.name,
-    "--kind",
-    slot.kind,
-    "--pane",
-    start.pane,
-    "--timeout",
-    String(START_TIMEOUT_MS),
-    "--",
-    ...slot.args,
-    ...readOnlyArgs(slot.kind),
-  ];
-};
-
 /** tmux / 直接 CLI 起動時の実行ファイル名。kind とバイナリ名が違う枠だけ写す。 */
 export const directBinary = (kind: string): string => {
   if (kind === "cursor") return "cursor-agent";
   return kind;
 };
 
-/** Herdr を経由せず interactive CLI を起動する argv（read-only を末尾に足す）。 */
+/** interactive CLI を起動する argv（read-only を末尾に足す）。 */
 export const directLaunchArgv = (slot: Slot): string[] => {
   rejectBypass(slot.args, true, slot.kind);
   return [directBinary(slot.kind), ...slot.args, ...readOnlyArgs(slot.kind)];
@@ -238,27 +217,6 @@ export const parseSlot = (raw: unknown): Slot => {
   return slot;
 };
 
-export const herdrResolveArgv = (
-  worker: Worker,
-  start: { name: string; pane: string },
-): string[] => {
-  rejectBypass(worker.args, false, worker.kind);
-  return [
-    "herdr",
-    "agent",
-    "start",
-    start.name,
-    "--kind",
-    worker.kind,
-    "--pane",
-    start.pane,
-    "--timeout",
-    String(START_TIMEOUT_MS),
-    "--",
-    ...worker.args,
-  ];
-};
-
 export const flag = (argv: readonly string[], name: string): string | undefined => {
   const i = argv.indexOf(name);
   return i < 0 ? undefined : argv[i + 1];
@@ -267,14 +225,6 @@ export const flag = (argv: readonly string[], name: string): string | undefined 
 const main = async (): Promise<void> => {
   const argv = process.argv.slice(2);
   try {
-    if (argv[0] === "resolve-argv") {
-      const name = flag(argv, "--name");
-      const pane = flag(argv, "--pane");
-      if (name === undefined || pane === undefined) throw new RosterError("--name / --pane が必要");
-      const { resolve } = parseRoster(await Bun.file(ROSTER_URL).text());
-      process.stdout.write(`${JSON.stringify(herdrResolveArgv(resolve, { name, pane }))}\n`);
-      return;
-    }
     if (argv[0] === "resolve-launch-argv") {
       // tmux dispatch 用。--kind があればその kind で起動（同じ kind なら roster args を引き継ぐ）
       const kindOverride = flag(argv, "--kind");
@@ -291,7 +241,7 @@ const main = async (): Promise<void> => {
       process.stdout.write(`${JSON.stringify(directResolveLaunchArgv(worker))}\n`);
       return;
     }
-    throw new RosterError("使い方: roster.ts resolve-argv | resolve-launch-argv");
+    throw new RosterError("使い方: roster.ts resolve-launch-argv");
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);
     console.error(`FATAL\t${message}`);

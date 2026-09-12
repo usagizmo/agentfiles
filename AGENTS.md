@@ -92,7 +92,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 - **意味と手順は共通、起動・配線・フォーマットは個別**。agents / prompts / commands / subagents は形式が harness ごとに違うため、原則 `harnesses/<agent>/` のみに置く（共通フォーマットや codegen は作らない）
 - **最初は個別に書き、上表のしきい値に達してから `agents/` へ昇格する**（空の共通抽象を先に作らない）
 - 参照方向は常に個別 → 共通の**一方通行**。共通が特定 harness を知ってはいけない
-- アドバイザーの起動は `consult` skill の単一実体（`references/advisors.md` + `scripts/consult-backend.sh` + `advisors.sh` / `advisors-tmux.sh` + `tmux-session.sh`）にし、harness ごとの上書きも project **差分も置かない**。backend は `CONSULT_BACKEND` で明示（silent fallback 禁止）。実装役の dispatch は `dispatch` skill + `dispatch/scripts/dispatch-backend.sh` / `worker-tmux.sh`（`DISPATCH_BACKEND`。permission 差は `dispatch/references/dispatch.md`）。session primitive は `agents/shared/tmux-session.sh`。選出・完走判定は `agents/shared/advisors.ts`（consult / dispatch から相対 symlink）。kind と起動 args の表とその解釈は `agents/shared/roster.toml` / `roster.ts`（`advisors` = consult の相談役、`resolve` = resolve の実装役）
+- アドバイザーの起動は `consult` skill の単一実体（`references/advisors.md` + `scripts/consult-backend.sh` + `advisors-tmux.sh` + `tmux-session.sh`）にし、harness ごとの上書きも project **差分も置かない**。backend は `CONSULT_BACKEND` で明示（silent fallback 禁止）。実装役の dispatch は `dispatch` skill + `dispatch/scripts/dispatch-backend.sh` / `worker-tmux.sh`（`DISPATCH_BACKEND`。permission 差は `dispatch/references/dispatch.md`）。session primitive は `agents/shared/tmux-session.sh`。選出・完走判定は `agents/shared/advisors.ts`（consult / dispatch から相対 symlink）。kind と起動 args の表とその解釈は `agents/shared/roster.toml` / `roster.ts`（`advisors` = consult の相談役、`resolve` = resolve の実装役）
 
 ### skill 間で実体を共有するとき
 
@@ -112,7 +112,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 | `lib/inventory.sh` | **この repo が何を配線するかの唯一の正**。harness / symlink / skills union の追加はここだけ               |
 | `lib/bootstrap.sh` | dotfiles の `lib/links.sh`（primitive と `inv_*` の実装）を解決して読む                                   |
 | `./init.sh`        | `run_inventory apply` + `core.hooksPath` の設定 + 開発依存のインストール                                  |
-| `./up.sh`          | 外部 skills の更新 + herdr skill の生成 + 配線の再適用 + 開発依存の更新                                   |
+| `./up.sh`          | 外部 skills の更新 + 配線の再適用 + 開発依存の更新                                                        |
 | `./doctor.sh`      | `run_inventory check` + commit gate 検査 + tracked ファイルの絶対 home パス検査（read-only。修復は init） |
 
 **ランタイム（bun / mise）はこの repo が入れない**。dotfiles の `./init.sh` が供給する。欠けていたら開発依存のインストールをスキップして ⚠️ に留める。

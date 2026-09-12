@@ -45,52 +45,9 @@ esac
 STUB
 chmod +x "$TMP/bin/gh"
 
-# herdr も呼ばせない。紐づく workspace は環境変数で渡し、閉じた id はファイルへ残す。
-cat >"$TMP/bin/herdr" <<'STUB'
-#!/bin/sh
-case "$1 $2" in
-"worktree list")
-  [ -z "${HERDR_LIST_FAILS:-}" ] || exit 1
-  case "${HERDR_LIST_BROKEN:-}" in
-  null)
-    printf '{"result":null}\n'
-    exit 0
-    ;;
-  object)
-    printf '{"result":{"worktrees":{}}}\n'
-    exit 0
-    ;;
-  numid)
-    printf '{"result":{"worktrees":[{"path":"%s","is_linked_worktree":true,"open_workspace_id":7}]}}\n' \
-      "${HERDR_WT_PATH:-}"
-    exit 0
-    ;;
-  esac
-  if [ -n "${HERDR_WT_PATH:-}" ] && [ -d "$HERDR_WT_PATH" ]; then
-    printf '{"result":{"worktrees":[{"path":"%s","is_linked_worktree":true,"open_workspace_id":"%s"}]}}\n' \
-      "$HERDR_WT_PATH" "${HERDR_WT_WS:-}"
-  else
-    printf '{"result":{"worktrees":[]}}\n'
-  fi
-  ;;
-"workspace close")
-  [ -z "${HERDR_CLOSE_FAILS:-}" ] || exit 1
-  printf '%s\n' "$3" >>"$HERDR_CLOSED"
-  ;;
-*)
-  echo "herdr stub: 想定外の呼び出し: $*" >&2
-  exit 1
-  ;;
-esac
-STUB
-chmod +x "$TMP/bin/herdr"
-
 PATH="$TMP/bin:$PATH"
 export PATH
 export GH_STATE=MERGED GH_HEAD=feat GH_BASE=main GH_HEAD_REPO=o/r GH_ORIGIN_REPO=o/r
-export HERDR_CLOSED="$TMP/closed"
-: >"$HERDR_CLOSED"
-unset HERDR_WORKSPACE_ID
 
 fails=0
 pass=0
@@ -307,7 +264,7 @@ fi
 # --- dirty な worktree は残し、branch も origin も消さない ---
 sandbox dirty
 printf 'dirty\n' >>"$TMP/dirty/wt/README"
-run "$TMP/dirty/work" "$TMP/dirty" HERDR_WT_PATH="$TMP/dirty/wt" HERDR_WT_WS=wZZ
+run "$TMP/dirty/work" "$TMP/dirty"
 dirty_code=$?
 if [ "$dirty_code" -ne 0 ]; then
   ok
@@ -321,32 +278,6 @@ if [ -e "$TMP/dirty/wt" ] &&
 else
   fail "dirty: worktree remove の失敗より先へ進んだ"
 fi
-# 消せていない木の workspace を閉じろと言わない
-if ! grep -q "herdr workspace close" "$TMP/dirty.err"; then
-  ok
-else
-  fail "dirty: 消せていないのに閉じ方を出した: $(cat "$TMP/dirty.err")"
-fi
-
-# --- inventory の構造が壊れていたら、消す前に止まる ---
-# 空値の正規化と id の型は、どちらも「該当なし」に化けて削除へ進みうる
-for shape in null object numid; do
-  sandbox "herdr-broken-$shape"
-  run "$TMP/herdr-broken-$shape/work" "$TMP/herdr-broken-$shape" \
-    HERDR_LIST_BROKEN="$shape" HERDR_WT_PATH="$TMP/herdr-broken-$shape/wt"
-  broken_code=$?
-  if [ "$broken_code" -ne 0 ]; then
-    ok
-  else
-    fail "herdr-broken-$shape: 壊れた inventory を workspace なしと扱った"
-  fi
-  if [ -e "$TMP/herdr-broken-$shape/wt" ] &&
-    [ -n "$(origin_ref "$TMP/herdr-broken-$shape" refs/heads/feat)" ]; then
-    ok
-  else
-    fail "herdr-broken-$shape: 消した"
-  fi
-done
 
 # --- origin/feat が既に消えていても、local と worktree は消す ---
 sandbox pruned
@@ -366,100 +297,6 @@ if ! grep -q "origin/feat を消した" "$TMP/pruned.err"; then
   ok
 else
   fail "pruned: 消していない origin/feat を消したと言った"
-fi
-
-# --- herdr の workspace に紐づく木は、消したあと workspace も閉じる ---
-sandbox herdr
-run "$TMP/herdr/work" "$TMP/herdr" HERDR_WT_PATH="$TMP/herdr/wt" HERDR_WT_WS=wZZ HERDR_WORKSPACE_ID=w1
-herdr_code=$?
-if [ "$herdr_code" -eq 0 ]; then
-  ok
-else
-  fail "herdr: 落ちた: $(cat "$TMP/herdr.err")"
-fi
-if [ ! -e "$TMP/herdr/wt" ]; then
-  ok
-else
-  fail "herdr: worktree が残った"
-fi
-if grep -q '^wZZ$' "$HERDR_CLOSED"; then
-  ok
-else
-  fail "herdr: workspace を閉じていない"
-fi
-
-# --- 自分が居る workspace も閉じる ---
-: >"$HERDR_CLOSED"
-sandbox herdr-self
-run "$TMP/herdr-self/work" "$TMP/herdr-self" \
-  HERDR_WT_PATH="$TMP/herdr-self/wt" HERDR_WT_WS=wZZ HERDR_WORKSPACE_ID=wZZ
-herdr_self_code=$?
-if [ "$herdr_self_code" -eq 0 ]; then
-  ok
-else
-  fail "herdr-self: 落ちた: $(cat "$TMP/herdr-self.err")"
-fi
-if grep -q '^wZZ$' "$HERDR_CLOSED"; then
-  ok
-else
-  fail "herdr-self: 自分が居る workspace を閉じていない"
-fi
-
-# --- workspace を閉じられなかったら、閉じ方を出して止まる ---
-: >"$HERDR_CLOSED"
-sandbox herdr-stuck
-run "$TMP/herdr-stuck/work" "$TMP/herdr-stuck" \
-  HERDR_WT_PATH="$TMP/herdr-stuck/wt" HERDR_WT_WS=wZZ HERDR_CLOSE_FAILS=1
-herdr_stuck_code=$?
-if [ "$herdr_stuck_code" -ne 0 ]; then
-  ok
-else
-  fail "herdr-stuck: 閉じられなかったのに成功で終えた"
-fi
-if grep -q "herdr workspace close wZZ" "$TMP/herdr-stuck.err"; then
-  ok
-else
-  fail "herdr-stuck: 閉じ方を出していない: $(cat "$TMP/herdr-stuck.err")"
-fi
-# 例外の意味は「workspace だけ残る」。git 側まで残ると、止まる位置が変わっている
-if [ ! -e "$TMP/herdr-stuck/wt" ] &&
-  [ -z "$(git -C "$TMP/herdr-stuck/work" rev-parse --verify --quiet refs/heads/feat)" ] &&
-  [ -z "$(origin_ref "$TMP/herdr-stuck" refs/heads/feat)" ]; then
-  ok
-else
-  fail "herdr-stuck: git 側が消え切っていない"
-fi
-
-# --- herdr の inventory を引けないなら、消す前に止まる ---
-sandbox herdr-blind
-run "$TMP/herdr-blind/work" "$TMP/herdr-blind" HERDR_LIST_FAILS=1
-herdr_blind_code=$?
-if [ "$herdr_blind_code" -ne 0 ]; then
-  ok
-else
-  fail "herdr-blind: 紐づきを判定できないのに消した"
-fi
-if [ -e "$TMP/herdr-blind/wt" ] && [ -n "$(origin_ref "$TMP/herdr-blind" refs/heads/feat)" ]; then
-  ok
-else
-  fail "herdr-blind: 消した"
-fi
-
-# --- remote 削除に失敗しても、閉じ方は既にログへ出ている ---
-sandbox herdr-push-fail
-git --git-dir="$TMP/herdr-push-fail/origin.git" config receive.denyDeletes true
-run "$TMP/herdr-push-fail/work" "$TMP/herdr-push-fail" \
-  HERDR_WT_PATH="$TMP/herdr-push-fail/wt" HERDR_WT_WS=wZZ
-push_fail_code=$?
-if [ "$push_fail_code" -ne 0 ]; then
-  ok
-else
-  fail "herdr-push-fail: remote 削除の失敗を成功で終えた"
-fi
-if grep -q "herdr workspace close wZZ" "$TMP/herdr-push-fail.err"; then
-  ok
-else
-  fail "herdr-push-fail: 閉じ方が出ていない: $(cat "$TMP/herdr-push-fail.err")"
 fi
 
 echo "retire-head.sh: $pass pass, $fails fail"
