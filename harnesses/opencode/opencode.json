@@ -8,6 +8,11 @@
           "options": {
             "reasoningEffort": "max"
           }
+        },
+        "glm-5.3-flash": {
+          "options": {
+            "reasoningEffort": "max"
+          }
         }
       }
     }
