@@ -3,14 +3,17 @@ name: ship
 description: PR の merge は理由・きっかけを問わず必ずこの skill を経由する（`gh pr merge` を直接実行しない）。
 ---
 
-CI が通った PR を merge し、後始末まで見る。
+CI が通った Ready-for-review PR を merge し、後始末まで見る。
 
 ## 前提
 
-- CI が通っている（`gh pr checks <number> --json bucket` に pending / fail / cancel が無い）
+- **Draft PR ではない**（`gh pr view <number> --json isDraft --jq .isDraft` が `false`）。Draft なら merge せず報告する
+- CI が通っている:
+  - `gh pr checks <number> --json bucket` に `pending` / `fail` / `cancel` が無い
+  - `pass` が 1 つ以上ある。**checks が空、または全部 `skipping` は通っていない**（Draft skip や未起動を緑とみなさない）
 - **base が default**（`gh pr view <number> --json baseRefName`）。別 PR の head が base なら積み上げの途中
 - 配信してよい（判断基準は project 差分。既定は「その変更の検証を終えている」）
-- **人に見せる面を変えたなら、明示の承認がある** —— UI・公開 API・設計骨格を変えた PR を、承認なしに merge しない。**沈黙は承認ではない**。承認の置き場と判定手順は project が定める（無ければ、このセッションでの明示承認か PR の人によるレビュー承認）
+- **人に見せる面（定義は `refine`）を変えたなら、明示の承認がある**。承認なしに merge しない。**沈黙は承認ではない**。承認の置き場と判定手順は project が定める（無ければ、このセッションでの明示承認か PR の人によるレビュー承認）
 
 満たさないなら merge せず、満たしていない側を報告する。
 
