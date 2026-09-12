@@ -10,7 +10,14 @@ const SCRIPT = new URL("../agents/skills/consult/scripts/consult-backend.sh", im
 
 const run = async (dir: string, env: Record<string, string | undefined>, argv: string[]) => {
   const proc = Bun.spawn(["sh", SCRIPT, ...argv], {
-    env: { ...process.env, ...env, PATH: `${dir}:${process.env["PATH"]}`, TMPDIR: dir },
+    env: {
+      ...process.env,
+      // 呼び出し元の自己 kind を持ち込まない（tmux backend の必須 env 検査を素で見る）
+      CONSULT_SELF_KIND: undefined,
+      ...env,
+      PATH: `${dir}:${process.env["PATH"]}`,
+      TMPDIR: dir,
+    },
     stdout: "pipe",
     stderr: "pipe",
   });

@@ -23,7 +23,7 @@ DISPATCH_BACKEND=tmux \
   <skills root>/dispatch/scripts/dispatch-backend.sh close <run-dir>
 ```
 
-- `DISPATCH_KIND` 省略時は `roster.toml` の `[resolve]`
+- `DISPATCH_KIND` 省略時は `roster.toml` の `[resolve]`。kind も argv も `resolve-launch-argv --print kind|argv` が返す（toml を読み直さない）
 - session primitive は `agents/shared/tmux-session.sh`（consult と同じ）
 - `--print` は拒否（`roster.ts`）。`-p` は Codex の `--profile` だけ許可
 

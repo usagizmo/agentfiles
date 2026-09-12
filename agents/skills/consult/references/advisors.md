@@ -1,6 +1,8 @@
 # アドバイザー起動表
 
-候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。表の解釈と検証は `roster.ts`、選出・上限・完走判定は `advisors.ts`。自己 kind は **観測または明示 env**（LLM の自己申告では判定しない）。
+候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。表の解釈と検証は `roster.ts`、選出・上限・完走判定・画面判定は `advisors.ts`。自己 kind は **env の印を観測**し、申告と食い違えば止まる（`resolveSelfKind`）。
+
+TS が返すのは常に**行**（選出 kind・起動 argv・応答）。sh は行を読むだけで、JSON を解釈しない。
 
 アドバイザーは consult を起動しない。agent を start しない。判断を応答に出す。
 
@@ -9,7 +11,7 @@
 ## Backend 選択
 
 入口は `consult-backend.sh`。`CONSULT_BACKEND` で経路を明示する（未設定・未知は fatal。黙って切替しない）。
-`CONSULT_SELF_KIND` は呼び出し側が明示する（harness overlay の env 注入が揃うまでの間。LLM の自己申告では決めない）。
+`CONSULT_SELF_KIND` は呼び出し側が明示する。印を持つ実行器（`CLAUDECODE` / `CURSOR_INVOKED_AS`）では観測が優先し、申告と食い違えば `start` が落ちる。
 
 | `CONSULT_BACKEND` | script             | 追加の必須 env                   | transport              |
 | ----------------- | ------------------ | -------------------------------- | ---------------------- |
@@ -29,6 +31,8 @@ CONSULT_BACKEND=tmux \
 `advisors-tmux.sh` を直接呼んでもよい（その場合も `CONSULT_BACKEND` 経由と同じ契約）。
 
 tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult / dispatch が共有）。実装役は `dispatch` skill。
+
+session ごとに `PATH` を `-e` で渡し、呼び出し元の印（`CLAUDECODE` 等）は空にする。tmux server の global env は最初に server を起こした client のものなので当てにしない。
 
 ## 起動・対話・回収・終了
 
@@ -56,6 +60,10 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 ## 不変条件
 
 **アドバイザーにコードを変更させない**。read-only 手段と、それを打ち消す args の棄却は `roster.ts` の `readOnlyArgs` / `rejectBypass`。tmux 経路の起動 argv は `directLaunchArgv`（`launch-argv`）。`--tools` は調査に使うツールの絞り込みであって担保ではない。起動は interactive TUI のみ。
+
+実行器の状態行と、それを引用した応答本文が同じ文字列になることがある（codex の `• Working (…)`）。分けられないので `working` 側に倒す —— `ask` は `working` でも `unknown` でも終端しないので、巡が進まないときは `close` で閉じる。
+
+**画面の読み方は `advisors.ts` だけが持つ**（`paneState` / `trustKey`）。判定に渡すのは表示中の 1 画面（`tmux-session.sh screen` / `state`）で、履歴ではない。`unknown` は「読めない」であって「停止」ではないので、`ask` は `ready` のときだけ終端する。trust 対話は Yes の選択肢番号を画面から読んで送り、消えたことを確かめる（初期選択に依存しない）。
 
 ## 失敗時
 

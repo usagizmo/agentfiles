@@ -6,10 +6,14 @@
 #   tmux-session.sh wait-ready <session> [timeout-sec]
 #   tmux-session.sh paste-file <session> <file>
 #   tmux-session.sh capture <session>
+#   tmux-session.sh screen <session>
+#   tmux-session.sh state <session>
 #   tmux-session.sh exists <session>
 #   tmux-session.sh kill <session>
 #
 # create は detached な 1 pane session を作り、cmd を直接 exec する（login shell 経由にしない）。
+# capture は履歴全体、screen は表示中の 1 画面。状態判定に使うのは screen だけ。
+# 画面の読み方（trust / working / ready）は隣の advisors.ts が SSOT。bun が要る。
 
 set -u
 
@@ -19,7 +23,7 @@ fatal() {
 }
 
 cmd=${1:-}
-[ -n "$cmd" ] || fatal "使い方: tmux-session.sh create|accept-trust|wait-ready|paste-file|capture|exists|kill ..."
+[ -n "$cmd" ] || fatal "使い方: tmux-session.sh create|accept-trust|wait-ready|paste-file|capture|screen|state|exists|kill ..."
 shift
 
 command -v tmux >/dev/null 2>&1 || fatal "tmux が PATH に無い"
@@ -30,8 +34,24 @@ tmux_af() {
 	tmux -L "$AF_TMUX_SOCKET" "$@"
 }
 
+# pane は base-index / pane-base-index に依存しない。session の pane id を引く
 target_of() {
-	printf '%s:0.0' "$1"
+	t_id=$(tmux_af list-panes -t "=$1" -F '#{pane_id}' 2>/dev/null | head -n 1)
+	[ -n "$t_id" ] || return 1
+	printf '%s' "$t_id"
+}
+
+here=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) ||
+	fatal "スクリプトの場所が取れない"
+advisors_ts=$here/advisors.ts
+
+# 表示中の 1 画面から状態語を読む（trust / working / ready / unknown）
+pane_state() {
+	[ -f "$advisors_ts" ] || fatal "画面判定が無い: $advisors_ts"
+	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
+	p_target=$(target_of "$1") || fatal "pane が無い: $1"
+	tmux_af capture-pane -t "$p_target" -p 2>/dev/null |
+		bun "$advisors_ts" pane-state
 }
 
 case "$cmd" in
@@ -58,16 +78,25 @@ create)
 		;;
 	esac
 	# argv を直接 exec。harness が終われば pane / session が消える
-	# 専用 socket で server を起こす。呼び出し側の CONSULT_*/DISPATCH_*/CLAUDECODE を外す
-	# （env -u … tmux_af だと関数が exec 対象になり失敗するので、subshell で unset する）
-	(
-		unset CONSULT_BACKEND CONSULT_SELF_KIND DISPATCH_BACKEND DISPATCH_KIND
-		unset CLAUDECODE CLAUDE_CODE LC_ALL
-		tmux_af new-session -d -s "$session" -c "$workdir" -x 120 -y 40 -- "$abs" "$@"
-	) || fatal "tmux session を作れない: $session"
+	#
+	# 渡す env は session ごとに -e で明示する。server の global env は最初に
+	# server を起こした client のもので、以降の session もそれを引くため。
+	# 呼び出し元の印（CLAUDECODE 等）は空にする —— 子を親の kind と誤認させない。
+	set -- "--" "$abs" "$@"
+	for name in $({
+		env
+		# server の global env は最初の client のもの。今の env に無い印もここに残る
+		tmux_af show-environment -g 2>/dev/null
+	} | sed -n -E 's/^(CLAUDECODE|CLAUDE_CODE_[A-Za-z0-9_]*|CURSOR_INVOKED_AS|CONSULT_[A-Za-z0-9_]*|DISPATCH_[A-Za-z0-9_]*|LC_ALL)=.*/\1/p' | sort -u); do
+		set -- -e "$name=" "$@"
+	done
+	set -- -e "PATH=$PATH" "$@"
+	tmux_af new-session -d -s "$session" -c "$workdir" -x 120 -y 40 "$@" ||
+		fatal "tmux session を作れない: $session"
 	;;
 accept-trust)
-	# Claude Code の workspace trust 対話（No / Yes）が出ていれば Yes を選ぶ
+	# workspace trust 対話が出ていれば Yes を選ぶ。選択肢番号は画面から読む
+	# （初期選択に依存しない。番号が読めない・送れないときは Enter を送らない）
 	session=${1:-}
 	timeout=${2:-20}
 	[ -n "$session" ] || fatal "session 名が無い"
@@ -75,20 +104,28 @@ accept-trust)
 	'' | *[!0-9]*) fatal "timeout が数値でない: $timeout" ;;
 	esac
 	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
+	[ -f "$advisors_ts" ] || fatal "画面判定が無い: $advisors_ts"
+	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
 	deadline=$(($(date +%s) + timeout))
-	target=$(target_of "$session")
+	target=$(target_of "$session") || fatal "pane が無い: $session"
+	answered=0
 	while :; do
-		pane=$(tmux_af capture-pane -t "$target" -p -S - -E - 2>/dev/null) || pane=""
-		if printf '%s\n' "$pane" | LC_ALL=C grep -F -q 'Yes, I trust this folder'; then
-			tmux_af send-keys -t "$target" Down || fatal "Down を送れない"
-			sleep 0.2
-			tmux_af send-keys -t "$target" C-m || fatal "Enter を送れない"
-			# プロンプトが出るまで短く待つ（失敗しても呼び出し側が wait-ready する）
-			sleep 1
-			exit 0
-		fi
-		# 既に入力待ちなら trust は不要
-		printf '%s\n' "$pane" | LC_ALL=C grep -E -q '(^|[^[:alnum:]])(❯|›|>)($|[[:space:]])' && exit 0
+		# 状態も選択肢番号も同じ 1 回の capture から読む（間で画面が変わらない）
+		snap=$(tmux_af capture-pane -t "$target" -p 2>/dev/null) || snap=""
+		case $(printf '%s\n' "$snap" | bun "$advisors_ts" pane-state) in
+		trust)
+			if [ "$answered" -eq 0 ]; then
+				key=$(printf '%s\n' "$snap" | bun "$advisors_ts" trust-key) ||
+					fatal "trust 対話の Yes を読めない"
+				tmux_af send-keys -t "$target" "$key" || fatal "選択肢を送れない: $key"
+				sleep 0.2
+				tmux_af send-keys -t "$target" C-m || fatal "Enter を送れない"
+				answered=1
+			fi
+			;;
+		# 対話が消えて入力待ちへ変わったら受理できている
+		ready) exit 0 ;;
+		esac
 		[ "$(date +%s)" -ge "$deadline" ] && exit 1
 		sleep 0.5
 	done
@@ -102,15 +139,11 @@ wait-ready)
 	esac
 	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
 	deadline=$(($(date +%s) + timeout))
-	target=$(target_of "$session")
 	while :; do
-		# trust / ready とも表示中の 1 画面だけで判定（二重 capture のレースを避ける）
-		pane=$(tmux_af capture-pane -t "$target" -p 2>/dev/null) || pane=""
-		if printf '%s\n' "$pane" | LC_ALL=C grep -E -qi 'trust this folder|do you trust|without asking for approval'; then
-			exit 3
-		fi
-		printf '%s\n' "$pane" | LC_ALL=C grep -E -q '(^|[^[:alnum:]])(❯|›|>)($|[[:space:]])' && exit 0
-		printf '%s\n' "$pane" | LC_ALL=C grep -E -qi 'plan mode on|ask for approval|sandbox' && exit 0
+		case $(pane_state "$session") in
+		ready) exit 0 ;;
+		trust) exit 3 ;;
+		esac
 		[ "$(date +%s)" -ge "$deadline" ] && exit 1
 		sleep 0.5
 	done
@@ -121,7 +154,7 @@ paste-file)
 	[ -n "$session" ] || fatal "session 名が無い"
 	[ -n "$file" ] && [ -f "$file" ] || fatal "file が不正: ${file:-未指定}"
 	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
-	target=$(target_of "$session")
+	target=$(target_of "$session") || fatal "pane が無い: $session"
 	buf="consult-paste-$$"
 	tmux_af load-buffer -b "$buf" -- "$file" || fatal "buffer に読めない: $file"
 	# -p: bracketed paste（LF→CR 置換を避ける）。-d: paste 後に buffer 削除
@@ -137,7 +170,21 @@ capture)
 	session=${1:-}
 	[ -n "$session" ] || fatal "session 名が無い"
 	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
-	tmux_af capture-pane -t "$(target_of "$session")" -p -S - -E -
+	target=$(target_of "$session") || fatal "pane が無い: $session"
+	tmux_af capture-pane -t "$target" -p -S - -E -
+	;;
+screen)
+	session=${1:-}
+	[ -n "$session" ] || fatal "session 名が無い"
+	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
+	target=$(target_of "$session") || fatal "pane が無い: $session"
+	tmux_af capture-pane -t "$target" -p
+	;;
+state)
+	session=${1:-}
+	[ -n "$session" ] || fatal "session 名が無い"
+	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
+	pane_state "$session"
 	;;
 exists)
 	session=${1:-}

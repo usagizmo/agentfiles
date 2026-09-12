@@ -10,9 +10,14 @@ import { expect, test } from "bun:test";
 import {
   MAX_ADVISORS,
   advisorComplete,
+  detectSelfKind,
   isChromeLine,
+  lastContentLine,
+  paneState,
+  resolveSelfKind,
   selectAdvisors,
   type Selection,
+  trustKey,
 } from "../agents/shared/advisors.ts";
 import {
   ROSTER_URL,
@@ -529,4 +534,117 @@ test("complete CLI は JSON と終了コードを返す", async () => {
   const [stdout, exited] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
   expect(exited).toBe(0);
   expect(JSON.parse(stdout)).toEqual({ ok: true });
+});
+
+// 画面判定は実行器の実画面で確かめる。手で書いた screen は実物とずれる
+const PANE = `${ROOT}test/fixtures/pane-state`;
+const paneFixture = (name: string) => Bun.file(`${PANE}/${name}`).text();
+
+test.each(["claude", "codex", "cursor"] as const)("%s の作業中の実画面は working", async (kind) => {
+  expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
+});
+
+test.each(["claude", "codex", "cursor"] as const)("%s の入力待ちの実画面は ready", async (kind) => {
+  expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
+});
+
+// 起動直後の cursor は ❯ を描かない。文字で探すと永久に ready にならない
+test("cursor の起動直後の実画面も ready", async () => {
+  expect(paneState(await paneFixture("startup-cursor"))).toBe("ready");
+});
+
+test("trust 対話は ready より先に取る", () => {
+  const screen =
+    "Do you trust the files in this folder?\n\n❯ 1. Yes, I trust this folder\n  2. No\n";
+  expect(paneState(screen)).toBe("trust");
+  expect(trustKey(screen)).toBe("1");
+});
+
+// この判定器自身をレビューさせると、応答本文に trust / working の文がそのまま出る。
+// 本文で状態が決まると、その巡を終端できず次巡が誰にも回らない
+test.each([
+  ["trust の問い", "Do you trust the files in this folder? と書いた行"],
+  ["作業中の語", "Working (6s • esc to interrupt) と書いた行"],
+  ["選択肢の引用", "❯ 1. Yes, I trust this folder"],
+])("応答本文の %s では状態を変えない", async (_label, prose) => {
+  const ready = await paneFixture("ready-codex");
+  const anchor = "• up.sh と doctor.sh を確認します。";
+  expect(ready).toContain(anchor);
+  expect(paneState(ready.replace(anchor, `${anchor}\n  ${prose}`))).toBe("ready");
+});
+
+test("問いだけで番号つきの Yes が無ければ trust にしない", () => {
+  expect(paneState("Do you trust the files in this folder?\n\n")).toBe("unknown");
+  expect(trustKey("Do you trust the files in this folder?\n")).toBeUndefined();
+});
+
+test("選択肢の caret は入力欄ではない（応答を選択肢で切らない）", () => {
+  expect(lastContentLine("答え\n❯ 1. Yes, I trust this folder\n")).toBe(
+    "❯ 1. Yes, I trust this folder",
+  );
+});
+
+// 長い巡では経過表示が (1m 6s のように伸びる。取り逃すと働いている agent を終端する
+test.each([
+  ["claude", "(1m 6s"],
+  ["codex", "(2h 3m 6s"],
+])("%s の経過が分・時間表示でも working", async (kind, elapsed) => {
+  const screen = (await paneFixture(`working-${kind}`)).replace("(6s", elapsed);
+  expect(screen).toContain(elapsed);
+  expect(paneState(screen)).toBe("working");
+});
+
+// スピナーの字は frame ごとに変わる。列挙に無い字で ready に落ちると稼働中の巡を終端する
+test.each(["✻", "✶", "✳", "✢", "✷", "✱", "⏺"])("スピナーが %s でも working", async (glyph) => {
+  const screen = (await paneFixture("working-claude")).replace("✽", glyph);
+  expect(paneState(screen)).toBe("working");
+});
+
+// Claude の状態語にはハイフン入りがある（Razzle-dazzling / Topsy-turvying）
+test.each(["Razzle-dazzling", "Sock-hopping", "Topsy-turvying"])(
+  "ハイフン入りの状態語 %s でも working",
+  async (verb) => {
+    const screen = (await paneFixture("working-claude")).replace("Propagating", verb);
+    expect(paneState(screen)).toBe("working");
+  },
+);
+
+// 応答の最終行は入力欄の直上に来る。表示例をそのまま書かれても状態行にしない
+test("応答の最終行にある表示例では working にしない", async () => {
+  const ready = await paneFixture("ready-codex");
+  const last =
+    "  更新・変更は up.sh、状態確認は doctor.sh。doctor は自動修復せず、修復先として init.sh を案内します。";
+  expect(ready).toContain(last);
+  for (const prose of [
+    "  例: Working (6s • esc to interrupt)",
+    "  - Working (6s • esc to interrupt)",
+  ]) {
+    expect(paneState(ready.replace(last, prose))).toBe("ready");
+  }
+});
+
+// 限界: codex の状態行と、それを箇条書きで引用した本文行は文字列として同じ。
+// 形でも位置でも分けられないので working 側に倒す（ask はどちらでも終端しない）
+test("状態行と同じ形の本文行は working 側に倒す", async () => {
+  const ready = await paneFixture("ready-codex");
+  const status = "• Working (6s • esc to interrupt)";
+  const last =
+    "  更新・変更は up.sh、状態確認は doctor.sh。doctor は自動修復せず、修復先として init.sh を案内します。";
+  expect(await paneFixture("working-codex")).toContain(status);
+  expect(paneState(ready.replace(last, `  ${status}`))).toBe("working");
+});
+
+test("読めない画面は unknown（停止と区別する）", () => {
+  expect(paneState("\n\n  loading\n")).toBe("unknown");
+});
+
+test("env に印が無ければ申告をそのまま使う", () => {
+  expect(detectSelfKind({})).toBeUndefined();
+  expect(resolveSelfKind({}, "codex")).toBe("codex");
+});
+
+test("env の印と食い違う申告は落とす（自分自身に相談させない）", () => {
+  expect(resolveSelfKind({ CLAUDECODE: "1" }, "claude")).toBe("claude");
+  expect(() => resolveSelfKind({ CLAUDECODE: "1" }, "cursor")).toThrow(RosterError);
+  expect(resolveSelfKind({ CLAUDECODE: "" }, "cursor")).toBe("cursor");
 });

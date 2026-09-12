@@ -1,8 +1,8 @@
 // roster.toml の解釈と検証。consult の advisors と resolve の実装役の kind / 起動 args を持つ。
 //
-//   bun roster.ts resolve-launch-argv [--kind <kind>] [--roster <file>]
+//   bun roster.ts resolve-launch-argv [--kind <kind>] [--roster <file>] [--print kind|argv]
 //
-// resolve-launch-argv の stdout は実装役を直接 CLI 起動する argv JSON（tmux dispatch）。
+// resolve-launch-argv の stdout は kind か起動 argv（行で返す）。kind の再解釈をさせない。
 // consult 側の select / launch-argv は advisors.ts。
 
 import { TOML } from "bun";
@@ -54,8 +54,9 @@ export class RosterError extends Error {
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
+// 起動 argv は 1 行 1 要素で sh へ渡す。改行を含む arg はその境界を壊す
 const isStringArray = (v: unknown): v is string[] =>
-  Array.isArray(v) && v.every((a) => typeof a === "string");
+  Array.isArray(v) && v.every((a) => typeof a === "string" && !a.includes("\n"));
 
 export const readOnlyArgs = (kind: string): readonly string[] => {
   if (kind === "codex") return ["-s", "read-only"];
@@ -210,13 +211,6 @@ export const directResolveLaunchArgv = (worker: Worker): string[] => {
   return [directBinary(worker.kind), ...worker.args];
 };
 
-/** JSON 1 枠を advisors と同じ検証で通す。 */
-export const parseSlot = (raw: unknown): Slot => {
-  const [slot] = parseSlots([raw]);
-  if (slot === undefined) throw new RosterError("slot が無い");
-  return slot;
-};
-
 export const flag = (argv: readonly string[], name: string): string | undefined => {
   const i = argv.indexOf(name);
   return i < 0 ? undefined : argv[i + 1];
@@ -228,8 +222,9 @@ const main = async (): Promise<void> => {
     if (argv[0] === "resolve-launch-argv") {
       // tmux dispatch 用。--kind があればその kind で起動（同じ kind なら roster args を引き継ぐ）
       const kindOverride = flag(argv, "--kind");
-      const rosterPath = flag(argv, "--roster") ?? ROSTER_URL.pathname;
-      const { resolve } = parseRoster(await Bun.file(rosterPath).text());
+      const rosterPath = flag(argv, "--roster");
+      const roster = rosterPath === undefined ? Bun.file(ROSTER_URL) : Bun.file(rosterPath);
+      const { resolve } = parseRoster(await roster.text());
       let worker: Worker = resolve;
       if (kindOverride !== undefined && kindOverride !== "") {
         if (!KIND_RE.test(kindOverride)) {
@@ -237,11 +232,18 @@ const main = async (): Promise<void> => {
         }
         worker = kindOverride === resolve.kind ? resolve : { kind: kindOverride, args: [] };
       }
+      const print = flag(argv, "--print") ?? "argv";
+      if (print !== "kind" && print !== "argv") {
+        throw new RosterError(`--print は kind か argv: ${print}`);
+      }
+      // kind だけ要るときも argv を組む（args の検査を print で飛ばさない）
       // directBinary は argv[0] に使う（PATH 検査は呼び出し側）
-      process.stdout.write(`${JSON.stringify(directResolveLaunchArgv(worker))}\n`);
+      const launch = directResolveLaunchArgv(worker);
+      const lines = print === "kind" ? [worker.kind] : launch;
+      process.stdout.write(lines.map((line) => `${line}\n`).join(""));
       return;
     }
-    throw new RosterError("使い方: roster.ts resolve-launch-argv");
+    throw new RosterError("使い方: roster.ts resolve-launch-argv [--print kind|argv]");
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);
     console.error(`FATAL\t${message}`);

@@ -20,7 +20,7 @@ fatal() {
 	exit 2
 }
 
-here=$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0") ||
+here=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) ||
 	fatal "スクリプトの場所が取れない"
 roster=$here/roster.toml
 select_ts=$here/advisors.ts
@@ -96,6 +96,8 @@ start)
 	[ -f "$tmux_sh" ] || fatal "tmux-session.sh が無い: $tmux_sh"
 	self=${CONSULT_SELF_KIND:-}
 	[ -n "$self" ] || fatal "CONSULT_SELF_KIND が無い（自己 kind は env で明示する）"
+	# env に自己の印があれば観測が優先。申告と食い違えば止まる
+	self=$(bun "$select_ts" self-kind --declared "$self") || fatal "自己 kind を確定できない"
 
 	prompt=${1:-}
 	[ -n "$prompt" ] && [ -s "$prompt" ] || fatal "prompt が空 / 不正: ${prompt:-未指定}"
@@ -116,18 +118,14 @@ start)
 	place_prompt "$run" "$prompt" 1
 	printf '%s\n' 1 >"$run/round" || fatal "round を書けない"
 
+	# select は選出した kind を行で返す
 	if ! bun "$select_ts" select --roster "$run/roster.toml" --self "$self" \
-		>"$run/selected.json" 2>"$run/select.err"; then
+		>"$run/advisors" 2>"$run/select.err"; then
 		cat "$run/select.err" >&2
 		rm -rf "$run"
 		fatal "選出できない"
 	fi
 	cat "$run/select.err" >&2 || true
-	python3 -c '
-import json, sys
-for s in json.load(open(sys.argv[1], encoding="utf-8")):
-    print(s["kind"])
-' "$run/selected.json" >"$run/advisors" || fatal "選出結果が読めない"
 	[ -s "$run/advisors" ] || fatal "選出結果が空"
 
 	# 選出された kind ごとに独立 session。cwd は呼び出し元
@@ -140,51 +138,40 @@ for s in json.load(open(sys.argv[1], encoding="utf-8")):
 			rm -rf "$run"
 			fatal "$run/$a を作れない"
 		}
-		python3 -c '
-import json, sys
-kind = sys.argv[2]
-for s in json.load(open(sys.argv[1], encoding="utf-8")):
-    if s["kind"] == kind:
-        json.dump(s, open(sys.argv[3], "w", encoding="utf-8"))
-        break
-else:
-    sys.exit(1)
-' "$run/selected.json" "$a" "$run/$a/slot.json" || {
-			kill_sessions "$run"
-			rm -rf "$run"
-			fatal "$a の枠が取れない"
-		}
 		session=c-$a-$rid
 		session=$(printf '%s' "$session" | tr -cd 'a-zA-Z0-9_-' | cut -c1-50)
 		printf '%s\n' "$session" >"$run/$a/session"
 		printf '%s\n' "$session" >"$run/$a/name"
-		if ! bun "$select_ts" launch-argv --slot "$run/$a/slot.json" \
-			>"$run/$a/argv.json" 2>>"$run/$a/log"; then
+		# 起動 argv は 1 行 1 要素。sh の位置引数へそのまま積む
+		if ! bun "$select_ts" launch-argv --roster "$run/roster.toml" --kind "$a" \
+			>"$run/$a/argv" 2>>"$run/$a/log"; then
 			printf '%s\n' 1 >"$run/$a/start.rc"
 			printf 'launch-argv に失敗\n' >>"$run/$a/log"
 			continue
 		fi
-		bin=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))[0])' "$run/$a/argv.json") || bin=""
-		if [ -z "$bin" ] || ! command -v "$bin" >/dev/null 2>&1; then
+		set --
+		while IFS= read -r arg; do set -- "$@" "$arg"; done <"$run/$a/argv"
+		if [ $# -eq 0 ] || ! command -v "$1" >/dev/null 2>&1; then
 			printf '%s\n' 1 >"$run/$a/start.rc"
-			printf '実行ファイルが PATH に無い: %s\n' "${bin:-?}" >>"$run/$a/log"
+			printf '実行ファイルが PATH に無い: %s\n' "${1:-?}" >>"$run/$a/log"
 			continue
 		fi
-		if ! python3 -c '
-import json, subprocess, sys
-argv = json.load(open(sys.argv[1], encoding="utf-8"))
-cmd = ["sh", sys.argv[2], "create", sys.argv[3], sys.argv[4], "--", *argv]
-raise SystemExit(subprocess.call(cmd))
-' "$run/$a/argv.json" "$tmux_sh" "$session" "$caller_cwd" >>"$run/$a/log" 2>&1; then
+		if ! sh "$tmux_sh" create "$session" "$caller_cwd" -- "$@" >>"$run/$a/log" 2>&1; then
 			printf '%s\n' 1 >"$run/$a/start.rc"
 			printf 'tmux create に失敗\n' >>"$run/$a/log"
 			continue
 		fi
 		# Claude の workspace trust 対話があれば Yes を選ぶ
 		sh "$tmux_sh" accept-trust "$session" 20 >>"$run/$a/log" 2>&1 || true
-		if ! sh "$tmux_sh" wait-ready "$session" 45 >>"$run/$a/log" 2>&1; then
+		sh "$tmux_sh" wait-ready "$session" 45 >>"$run/$a/log" 2>&1
+		wr=$?
+		if [ "$wr" -ne 0 ]; then
 			printf '%s\n' 1 >"$run/$a/start.rc"
-			printf 'wait-ready に失敗（TUI 未準備）\n' >>"$run/$a/log"
+			if [ "$wr" -eq 3 ]; then
+				printf 'trust 対話を越えられない: %s\n' "$caller_cwd" >>"$run/$a/log"
+			else
+				printf 'wait-ready に失敗（TUI 未準備）\n' >>"$run/$a/log"
+			fi
 			sh "$tmux_sh" kill "$session" >>"$run/$a/log" 2>&1 || true
 			continue
 		fi
@@ -261,16 +248,8 @@ collect)
 			sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
 			if bun "$select_ts" complete --output "$run/$a/raw.$n" --marker "$marker" \
 				>"$run/$a/complete.$n.json" 2>>"$run/$a/log"; then
-				python3 -c '
-import sys
-raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
-prev = sys.argv[3]
-if prev:
-    i = raw.rfind(prev)
-    if i >= 0:
-        raw = raw[i + len(prev):]
-open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
-' "$run/$a/raw.$n" "$run/$a/out.$n" "$prev" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
+				bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
+					>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
 				printf '%s\n' 0 >"$run/$a/rc.$n"
 				: >"$run/$a/reason.$n"
 			fi
@@ -282,16 +261,8 @@ open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
 				[ -f "$run/$a/rc.$n" ] && continue
 				printf '%s\n' timeout >"$run/$a/reason.$n"
 				if [ -f "$run/$a/raw.$n" ]; then
-					python3 -c '
-import sys
-raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
-prev = sys.argv[3]
-if prev:
-    i = raw.rfind(prev)
-    if i >= 0:
-        raw = raw[i + len(prev):]
-open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
-' "$run/$a/raw.$n" "$run/$a/out.$n" "$prev" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
+					bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
+						>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
 				fi
 			done <"$run/advisors"
 			break
@@ -352,10 +323,12 @@ ask)
 		1) ;;
 		*) fatal "巡 $n の $a を判定できない（終端しない。collect をやり直す）" ;;
 		esac
-		# スピナー等があればまだ処理中
-		if grep -E -qi '(Photosynthesizing|Thinking|Working|Nebulizing|Sautéing|… \([0-9]+s\))' "$run/$a/raw.$n"; then
-			fatal "巡 $n を $a がまだ処理中（collect を先に通す）"
-		fi
+		# 終端してよいのは、表示中の画面が入力待ちに戻っているときだけ
+		case $(sh "$tmux_sh" state "$session") in
+		working) fatal "巡 $n を $a がまだ処理中（collect を先に通す）" ;;
+		ready) ;;
+		*) fatal "巡 $n の $a の状態を読めない（終端しない。collect をやり直す）" ;;
+		esac
 		printf '%s\n' 1 >"$run/$a/rc.$n"
 		printf '%s\n' "timeout" >"$run/$a/reason.$n"
 		: >"$run/$a/dead"

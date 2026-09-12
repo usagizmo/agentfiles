@@ -22,11 +22,17 @@ def session_dir(name: str) -> pathlib.Path:
     return d
 
 def target_session(token: str) -> str:
-    t = token[1:] if token.startswith("=") else token
+    # -t =name / -t %pane-id
+    t = token[1:] if token[:1] in ("=", "%") else token
     return t.split(":", 1)[0]
 
 if not args:
     raise SystemExit("tmux: no args")
+
+if args[0] == "list-panes":
+    # 本物は pane id を返す。固定 target へ戻す回帰を落とす
+    sys.stdout.write("%" + target_session(args[args.index("-t") + 1]) + "\\n")
+    raise SystemExit(0)
 
 if args[0] == "has-session":
     name = target_session(args[args.index("-t") + 1])

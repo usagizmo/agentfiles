@@ -14,7 +14,7 @@ fatal() {
 	exit 2
 }
 
-here=$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0") ||
+here=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) ||
 	fatal "スクリプトの場所が取れない"
 
 backend=${DISPATCH_BACKEND:-}

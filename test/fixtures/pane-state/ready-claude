@@ -1,0 +1,40 @@
+ ▐▛███▛█   Claude Code v2.1.269
+▝▜██████▀  Opus 5 (1M context)
+  ▝▝ ▝▝    ~/workspace
+
+
+❯ このリポジトリの up.sh と doctor.sh を読んで、役割の違いを 3 行で説明して。
+
+⏺ Read(~/workspace/up.sh)
+  ⎿  Read 78 lines
+
+⏺ Read(~/workspace/doctor.sh)
+  ⎿  Read 89 lines
+
+⏺ - up.sh は書き込み系の更新: 外部 skill (bunx skills update -g)、run_inventory apply による配線の再適用、bun update
+    による開発依存の更新を行う。
+  - doctor.sh はread-only の検査: run_inventory check + commit gate + 絶対 home パス + bun
+    の有無を見るだけで、修復はせず ./init.sh へ誘導する。
+  - 失敗の扱いも対照的で、up は外部更新失敗と LINK_BLOCKED を別軸で集計して exit 1、doctor は fail>0 のみ exit 1（warn
+    は exit 0）。
+
+✻ Cooked for 12s · done 2:14 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5 (1M context) │ ctx ▌░░░░░░░░░ 0% │ 5h ░░░░░░░░░░ 0% │ 7d ░░░░░░░░░░ 0%                          53939 tokens
+  ⏸ plan mode on (shift+tab to cycle) · ← 2 agents                                                                 /rc
+
+
+
+
+
+
+
+
+
+
+
+
+

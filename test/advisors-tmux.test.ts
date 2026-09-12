@@ -22,12 +22,17 @@ def session_dir(name: str) -> pathlib.Path:
     return d
 
 def target_session(token: str) -> str:
-    # -t =name or -t name:0.0
-    t = token[1:] if token.startswith("=") else token
+    # -t =name / -t %pane-id
+    t = token[1:] if token[:1] in ("=", "%") else token
     return t.split(":", 1)[0]
 
 if not args:
     raise SystemExit("tmux: no args")
+
+if args[0] == "list-panes":
+    # 本物は pane id を返す。固定 target へ戻す回帰を落とす
+    sys.stdout.write("%" + target_session(args[args.index("-t") + 1]) + "\\n")
+    raise SystemExit(0)
 
 if args[0] == "has-session":
     name = target_session(args[args.index("-t") + 1])
@@ -94,10 +99,19 @@ const FAKE_BIN = `#!/bin/sh
 exit 0
 `;
 
+// 呼び出し元の env（自分の印・自己 kind）は持ち込まない。持ち込むと観測と申告が食い違う
+const CLEAN = {
+  CLAUDECODE: undefined,
+  CLAUDE_CODE_ENTRYPOINT: undefined,
+  CURSOR_INVOKED_AS: undefined,
+  CONSULT_SELF_KIND: undefined,
+} as const;
+
 const run = async (dir: string, argv: string[]) => {
   const proc = Bun.spawn(["sh", SCRIPT, ...argv], {
     env: {
       ...process.env,
+      ...CLEAN,
       PATH: `${dir}:${process.env["PATH"]}`,
       TMPDIR: dir,
       CONSULT_SELF_KIND: "cursor",
@@ -168,13 +182,36 @@ test("tmux backend: CONSULT_SELF_KIND 無しは start できない", async () =>
   const dir = await setup();
   try {
     const proc = Bun.spawn(["sh", SCRIPT, "start", join(dir, "prompt")], {
-      env: { ...process.env, PATH: `${dir}:${process.env["PATH"]}`, TMPDIR: dir },
+      env: { ...process.env, ...CLEAN, PATH: `${dir}:${process.env["PATH"]}`, TMPDIR: dir },
       stdout: "pipe",
       stderr: "pipe",
     });
     const stderr = await new Response(proc.stderr).text();
     expect(await proc.exited).toBe(2);
     expect(stderr).toContain("CONSULT_SELF_KIND が無い");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("tmux backend: env の印と食い違う自己 kind は start できない", async () => {
+  const dir = await setup();
+  try {
+    const proc = Bun.spawn(["sh", SCRIPT, "start", join(dir, "prompt")], {
+      env: {
+        ...process.env,
+        ...CLEAN,
+        PATH: `${dir}:${process.env["PATH"]}`,
+        TMPDIR: dir,
+        CLAUDECODE: "1",
+        CONSULT_SELF_KIND: "cursor",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stderr = await new Response(proc.stderr).text();
+    expect(await proc.exited).toBe(2);
+    expect(stderr).toContain("申告 cursor / 観測 claude");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

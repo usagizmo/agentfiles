@@ -1,0 +1,40 @@
+╭──────────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.154.0)                       │
+│                                                  │
+│ model:     gpt-6-astra medium   /model to change │
+│ directory: ~/workspace  │
+╰──────────────────────────────────────────────────╯
+
+  Tip: New Use /fast to enable our fastest inference with increased plan usage.
+
+⚠ 1 MCP startup issue · ctrl + t for details
+
+
+
+
+› このリポジトリの up.sh と doctor.sh を読んで、役割の違いを 3 行で説明して。
+
+
+• up.sh と doctor.sh を確認します。
+
+• Explored
+  └ Read up.sh, doctor.sh
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• up.sh は外部 skills と開発依存を更新し、symlink の配線を再適用します。
+  doctor.sh は配線・commit gate・絶対 home パス・Bun の有無を読み取り専用で検査します。
+  更新・変更は up.sh、状態確認は doctor.sh。doctor は自動修復せず、修復先として init.sh を案内します。
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Ask Codex to do anything
+
+  gpt-6-astra medium · ~/workspace · up.sh と doctor.sh を比較
+
+
+
+
+
+

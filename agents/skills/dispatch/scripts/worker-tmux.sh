@@ -27,7 +27,7 @@ fail_start() {
 	fatal "$msg"
 }
 
-here=$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0") ||
+here=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) ||
 	fatal "スクリプトの場所が取れない"
 roster_ts=$here/roster.ts
 complete_ts=$here/advisors.ts
@@ -103,56 +103,26 @@ start)
 	place_prompt "$run" "$prompt" 1
 	printf '%s\n' 1 >"$run/round" || fatal "round を書けない"
 
-	if [ -n "${DISPATCH_KIND:-}" ]; then
-		printf '%s\n' "$DISPATCH_KIND" >"$run/worker"
-		if ! bun "$roster_ts" resolve-launch-argv --roster "$run/roster.toml" --kind "$DISPATCH_KIND" \
-			>"$run/argv.json" 2>>"$run/log"; then
-			fail_start "resolve-launch-argv に失敗"
-		fi
-	else
-		if ! bun "$roster_ts" resolve-launch-argv --roster "$run/roster.toml" \
-			>"$run/argv.json" 2>>"$run/log"; then
-			fail_start "resolve-launch-argv に失敗"
-		fi
-		python3 -c '
-import sys
-text = open(sys.argv[1], encoding="utf-8").read().splitlines()
-kind = ""
-in_resolve = False
-for line in text:
-    s = line.strip()
-    if s == "[resolve]":
-        in_resolve = True
-        continue
-    if s.startswith("["):
-        in_resolve = False
-        continue
-    if in_resolve and s.startswith("kind"):
-        kind = s.split("=", 1)[1].strip().strip("\"")
-        break
-if not kind:
-    raise SystemExit(1)
-open(sys.argv[2], "w", encoding="utf-8").write(kind + "\n")
-' "$run/roster.toml" "$run/worker" || {
-			fail_start "resolve.kind が読めない"
-		}
-	fi
+	# kind も argv も roster.ts が返す（toml をここで読み直さない）
+	set -- --roster "$run/roster.toml"
+	[ -n "${DISPATCH_KIND:-}" ] && set -- "$@" --kind "$DISPATCH_KIND"
+	bun "$roster_ts" resolve-launch-argv "$@" --print kind \
+		>"$run/worker" 2>>"$run/log" || fail_start "resolve.kind を読めない"
+	bun "$roster_ts" resolve-launch-argv "$@" --print argv \
+		>"$run/argv" 2>>"$run/log" || fail_start "resolve-launch-argv に失敗"
 
-	bin=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))[0])' "$run/argv.json") || bin=""
-	if [ -z "$bin" ] || ! command -v "$bin" >/dev/null 2>&1; then
-		fail_start "実行ファイルが PATH に無い: ${bin:-?}"
+	# 起動 argv は 1 行 1 要素。sh の位置引数へそのまま積む
+	set --
+	while IFS= read -r arg; do set -- "$@" "$arg"; done <"$run/argv"
+	if [ $# -eq 0 ] || ! command -v "$1" >/dev/null 2>&1; then
+		fail_start "実行ファイルが PATH に無い: ${1:-?}"
 	fi
 
 	session=d-$(cat "$run/worker")-$rid
 	session=$(printf '%s' "$session" | tr -cd 'a-zA-Z0-9_-' | cut -c1-50)
 	printf '%s\n' "$session" >"$run/session"
 	caller_cwd=$PWD
-	if ! python3 -c '
-import json, subprocess, sys
-argv = json.load(open(sys.argv[1], encoding="utf-8"))
-cmd = ["sh", sys.argv[2], "create", sys.argv[3], sys.argv[4], "--", *argv]
-raise SystemExit(subprocess.call(cmd))
-' "$run/argv.json" "$tmux_sh" "$session" "$caller_cwd" >>"$run/log" 2>&1; then
+	if ! sh "$tmux_sh" create "$session" "$caller_cwd" -- "$@" >>"$run/log" 2>&1; then
 		fail_start "tmux create に失敗"
 	fi
 	# detached のため Claude workspace trust 対話が出たら Yes を選ぶ（consult と同じ）
@@ -207,16 +177,8 @@ collect)
 				sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log" || true
 				if bun "$complete_ts" complete --output "$run/raw.$n" --marker "$marker" \
 					>"$run/complete.$n.json" 2>>"$run/log"; then
-					python3 -c '
-import sys
-raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
-prev = sys.argv[3]
-if prev:
-    i = raw.rfind(prev)
-    if i >= 0:
-        raw = raw[i + len(prev):]
-open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
-' "$run/raw.$n" "$run/out.$n" "$prev" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
+					bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
+						>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
 					printf '%s\n' 0 >"$run/rc.$n"
 					: >"$run/reason.$n"
 					break
@@ -224,16 +186,8 @@ open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
 				if [ "$(date +%s)" -ge "$deadline" ]; then
 					printf '%s\n' timeout >"$run/reason.$n"
 					if [ -f "$run/raw.$n" ]; then
-						python3 -c '
-import sys
-raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
-prev = sys.argv[3]
-if prev:
-    i = raw.rfind(prev)
-    if i >= 0:
-        raw = raw[i + len(prev):]
-open(sys.argv[2], "w", encoding="utf-8").write(raw.lstrip("\n"))
-' "$run/raw.$n" "$run/out.$n" "$prev" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
+						bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
+							>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
 					fi
 					break
 				fi
@@ -285,9 +239,11 @@ ask)
 		1) ;;
 		*) fatal "巡 $n を判定できない（collect をやり直す）" ;;
 		esac
-		if grep -E -qi '(Photosynthesizing|Thinking|Working|Nebulizing|Sautéing|… \([0-9]+s\))' "$run/raw.$n"; then
-			fatal "巡 $n はまだ処理中（collect を先に通す）"
-		fi
+		case $(sh "$tmux_sh" state "$session") in
+		working) fatal "巡 $n はまだ処理中（collect を先に通す）" ;;
+		ready) ;;
+		*) fatal "巡 $n の状態を読めない（終端しない。collect をやり直す）" ;;
+		esac
 		printf '%s\n' 1 >"$run/rc.$n"
 		printf '%s\n' "timeout" >"$run/reason.$n"
 		: >"$run/dead"
