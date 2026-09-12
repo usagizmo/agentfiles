@@ -1,10 +1,10 @@
-// pr/scripts/sync-and-push.test.sh を bun test から回す。
+// agents/shared/sync-and-push.test.sh を bun test から回す。
 // 置いてあるだけの shell 検査は commit gate に載らない。
 
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
-const SCRIPTS = join(import.meta.dir, "../agents/skills/pr/scripts");
+const SCRIPTS = join(import.meta.dir, "../agents/shared");
 
 test("sync-and-push は origin の同名へ送りきる", async () => {
   // GIT_* の剥がしは呼び先が持つ（sync-and-push.test.sh の冒頭）。ここで先回りすると

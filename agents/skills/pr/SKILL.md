@@ -25,6 +25,8 @@ PR を作り、呼ぶ側が指定した経路で **Draft PR** で止めるか、
 
 **base の PR が既に着地しているなら、`gh pr edit <自分> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替えてから rebase する。** 放置すると merge できない。
 
+**repo 方針が rebase / force-push を禁じるときだけ** `sync-and-push.sh` を使わず、`git merge origin/<base>` で追随して `git push origin HEAD` で送る。
+
 ## 共通の入る条件
 
 次が揃う前には呼ばない。

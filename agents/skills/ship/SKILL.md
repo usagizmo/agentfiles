@@ -19,20 +19,20 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
 
 ## 分岐の解消と着地
 
-| 目的                         | 手段                                              |
-| ---------------------------- | ------------------------------------------------- |
-| head を最新 base に載せる    | **rebase**（`pr` の `sync-and-push.sh`）          |
-| default へ着地する           | `gh pr merge --merge`（着地用の merge commit）    |
+| 目的                      | 手段                                           |
+| ------------------------- | ---------------------------------------------- |
+| head を最新 base に載せる | **rebase**（`sync-and-push.sh`）               |
+| default へ着地する        | `gh pr merge --merge`（着地用の merge commit） |
 
-**禁止:** 衝突解消として `git merge origin/<base>`（例: `origin/main`）を PR head へ入れる。ユーザー明示、または repo 方針が rebase / force-push を禁じるときだけ例外。
+**禁止:** 衝突解消として `git merge origin/<base>`（例: `origin/main`）を PR head へ入れる。ユーザー明示、または repo 方針が rebase / force-push を禁じるときだけ例外。例外時の追随手順は `pr` の base 節。
 
 ## フロー
 
 1. head を最新 base に載せる。PR head の worktree で:
    ```
-   bash <skills root>/pr/scripts/sync-and-push.sh [<base>]
+   bash <skills root>/ship/scripts/sync-and-push.sh
    ```
-   （fetch + `origin/<base>` への rebase + `--force-with-lease`。衝突は rebase 上で解消して再実行。）SHA が動いたら前提の CI を取り直し、通るまで待つ
+   衝突は rebase 上で解消して再実行する。SHA が動いたら前提の CI を取り直し、通るまで待つ
 2. auto-merge を有効化する:
    ```
    gh pr merge <number> --merge --auto --subject "{PR タイトル} (#{PR 番号})" --body "{箇条書き body または空}"
