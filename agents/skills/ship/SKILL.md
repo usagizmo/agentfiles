@@ -17,18 +17,32 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
 
 満たさないなら merge せず、満たしていない側を報告する。
 
+## 分岐の解消と着地
+
+| 目的                         | 手段                                              |
+| ---------------------------- | ------------------------------------------------- |
+| head を最新 base に載せる    | **rebase**（`pr` の `sync-and-push.sh`）          |
+| default へ着地する           | `gh pr merge --merge`（着地用の merge commit）    |
+
+**禁止:** 衝突解消として `git merge origin/<base>`（例: `origin/main`）を PR head へ入れる。ユーザー明示、または repo 方針が rebase / force-push を禁じるときだけ例外。
+
 ## フロー
 
-1. auto-merge を有効化する:
+1. head を最新 base に載せる。PR head の worktree で:
+   ```
+   bash <skills root>/pr/scripts/sync-and-push.sh [<base>]
+   ```
+   （fetch + `origin/<base>` への rebase + `--force-with-lease`。衝突は rebase 上で解消して再実行。）SHA が動いたら前提の CI を取り直し、通るまで待つ
+2. auto-merge を有効化する:
    ```
    gh pr merge <number> --merge --auto --subject "{PR タイトル} (#{PR 番号})" --body "{箇条書き body または空}"
    ```
    auto-merge が使えない環境では `--auto` なしで同じコマンドを実行する
-2. `gh pr view <number> --json state --jq .state` を 5 秒間隔で確認し、`MERGED` を待つ。2 分超えたら auto-merge 不成立として原因を報告する
-3. **この PR の head を base にしている open PR があれば `gh pr edit <子> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替える。** head を消す前に張り替える。GitHub の自動付け替えに頼らない
-4. `bash <skills root>/ship/scripts/sync-local-default.sh` でローカル default を最新化する。マージした PR と変更の要点を報告する
-5. closing keyword で紐付けた Issue が実際に `CLOSED` になったか確認する（`gh issue view <n> --json state`）。open のまま残っていたら閉じる
-6. `bash <skills root>/ship/scripts/retire-head.sh <number>` で head の worktree と branch を消す。消す条件は script が持つ。**止まったら消しにいかない** —— script が出した理由と、移動先を促されたならその path へ移ってからの再実行だけで進める
+3. `gh pr view <number> --json state --jq .state` を 5 秒間隔で確認し、`MERGED` を待つ。2 分超えたら auto-merge 不成立として原因を報告する
+4. **この PR の head を base にしている open PR があれば `gh pr edit <子> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替える。** head を消す前に張り替える。GitHub の自動付け替えに頼らない
+5. `bash <skills root>/ship/scripts/sync-local-default.sh` でローカル default を最新化する。マージした PR と変更の要点を報告する
+6. closing keyword で紐付けた Issue が実際に `CLOSED` になったか確認する（`gh issue view <n> --json state`）。open のまま残っていたら閉じる
+7. `bash <skills root>/ship/scripts/retire-head.sh <number>` で head の worktree と branch を消す。消す条件は script が持つ。**止まったら消しにいかない** —— script が出した理由と、移動先を促されたならその path へ移ってからの再実行だけで進める
 
 ## マージコミット
 
