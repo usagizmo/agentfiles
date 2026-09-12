@@ -1,0 +1,40 @@
+
+
+  Cursor Agent
+  v2026.09.10-fd3934a
+  Tip: Use subagents to parallelize work and preserve context.
+
+
+  このリポジトリの up.sh と doctor.sh を読んで、役割の違いを 3 行で説明して。
+
+
+
+  up.sh と doctor.sh の役割を確認します。
+
+    Read 3 files
+    Read up.sh
+    Read doctor.sh
+    Read AGENTS.md
+
+  up.sh は外部 skill の更新 → 配線の再適用（run_inventory apply）→ 開発依存の bun update
+  という、状態を進める更新スクリプトです。
+  doctor.sh は配線・commit gate・絶対 home パス・bun 有無を read-only
+  で検査するだけで、壊れていても直しません（修復は ./init.sh）。
+  つまり up は更新、doctor は検査 で、配線の SSOT はどちらも lib/inventory.sh です。
+
+
+ ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  → Add a follow-up
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  Plan (shift+tab to cycle)
+  Cursor Grok 4.6 High · 8.8%                                                                           Run Everything
+  ~/workspace · main
+
+
+
+
+
+
+
+
+

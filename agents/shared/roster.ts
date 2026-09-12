@@ -1,15 +1,13 @@
 // roster.toml の解釈と検証。consult の advisors と resolve の実装役の kind / 起動 args を持つ。
 //
-//   bun roster.ts resolve-argv --name <name> --pane <id>
+//   bun roster.ts resolve-launch-argv [--kind <kind>] [--roster <file>] [--print kind|argv]
 //
-// resolve-argv の stdout は実装役を起動する herdr agent start の argv JSON。
-// consult 側の select / start-argv は advisors.ts。
+// resolve-launch-argv の stdout は kind か起動 argv（行で返す）。kind の再解釈をさせない。
+// consult 側の select / launch-argv は advisors.ts。
 
 import { TOML } from "bun";
 
 export const ROSTER_URL = new URL("./roster.toml", import.meta.url);
-export const START_TIMEOUT_MS = 90000;
-
 export type Slot = {
   readonly kind: string;
   readonly args: readonly string[];
@@ -56,8 +54,9 @@ export class RosterError extends Error {
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
+// 起動 argv は 1 行 1 要素で sh へ渡す。改行を含む arg はその境界を壊す
 const isStringArray = (v: unknown): v is string[] =>
-  Array.isArray(v) && v.every((a) => typeof a === "string");
+  Array.isArray(v) && v.every((a) => typeof a === "string" && !a.includes("\n"));
 
 export const readOnlyArgs = (kind: string): readonly string[] => {
   if (kind === "codex") return ["-s", "read-only"];
@@ -85,12 +84,16 @@ const splitFlag = (
 };
 
 /** 承認を飛ばす flag を止める。readOnly なら read-only を弱める指定も止める。 */
-const rejectBypass = (args: readonly string[], readOnly: boolean): void => {
+const rejectBypass = (args: readonly string[], readOnly: boolean, kind: string): void => {
   for (let i = 0; i < args.length; i++) {
     const token = args[i] ?? "";
     if (token === "--") throw new RosterError("args に -- は置けない");
     const { name, value } = splitFlag(token, args[i + 1]);
     if (BYPASS.has(name)) throw new RosterError(`承認を飛ばす flag: ${token}`);
+    // interactive TUI のみ。--print は拒否。-p は Codex の --profile だけ許可
+    if (name === "--print" || (name === "-p" && kind !== "codex")) {
+      throw new RosterError(`interactive 以外の起動: ${token}`);
+    }
     if (name === "--permission-mode" && APPROVAL_SKIPPING_MODES.has(value ?? "")) {
       throw new RosterError(`承認を飛ばす --permission-mode: ${value}`);
     }
@@ -146,11 +149,11 @@ const parseWorker = (data: unknown): Worker => {
   if (typeof kind !== "string" || !KIND_RE.test(kind)) return fail("kind が不正", at);
   const args = data["args"];
   if (!isStringArray(args)) return fail("args が string[] ではない", at);
-  rejectBypass(args, false);
+  rejectBypass(args, false, kind);
   return { kind, args };
 };
 
-/** 枠配列の検証。`parseRoster` が `advisors` を、`start-argv` が 1 枠を通す。 */
+/** 枠配列の検証。`parseRoster` が `advisors` を、`launch-argv` が 1 枠を通す。 */
 const parseSlots = (data: unknown): Slot[] => {
   if (!Array.isArray(data) || data.length === 0) {
     throw new RosterError("枠配列が空");
@@ -171,7 +174,7 @@ const parseSlots = (data: unknown): Slot[] => {
     seenKinds.add(kind);
     const rawArgs = item["args"];
     if (!isStringArray(rawArgs)) return fail("args が string[] ではない", at);
-    rejectBypass(rawArgs, true);
+    rejectBypass(rawArgs, true, kind);
     const rawMembers = item["members"] === undefined ? [kind] : item["members"];
     if (!isStringArray(rawMembers) || rawMembers.length === 0) return fail("members が空", at);
     if (!rawMembers.every((m) => KIND_RE.test(m))) return fail("members が不正", at);
@@ -190,51 +193,22 @@ const parseSlots = (data: unknown): Slot[] => {
   return slots;
 };
 
-export const herdrStartArgv = (slot: Slot, start: { name: string; pane: string }): string[] => {
-  rejectBypass(slot.args, true);
-  return [
-    "herdr",
-    "agent",
-    "start",
-    start.name,
-    "--kind",
-    slot.kind,
-    "--pane",
-    start.pane,
-    "--timeout",
-    String(START_TIMEOUT_MS),
-    "--",
-    ...slot.args,
-    ...readOnlyArgs(slot.kind),
-  ];
+/** tmux / 直接 CLI 起動時の実行ファイル名。kind とバイナリ名が違う枠だけ写す。 */
+export const directBinary = (kind: string): string => {
+  if (kind === "cursor") return "cursor-agent";
+  return kind;
 };
 
-/** JSON 1 枠を advisors と同じ検証で通す。 */
-export const parseSlot = (raw: unknown): Slot => {
-  const [slot] = parseSlots([raw]);
-  if (slot === undefined) throw new RosterError("slot が無い");
-  return slot;
+/** interactive CLI を起動する argv（read-only を末尾に足す）。 */
+export const directLaunchArgv = (slot: Slot): string[] => {
+  rejectBypass(slot.args, true, slot.kind);
+  return [directBinary(slot.kind), ...slot.args, ...readOnlyArgs(slot.kind)];
 };
 
-export const herdrResolveArgv = (
-  worker: Worker,
-  start: { name: string; pane: string },
-): string[] => {
-  rejectBypass(worker.args, false);
-  return [
-    "herdr",
-    "agent",
-    "start",
-    start.name,
-    "--kind",
-    worker.kind,
-    "--pane",
-    start.pane,
-    "--timeout",
-    String(START_TIMEOUT_MS),
-    "--",
-    ...worker.args,
-  ];
+/** resolve / dispatch 用。read-only を足さない（実装役。bypass と --print は拒否。-p は Codex の --profile だけ）。 */
+export const directResolveLaunchArgv = (worker: Worker): string[] => {
+  rejectBypass(worker.args, false, worker.kind);
+  return [directBinary(worker.kind), ...worker.args];
 };
 
 export const flag = (argv: readonly string[], name: string): string | undefined => {
@@ -245,15 +219,31 @@ export const flag = (argv: readonly string[], name: string): string | undefined 
 const main = async (): Promise<void> => {
   const argv = process.argv.slice(2);
   try {
-    if (argv[0] === "resolve-argv") {
-      const name = flag(argv, "--name");
-      const pane = flag(argv, "--pane");
-      if (name === undefined || pane === undefined) throw new RosterError("--name / --pane が必要");
-      const { resolve } = parseRoster(await Bun.file(ROSTER_URL).text());
-      process.stdout.write(`${JSON.stringify(herdrResolveArgv(resolve, { name, pane }))}\n`);
+    if (argv[0] === "resolve-launch-argv") {
+      // tmux dispatch 用。--kind があればその kind で起動（同じ kind なら roster args を引き継ぐ）
+      const kindOverride = flag(argv, "--kind");
+      const rosterPath = flag(argv, "--roster");
+      const roster = rosterPath === undefined ? Bun.file(ROSTER_URL) : Bun.file(rosterPath);
+      const { resolve } = parseRoster(await roster.text());
+      let worker: Worker = resolve;
+      if (kindOverride !== undefined && kindOverride !== "") {
+        if (!KIND_RE.test(kindOverride)) {
+          throw new RosterError(`kind が不正: ${kindOverride}`);
+        }
+        worker = kindOverride === resolve.kind ? resolve : { kind: kindOverride, args: [] };
+      }
+      const print = flag(argv, "--print") ?? "argv";
+      if (print !== "kind" && print !== "argv") {
+        throw new RosterError(`--print は kind か argv: ${print}`);
+      }
+      // kind だけ要るときも argv を組む（args の検査を print で飛ばさない）
+      // directBinary は argv[0] に使う（PATH 検査は呼び出し側）
+      const launch = directResolveLaunchArgv(worker);
+      const lines = print === "kind" ? [worker.kind] : launch;
+      process.stdout.write(lines.map((line) => `${line}\n`).join(""));
       return;
     }
-    throw new RosterError("使い方: roster.ts resolve-argv");
+    throw new RosterError("使い方: roster.ts resolve-launch-argv [--print kind|argv]");
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);
     console.error(`FATAL\t${message}`);
