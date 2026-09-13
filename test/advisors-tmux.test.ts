@@ -67,7 +67,8 @@ if args[0] == "paste-buffer":
     n = int((d / "prompts").read_text()) + 1 if (d / "prompts").exists() else 1
     (d / "prompts").write_text(str(n))
     prev = (d / "screen").read_text() if (d / "screen").exists() else ""
-    line = "answer %d\\n%s\\n❯ \\n" % (n, marker)
+    verdict = (root / "verdict").read_text() if (root / "verdict").exists() else ""
+    line = "answer %d\\n%s%s\\n❯ \\n" % (n, verdict, marker)
     (d / "screen").write_text(prev + line)
     raise SystemExit(0)
 
@@ -173,6 +174,43 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
     const after = await run(dir, ["collect", runDir, "5"]);
     expect(after.exitCode).toBe(2);
     expect(after.stderr).toContain("close 済み");
+
+    // 判定行の無い巡は証跡にならない。close 済みでも読める
+    const unverified = await run(dir, ["verify", runDir]);
+    expect({ exitCode: unverified.exitCode, stdout: unverified.stdout }).toEqual({
+      exitCode: 1,
+      stdout: `run: ${runDir}\nround: 2\nclosed: yes\nclaude: 不明\ncodex: 不明\nverify: fail\n`,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: verify は今の巡の全員が「指摘なし」のときだけ通る", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "verdict"), "判定: 修正推奨\n");
+    const runDir = (await run(dir, ["start", join(dir, "prompt")])).stdout.trim();
+    expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(0);
+    const fix = await run(dir, ["verify", runDir]);
+    expect({ exitCode: fix.exitCode, stdout: fix.stdout }).toEqual({
+      exitCode: 1,
+      stdout: `run: ${runDir}\nround: 1\nclosed: no\nclaude: 修正推奨\ncodex: 修正推奨\nverify: fail\n`,
+    });
+
+    await Bun.write(join(dir, "verdict"), "判定: 指摘なし\n");
+    expect((await run(dir, ["ask", runDir, join(dir, "reply")])).exitCode).toBe(0);
+    // 回収前は未終了
+    const early = await run(dir, ["verify", runDir]);
+    expect(early.exitCode).toBe(1);
+    expect(early.stdout).toContain("claude: 未回収");
+    expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(0);
+    const pass = await run(dir, ["verify", runDir]);
+    expect({ exitCode: pass.exitCode, stdout: pass.stdout }).toEqual({
+      exitCode: 0,
+      stdout: `run: ${runDir}\nround: 2\nclosed: no\nclaude: 指摘なし\ncodex: 指摘なし\nverify: pass\n`,
+    });
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

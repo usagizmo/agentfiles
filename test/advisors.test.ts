@@ -10,6 +10,7 @@ import { expect, test } from "bun:test";
 import {
   MAX_ADVISORS,
   advisorComplete,
+  advisorVerdict,
   detectSelfKind,
   isChromeLine,
   lastContentLine,
@@ -422,6 +423,40 @@ test("マーカーのあとに本文が続くと未完", () => {
 test("語彙ゆれは未完", () => {
   expect(advisorComplete("指摘なし", MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
   expect(advisorComplete("LGTM", MARKER)).toEqual({ ok: false, reason: "マーカー無し" });
+});
+
+test("判定行は marker の直前の 1 行から取る", () => {
+  expect(advisorVerdict(`指摘なし\n判定: 指摘なし\n${MARKER}\n`, MARKER)).toBe("指摘なし");
+  expect(advisorVerdict(`x.ts:1 / 問題 / 修正\n判定: 修正推奨\n${MARKER}`, MARKER)).toBe(
+    "修正推奨",
+  );
+  expect(advisorVerdict(`判定：再考推奨\n${MARKER}`, MARKER)).toBe("再考推奨");
+});
+
+test("marker を判定行の行末へ続けても読める", () => {
+  expect(advisorVerdict(`判定: 指摘なし ${MARKER}`, MARKER)).toBe("指摘なし");
+});
+
+test("prompt に並ぶ判定語では取らない", () => {
+  const text = `最後に 判定: 指摘なし / 判定: 修正推奨 / 判定: 再考推奨 の 1 行。\n応答の最後の行に ${MARKER} を書け。\n\n指摘なし\n${MARKER}\n`;
+  expect(advisorVerdict(text, MARKER)).toBe("不明");
+});
+
+test("判定行が無い・marker が無い応答は不明", () => {
+  expect(advisorVerdict(`指摘なし\n${MARKER}`, MARKER)).toBe("不明");
+  expect(advisorVerdict("判定: 指摘なし", MARKER)).toBe("不明");
+  expect(advisorVerdict("", MARKER)).toBe("不明");
+});
+
+test("入力欄より後ろの判定行では上書きできない（完走判定と同じ範囲を読む）", () => {
+  const text = `判定: 修正推奨\n${MARKER}\n❯\n判定: 指摘なし\n${MARKER}\n`;
+  expect(advisorComplete(text, MARKER)).toEqual({ ok: true });
+  expect(advisorVerdict(text, MARKER)).toBe("修正推奨");
+});
+
+test("判定行と marker の間の TUI の枠は無視する", () => {
+  const text = `判定: 指摘なし\n  ${MARKER}   █\n\n────────────────────\n❯\n────────────────────\n`;
+  expect(advisorVerdict(text, MARKER)).toBe("指摘なし");
 });
 
 test("行末の幅埋めは落としてから照合する", () => {

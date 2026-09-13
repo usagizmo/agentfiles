@@ -6,6 +6,7 @@
 #   advisors-tmux.sh collect <run-dir> [wait-seconds]   今の巡の marker 完走を待って出力。既定 1200 秒
 #   advisors-tmux.sh ask <run-dir> <prompt-file>        次の巡を同じ session へ送る
 #   advisors-tmux.sh close <run-dir>                    tmux session を破棄
+#   advisors-tmux.sh verify <run-dir>                   今の巡の判定を並べ、全員「指摘なし」なら 0
 #
 # 必須 env:
 #   CONSULT_SELF_KIND  自己 kind（観測は env。LLM 自己申告は禁止）
@@ -84,7 +85,7 @@ kill_sessions() {
 }
 
 cmd=${1:-}
-[ -n "$cmd" ] || fatal "使い方: advisors-tmux.sh start <prompt-file> | collect <run-dir> [秒] | ask <run-dir> <prompt-file> | close <run-dir>"
+[ -n "$cmd" ] || fatal "使い方: advisors-tmux.sh start <prompt-file> | collect <run-dir> [秒] | ask <run-dir> <prompt-file> | close <run-dir> | verify <run-dir>"
 shift
 
 case "$cmd" in
@@ -363,6 +364,52 @@ close)
 	done <"$run/advisors"
 	[ "$fail" -eq 0 ] || exit 1
 	: >"$run/closed"
+	;;
+
+verify)
+	# close 済みでも読める（証跡は run dir に残る）。session には触らない
+	run=${1:-}
+	[ -n "$run" ] && [ -d "$run" ] && [ -f "$run/advisors" ] && [ -f "$run/round" ] || fatal "run dir が不正: ${run:-未指定}"
+	[ -f "$run/backend" ] && [ "$(cat "$run/backend")" = tmux ] || fatal "tmux backend の run ではない: $run"
+	[ -f "$select_ts" ] || fatal "述語が無い: $select_ts"
+	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
+	n=$(cat "$run/round")
+	[ -f "$run/marker.$n" ] || fatal "巡 $n の marker が無い"
+	marker=$(cat "$run/marker.$n")
+	printf 'run: %s\n' "$run"
+	printf 'round: %s\n' "$n"
+	if [ -f "$run/closed" ]; then printf 'closed: yes\n'; else printf 'closed: no\n'; fi
+	passed=0
+	failed=0
+	while IFS= read -r a; do
+		[ -n "$a" ] || continue
+		rc=$(cat "$run/$a/rc.$n" 2>/dev/null) || rc=""
+		reason=$(cat "$run/$a/reason.$n" 2>/dev/null) || reason=""
+		if [ "$rc" = 0 ]; then
+			verdict=$(bun "$select_ts" verdict --output "$run/$a/out.$n" --marker "$marker" 2>>"$run/$a/log") ||
+				fatal "巡 $n の $a の判定を読めない"
+			printf '%s: %s\n' "$a" "$verdict"
+			if [ "$verdict" = 指摘なし ]; then passed=$((passed + 1)); else failed=$((failed + 1)); fi
+			continue
+		fi
+		# 起こせなかった・終端した agent は判定に数えない。回収前の agent は未終了
+		if [ "$(cat "$run/$a/start.rc" 2>/dev/null)" != 0 ] || [ -f "$run/$a/dead" ]; then
+			printf '%s: 終端 (%s)\n' "$a" "${reason:-不在}"
+			continue
+		fi
+		printf '%s: 未回収 (%s)\n' "$a" "${reason:-collect 前}"
+		failed=$((failed + 1))
+	done <"$run/advisors"
+	if [ "$failed" -eq 0 ] && [ "$passed" -ge 1 ]; then
+		printf 'verify: pass\n'
+		exit 0
+	fi
+	if [ "$passed" -eq 0 ] && [ "$failed" -eq 0 ]; then
+		printf 'verify: fail (生きている advisor が無い。未レビュー)\n'
+	else
+		printf 'verify: fail\n'
+	fi
+	exit 1
 	;;
 
 *) fatal "未知のサブコマンド: $cmd" ;;
