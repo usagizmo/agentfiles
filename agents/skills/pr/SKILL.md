@@ -56,7 +56,7 @@ local gate の入口が無い repo では、**CI の定義から同じ検査を�
 **入る条件（共通に加え）:** 意図の確認が決着している（明示承認があるか、不要と判定されている）。
 
 1. `bash <skills root>/pr/scripts/sync-and-push.sh [<base>]` で push する。衝突が出たら解消して再実行する
-2. sync 後、ready 前に HEAD の意味を見る。差し戻し基準は `resolve` の承認後表。`finish` / 再検証が要るならこの skill を抜けて呼ぶ側へ戻す（面変化も同時なら呼ぶ側が **要** 行へ進む）。再確認だけが残ったときだけ **Draft PR** 節の 2 以降へ（作成・Draft 化・再開欄を済ませて止まる）
+2. sync 後、ready 前に HEAD の意味を見る。差し戻し基準は `resolve` の承認後表。**実物確認の Pass 後でも、確認中の修正などで新 commit があるなら Ready に入らず**、この skill を抜けて呼ぶ側へ戻し `finish`（必要なら再検証 / 再確認）させる。面変化も同時なら呼ぶ側が **要** 行へ進む。再確認だけが残ったときだけ **Draft PR** 節の 2 以降へ（作成・Draft 化・再開欄を済ませて止まる）
 3. PR が無ければ `gh pr create --base <base>`（draft にしない）。あれば title / body を更新する
 4. Draft のままなら、**push のあと**に `gh pr ready` する（ready してから push しない）
 5. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
