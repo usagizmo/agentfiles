@@ -26,6 +26,8 @@ CONSULT_BACKEND=tmux \
   <skills root>/consult/scripts/consult-backend.sh ask <run-dir> <prompt-file>
 CONSULT_BACKEND=tmux \
   <skills root>/consult/scripts/consult-backend.sh close <run-dir>
+CONSULT_BACKEND=tmux \
+  <skills root>/consult/scripts/consult-backend.sh verify <run-dir>
 ```
 
 `advisors-tmux.sh` を直接呼んでもよい（その場合も `CONSULT_BACKEND` 経由と同じ契約）。
@@ -41,6 +43,7 @@ session ごとに `PATH` を `-e` で渡し、呼び出し元の印（`CLAUDECOD
 <skills root>/consult/scripts/consult-backend.sh collect <run-dir> [秒]   # 今の巡が出揃うまで待って出力
 <skills root>/consult/scripts/consult-backend.sh ask <run-dir> <prompt-file>  # 次の巡を同じ agent へ送る
 <skills root>/consult/scripts/consult-backend.sh close <run-dir>          # session / tab を閉じる
+<skills root>/consult/scripts/consult-backend.sh verify <run-dir>         # 今の巡の判定を並べる。全員「指摘なし」で 0
 ```
 
 - **prompt は `mktemp` で作ったファイルに書いて渡す**。`PROMPT=$(mktemp "${TMPDIR:-/tmp}/consult-prompt.XXXXXX"); printf '%s\n' "$PROMPT"` で作り、**出力されたパスを控えて**本文をそのファイルへ書き込む（shell 変数はコマンド間で消えるため、以降の各コマンドで再設定する）
@@ -52,6 +55,7 @@ session ごとに `PATH` を `-e` で渡し、呼び出し元の印（`CLAUDECOD
 - 回収ヘッダの `rc≠0` は未完了。`消失`（session/agent が居なくなった）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
 - timeout の巡は pane / `tmux capture` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
 - **どのモードでも最後に `close` を呼ぶ**。完了・終端を確認してから閉じる
+- `verify` は `close` 済みでも読める。1 行目から `run:` / `round:` / `closed:` / `<kind>: <判定>`… / `verify: pass|fail`。判定は応答末尾の `判定: …` 行だけから取る（`advisors.ts` の `verdict`）。判定行が無い完走は `不明`、回収前は `未回収`、終端した agent は `終端` で判定に数えない。rc 0 で判定行あり以外が 1 つでもあれば fail、数える agent が 0 でも fail（未レビュー）
 
 ## レイアウト
 

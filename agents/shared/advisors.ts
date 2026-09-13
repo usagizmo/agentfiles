@@ -3,6 +3,7 @@
 //   bun advisors.ts select --roster <file> --self <kind>
 //   bun advisors.ts launch-argv --roster <file> --kind <kind>
 //   bun advisors.ts complete --output <file> --marker <token>
+//   bun advisors.ts verdict --output <file> --marker <token>
 //   bun advisors.ts extract --raw <file> [--prev <marker>]
 //   bun advisors.ts pane-state [--screen <file>]   （既定は stdin）
 //   bun advisors.ts trust-key [--screen <file>]    （既定は stdin）
@@ -92,7 +93,7 @@ export const isChromeLine = (line: string): boolean => {
  * ので、入力欄を境にする。送った prompt も同じ形で出るが、応答より前なので
  * 最後の 1 つを境に取る。
  */
-export const lastContentLine = (text: string): string | undefined => {
+const contentLines = (text: string): readonly string[] => {
   const lines = text.split(/\r?\n/).map(normalizeSnapshotLine);
   let end = lines.length;
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -101,12 +102,10 @@ export const lastContentLine = (text: string): string | undefined => {
       break;
     }
   }
-  for (let i = end - 1; i >= 0; i--) {
-    const line = lines[i] ?? "";
-    if (!isChromeLine(line)) return line;
-  }
-  return undefined;
+  return lines.slice(0, end).filter((line) => !isChromeLine(line));
 };
+
+export const lastContentLine = (text: string): string | undefined => contentLines(text).at(-1);
 
 /**
  * marker が応答の最後にあるかを見る。
@@ -119,6 +118,30 @@ export const advisorComplete = (text: string, marker: string): CompleteResult =>
   if (last === undefined) return { ok: false, reason: "出力なし" };
   if (!last.endsWith(marker)) return { ok: false, reason: "マーカー無し" };
   return { ok: true };
+};
+
+export const VERDICTS = ["指摘なし", "修正推奨", "再考推奨"] as const;
+export type Verdict = (typeof VERDICTS)[number];
+/** 完走した応答に判定行が無い（未完走は complete 側で落ちる）。 */
+export type VerdictResult = Verdict | "不明";
+
+const VERDICT_LINE = /^判定[:：]\s*(指摘なし|修正推奨|再考推奨)\s*$/u;
+
+/**
+ * 応答末尾の判定行。marker の直前の行、または marker を後ろへ続けた行から取る。
+ *
+ * 読む範囲は完走判定と同じ（最後の入力欄より前）。別の範囲を読むと、入力欄側の
+ * 文字列で判定を差し替えられる。履歴には送った prompt も残り、そこには 3 つの
+ * 判定語が並ぶので、本文中の語では取らず、marker の手前の 1 行だけを見る。
+ */
+export const advisorVerdict = (text: string, marker: string): VerdictResult => {
+  const lines = contentLines(text);
+  const last = lines.at(-1);
+  if (last === undefined || !last.endsWith(marker)) return "不明";
+  const inline = last.slice(0, -marker.length).trim();
+  const candidate = inline === "" ? (lines.at(-2) ?? "") : inline;
+  const m = VERDICT_LINE.exec(candidate);
+  return m === null ? "不明" : (m[1] as Verdict);
 };
 
 /**
@@ -285,6 +308,17 @@ const main = async (): Promise<void> => {
       process.exit(result.ok ? 0 : 1);
       return;
     }
+    if (cmd === "verdict") {
+      const outputPath = flag(argv, "--output");
+      const marker = flag(argv, "--marker");
+      if (outputPath === undefined || marker === undefined || marker === "") {
+        throw new RosterError("--output / --marker が必要");
+      }
+      const file = Bun.file(outputPath);
+      const text = (await file.exists()) ? await file.text() : "";
+      process.stdout.write(`${advisorVerdict(text, marker)}\n`);
+      return;
+    }
     if (cmd === "self-kind") {
       const declared = flag(argv, "--declared");
       if (declared === undefined || declared === "") throw new RosterError("--declared が無い");
@@ -330,7 +364,7 @@ const main = async (): Promise<void> => {
       return;
     }
     throw new RosterError(
-      "使い方: advisors.ts select | launch-argv | complete | pane-state | trust-key",
+      "使い方: advisors.ts select | launch-argv | complete | verdict | extract | pane-state | trust-key | self-kind",
     );
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);
