@@ -45,6 +45,12 @@ here=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) ||
 	fatal "スクリプトの場所が取れない"
 advisors_ts=$here/advisors.ts
 
+# 待機ループの各回で見る。消えた session を画面判定の失敗と区別して報告する
+require_alive() {
+	tmux_af has-session -t "=$1" 2>/dev/null ||
+		fatal "session が消えた（起動した harness が終了した）: $1"
+}
+
 # 表示中の 1 画面から状態語を読む（trust / working / ready / unknown）
 pane_state() {
 	[ -f "$advisors_ts" ] || fatal "画面判定が無い: $advisors_ts"
@@ -113,9 +119,12 @@ accept-trust)
 	target=$(target_of "$session") || fatal "pane が無い: $session"
 	answered=0
 	while :; do
+		require_alive "$session"
 		# 状態も選択肢番号も同じ 1 回の capture から読む（間で画面が変わらない）
 		snap=$(tmux_af capture-pane -t "$target" -p 2>/dev/null) || snap=""
-		case $(printf '%s\n' "$snap" | bun "$advisors_ts" pane-state) in
+		state=$(printf '%s\n' "$snap" | bun "$advisors_ts" pane-state) ||
+			fatal "画面を判定できない: $session"
+		case $state in
 		trust)
 			if [ "$answered" -eq 0 ]; then
 				key=$(printf '%s\n' "$snap" | bun "$advisors_ts" trust-key) ||
@@ -143,7 +152,9 @@ wait-ready)
 	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
 	deadline=$(($(date +%s) + timeout))
 	while :; do
-		case $(pane_state "$session") in
+		require_alive "$session"
+		state=$(pane_state "$session") || fatal "画面を判定できない: $session"
+		case $state in
 		ready) exit 0 ;;
 		trust) exit 3 ;;
 		esac
