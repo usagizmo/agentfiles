@@ -104,3 +104,57 @@ test("dispatch tmux: 巡をまたいで送り、close で session を破棄す�
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("dispatch tmux: 入力待ちで marker が無ければ collect が終端にし、ask できない", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "no-marker"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "2"]);
+    expect(first.stdout).toContain("(rc=1 marker 無し)");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(true);
+    const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
+    expect(asked.exitCode).toBe(2);
+    expect(asked.stderr).toContain("worker は終端している");
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("dispatch tmux: deadline で入力待ちでも、読み直して marker があれば完走", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "late-marker"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "0"]);
+    expect(first.stdout).toContain("(rc=0)");
+    expect(first.stdout).toContain("answer 1");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(false);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("dispatch tmux: deadline の再読込が失敗したら終端にせず timeout", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "no-marker"), "");
+    await Bun.write(join(dir, "history-fail-after-first"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "0"]);
+    expect(first.stdout).toContain("(rc=1 timeout)");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(false);
+    expect(await Bun.file(join(runDir, "rc.1")).exists()).toBe(false);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);

@@ -155,3 +155,68 @@ test("tmux backend: verify は今の巡が「指摘なし」のときだけ通�
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("tmux backend: paste は反映を待ってから Enter を 1 回送る（反映前の Enter は落ちる）", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "slow-paste"), "3\n");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "5"]);
+    expect(first.exitCode).toBe(0);
+    expect(first.stdout).toContain("answer 1");
+    expect((await run(dir, ["ask", runDir, join(dir, "reply")])).exitCode).toBe(0);
+    expect((await run(dir, ["collect", runDir, "5"])).stdout).toContain("answer 2");
+    const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+    expect(servers).toHaveLength(1);
+    expect(await readFile(join(dir, servers[0] ?? "", "enters"), "utf8")).toBe("enter\nenter\n");
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 反映後に落ちた Enter は 1 回だけ送り直す", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "drop-enter"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    expect((await run(dir, ["collect", runDir, "5"])).stdout).toContain("answer 1");
+    const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+    expect(await readFile(join(dir, servers[0] ?? "", "enters"), "utf8")).toBe("enter\nenter\n");
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 貼り付けが反映されなければ Enter を送らず start を止める", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "slow-paste"), "999\n");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(2);
+    expect(started.stderr).toContain("貼り付けが画面に反映されない");
+    const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+    for (const srv of servers) {
+      expect(await Bun.file(join(dir, srv, "enters")).exists()).toBe(false);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 送信後の画面を読めなければ Enter を送り直さず start を止める", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "capture-fail-after-enter"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(2);
+    expect(started.stderr).toContain("送信後の画面を読めない");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);

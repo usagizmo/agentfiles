@@ -1,6 +1,10 @@
 // consult / dispatch の tmux backend テストが PATH へ置く偽 tmux。
 // server は socket ごとに dir を持ち、その中に session の画面と buffer を置く。
-// paste された prompt の marker を応答として積む。
+// paste は入力欄に pending として置き、capture で画面へ反映し、Enter で marker つきの応答を積む。
+// 反映前の Enter は落ちる（本物の TUI の挙動）。slow-paste があれば反映をその回数の capture だけ遅らせる。
+// drop-enter は反映後の最初の Enter を 1 回だけ落とす。capture-fail-after-enter は Enter 後の capture を失敗させる。
+// no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。
+// history-fail-after-first は 2 回目以降の履歴 capture を失敗させる。Enter の回数は enters に積む。
 
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
@@ -67,6 +71,30 @@ if args[0] == "list-panes":
 
 if args[0] == "send-keys":
     target()
+    if "C-m" in args:
+        enters = server / "enters"
+        enters.write_text(enters.read_text() + "enter\\n" if enters.exists() else "enter\\n")
+        pending = server / "pending"
+        drop = root / "drop-enter"
+        if pending.exists() and (server / "pending-rendered").exists() and drop.exists():
+            drop.unlink()
+        elif pending.exists() and (server / "pending-rendered").exists():
+            text = pending.read_text()
+            pending.unlink()
+            (server / "pending-rendered").unlink()
+            marker_m = re.search(r"([A-Z]+-DONE-[a-z0-9]+-\\d+)", text)
+            marker = marker_m.group(1) if marker_m else "NO-MARKER"
+            if (root / "no-marker").exists():
+                marker = ""
+            if (root / "late-marker").exists():
+                (server / "late-marker").write_text(marker)
+                marker = ""
+            prompts = server / "prompts"
+            n = int(prompts.read_text()) + 1 if prompts.exists() else 1
+            prompts.write_text(str(n))
+            verdict = (root / "verdict").read_text() if (root / "verdict").exists() else ""
+            screen = server / "screen"
+            screen.write_text(screen.read_text() + ("answer %d\\n%s%s\\n❯ \\n" % (n, verdict, marker)))
     raise SystemExit(0)
 
 if args[0] == "load-buffer":
@@ -80,14 +108,9 @@ if args[0] == "paste-buffer":
     text = buf.read_text()
     if "-d" in args:
         buf.unlink()
-    marker_m = re.search(r"([A-Z]+-DONE-[a-z0-9]+-\\d+)", text)
-    marker = marker_m.group(1) if marker_m else "NO-MARKER"
-    prompts = server / "prompts"
-    n = int(prompts.read_text()) + 1 if prompts.exists() else 1
-    prompts.write_text(str(n))
-    verdict = (root / "verdict").read_text() if (root / "verdict").exists() else ""
-    screen = server / "screen"
-    screen.write_text(screen.read_text() + ("answer %d\\n%s%s\\n❯ \\n" % (n, verdict, marker)))
+    (server / "pending").write_text(text)
+    slow = root / "slow-paste"
+    (server / "pending-delay").write_text(slow.read_text().strip() if slow.exists() else "0")
     raise SystemExit(0)
 
 if args[0] == "delete-buffer":
@@ -96,6 +119,28 @@ if args[0] == "delete-buffer":
 
 if args[0] == "capture-pane":
     target()
+    if (root / "capture-fail-after-enter").exists() and (server / "enters").exists():
+        raise SystemExit(1)
+    history = "-S" in args
+    seen = server / "history-seen"
+    if history:
+        if (root / "history-fail-after-first").exists() and seen.exists():
+            raise SystemExit(1)
+        seen.write_text("")
+    late = server / "late-marker"
+    if late.exists() and not history and seen.exists():
+        screen = server / "screen"
+        screen.write_text(screen.read_text() + late.read_text() + "\\n❯ \\n")
+        late.unlink()
+    pending = server / "pending"
+    if pending.exists() and not (server / "pending-rendered").exists():
+        delay = int((server / "pending-delay").read_text())
+        if delay > 0:
+            (server / "pending-delay").write_text(str(delay - 1))
+        else:
+            screen = server / "screen"
+            screen.write_text(screen.read_text() + "› [Pasted Content]\\n")
+            (server / "pending-rendered").write_text("")
     sys.stdout.write((server / "screen").read_text())
     raise SystemExit(0)
 

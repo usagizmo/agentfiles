@@ -54,6 +54,45 @@ destroy_session() {
 	rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$session"
 }
 
+screen_of() {
+	tmux_session capture-pane -t "$1" -p 2>/dev/null
+}
+
+# 画面が prev から変わるまで 0.2 秒刻みで待つ。変わったら 0、読めたが変わらなければ 1、1 度も読めなければ 2
+wait_screen_change() {
+	w_target=$1
+	w_prev=$2
+	w_ticks=$3
+	w_seen=0
+	while [ "$w_ticks" -gt 0 ]; do
+		if w_now=$(screen_of "$w_target"); then
+			[ "$w_now" != "$w_prev" ] && return 0
+			w_seen=1
+		fi
+		sleep 0.2
+		w_ticks=$((w_ticks - 1))
+	done
+	[ "$w_seen" = 1 ] && return 1
+	return 2
+}
+
+# 画面が prev から変わり、続けて 2 回同じ画面になるまで待つ。尽きたら 1
+wait_screen_settle() {
+	s_target=$1
+	s_prev=$2
+	s_ticks=$3
+	s_last=$s_prev
+	while [ "$s_ticks" -gt 0 ]; do
+		if s_now=$(screen_of "$s_target") && [ "$s_now" != "$s_prev" ]; then
+			[ "$s_now" = "$s_last" ] && return 0
+			s_last=$s_now
+		fi
+		sleep 0.2
+		s_ticks=$((s_ticks - 1))
+	done
+	return 1
+}
+
 # pane は base-index / pane-base-index に依存しない。session の pane id を引く
 target_of() {
 	t_id=$(tmux_session list-panes -t "=$session" -F '#{pane_id}' 2>/dev/null | head -n 1)
@@ -166,15 +205,24 @@ paste-file)
 	require_session
 	target=$(target_of) || fatal "pane が無い: $session"
 	buf="consult-paste-$$"
+	before=$(screen_of "$target") || fatal "画面を読めない: $session"
 	tmux_session load-buffer -b "$buf" -- "$file" || fatal "buffer に読めない: $file"
 	# -p: bracketed paste（LF→CR 置換を避ける）。-d: paste 後に buffer 削除
 	tmux_session paste-buffer -p -d -b "$buf" -t "$target" || {
 		tmux_session delete-buffer -b "$buf" 2>/dev/null || true
 		fatal "paste できない"
 	}
-	# 貼り付け直後の Enter（送信）
-	sleep 0.2
+	# 貼り付けが画面に反映されて落ち着いてから Enter を送る（処理中に送ると入力欄に残る）
+	wait_screen_settle "$target" "$before" 50 || fatal "貼り付けが画面に反映されない: $session"
+	after=$(screen_of "$target") || fatal "画面を読めない: $session"
 	tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない"
+	# 読めたのに画面が動かないときだけ Enter をもう 1 度送る
+	wait_screen_change "$target" "$after" 10
+	case $? in
+	0) ;;
+	1) tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない" ;;
+	*) fatal "送信後の画面を読めない: $session" ;;
+	esac
 	;;
 capture)
 	require_session

@@ -154,6 +154,7 @@ collect)
 			: >"$run/dead"
 		else
 			session=$(cat "$run/session")
+			final=0
 			while :; do
 				[ -f "$run/rc.$n" ] && break
 				if ! sh "$tmux_sh" exists "$session"; then
@@ -162,9 +163,14 @@ collect)
 					: >"$run/dead"
 					break
 				fi
-				sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log" || true
-				if bun "$complete_ts" complete --output "$run/raw.$n" --marker "$marker" \
-					>"$run/complete.$n.json" 2>>"$run/log"; then
+				# complete_rc: 0 完走 / 1 未完走 / それ以外は読めない・判定できない
+				complete_rc=2
+				if sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log"; then
+					bun "$complete_ts" complete --output "$run/raw.$n" --marker "$marker" \
+						>"$run/complete.$n.json" 2>>"$run/log"
+					complete_rc=$?
+				fi
+				if [ "$complete_rc" = 0 ]; then
 					bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
 						>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
 					printf '%s\n' 0 >"$run/rc.$n"
@@ -172,11 +178,27 @@ collect)
 					break
 				fi
 				if [ "$(date +%s)" -ge "$deadline" ]; then
-					printf '%s\n' timeout >"$run/reason.$n"
 					if [ -f "$run/raw.$n" ]; then
 						bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
 							>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
 					fi
+					# 稼働中なら timeout（再 collect できる）。入力待ちなら履歴をもう 1 度読んで完走判定をやり直す。
+					# 終端にするのは、その再読込が成功して未完走と判定できたときだけ。読めなければ timeout
+					if [ "$(sh "$tmux_sh" state "$session" 2>>"$run/log")" != ready ]; then
+						printf '%s\n' timeout >"$run/reason.$n"
+						break
+					fi
+					if [ "$final" = 0 ]; then
+						final=1
+						continue
+					fi
+					if [ "$complete_rc" != 1 ]; then
+						printf '%s\n' timeout >"$run/reason.$n"
+						break
+					fi
+					printf '%s\n' 1 >"$run/rc.$n"
+					printf '%s\n' "marker 無し" >"$run/reason.$n"
+					: >"$run/dead"
 					break
 				fi
 				sleep 1
