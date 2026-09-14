@@ -8,14 +8,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import {
-  MAX_ADVISORS,
   advisorComplete,
   advisorVerdict,
-  detectSelfKind,
   isChromeLine,
   lastContentLine,
   paneState,
-  resolveSelfKind,
   selectAdvisors,
   type Selection,
   trustKey,
@@ -58,9 +55,9 @@ const withResolve = (resolve: string): Roster =>
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "cursor"]);
-  expect(roster[2]?.members).toEqual(["grok", "cursor", "opencode", "command-code"]);
-  expect(roster[2]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
+  expect(roster.map((s) => s.kind)).toEqual(["codex", "claude", "grok", "cursor"]);
+  expect(roster[2]?.args).toEqual(["--model", "grok-4.6", "--effort", "high"]);
+  expect(roster[3]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
   expect(parsed.resolve).toEqual({
     kind: "grok",
     args: ["--model", "grok-4.6", "--effort", "high"],
@@ -110,54 +107,13 @@ test("resolve は read-only を要求しない", () => {
   expect(c.resolve.kind).toBe("claude");
 });
 
-test("claude は codex + cursor", () => {
-  const r = selectAdvisors(roster, "claude");
-  expect(kinds(r)).toEqual(["codex", "cursor"]);
-  expect(r.warning).toBe(false);
-});
-
-test("codex は claude + cursor", () => {
-  const r = selectAdvisors(roster, "codex");
-  expect(kinds(r)).toEqual(["claude", "cursor"]);
-  expect(r.warning).toBe(false);
-});
-
-test("grok は cursor 枠ごと外れ claude + codex", () => {
-  const r = selectAdvisors(roster, "grok");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("cursor は claude + codex", () => {
-  const r = selectAdvisors(roster, "cursor");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("opencode は cursor 枠ごと外れ claude + codex", () => {
-  const r = selectAdvisors(roster, "opencode");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("command-code は cursor 枠ごと外れ claude + codex", () => {
-  const r = selectAdvisors(roster, "command-code");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("表に無い kind は先頭 2 枠と警告", () => {
-  const r = selectAdvisors(roster, "unknown");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(true);
-  expect(r.chosen).toHaveLength(MAX_ADVISORS);
-});
-
-test("members 省略は kind 自身", () => {
-  const slots = parseRoster(
+test("選出は候補表の先頭 1 枠（自己 kind を見ない）", () => {
+  expect(kinds(selectAdvisors(roster))).toEqual(["codex"]);
+  const swapped = parseRoster(
     toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'),
   ).advisors;
-  expect(slots[0]?.members).toEqual(["claude"]);
+  expect(kinds(selectAdvisors(swapped))).toEqual(["claude"]);
+  expect(selectAdvisors(swapped).chosen).toHaveLength(1);
 });
 
 test("kind は 32 文字まで（tmux の session 名・socket 名に使う）", () => {
@@ -168,20 +124,6 @@ test("kind は 32 文字まで（tmux の session 名・socket 名に使う）",
 
 test("起動されないキーは落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"claude","args":[],"model":"x"}]'))).toThrow(RosterError);
-});
-
-test("members の交差は落とす", () => {
-  const text = JSON.stringify([
-    { kind: "claude", args: [], members: ["claude", "cursor"] },
-    { kind: "grok", args: [], members: ["grok", "cursor"] },
-  ]);
-  expect(() => parseRoster(toml(text))).toThrow(RosterError);
-});
-
-test("members に kind が無い枠は落とす", () => {
-  expect(() => parseRoster(toml('[{"kind":"grok","args":[],"members":["cursor"]}]'))).toThrow(
-    RosterError,
-  );
 });
 
 test("read-only を打ち消す args は落とす", () => {
@@ -195,9 +137,7 @@ test("--print は拒否し、-p は Codex の --profile だけ通す", () => {
   expect(() => parseRoster(toml('[{"kind":"claude","args":["--print"]}]'))).toThrow(/interactive/);
   expect(() => parseRoster(toml('[{"kind":"cursor","args":["-p"]}]'))).toThrow(/interactive/);
   expect(() => parseRoster(toml('[{"kind":"grok","args":["-p"]}]'))).toThrow(/interactive/);
-  expect(() =>
-    parseRoster(toml('[{"kind":"codex","args":["-p","foo"],"members":["codex"]}]')),
-  ).not.toThrow();
+  expect(() => parseRoster(toml('[{"kind":"codex","args":["-p","foo"]}]'))).not.toThrow();
 });
 
 test("= 連結と別名の bypass も落とす", () => {
@@ -231,15 +171,11 @@ test("read-only 手段が無い kind は宣言時に落とす", () => {
 });
 
 test("起動 argv も bypass を落とす", () => {
-  const skip = { kind: "claude", args: ["--dangerously-skip-permissions"], members: ["claude"] };
+  const skip = { kind: "claude", args: ["--dangerously-skip-permissions"] };
   expect(() => directLaunchArgv(skip)).toThrow(RosterError);
-  const glued = { kind: "codex", args: ["-sdanger-full-access"], members: ["codex"] };
+  const glued = { kind: "codex", args: ["-sdanger-full-access"] };
   expect(() => directLaunchArgv(glued)).toThrow(RosterError);
-  const cfg = {
-    kind: "codex",
-    args: ["-c", "sandbox_mode=danger-full-access"],
-    members: ["codex"],
-  };
+  const cfg = { kind: "codex", args: ["-c", "sandbox_mode=danger-full-access"] };
   expect(() => directLaunchArgv(cfg)).toThrow(RosterError);
 });
 
@@ -311,7 +247,6 @@ test("cursor の read-only は --mode plan", () => {
   const argv = directLaunchArgv({
     kind: "cursor",
     args: ["--model", "cursor-grok-4.6-high"],
-    members: ["grok", "cursor", "opencode", "command-code"],
   });
   expect(argv).toEqual([
     directBinary("cursor"),
@@ -322,9 +257,8 @@ test("cursor の read-only は --mode plan", () => {
   ]);
 });
 
-test("実体 file のコメントに grok 直への差し替えが残っている", () => {
-  expect(roster.map((s) => s.kind)).not.toContain("grok");
-  expect(rosterText).toContain('#   args = ["--model", "grok-4.6", "--effort", "high"]');
+test("実体 file のコメントに model 指定の例が残っている", () => {
+  expect(rosterText).toContain('#   args = ["--model", "claude-opus-5", "--effort", "high"]');
   expect(rosterText).not.toContain("_comment");
 });
 
@@ -711,15 +645,4 @@ test("状態行と同じ形の本文行は working 側に倒す", async () => {
 
 test("読めない画面は unknown（停止と区別する）", () => {
   expect(paneState("\n\n  loading\n")).toBe("unknown");
-});
-
-test("env に印が無ければ申告をそのまま使う", () => {
-  expect(detectSelfKind({})).toBeUndefined();
-  expect(resolveSelfKind({}, "codex")).toBe("codex");
-});
-
-test("env の印と食い違う申告は落とす（自分自身に相談させない）", () => {
-  expect(resolveSelfKind({ CLAUDECODE: "1" }, "claude")).toBe("claude");
-  expect(() => resolveSelfKind({ CLAUDECODE: "1" }, "cursor")).toThrow(RosterError);
-  expect(resolveSelfKind({ CLAUDECODE: "" }, "cursor")).toBe("cursor");
 });

@@ -1,5 +1,5 @@
 // advisors-tmux.sh の巡（start → collect → ask → collect → close）。
-// tmux / claude / codex は偽物。偽 tmux は fake-tmux.ts。
+// tmux / codex は偽物。偽 tmux は fake-tmux.ts。
 
 import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,16 +13,15 @@ const SCRIPT = new URL("../agents/skills/consult/scripts/advisors-tmux.sh", impo
 const FIXTURE = new URL("fixtures/pane-state", import.meta.url).pathname;
 
 const FAKE_BIN = `#!/bin/sh
-# PATH 上の偽 claude / 偽 codex。open が直接 exec するので実バイナリが要る
+# PATH 上の偽 codex。open が直接 exec するので実バイナリが要る
 exit 0
 `;
 
-// 呼び出し元の env（自分の印・自己 kind）は持ち込まない。持ち込むと観測と申告が食い違う
+// 呼び出し元の harness の印は持ち込まない
 const CLEAN = {
   CLAUDECODE: undefined,
   CLAUDE_CODE_ENTRYPOINT: undefined,
   CURSOR_INVOKED_AS: undefined,
-  CONSULT_SELF_KIND: undefined,
 } as const;
 
 const run = async (dir: string, argv: string[]) => {
@@ -32,7 +31,6 @@ const run = async (dir: string, argv: string[]) => {
       ...CLEAN,
       PATH: `${dir}:${process.env["PATH"]}`,
       TMPDIR: dir,
-      CONSULT_SELF_KIND: "cursor",
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -48,11 +46,9 @@ const run = async (dir: string, argv: string[]) => {
 const setup = async () => {
   const dir = await mkdtemp(join(tmpdir(), "advisors-tmux-"));
   await installFakeTmux(dir);
-  await Bun.write(join(dir, "claude"), FAKE_BIN);
   await Bun.write(join(dir, "codex"), FAKE_BIN);
   await Bun.write(join(dir, "prompt"), "Review the diff.\n");
   await Bun.write(join(dir, "reply"), "Applied 1. Re-review.\n");
-  await chmod(join(dir, "claude"), 0o755);
   await chmod(join(dir, "codex"), 0o755);
   return dir;
 };
@@ -71,7 +67,7 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
 
     const first = await run(dir, ["collect", runDir, "5"]);
     expect(first.exitCode).toBe(0);
-    expect(first.stdout).toContain("=== claude 巡 1 (rc=0) ===");
+    expect(first.stdout).toContain("=== codex 巡 1 (rc=0) ===");
     expect(first.stdout).toContain("answer 1");
 
     const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
@@ -97,24 +93,22 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
     const unverified = await run(dir, ["verify", runDir]);
     expect({ exitCode: unverified.exitCode, stdout: unverified.stdout }).toEqual({
       exitCode: 1,
-      stdout: `run: ${runDir}\nround: 2\nclosed: yes\nclaude: 不明\ncodex: 不明\nverify: fail\n`,
+      stdout: `run: ${runDir}\nround: 2\nclosed: yes\ncodex: 不明\nverify: fail\n`,
     });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
 
-test("tmux backend: 1 つも起こせなければ各 agent の log 末尾を出す", async () => {
+test("tmux backend: 起こせなければ agent の log 末尾を出す", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "die"), "");
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
-    for (const kind of ["claude", "codex"]) {
-      expect(started.stderr).toContain(
-        `=== ${kind} start 失敗 ===\nFATAL\tsession が消えた（起動した harness が終了した）: c-${kind}-`,
-      );
-    }
+    expect(started.stderr).toContain(
+      "=== codex start 失敗 ===\nFATAL\tsession が消えた（起動した harness が終了した）: c-codex-",
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -126,14 +120,13 @@ test("tmux backend: ログイン待ちの agent は log に理由を残して起
     await Bun.write(join(dir, "login"), Bun.file(`${FIXTURE}/login-cursor`));
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
-    expect(started.stderr).toContain("=== claude start 失敗 ===\nFATAL\tログインが要る: claude\n");
     expect(started.stderr).toContain("=== codex start 失敗 ===\nFATAL\tログインが要る: codex\n");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
 
-test("tmux backend: verify は今の巡の全員が「指摘なし」のときだけ通る", async () => {
+test("tmux backend: verify は今の巡が「指摘なし」のときだけ通る", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "verdict"), "判定: 修正推奨\n");
@@ -142,7 +135,7 @@ test("tmux backend: verify は今の巡の全員が「指摘なし」のとき�
     const fix = await run(dir, ["verify", runDir]);
     expect({ exitCode: fix.exitCode, stdout: fix.stdout }).toEqual({
       exitCode: 1,
-      stdout: `run: ${runDir}\nround: 1\nclosed: no\nclaude: 修正推奨\ncodex: 修正推奨\nverify: fail\n`,
+      stdout: `run: ${runDir}\nround: 1\nclosed: no\ncodex: 修正推奨\nverify: fail\n`,
     });
 
     await Bun.write(join(dir, "verdict"), "判定: 指摘なし\n");
@@ -150,54 +143,15 @@ test("tmux backend: verify は今の巡の全員が「指摘なし」のとき�
     // 回収前は未終了
     const early = await run(dir, ["verify", runDir]);
     expect(early.exitCode).toBe(1);
-    expect(early.stdout).toContain("claude: 未回収");
+    expect(early.stdout).toContain("codex: 未回収");
     expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(0);
     const pass = await run(dir, ["verify", runDir]);
     expect({ exitCode: pass.exitCode, stdout: pass.stdout }).toEqual({
       exitCode: 0,
-      stdout: `run: ${runDir}\nround: 2\nclosed: no\nclaude: 指摘なし\ncodex: 指摘なし\nverify: pass\n`,
+      stdout: `run: ${runDir}\nround: 2\nclosed: no\ncodex: 指摘なし\nverify: pass\n`,
     });
     expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
-
-test("tmux backend: CONSULT_SELF_KIND 無しは start できない", async () => {
-  const dir = await setup();
-  try {
-    const proc = Bun.spawn(["sh", SCRIPT, "start", join(dir, "prompt")], {
-      env: { ...process.env, ...CLEAN, PATH: `${dir}:${process.env["PATH"]}`, TMPDIR: dir },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stderr = await new Response(proc.stderr).text();
-    expect(await proc.exited).toBe(2);
-    expect(stderr).toContain("CONSULT_SELF_KIND が無い");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
-
-test("tmux backend: env の印と食い違う自己 kind は start できない", async () => {
-  const dir = await setup();
-  try {
-    const proc = Bun.spawn(["sh", SCRIPT, "start", join(dir, "prompt")], {
-      env: {
-        ...process.env,
-        ...CLEAN,
-        PATH: `${dir}:${process.env["PATH"]}`,
-        TMPDIR: dir,
-        CLAUDECODE: "1",
-        CONSULT_SELF_KIND: "cursor",
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stderr = await new Response(proc.stderr).text();
-    expect(await proc.exited).toBe(2);
-    expect(stderr).toContain("申告 cursor / 観測 claude");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});

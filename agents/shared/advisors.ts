@@ -1,25 +1,21 @@
 // アドバイザーの選出・完走判定・pane 状態判定。roster の解釈は roster.ts。
 //
-//   bun advisors.ts select --roster <file> --self <kind>
+//   bun advisors.ts select --roster <file>
 //   bun advisors.ts launch-argv --roster <file> --kind <kind>
 //   bun advisors.ts complete --output <file> --marker <token>
 //   bun advisors.ts verdict --output <file> --marker <token>
 //   bun advisors.ts extract --raw <file> [--prev <marker>]
 //   bun advisors.ts pane-state [--screen <file>]   （既定は stdin）
 //   bun advisors.ts trust-key [--screen <file>]    （既定は stdin）
-//   bun advisors.ts self-kind --declared <kind>
 //
 // stdout はどれも行で返す（sh がそのまま読める形。JSON を挟まない）。
-// 表に無い self は先頭 2 枠 + stderr へ警告。env の印と食い違う自己 kind の申告は落とす。
+// 選出は候補表の先頭 1 枠。自己 kind は見ない（書き手と別 session であれば足りる）。
 // TUI 画面の読み方はこのファイルだけが持つ。
 
 import { RosterError, type Slot, directLaunchArgv, flag, parseRoster } from "./roster.ts";
 
-export const MAX_ADVISORS = 2;
-
 export type Selection = {
   readonly chosen: readonly Slot[];
-  readonly warning: boolean;
 };
 
 export type CompleteReason = "出力なし" | "マーカー無し";
@@ -239,41 +235,6 @@ export const trustKey = (screen: string): string | undefined => {
 };
 
 /**
- * 実行器が自分で立てる env の印。親から継承した印は create で落としてある。
- *
- * 印を持たない実行器がある。観測できないときだけ申告を使う —— 観測できたのに
- * 食い違う申告は、自分自身をアドバイザーに選ぶ事故になるので落とす。
- */
-const SELF_MARKER: readonly (readonly [string, string])[] = [
-  ["CLAUDECODE", "claude"],
-  ["CURSOR_INVOKED_AS", "cursor"],
-];
-
-export const detectSelfKind = (
-  env: Readonly<Record<string, string | undefined>>,
-): string | undefined => {
-  for (const [name, kind] of SELF_MARKER) {
-    if ((env[name] ?? "") !== "") return kind;
-  }
-  return undefined;
-};
-
-/** 使う自己 kind。観測と申告が食い違えば RosterError。 */
-export const resolveSelfKind = (
-  env: Readonly<Record<string, string | undefined>>,
-  declared: string,
-): string => {
-  const detected = detectSelfKind(env);
-  if (detected === undefined) return declared;
-  if (detected !== declared) {
-    throw new RosterError(
-      `自己 kind の申告が env の観測と違う: 申告 ${declared} / 観測 ${detected}`,
-    );
-  }
-  return detected;
-};
-
-/**
  * 前巡の marker より後ろ。巡ごとの応答だけを切り出す。
  *
  * 履歴には過去の巡も残る。marker は巡ごとに一意なので、最後の出現を境にする。
@@ -285,12 +246,10 @@ export const responseAfter = (raw: string, prev: string): string => {
   return rest.replace(/^\n+/u, "");
 };
 
-export const selectAdvisors = (slots: readonly Slot[], selfKind: string): Selection => {
-  const matched = slots.find((s) => s.members.includes(selfKind));
-  const remaining = matched === undefined ? slots : slots.filter((s) => s !== matched);
-  const chosen = remaining.slice(0, MAX_ADVISORS);
-  if (chosen.length === 0) throw new RosterError("選出できる枠が無い");
-  return { chosen, warning: matched === undefined };
+export const selectAdvisors = (slots: readonly Slot[]): Selection => {
+  const first = slots[0];
+  if (first === undefined) throw new RosterError("選出できる枠が無い");
+  return { chosen: [first] };
 };
 
 const main = async (): Promise<void> => {
@@ -299,14 +258,9 @@ const main = async (): Promise<void> => {
   try {
     if (cmd === "select") {
       const rosterPath = flag(argv, "--roster");
-      const selfKind = flag(argv, "--self");
       if (rosterPath === undefined) throw new RosterError("--roster が無い");
-      if (selfKind === undefined || selfKind === "") throw new RosterError("--self が無い");
       const { advisors } = parseRoster(await Bun.file(rosterPath).text());
-      const { chosen, warning } = selectAdvisors(advisors, selfKind);
-      if (warning) {
-        console.error(`WARN\t自己 kind が候補表に無い: ${selfKind}`);
-      }
+      const { chosen } = selectAdvisors(advisors);
       process.stdout.write(chosen.map((slot) => `${slot.kind}\n`).join(""));
       return;
     }
@@ -332,12 +286,6 @@ const main = async (): Promise<void> => {
       const file = Bun.file(outputPath);
       const text = (await file.exists()) ? await file.text() : "";
       process.stdout.write(`${advisorVerdict(text, marker)}\n`);
-      return;
-    }
-    if (cmd === "self-kind") {
-      const declared = flag(argv, "--declared");
-      if (declared === undefined || declared === "") throw new RosterError("--declared が無い");
-      process.stdout.write(`${resolveSelfKind(process.env, declared)}\n`);
       return;
     }
     if (cmd === "pane-state" || cmd === "trust-key") {
@@ -379,7 +327,7 @@ const main = async (): Promise<void> => {
       return;
     }
     throw new RosterError(
-      "使い方: advisors.ts select | launch-argv | complete | verdict | extract | pane-state | trust-key | self-kind",
+      "使い方: advisors.ts select | launch-argv | complete | verdict | extract | pane-state | trust-key",
     );
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);

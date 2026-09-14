@@ -12,8 +12,6 @@ const run = async (dir: string, env: Record<string, string | undefined>, argv: s
   const proc = Bun.spawn(["sh", SCRIPT, ...argv], {
     env: {
       ...process.env,
-      // 呼び出し元の自己 kind を持ち込まない（tmux backend の必須 env 検査を素で見る）
-      CONSULT_SELF_KIND: undefined,
       ...env,
       PATH: `${dir}:${process.env["PATH"]}`,
       TMPDIR: dir,
@@ -54,10 +52,10 @@ test("未知の CONSULT_BACKEND は fatal", async () => {
 test("CONSULT_BACKEND=tmux は advisors-tmux へ委譲する", async () => {
   const dir = await mkdtemp(join(tmpdir(), "consult-backend-"));
   try {
-    // advisors-tmux は CONSULT_SELF_KIND 無しで fatal するはず（委譲の証拠）
+    // advisors-tmux は空の prompt で fatal するはず（委譲の証拠）
     const r = await run(dir, { CONSULT_BACKEND: "tmux" }, ["start", "/dev/null"]);
     expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain("CONSULT_SELF_KIND が無い");
+    expect(r.stderr).toContain("prompt が空 / 不正");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
