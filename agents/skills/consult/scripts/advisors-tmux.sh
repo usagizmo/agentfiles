@@ -190,7 +190,7 @@ start)
 		while IFS= read -r a; do
 			[ -n "$a" ] || continue
 			printf '=== %s start 失敗 ===\n' "$a" >&2
-			tail -n 20 "$run/$a/log" 2>/dev/null >&2
+			tail -n 20 "$run/$a/log" >&2 2>/dev/null
 		done <"$run/advisors"
 		kill_sessions "$run"
 		rm -rf "$run"

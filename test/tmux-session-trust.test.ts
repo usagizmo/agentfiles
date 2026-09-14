@@ -18,15 +18,21 @@ if args[:1] == ["-L"]:
     args = args[2:]
 
 if args[0] == "has-session":
-    # create の検査用。absent があれば「session はまだ無い」
-    raise SystemExit(1 if (root / "absent").exists() else 0)
+    # absent: create 前でまだ無い。gone: 起動した harness が終了して消えた
+    raise SystemExit(1 if (root / "absent").exists() or (root / "gone").exists() else 0)
 if args[0] == "list-panes":
-    sys.stdout.write("%3\\n")
+    if not (root / "gone").exists():
+        sys.stdout.write("%3\\n")
     raise SystemExit(0)
 if args[0] == "capture-pane":
+    if (root / "gone").exists():
+        raise SystemExit("can't find pane: " + args[args.index("-t") + 1])
     if args[args.index("-t") + 1] != "%3":
         raise SystemExit("capture-pane: unexpected target " + args[args.index("-t") + 1])
     sys.stdout.write((root / "screen").read_text())
+    # vanish: 1 画面を返した直後に harness が終了する
+    if (root / "vanish").exists():
+        (root / "gone").write_text("")
     raise SystemExit(0)
 if args[0] == "new-session":
     (root / "new-session").write_text("\\n".join(args) + "\\n")
@@ -60,8 +66,12 @@ const runScript = async (dir: string, argv: string[]) => {
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-  return { stdout, exitCode };
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, exitCode };
 };
 
 const TRUST_SCREEN = `Do you trust the files in this folder?
@@ -126,10 +136,69 @@ test("accept-trust: 対話が消えなければ失敗（勝手に選び直さな
   }
 });
 
+// 起動直後に終了した harness を timeout まで待たない
+test.each(["wait-ready", "accept-trust"] as const)(
+  "%s: session が消えたら timeout を待たず exit 2",
+  async (cmd) => {
+    const dir = await setup("Loading\n");
+    try {
+      await writeFile(join(dir, "vanish"), "");
+      const started = Date.now();
+      const result = await runScript(dir, [cmd, "s", "8"]);
+      expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({
+        exitCode: 2,
+        stderr: "FATAL\tsession が消えた（起動した harness が終了した）: s\n",
+      });
+      expect(Date.now() - started).toBeLessThan(6_000);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  15_000,
+);
+
+// 画面を読めないまま timeout まで待たない（unknown と区別する）
+test.each(["wait-ready", "accept-trust"] as const)(
+  "%s: 画面判定が失敗したら timeout を待たず exit 2",
+  async (cmd) => {
+    const dir = await setup("Loading\n");
+    try {
+      await writeFile(join(dir, "bun"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+      const started = Date.now();
+      const result = await runScript(dir, [cmd, "s", "8"]);
+      expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({
+        exitCode: 2,
+        stderr: "FATAL\t画面を判定できない: s\n",
+      });
+      expect(Date.now() - started).toBeLessThan(6_000);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  15_000,
+);
+
 test("state: 表示中の画面の状態語を返す", async () => {
   const dir = await setup(await readFile(join(FIXTURE, "working-codex"), "utf8"));
   try {
-    expect(await runScript(dir, ["state", "s"])).toEqual({ stdout: "working\n", exitCode: 0 });
+    expect(await runScript(dir, ["state", "s"])).toEqual({
+      stdout: "working\n",
+      stderr: "",
+      exitCode: 0,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("create: cwd は server の状態に依らず起動 argv で固定する", async () => {
+  const dir = await setup("");
+  try {
+    await writeFile(join(dir, "absent"), "");
+    expect((await runScript(dir, ["create", "s", dir, "--", "tmux", "a"])).exitCode).toBe(0);
+    const args = await readFile(join(dir, "new-session"), "utf8");
+    expect(args).toEndWith(`\n--\n/usr/bin/env\n-C\n${dir}\n--\n${dir}/tmux\na\n`);
+    expect(args).not.toContain("-c\n");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
