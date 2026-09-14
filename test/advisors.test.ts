@@ -588,6 +588,40 @@ test("cursor の起動直後の実画面も ready", async () => {
   expect(paneState(await paneFixture("startup-cursor"))).toBe("ready");
 });
 
+// ログイン待ちは入力を受けない。unknown にすると起動の timeout まで待ち、理由も残らない
+test("cursor のログイン待ちの実画面は login", async () => {
+  expect(paneState(await paneFixture("login-cursor"))).toBe("login");
+});
+
+test("応答本文のログイン案内では login にしない", async () => {
+  const ready = await paneFixture("ready-codex");
+  const anchor = "• up.sh と doctor.sh を確認します。";
+  expect(paneState(ready.replace(anchor, `${anchor}\n  Press any key to log in...`))).toBe("ready");
+});
+
+// 入力欄の無い画面でも、trust 対話と生成中の状態行はログイン案内の引用より強い
+const LOGIN_QUOTE = "Cursor Agent\nPress any key to log in...\n";
+test.each([
+  [
+    "trust 対話",
+    `${LOGIN_QUOTE}Do you trust the files in this folder?\n❯ 1. Yes\n  2. No\n`,
+    "trust",
+  ],
+  ["生成中の状態行", `${LOGIN_QUOTE}✽ Propagating… (6s · esc to interrupt)\n`, "working"],
+] as const)("%s の画面にログイン案内の引用があっても login にしない", (_label, screen, state) => {
+  expect(paneState(screen)).toBe(state);
+});
+
+// 実画面で確かめていない文言・識別行の欠けた画面は login にしない
+test.each([
+  "Cursor Agent\nPress any key to log in\n",
+  "Cursor Agent\nPress any key to log in…\n",
+  "Cursor Agent\npress any key to log in...\n",
+  "Press any key to log in...\n",
+])("未観測の画面 %p は login にしない", (screen) => {
+  expect(paneState(screen)).toBe("unknown");
+});
+
 test("trust 対話は ready より先に取る", () => {
   const screen =
     "Do you trust the files in this folder?\n\n❯ 1. Yes, I trust this folder\n  2. No\n";

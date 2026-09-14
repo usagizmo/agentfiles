@@ -9,6 +9,8 @@ import { expect, test } from "bun:test";
 const SCRIPT = new URL("../agents/skills/dispatch/scripts/worker-tmux.sh", import.meta.url)
   .pathname;
 
+const FIXTURE = new URL("fixtures/pane-state", import.meta.url).pathname;
+
 const FAKE_TMUX = `#!/usr/bin/env python3
 import pathlib, re, sys
 root = pathlib.Path(__file__).parent
@@ -44,7 +46,9 @@ if args[0] == "new-session":
     if (root / "die").exists():
         raise SystemExit(0)
     d = session_dir(name)
-    (d / "screen").write_text("❯ \\n")
+    # login: 起動した harness がログイン待ちの画面を出す
+    login = root / "login"
+    (d / "screen").write_text(login.read_text() if login.exists() else "❯ \\n")
     raise SystemExit(0)
 
 if args[0] == "send-keys":
@@ -131,7 +135,21 @@ test("dispatch tmux: 起こせなければ log 末尾を出す", async () => {
     await Bun.write(join(dir, "die"), "");
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
-    expect(started.stderr).toContain("(log の末尾)\nFATAL\tsession が無い: d-claude-");
+    expect(started.stderr).toContain(
+      "(log の末尾)\nFATAL\tsession が消えた（起動した harness が終了した）: d-claude-",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("dispatch tmux: ログイン待ちなら理由を出して起動を止める", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "login"), Bun.file(`${FIXTURE}/login-cursor`));
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(2);
+    expect(started.stderr).toContain("FATAL\tログインが要る: claude\n");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

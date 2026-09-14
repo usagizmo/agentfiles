@@ -177,7 +177,21 @@ const isStatusLine = (line: string): boolean => {
   return matched !== null && STATUS_HEAD.test(line.slice(0, matched.index));
 };
 
-export type PaneState = "trust" | "working" | "ready" | "unknown";
+/**
+ * 実行器がログインを待つ画面。人がログインするまで prompt は届かない。
+ *
+ * 実画面で確かめた実行器の行の組だけを置き、組の全行が行全体で揃うときだけ取る。
+ * trust / working より後に見る —— 生成中の応答本文や対話の画面にも同じ文が現れる。
+ */
+const LOGIN_SCREENS: readonly (readonly RegExp[])[] = [
+  // cursor-agent
+  [/^Cursor Agent$/u, /^Press any key to log in\.\.\.$/u],
+];
+
+const isLoginScreen = (lines: readonly string[]): boolean =>
+  LOGIN_SCREENS.some((screen) => screen.every((row) => lines.some((line) => row.test(line))));
+
+export type PaneState = "login" | "trust" | "working" | "ready" | "unknown";
 
 /**
  * 表示中の 1 画面から実行器の状態を読む。
@@ -200,7 +214,8 @@ export const paneState = (screen: string): PaneState => {
     if (lines.some((line) => TRUST_QUESTION.test(line)) && trustKey(screen) !== undefined) {
       return "trust";
     }
-    return lines.some(isStatusLine) ? "working" : "unknown";
+    if (lines.some(isStatusLine)) return "working";
+    return isLoginScreen(lines) ? "login" : "unknown";
   }
   // 入力欄の右端の中断案内と、入力欄まわりの状態行だけを見る（本文は見ない）
   if (INTERRUPT_HINT.test(lines[input] ?? "")) return "working";

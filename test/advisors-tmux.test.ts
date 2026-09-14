@@ -9,6 +9,8 @@ import { expect, test } from "bun:test";
 const SCRIPT = new URL("../agents/skills/consult/scripts/advisors-tmux.sh", import.meta.url)
   .pathname;
 
+const FIXTURE = new URL("fixtures/pane-state", import.meta.url).pathname;
+
 const FAKE_TMUX = `#!/usr/bin/env python3
 import pathlib, re, sys
 root = pathlib.Path(__file__).parent
@@ -44,7 +46,9 @@ if args[0] == "new-session":
     if (root / "die").exists():
         raise SystemExit(0)
     d = session_dir(name)
-    (d / "screen").write_text("❯ \\n")
+    # login: 起動した harness がログイン待ちの画面を出す
+    login = root / "login"
+    (d / "screen").write_text(login.read_text() if login.exists() else "❯ \\n")
     raise SystemExit(0)
 
 if args[0] == "send-keys":
@@ -194,8 +198,24 @@ test("tmux backend: 1 つも起こせなければ各 agent の log 末尾を出�
     await Bun.write(join(dir, "die"), "");
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
-    expect(started.stderr).toContain("=== claude start 失敗 ===\nFATAL\tsession が無い: c-claude-");
-    expect(started.stderr).toContain("wait-ready に失敗（TUI 未準備）\n=== codex start 失敗 ===");
+    for (const kind of ["claude", "codex"]) {
+      expect(started.stderr).toContain(
+        `=== ${kind} start 失敗 ===\nFATAL\tsession が消えた（起動した harness が終了した）: c-${kind}-`,
+      );
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: ログイン待ちの agent は log に理由を残して起こせなかった扱いにする", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "login"), Bun.file(`${FIXTURE}/login-cursor`));
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(2);
+    expect(started.stderr).toContain("=== claude start 失敗 ===\nFATAL\tログインが要る: claude\n");
+    expect(started.stderr).toContain("=== codex start 失敗 ===\nFATAL\tログインが要る: codex\n");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

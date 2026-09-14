@@ -122,20 +122,9 @@ start)
 	session=$(printf '%s' "$session" | tr -cd 'a-zA-Z0-9_-' | cut -c1-50)
 	printf '%s\n' "$session" >"$run/session"
 	caller_cwd=$PWD
-	if ! sh "$tmux_sh" create "$session" "$caller_cwd" -- "$@" >>"$run/log" 2>&1; then
-		fail_start "tmux create に失敗"
-	fi
-	# detached のため Claude workspace trust 対話が出たら Yes を選ぶ（consult と同じ）
-	sh "$tmux_sh" accept-trust "$session" 20 >>"$run/log" 2>&1 || true
-	sh "$tmux_sh" wait-ready "$session" 45 >>"$run/log" 2>&1
-	wr=$?
-	if [ "$wr" -eq 3 ]; then
-		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
-		fail_start "trust 対話を越えられない: $PWD"
-	fi
-	if [ "$wr" -ne 0 ]; then
-		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
-		fail_start "wait-ready に失敗（TUI 未準備）"
+	# 起こせなかった理由は open が log へ FATAL 行で残す
+	if ! sh "$tmux_sh" open "$session" "$caller_cwd" -- "$@" >>"$run/log" 2>&1; then
+		fail_start "worker を起こせない"
 	fi
 	if ! send_round "$run" 1; then
 		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true

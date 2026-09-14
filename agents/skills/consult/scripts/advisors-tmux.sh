@@ -157,23 +157,9 @@ start)
 			printf '実行ファイルが PATH に無い: %s\n' "${1:-?}" >>"$run/$a/log"
 			continue
 		fi
-		if ! sh "$tmux_sh" create "$session" "$caller_cwd" -- "$@" >>"$run/$a/log" 2>&1; then
+		# 起こせなかった理由は open が log へ FATAL 行で残す
+		if ! sh "$tmux_sh" open "$session" "$caller_cwd" -- "$@" >>"$run/$a/log" 2>&1; then
 			printf '%s\n' 1 >"$run/$a/start.rc"
-			printf 'tmux create に失敗\n' >>"$run/$a/log"
-			continue
-		fi
-		# Claude の workspace trust 対話があれば Yes を選ぶ
-		sh "$tmux_sh" accept-trust "$session" 20 >>"$run/$a/log" 2>&1 || true
-		sh "$tmux_sh" wait-ready "$session" 45 >>"$run/$a/log" 2>&1
-		wr=$?
-		if [ "$wr" -ne 0 ]; then
-			printf '%s\n' 1 >"$run/$a/start.rc"
-			if [ "$wr" -eq 3 ]; then
-				printf 'trust 対話を越えられない: %s\n' "$caller_cwd" >>"$run/$a/log"
-			else
-				printf 'wait-ready に失敗（TUI 未準備）\n' >>"$run/$a/log"
-			fi
-			sh "$tmux_sh" kill "$session" >>"$run/$a/log" 2>&1 || true
 			continue
 		fi
 		if send_round "$run" "$a" 1; then
