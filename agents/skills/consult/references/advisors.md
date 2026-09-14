@@ -34,8 +34,6 @@ CONSULT_BACKEND=tmux \
 
 tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult / dispatch が共有）。実装役は `dispatch` skill。
 
-session ごとに `PATH` を `-e` で渡し、呼び出し元の印（`CLAUDECODE` 等）は空にする。tmux server の global env は最初に server を起こした client のものなので当てにしない。
-
 ## 起動・対話・回収・終了
 
 ```
@@ -59,7 +57,7 @@ session ごとに `PATH` を `-e` で渡し、呼び出し元の印（`CLAUDECOD
 
 ## レイアウト
 
-選出された kind ごとに **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`。人が `tmux -L agentfiles attach -t <session>` で覗ける。起動待ち（workspace trust 対話の Yes・起こせない理由）は `tmux-session.sh open` が持つ。
+選出された kind ごとに **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`。tmux server は session ごとに分かれ（socket 名 = session 名）、人が `tmux -L <session> attach` で覗ける。起動待ち（workspace trust 対話の Yes・起こせない理由）は `tmux-session.sh open` が持つ。
 
 ## 不変条件
 

@@ -1,5 +1,5 @@
 // tmux-session.sh の画面まわり。open の起動待ち（trust 対話の受理・失敗理由）と、pane id の引き方。
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -14,6 +14,13 @@ const FAKE = `#!/usr/bin/env python3
 import pathlib, sys
 root = pathlib.Path(__file__).parent
 args = sys.argv[1:]
+# server の振る舞いをユーザー設定に左右させない呼び出しだけを受ける
+if args[:2] != ["-f", "/dev/null"]:
+    raise SystemExit("tmux: -f /dev/null が無い: " + repr(args))
+args = args[2:]
+# どの server へ向けた呼び出しかを残す（socket は session ごと）
+with (root / "sockets").open("a") as f:
+    f.write((args[1] if args[:1] == ["-L"] else "-") + "\\n")
 if args[:1] == ["-L"]:
     args = args[2:]
 
@@ -38,12 +45,16 @@ if args[0] == "new-session":
     (root / "new-session").write_text("\\n".join(args) + "\\n")
     (root / "absent").unlink()
     raise SystemExit(0)
-if args[0] == "kill-session":
+if args[0] == "kill-server":
+    # unkillable: server を止められない
+    if (root / "unkillable").exists():
+        raise SystemExit(1)
+    # racing: kill-server が届く前に server が自分で終わる
+    if (root / "racing").exists():
+        (root / "gone").write_text("")
+        raise SystemExit(1)
     (root / "killed").write_text("")
-    raise SystemExit(0)
-if args[0] == "show-environment":
-    # server の global env（この client の env には無い印が残っている）
-    sys.stdout.write("CLAUDE_CODE_SESSION_ID=from-server\\n")
+    (root / "gone").write_text("")
     raise SystemExit(0)
 if args[0] == "send-keys":
     keys = args[args.index("-t") + 2:]
@@ -152,14 +163,20 @@ test("open: trust 対話が消えなければ失敗（勝手に選び直さな�
   }
 });
 
-// ログイン待ち・消失・判定器の失敗は、timeout を待たずに理由を出して session を残さない
+// ログイン待ち・消失・判定器の失敗は、timeout を待たずに理由を出して session を残さない。
+// 消失した session の server は既に終わっているので止めに行かない
 test.each([
-  ["ログイン待ち", "login", "FATAL\tログインが要る: tmux\n"],
-  ["session の消失", "vanish", "FATAL\tsession が消えた（起動した harness が終了した）: s\n"],
-  ["画面判定の失敗", "judge", "FATAL\t画面を判定できない: s\n"],
+  ["ログイン待ち", "login", "FATAL\tログインが要る: tmux\n", true],
+  [
+    "session の消失",
+    "vanish",
+    "FATAL\tsession が消えた（起動した harness が終了した）: s\n",
+    false,
+  ],
+  ["画面判定の失敗", "judge", "FATAL\t画面を判定できない: s\n", true],
 ] as const)(
   "open: %s は timeout を待たず理由を出して exit 2",
-  async (_label, kind, stderr) => {
+  async (_label, kind, stderr, killed) => {
     const screen =
       kind === "login" ? await readFile(join(FIXTURE, "login-cursor"), "utf8") : "Loading\n";
     const dir = await setup(screen);
@@ -171,12 +188,107 @@ test.each([
       const started = Date.now();
       expect(await open(dir, 8)).toEqual({ stdout: "", stderr, exitCode: 2 });
       expect(Date.now() - started).toBeLessThan(6_000);
-      expect(await exists(join(dir, "killed"))).toBe(true);
+      expect(await exists(join(dir, "killed"))).toBe(killed);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   },
   15_000,
+);
+
+// server が終わっても socket file は残る。session ごとの socket を使い捨てるので溜めない
+const socketDir = (dir: string) => join(dir, `tmux-${process.getuid?.()}`);
+
+const socketFile = async (dir: string) => {
+  await mkdir(socketDir(dir), { recursive: true });
+  const socket = join(socketDir(dir), "s");
+  await writeFile(socket, "");
+  return socket;
+};
+
+test("open の失敗は server を止めて socket file を消す", async () => {
+  const dir = await setup(await readFile(join(FIXTURE, "login-cursor"), "utf8"));
+  try {
+    const socket = await socketFile(dir);
+    const argv = ["open", "s", dir, "--timeout", "2", "--", "tmux"];
+    expect((await runScript(dir, argv, { TMUX_TMPDIR: dir })).exitCode).toBe(2);
+    expect(await exists(join(dir, "killed"))).toBe(true);
+    expect(await exists(socket)).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  ["生きている server", true],
+  ["先に終わった server", false],
+] as const)("kill: %s の socket file を消す", async (_label, alive) => {
+  const dir = await setup("");
+  try {
+    const socket = await socketFile(dir);
+    if (alive) await rm(join(dir, "absent"));
+    expect((await runScript(dir, ["kill", "s"], { TMUX_TMPDIR: dir })).exitCode).toBe(0);
+    expect(await exists(join(dir, "killed"))).toBe(alive);
+    expect(await exists(socket)).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("kill: kill-server の前に server が自分で終わっても socket file を消して成功する", async () => {
+  const dir = await setup("");
+  try {
+    const socket = await socketFile(dir);
+    await rm(join(dir, "absent"));
+    await writeFile(join(dir, "racing"), "");
+    expect(await runScript(dir, ["kill", "s"], { TMUX_TMPDIR: dir })).toEqual({
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    });
+    expect(await exists(socket)).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// socket file を消すとその server へ辿れなくなる
+test("kill: server を止められなければ socket file を残して失敗する", async () => {
+  const dir = await setup("");
+  try {
+    const socket = await socketFile(dir);
+    await rm(join(dir, "absent"));
+    await writeFile(join(dir, "unkillable"), "");
+    expect(await runScript(dir, ["kill", "s"], { TMUX_TMPDIR: dir })).toEqual({
+      stdout: "",
+      stderr: "FATAL\tsession を殺せない: s\n",
+      exitCode: 2,
+    });
+    expect(await exists(socket)).toBe(true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// session 名は socket file のパスになる。境界の外のファイルに触れず、tmux も呼ばない
+test.each(["../sentinel", "S", "-x", "a".repeat(49)])(
+  "session 名 %p は tmux を呼ばずに落とす",
+  async (name) => {
+    const dir = await setup("");
+    try {
+      await mkdir(socketDir(dir), { recursive: true });
+      await writeFile(join(dir, "sentinel"), "");
+      expect(await runScript(dir, ["kill", name], { TMUX_TMPDIR: dir })).toEqual({
+        stdout: "",
+        stderr: `FATAL\tsession 名が不正: ${name}\n`,
+        exitCode: 2,
+      });
+      expect(await exists(join(dir, "sentinel"))).toBe(true);
+      expect(await exists(join(dir, "sockets"))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
 );
 
 test("state: 表示中の画面の状態語を返す", async () => {
@@ -193,28 +305,36 @@ test("state: 表示中の画面の状態語を返す", async () => {
   }
 });
 
-test("open: cwd は server の状態に依らず起動 argv で固定する", async () => {
-  const dir = await setup(await readFile(join(FIXTURE, "ready-codex"), "utf8"));
+// 共有 server は起こした呼び出し元の cwd・env・実行環境を後続の session へ漏らす
+test("open: tmux の呼び出しはすべて session 名の socket へ向ける", async () => {
+  const dir = await setup(TRUST_SCREEN, await readFile(join(FIXTURE, "ready-claude"), "utf8"));
   try {
-    expect((await open(dir, 2)).exitCode).toBe(0);
-    const args = await readFile(join(dir, "new-session"), "utf8");
-    expect(args).toEndWith(`\n--\n/usr/bin/env\n-C\n${dir}\n--\n${dir}/tmux\n`);
-    expect(args).not.toContain("-c\n");
+    expect((await open(dir, 5)).exitCode).toBe(0);
+    const sockets = (await readFile(join(dir, "sockets"), "utf8")).trim().split("\n");
+    expect(sockets.length).toBeGreaterThan(3);
+    expect(new Set(sockets)).toEqual(new Set(["s"]));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test("open: 呼び出し元にも server にも残る印を空にして渡す", async () => {
+test("open: cwd は -c で渡し、起動 argv を直接 exec する", async () => {
+  const dir = await setup(await readFile(join(FIXTURE, "ready-codex"), "utf8"));
+  try {
+    expect((await open(dir, 2)).exitCode).toBe(0);
+    const args = await readFile(join(dir, "new-session"), "utf8");
+    expect(args).toContain(`\n-c\n${dir}\n`);
+    expect(args).toEndWith(`\n--\n${dir}/tmux\n`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("open: 呼び出し元の印を空にして渡す", async () => {
   const dir = await setup(await readFile(join(FIXTURE, "ready-codex"), "utf8"));
   try {
     expect((await open(dir, 2, { CLAUDECODE: "1" })).exitCode).toBe(0);
-    const args = await readFile(join(dir, "new-session"), "utf8");
-    // 呼び出し元の env にある印
-    expect(args).toContain("-e\nCLAUDECODE=\n");
-    // server の global env にだけ残る印
-    expect(args).toContain("-e\nCLAUDE_CODE_SESSION_ID=\n");
-    expect(args).toContain(`-e\nPATH=`);
+    expect(await readFile(join(dir, "new-session"), "utf8")).toContain("-e\nCLAUDECODE=\n");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

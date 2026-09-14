@@ -28,7 +28,8 @@ export type Roster = {
 const SLOT_KEYS = new Set(["kind", "args", "members"]);
 const WORKER_KEYS = new Set(["kind", "args"]);
 const ROSTER_KEYS = new Set(["advisors", "resolve"]);
-const KIND_RE = /^[a-z][a-z0-9_-]*$/;
+// kind は tmux の session 名と socket 名（パス長に上限がある）の一部になる
+const KIND_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const APPROVAL_SKIPPING_MODES = new Set(["bypassPermissions", "dontAsk"]);
 const BYPASS = new Set([
   "--dangerously-skip-permissions",

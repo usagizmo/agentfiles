@@ -22,22 +22,47 @@ fatal() {
 }
 
 cmd=${1:-}
-[ -n "$cmd" ] || fatal "使い方: tmux-session.sh open|paste-file|capture|screen|state|exists|kill ..."
+[ -n "$cmd" ] || fatal "使い方: tmux-session.sh open|paste-file|capture|screen|state|exists|kill <session> ..."
 shift
+session=${1:-}
+[ -n "$session" ] || fatal "session 名が無い"
+shift
+# session 名は socket 名と socket file のパスになる。文字種と長さを tmux を呼ぶ前に固定する
+case $session in
+-* | *[![:lower:][:digit:]_-]*) fatal "session 名が不正: $session" ;;
+esac
+[ ${#session} -le 48 ] || fatal "session 名が不正: $session"
 
 command -v tmux >/dev/null 2>&1 || fatal "tmux が PATH に無い"
 
-# ユーザー default socket を汚さない。この repo の session 専用。
-AF_TMUX_SOCKET=agentfiles
-tmux_af() {
-	tmux -L "$AF_TMUX_SOCKET" "$@"
+# socket は session ごとに分ける（socket 名 = session 名）。tmux server は起こした
+# 呼び出し元の cwd・env・実行環境を引き継ぎ、以降の session もそれを引くため、
+# 別の呼び出し元の session と server を共有しない。ユーザー default socket も汚さない。
+# -f /dev/null: server の振る舞い（remain-on-exit / exit-empty / base-index 等）をユーザー設定に左右させない
+tmux_session() {
+	tmux -f /dev/null -L "$session" "$@"
+}
+
+# server を止めて socket file を消す。server が先に終わっていても socket file は残る。
+# 生きている server を止められなければ socket file を残す（消すとその server へ辿れなくなる）
+destroy_session() {
+	# kill-server の失敗は、その間に server が自分で終わった場合と区別する
+	if tmux_session has-session -t "=$session" 2>/dev/null; then
+		tmux_session kill-server 2>/dev/null ||
+			! tmux_session has-session -t "=$session" 2>/dev/null || return 1
+	fi
+	rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$session"
 }
 
 # pane は base-index / pane-base-index に依存しない。session の pane id を引く
 target_of() {
-	t_id=$(tmux_af list-panes -t "=$1" -F '#{pane_id}' 2>/dev/null | head -n 1)
+	t_id=$(tmux_session list-panes -t "=$session" -F '#{pane_id}' 2>/dev/null | head -n 1)
 	[ -n "$t_id" ] || return 1
 	printf '%s' "$t_id"
+}
+
+require_session() {
+	tmux_session has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
 }
 
 here=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) ||
@@ -49,20 +74,11 @@ require_judge() {
 	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
 }
 
-# 表示中の 1 画面から状態語を読む
-pane_state() {
-	require_judge
-	p_target=$(target_of "$1") || fatal "pane が無い: $1"
-	tmux_af capture-pane -t "$p_target" -p 2>/dev/null |
-		bun "$advisors_ts" pane-state
-}
-
-# session を作り、起動 argv を直接 exec する。harness が終われば pane / session が消える
+# session を作り、起動 argv を直接 exec する。harness が終われば pane / session と server が消える
 create_session() {
-	c_session=$1
-	c_workdir=$2
-	shift 2
-	tmux_af has-session -t "=$c_session" 2>/dev/null && fatal "session が既にある: $c_session"
+	c_workdir=$1
+	shift
+	tmux_session has-session -t "=$session" 2>/dev/null && fatal "session が既にある: $session"
 	c_bin=$1
 	shift
 	case $c_bin in
@@ -75,32 +91,21 @@ create_session() {
 		esac
 		;;
 	esac
-	# cwd は env -C で起動 argv に固定する。new-session -c は server の状態次第で
-	# 無視され、pane が server 自身の cwd（消えていることがある）で起動するため。
-	#
-	# 渡す env は session ごとに -e で明示する。server の global env は最初に
-	# server を起こした client のもので、以降の session もそれを引くため。
+	# server はこの呼び出しで起き、今の env を引き継ぐ。
 	# 呼び出し元の印（CLAUDECODE 等）は空にする —— 子を親の kind と誤認させない。
-	set -- "--" /usr/bin/env -C "$c_workdir" -- "$c_abs" "$@"
-	for name in $({
-		env
-		# server の global env は最初の client のもの。今の env に無い印もここに残る
-		tmux_af show-environment -g 2>/dev/null
-	} | sed -n -E 's/^(CLAUDECODE|CLAUDE_CODE_[A-Za-z0-9_]*|CURSOR_INVOKED_AS|CONSULT_[A-Za-z0-9_]*|DISPATCH_[A-Za-z0-9_]*|LC_ALL)=.*/\1/p' | sort -u); do
+	set -- "--" "$c_abs" "$@"
+	for name in $(env | sed -n -E 's/^(CLAUDECODE|CLAUDE_CODE_[A-Za-z0-9_]*|CURSOR_INVOKED_AS|CONSULT_[A-Za-z0-9_]*|DISPATCH_[A-Za-z0-9_]*|LC_ALL)=.*/\1/p' | sort -u); do
 		set -- -e "$name=" "$@"
 	done
-	set -- -e "PATH=$PATH" "$@"
-	tmux_af new-session -d -s "$c_session" -x 120 -y 40 "$@" ||
-		fatal "tmux session を作れない: $c_session"
+	tmux_session new-session -d -s "$session" -c "$c_workdir" -x 120 -y 40 "$@" ||
+		fatal "tmux session を作れない: $session"
 }
 
 case "$cmd" in
 open)
-	session=${1:-}
-	workdir=${2:-}
-	[ -n "$session" ] || fatal "session 名が無い"
+	workdir=${1:-}
 	[ -n "$workdir" ] && [ -d "$workdir" ] || fatal "workdir が不正: ${workdir:-未指定}"
-	shift 2
+	shift
 	# 既定は trust 対話の受理と TUI の起動を合わせた待ち時間
 	timeout=65
 	if [ "${1:-}" = "--timeout" ]; then
@@ -116,17 +121,17 @@ open)
 	[ $# -ge 1 ] || fatal "起動 argv が空"
 	require_judge
 	bin=$1
-	create_session "$session" "$workdir" "$@"
+	create_session "$workdir" "$@"
 	# 入力を受ける画面になる前に止まったら session を残さない
-	trap 'tmux_af kill-session -t "=$session" 2>/dev/null' EXIT
+	trap destroy_session EXIT
 	deadline=$(($(date +%s) + timeout))
 	answered=0
 	while :; do
-		tmux_af has-session -t "=$session" 2>/dev/null ||
+		tmux_session has-session -t "=$session" 2>/dev/null ||
 			fatal "session が消えた（起動した harness が終了した）: $session"
-		target=$(target_of "$session") || fatal "pane が無い: $session"
+		target=$(target_of) || fatal "pane が無い: $session"
 		# 状態も選択肢番号も同じ 1 回の capture から読む（間で画面が変わらない）
-		snap=$(tmux_af capture-pane -t "$target" -p 2>/dev/null) || snap=""
+		snap=$(tmux_session capture-pane -t "$target" -p 2>/dev/null) || snap=""
 		state=$(printf '%s\n' "$snap" | bun "$advisors_ts" pane-state) ||
 			fatal "画面を判定できない: $session"
 		case $state in
@@ -141,9 +146,9 @@ open)
 			if [ "$answered" -eq 0 ]; then
 				key=$(printf '%s\n' "$snap" | bun "$advisors_ts" trust-key) ||
 					fatal "trust 対話の Yes を読めない"
-				tmux_af send-keys -t "$target" "$key" || fatal "選択肢を送れない: $key"
+				tmux_session send-keys -t "$target" "$key" || fatal "選択肢を送れない: $key"
 				sleep 0.2
-				tmux_af send-keys -t "$target" C-m || fatal "Enter を送れない"
+				tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない"
 				answered=1
 			fi
 			;;
@@ -156,53 +161,43 @@ open)
 	done
 	;;
 paste-file)
-	session=${1:-}
-	file=${2:-}
-	[ -n "$session" ] || fatal "session 名が無い"
+	file=${1:-}
 	[ -n "$file" ] && [ -f "$file" ] || fatal "file が不正: ${file:-未指定}"
-	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
-	target=$(target_of "$session") || fatal "pane が無い: $session"
+	require_session
+	target=$(target_of) || fatal "pane が無い: $session"
 	buf="consult-paste-$$"
-	tmux_af load-buffer -b "$buf" -- "$file" || fatal "buffer に読めない: $file"
+	tmux_session load-buffer -b "$buf" -- "$file" || fatal "buffer に読めない: $file"
 	# -p: bracketed paste（LF→CR 置換を避ける）。-d: paste 後に buffer 削除
-	tmux_af paste-buffer -p -d -b "$buf" -t "$target" || {
-		tmux_af delete-buffer -b "$buf" 2>/dev/null || true
+	tmux_session paste-buffer -p -d -b "$buf" -t "$target" || {
+		tmux_session delete-buffer -b "$buf" 2>/dev/null || true
 		fatal "paste できない"
 	}
 	# 貼り付け直後の Enter（送信）
 	sleep 0.2
-	tmux_af send-keys -t "$target" C-m || fatal "Enter を送れない"
+	tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない"
 	;;
 capture)
-	session=${1:-}
-	[ -n "$session" ] || fatal "session 名が無い"
-	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
-	target=$(target_of "$session") || fatal "pane が無い: $session"
-	tmux_af capture-pane -t "$target" -p -S - -E -
+	require_session
+	target=$(target_of) || fatal "pane が無い: $session"
+	tmux_session capture-pane -t "$target" -p -S - -E -
 	;;
 screen)
-	session=${1:-}
-	[ -n "$session" ] || fatal "session 名が無い"
-	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
-	target=$(target_of "$session") || fatal "pane が無い: $session"
-	tmux_af capture-pane -t "$target" -p
+	require_session
+	target=$(target_of) || fatal "pane が無い: $session"
+	tmux_session capture-pane -t "$target" -p
 	;;
 state)
-	session=${1:-}
-	[ -n "$session" ] || fatal "session 名が無い"
-	tmux_af has-session -t "=$session" 2>/dev/null || fatal "session が無い: $session"
-	pane_state "$session"
+	require_session
+	require_judge
+	target=$(target_of) || fatal "pane が無い: $session"
+	tmux_session capture-pane -t "$target" -p 2>/dev/null |
+		bun "$advisors_ts" pane-state
 	;;
 exists)
-	session=${1:-}
-	[ -n "$session" ] || fatal "session 名が無い"
-	tmux_af has-session -t "=$session" 2>/dev/null
+	tmux_session has-session -t "=$session" 2>/dev/null
 	;;
 kill)
-	session=${1:-}
-	[ -n "$session" ] || fatal "session 名が無い"
-	tmux_af has-session -t "=$session" 2>/dev/null || exit 0
-	tmux_af kill-session -t "=$session" || fatal "session を殺せない: $session"
+	destroy_session || fatal "session を殺せない: $session"
 	;;
 *) fatal "未知のサブコマンド: $cmd" ;;
 esac

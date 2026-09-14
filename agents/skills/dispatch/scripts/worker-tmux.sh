@@ -119,7 +119,6 @@ start)
 	fi
 
 	session=d-$(cat "$run/worker")-$rid
-	session=$(printf '%s' "$session" | tr -cd 'a-zA-Z0-9_-' | cut -c1-50)
 	printf '%s\n' "$session" >"$run/session"
 	caller_cwd=$PWD
 	# 起こせなかった理由は open が log へ FATAL 行で残す

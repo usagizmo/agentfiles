@@ -37,7 +37,7 @@ DISPATCH_BACKEND=tmux \
 | trust  | Claude trust 対話を自動 Yes | Claude trust 対話を自動 Yes（detached 前提） |
 | 完走   | marker + rc                 | 同じ（`WORKER-DONE-…`）                      |
 
-過剰権限（yolo / bypassPermissions 等）は roster 検証で落とす。workspace trust 以外の承認 UI は harness 既定に任せ、人が `tmux attach` する。
+過剰権限（yolo / bypassPermissions 等）は roster 検証で落とす。workspace trust 以外の承認 UI は harness 既定に任せ、人が `tmux -L <session> attach` する。
 
 ## resolve からの使い方
 
@@ -46,7 +46,7 @@ DISPATCH_BACKEND=tmux \
 1. worktree を切って cd
 2. 作業指示を prompt ファイルへ書く（「2 を飛ばして 3 から」を含める）
 3. `DISPATCH_BACKEND=tmux`（必要なら `DISPATCH_KIND=…`）で `start`
-4. working を確認したら session 名と `tmux -L agentfiles attach -t <session>` を報告して終える（呼び出し側はこの session を `close` で殺さない）
+4. working を確認したら session 名と `tmux -L <session> attach` を報告して終える（呼び出し側はこの session を `close` で殺さない）
 5. 短い往復だけに `collect` / `ask` / `close` を使う。`close` は実装中の worker を破棄する
 
 Codex の `-p`（`--profile`）は許可する。profile 内の `approval_policy` までは見ない（明示の `-c` 拒否の限界）。

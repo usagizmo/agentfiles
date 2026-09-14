@@ -140,7 +140,6 @@ start)
 			fatal "$run/$a を作れない"
 		}
 		session=c-$a-$rid
-		session=$(printf '%s' "$session" | tr -cd 'a-zA-Z0-9_-' | cut -c1-50)
 		printf '%s\n' "$session" >"$run/$a/session"
 		printf '%s\n' "$session" >"$run/$a/name"
 		# 起動 argv は 1 行 1 要素。sh の位置引数へそのまま積む

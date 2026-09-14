@@ -160,6 +160,12 @@ test("members 省略は kind 自身", () => {
   expect(slots[0]?.members).toEqual(["claude"]);
 });
 
+test("kind は 32 文字まで（tmux の session 名・socket 名に使う）", () => {
+  const resolveKind = (kind: string) => withResolve(`[resolve]\nkind = "${kind}"\nargs = []\n`);
+  expect(resolveKind("a".repeat(32)).resolve.kind).toBe("a".repeat(32));
+  expect(() => resolveKind("a".repeat(33))).toThrow("kind");
+});
+
 test("起動されないキーは落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"claude","args":[],"model":"x"}]'))).toThrow(RosterError);
 });

@@ -1,108 +1,19 @@
 // advisors-tmux.sh の巡（start → collect → ask → collect → close）。
-// tmux / claude / codex は偽物。paste で marker を画面へ積む。
+// tmux / claude / codex は偽物。偽 tmux は fake-tmux.ts。
 
-import { chmod, mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
+import { installFakeTmux } from "./fake-tmux.ts";
 
 const SCRIPT = new URL("../agents/skills/consult/scripts/advisors-tmux.sh", import.meta.url)
   .pathname;
 
 const FIXTURE = new URL("fixtures/pane-state", import.meta.url).pathname;
 
-const FAKE_TMUX = `#!/usr/bin/env python3
-import pathlib, re, sys
-root = pathlib.Path(__file__).parent
-args = sys.argv[1:]
-if args[:1] == ["-L"]:
-    args = args[2:]
-
-def session_dir(name: str) -> pathlib.Path:
-    d = root / ("sess-" + name)
-    d.mkdir(exist_ok=True)
-    return d
-
-def target_session(token: str) -> str:
-    # -t =name / -t %pane-id
-    t = token[1:] if token[:1] in ("=", "%") else token
-    return t.split(":", 1)[0]
-
-if not args:
-    raise SystemExit("tmux: no args")
-
-if args[0] == "list-panes":
-    # 本物は pane id を返す。固定 target へ戻す回帰を落とす
-    sys.stdout.write("%" + target_session(args[args.index("-t") + 1]) + "\\n")
-    raise SystemExit(0)
-
-if args[0] == "has-session":
-    name = target_session(args[args.index("-t") + 1])
-    raise SystemExit(0 if (root / ("sess-" + name)).exists() else 1)
-
-if args[0] == "new-session":
-    name = args[args.index("-s") + 1]
-    # die: 起動した harness が即座に終了し、session が残らない
-    if (root / "die").exists():
-        raise SystemExit(0)
-    d = session_dir(name)
-    # login: 起動した harness がログイン待ちの画面を出す
-    login = root / "login"
-    (d / "screen").write_text(login.read_text() if login.exists() else "❯ \\n")
-    raise SystemExit(0)
-
-if args[0] == "send-keys":
-    raise SystemExit(0)
-
-if args[0] == "load-buffer":
-    b = args[args.index("-b") + 1]
-    path = args[-1]
-    (root / ("buf-" + b)).write_text(pathlib.Path(path).read_text())
-    raise SystemExit(0)
-
-if args[0] == "paste-buffer":
-    # -p / -d は本番と同じく受け取る（無視）
-    b = args[args.index("-b") + 1]
-    name = target_session(args[args.index("-t") + 1])
-    d = session_dir(name)
-    prompt_path = (root / ("buf-" + b)).read_text()
-    # load-buffer は file 内容を入れた。advisors-tmux は file パスではなく内容を load する
-    text = prompt_path
-    marker_m = re.search(r"(ADVISOR-DONE-[a-z0-9]+-\\d+)", text)
-    marker = marker_m.group(1) if marker_m else "NO-MARKER"
-    n = int((d / "prompts").read_text()) + 1 if (d / "prompts").exists() else 1
-    (d / "prompts").write_text(str(n))
-    prev = (d / "screen").read_text() if (d / "screen").exists() else ""
-    verdict = (root / "verdict").read_text() if (root / "verdict").exists() else ""
-    line = "answer %d\\n%s%s\\n❯ \\n" % (n, verdict, marker)
-    (d / "screen").write_text(prev + line)
-    raise SystemExit(0)
-
-if args[0] == "delete-buffer":
-    raise SystemExit(0)
-
-if args[0] == "capture-pane":
-    name = target_session(args[args.index("-t") + 1])
-    d = session_dir(name)
-    sys.stdout.write((d / "screen").read_text() if (d / "screen").exists() else "")
-    raise SystemExit(0)
-
-if args[0] == "kill-session":
-    name = target_session(args[args.index("-t") + 1])
-    d = root / ("sess-" + name)
-    if d.exists():
-        for p in d.iterdir():
-            p.unlink()
-        d.rmdir()
-        bump = root / "kills"
-        bump.write_text(str(int(bump.read_text()) + 1 if bump.exists() else 1))
-    raise SystemExit(0)
-
-raise SystemExit("Unexpected tmux: " + repr(args))
-`;
-
 const FAKE_BIN = `#!/bin/sh
-# PATH 上の偽 claude / 偽 codex。create が直接 exec するので実バイナリが要る
+# PATH 上の偽 claude / 偽 codex。open が直接 exec するので実バイナリが要る
 exit 0
 `;
 
@@ -136,12 +47,11 @@ const run = async (dir: string, argv: string[]) => {
 
 const setup = async () => {
   const dir = await mkdtemp(join(tmpdir(), "advisors-tmux-"));
-  await Bun.write(join(dir, "tmux"), FAKE_TMUX);
+  await installFakeTmux(dir);
   await Bun.write(join(dir, "claude"), FAKE_BIN);
   await Bun.write(join(dir, "codex"), FAKE_BIN);
   await Bun.write(join(dir, "prompt"), "Review the diff.\n");
   await Bun.write(join(dir, "reply"), "Applied 1. Re-review.\n");
-  await chmod(join(dir, "tmux"), 0o755);
   await chmod(join(dir, "claude"), 0o755);
   await chmod(join(dir, "codex"), 0o755);
   return dir;
@@ -177,6 +87,8 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
     const closed = await run(dir, ["close", runDir]);
     expect(closed.exitCode).toBe(0);
     expect(await readFile(join(dir, "kills"), "utf8")).toMatch(/^[1-9]/);
+    // close は session ごとの server を残さない（buffer も server と一緒に消える）
+    expect((await readdir(dir)).filter((name) => name.startsWith("srv-"))).toEqual([]);
     const after = await run(dir, ["collect", runDir, "5"]);
     expect(after.exitCode).toBe(2);
     expect(after.stderr).toContain("close 済み");
