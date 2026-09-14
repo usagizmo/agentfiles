@@ -39,8 +39,10 @@ if args[0] == "has-session":
     raise SystemExit(0 if (root / ("sess-" + name)).exists() else 1)
 
 if args[0] == "new-session":
-    # ... -s NAME -c DIR ...
     name = args[args.index("-s") + 1]
+    # die: 起動した harness が即座に終了し、session が残らない
+    if (root / "die").exists():
+        raise SystemExit(0)
     d = session_dir(name)
     (d / "screen").write_text("❯ \\n")
     raise SystemExit(0)
@@ -181,6 +183,19 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
       exitCode: 1,
       stdout: `run: ${runDir}\nround: 2\nclosed: yes\nclaude: 不明\ncodex: 不明\nverify: fail\n`,
     });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 1 つも起こせなければ各 agent の log 末尾を出す", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "die"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(2);
+    expect(started.stderr).toContain("=== claude start 失敗 ===\nFATAL\tsession が無い: c-claude-");
+    expect(started.stderr).toContain("wait-ready に失敗（TUI 未準備）\n=== codex start 失敗 ===");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

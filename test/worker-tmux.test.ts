@@ -40,6 +40,9 @@ if args[0] == "has-session":
 
 if args[0] == "new-session":
     name = args[args.index("-s") + 1]
+    # die: 起動した harness が即座に終了し、session が残らない
+    if (root / "die").exists():
+        raise SystemExit(0)
     d = session_dir(name)
     (d / "screen").write_text("❯ \\n")
     raise SystemExit(0)
@@ -121,6 +124,18 @@ const setup = async () => {
   await chmod(join(dir, "claude"), 0o755);
   return dir;
 };
+
+test("dispatch tmux: 起こせなければ log 末尾を出す", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "die"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(2);
+    expect(started.stderr).toContain("(log の末尾)\nFATAL\tsession が無い: d-claude-");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test("dispatch tmux: 巡をまたいで送り、close で session を破棄する", async () => {
   const dir = await setup();

@@ -22,7 +22,7 @@ fatal() {
 fail_start() {
 	msg=$1
 	printf '(log の末尾)\n' >&2
-	tail -n 20 "$run/log" 2>/dev/null >&2 || true
+	tail -n 20 "$run/log" >&2 2>/dev/null || true
 	rm -rf "$run"
 	fatal "$msg"
 }
