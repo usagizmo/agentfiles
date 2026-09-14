@@ -135,6 +135,19 @@ test("state: 表示中の画面の状態語を返す", async () => {
   }
 });
 
+test("create: cwd は server の状態に依らず起動 argv で固定する", async () => {
+  const dir = await setup("");
+  try {
+    await writeFile(join(dir, "absent"), "");
+    expect((await runScript(dir, ["create", "s", dir, "--", "tmux", "a"])).exitCode).toBe(0);
+    const args = await readFile(join(dir, "new-session"), "utf8");
+    expect(args).toEndWith(`\n--\n/usr/bin/env\n-C\n${dir}\n--\n${dir}/tmux\na\n`);
+    expect(args).not.toContain("-c\n");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("create: 呼び出し元にも server にも残る印を空にして渡す", async () => {
   const dir = await setup("");
   try {

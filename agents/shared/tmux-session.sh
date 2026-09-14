@@ -79,10 +79,13 @@ create)
 	esac
 	# argv を直接 exec。harness が終われば pane / session が消える
 	#
+	# cwd は env -C で起動 argv に固定する。new-session -c は server の状態次第で
+	# 無視され、pane が server 自身の cwd（消えていることがある）で起動するため。
+	#
 	# 渡す env は session ごとに -e で明示する。server の global env は最初に
 	# server を起こした client のもので、以降の session もそれを引くため。
 	# 呼び出し元の印（CLAUDECODE 等）は空にする —— 子を親の kind と誤認させない。
-	set -- "--" "$abs" "$@"
+	set -- "--" /usr/bin/env -C "$workdir" -- "$abs" "$@"
 	for name in $({
 		env
 		# server の global env は最初の client のもの。今の env に無い印もここに残る
@@ -91,7 +94,7 @@ create)
 		set -- -e "$name=" "$@"
 	done
 	set -- -e "PATH=$PATH" "$@"
-	tmux_af new-session -d -s "$session" -c "$workdir" -x 120 -y 40 "$@" ||
+	tmux_af new-session -d -s "$session" -x 120 -y 40 "$@" ||
 		fatal "tmux session を作れない: $session"
 	;;
 accept-trust)
