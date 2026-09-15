@@ -7,5 +7,6 @@
 # externally installed agent skills
 /agents/skills/agent-browser/
 /agents/skills/grilling/
+/agents/skills/herdr/
 /agents/skills/skill-creator/
 /agents/skills/swiftui-expert-skill/
