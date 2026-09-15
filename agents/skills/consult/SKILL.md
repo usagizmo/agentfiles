@@ -1,7 +1,7 @@
 ---
 name: consult
 description: >-
-  設計・方針のセカンドオピニオン。resolve / refine / docs / finish の手順から呼ばれたとき、
+  設計・方針のセカンドオピニオン。resolve / refine / finish の手順から呼ばれたとき、
   またはユーザーが /consult と言ったときに実行する。それ以外では発動しない。
 ---
 
@@ -19,7 +19,7 @@ description: >-
 
 ## 手順
 
-1. 自分の判断を書く（モードの「出すもの」）
+1. 自分の判断を書く（モードの「出すもの」）。ループなら先に gate（lint / test）を通す
 2. プロンプトを `mktemp` のファイルへ書く（下記。書き方は `references/advisors.md`）
 3. `CONSULT_BACKEND` を明示して `<skills root>/consult/scripts/consult-backend.sh start <prompt-file>` → `collect <run-dir>`（起動表・backend 切替は `references/advisors.md`）
 4. 統合する。論点ごとに 一致 / 取り込み / 不採用（理由）/ ユーザー判断が要る点
@@ -33,7 +33,7 @@ description: >-
 ## ループ
 
 1. 指摘を 1 件ずつ精査し、採用したものを直す。承認済みの範囲内の技術修正は自律で直し、製品判断が変わるときだけユーザーに聞く
-2. 採否と理由・問い・修正の要約を書き、`ask <run-dir> <prompt-file>` で同じ agent へ送り、`collect` する。agent は文脈を保っているので diff は取り直させる
+2. gate（lint / test）を通し、採否と理由・問い・修正の要約と gate の結果 1 行を書き、`ask <run-dir> <prompt-file>` で同じ agent へ送り、`collect` する。agent は文脈を保っているので diff は取り直させる
 3. 1 へ戻る
 
 終了は、`verify <run-dir>` が `verify: pass`（agent が rc=0 で `判定: 指摘なし`）を返し、かつ自分に未解決の問いが無い巡。判定は `verify` の出力で見る。自分で応答を読んで「指摘なし」と判断**しない**。**採用 0 件で指摘が残る巡が 2 連続したらユーザーへ**（新しい根拠も修正も出ていない）。固定ラウンド数では終わらない。
@@ -50,6 +50,7 @@ description: >-
 ## 必読
 
 - ~/.agents/AGENTS.md（設計原則・ボーイスカウトルール）
+- {文書を変えたとき: <skills root>/docs/SKILL.md の品質基準 / 編集した文書 / その規則が関係する文書}
 
 ## 背景・要件
 
@@ -58,7 +59,7 @@ description: >-
 ## レビュー対象
 
 {事前: パス + 注目点。全文は貼らない}
-{ループ: git status --short / git diff / git diff --cached / untracked の中身}
+{ループ: git status --short / git diff / git diff --cached / untracked の中身。lint / test の gate は呼び出し側が通した（結果を 1 行）。実行は主張の検証に必要なときだけ}
 
 ## 私の判断
 
@@ -69,6 +70,7 @@ description: >-
 - 設計原則からの逸脱（ゼロベース一致・根本解決・互換 shim / deprecated / dead code の残存）
 - SSOT 複製（test が production 形を手コピー・同一 helper の二重）、shape / 型 / mock / 生成物の drift
 - 経緯コメント（「以前は〜だった」・Issue / PR 番号）
+- 文書を変えたとき: 参照先の節・ファイルが実在する / 同じ規則・数値が 2 箇所に実体として無く文書間で矛盾しない / 削ると判断ができなくなる記述を落としていない / 複数の文書を順に読んだとき順序・前提・差し戻し先が噛み合う
 - バグ・エッジケース・軸の混在・より良い代替・隠れたトレードオフ
 
 ## 出力
