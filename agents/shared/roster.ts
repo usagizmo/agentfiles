@@ -11,7 +11,6 @@ export const ROSTER_URL = new URL("./roster.toml", import.meta.url);
 export type Slot = {
   readonly kind: string;
   readonly args: readonly string[];
-  readonly members: readonly string[];
 };
 
 /** resolve の実装役。read-only にはしない（実装する agent）。 */
@@ -25,10 +24,11 @@ export type Roster = {
   readonly resolve: Worker;
 };
 
-const SLOT_KEYS = new Set(["kind", "args", "members"]);
+const SLOT_KEYS = new Set(["kind", "args"]);
 const WORKER_KEYS = new Set(["kind", "args"]);
 const ROSTER_KEYS = new Set(["advisors", "resolve"]);
-const KIND_RE = /^[a-z][a-z0-9_-]*$/;
+// kind は tmux の session 名と socket 名（パス長に上限がある）の一部になる
+const KIND_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const APPROVAL_SKIPPING_MODES = new Set(["bypassPermissions", "dontAsk"]);
 const BYPASS = new Set([
   "--dangerously-skip-permissions",
@@ -160,7 +160,6 @@ const parseSlots = (data: unknown): Slot[] => {
   }
   const slots: Slot[] = [];
   const seenKinds = new Set<string>();
-  const seenMembers = new Set<string>();
   for (let i = 0; i < data.length; i++) {
     const item: unknown = data[i];
     const at = `[${i}]`;
@@ -175,19 +174,7 @@ const parseSlots = (data: unknown): Slot[] => {
     const rawArgs = item["args"];
     if (!isStringArray(rawArgs)) return fail("args が string[] ではない", at);
     rejectBypass(rawArgs, true, kind);
-    const rawMembers = item["members"] === undefined ? [kind] : item["members"];
-    if (!isStringArray(rawMembers) || rawMembers.length === 0) return fail("members が空", at);
-    if (!rawMembers.every((m) => KIND_RE.test(m))) return fail("members が不正", at);
-    if (!rawMembers.includes(kind)) {
-      throw new RosterError(`${at}: members に kind が無い`);
-    }
-    for (const member of rawMembers) {
-      if (seenMembers.has(member)) {
-        throw new RosterError(`${at}: members が交差: ${member}`);
-      }
-      seenMembers.add(member);
-    }
-    slots.push({ kind, args: rawArgs, members: rawMembers });
+    slots.push({ kind, args: rawArgs });
   }
   for (const slot of slots) readOnlyArgs(slot.kind);
   return slots;

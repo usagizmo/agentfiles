@@ -8,14 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import {
-  MAX_ADVISORS,
   advisorComplete,
   advisorVerdict,
-  detectSelfKind,
+  inputLine,
   isChromeLine,
   lastContentLine,
   paneState,
-  resolveSelfKind,
   selectAdvisors,
   type Selection,
   trustKey,
@@ -57,14 +55,11 @@ const withResolve = (resolve: string): Roster =>
 
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
+// 並び順と args は quota 切れで人が並べ替える運用値。順序を固定せず、妥当性だけを見る
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind)).toEqual(["claude", "codex", "cursor"]);
-  expect(roster[2]?.members).toEqual(["grok", "cursor", "opencode", "command-code"]);
-  expect(roster[2]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
-  expect(parsed.resolve).toEqual({
-    kind: "grok",
-    args: ["--model", "grok-4.6", "--effort", "high"],
-  });
+  expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex", "cursor", "grok"]);
+  for (const slot of roster) expect(() => directLaunchArgv(slot)).not.toThrow();
+  expect(() => directResolveLaunchArgv(parsed.resolve)).not.toThrow();
 });
 
 test("resolve は無いと止まり、未知キー・承認を飛ばす flag も止まる", () => {
@@ -110,72 +105,23 @@ test("resolve は read-only を要求しない", () => {
   expect(c.resolve.kind).toBe("claude");
 });
 
-test("claude は codex + cursor", () => {
-  const r = selectAdvisors(roster, "claude");
-  expect(kinds(r)).toEqual(["codex", "cursor"]);
-  expect(r.warning).toBe(false);
-});
-
-test("codex は claude + cursor", () => {
-  const r = selectAdvisors(roster, "codex");
-  expect(kinds(r)).toEqual(["claude", "cursor"]);
-  expect(r.warning).toBe(false);
-});
-
-test("grok は cursor 枠ごと外れ claude + codex", () => {
-  const r = selectAdvisors(roster, "grok");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("cursor は claude + codex", () => {
-  const r = selectAdvisors(roster, "cursor");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("opencode は cursor 枠ごと外れ claude + codex", () => {
-  const r = selectAdvisors(roster, "opencode");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("command-code は cursor 枠ごと外れ claude + codex", () => {
-  const r = selectAdvisors(roster, "command-code");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(false);
-});
-
-test("表に無い kind は先頭 2 枠と警告", () => {
-  const r = selectAdvisors(roster, "unknown");
-  expect(kinds(r)).toEqual(["claude", "codex"]);
-  expect(r.warning).toBe(true);
-  expect(r.chosen).toHaveLength(MAX_ADVISORS);
-});
-
-test("members 省略は kind 自身", () => {
-  const slots = parseRoster(
+test("選出は候補表の先頭 1 枠（自己 kind を見ない）", () => {
+  expect(kinds(selectAdvisors(roster))).toEqual(roster.slice(0, 1).map((s) => s.kind));
+  const swapped = parseRoster(
     toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'),
   ).advisors;
-  expect(slots[0]?.members).toEqual(["claude"]);
+  expect(kinds(selectAdvisors(swapped))).toEqual(["claude"]);
+  expect(selectAdvisors(swapped).chosen).toHaveLength(1);
+});
+
+test("kind は 32 文字まで（tmux の session 名・socket 名に使う）", () => {
+  const resolveKind = (kind: string) => withResolve(`[resolve]\nkind = "${kind}"\nargs = []\n`);
+  expect(resolveKind("a".repeat(32)).resolve.kind).toBe("a".repeat(32));
+  expect(() => resolveKind("a".repeat(33))).toThrow("kind");
 });
 
 test("起動されないキーは落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"claude","args":[],"model":"x"}]'))).toThrow(RosterError);
-});
-
-test("members の交差は落とす", () => {
-  const text = JSON.stringify([
-    { kind: "claude", args: [], members: ["claude", "cursor"] },
-    { kind: "grok", args: [], members: ["grok", "cursor"] },
-  ]);
-  expect(() => parseRoster(toml(text))).toThrow(RosterError);
-});
-
-test("members に kind が無い枠は落とす", () => {
-  expect(() => parseRoster(toml('[{"kind":"grok","args":[],"members":["cursor"]}]'))).toThrow(
-    RosterError,
-  );
 });
 
 test("read-only を打ち消す args は落とす", () => {
@@ -189,9 +135,7 @@ test("--print は拒否し、-p は Codex の --profile だけ通す", () => {
   expect(() => parseRoster(toml('[{"kind":"claude","args":["--print"]}]'))).toThrow(/interactive/);
   expect(() => parseRoster(toml('[{"kind":"cursor","args":["-p"]}]'))).toThrow(/interactive/);
   expect(() => parseRoster(toml('[{"kind":"grok","args":["-p"]}]'))).toThrow(/interactive/);
-  expect(() =>
-    parseRoster(toml('[{"kind":"codex","args":["-p","foo"],"members":["codex"]}]')),
-  ).not.toThrow();
+  expect(() => parseRoster(toml('[{"kind":"codex","args":["-p","foo"]}]'))).not.toThrow();
 });
 
 test("= 連結と別名の bypass も落とす", () => {
@@ -225,15 +169,11 @@ test("read-only 手段が無い kind は宣言時に落とす", () => {
 });
 
 test("起動 argv も bypass を落とす", () => {
-  const skip = { kind: "claude", args: ["--dangerously-skip-permissions"], members: ["claude"] };
+  const skip = { kind: "claude", args: ["--dangerously-skip-permissions"] };
   expect(() => directLaunchArgv(skip)).toThrow(RosterError);
-  const glued = { kind: "codex", args: ["-sdanger-full-access"], members: ["codex"] };
+  const glued = { kind: "codex", args: ["-sdanger-full-access"] };
   expect(() => directLaunchArgv(glued)).toThrow(RosterError);
-  const cfg = {
-    kind: "codex",
-    args: ["-c", "sandbox_mode=danger-full-access"],
-    members: ["codex"],
-  };
+  const cfg = { kind: "codex", args: ["-c", "sandbox_mode=danger-full-access"] };
   expect(() => directLaunchArgv(cfg)).toThrow(RosterError);
 });
 
@@ -305,7 +245,6 @@ test("cursor の read-only は --mode plan", () => {
   const argv = directLaunchArgv({
     kind: "cursor",
     args: ["--model", "cursor-grok-4.6-high"],
-    members: ["grok", "cursor", "opencode", "command-code"],
   });
   expect(argv).toEqual([
     directBinary("cursor"),
@@ -316,9 +255,8 @@ test("cursor の read-only は --mode plan", () => {
   ]);
 });
 
-test("実体 file のコメントに grok 直への差し替えが残っている", () => {
-  expect(roster.map((s) => s.kind)).not.toContain("grok");
-  expect(rosterText).toContain('#   args = ["--model", "grok-4.6", "--effort", "high"]');
+test("実体 file のコメントに model 指定の例が残っている", () => {
+  expect(rosterText).toContain('#   args = ["--model", "claude-opus-5", "--effort", "high"]');
   expect(rosterText).not.toContain("_comment");
 });
 
@@ -575,17 +513,57 @@ test("complete CLI は JSON と終了コードを返す", async () => {
 const PANE = `${ROOT}test/fixtures/pane-state`;
 const paneFixture = (name: string) => Bun.file(`${PANE}/${name}`).text();
 
-test.each(["claude", "codex", "cursor"] as const)("%s の作業中の実画面は working", async (kind) => {
-  expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
-});
+test.each(["claude", "codex", "cursor", "grok"] as const)(
+  "%s の作業中の実画面は working",
+  async (kind) => {
+    expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
+  },
+);
 
-test.each(["claude", "codex", "cursor"] as const)("%s の入力待ちの実画面は ready", async (kind) => {
-  expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
-});
+test.each(["claude", "codex", "cursor", "grok"] as const)(
+  "%s の入力待ちの実画面は ready",
+  async (kind) => {
+    expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
+  },
+);
 
 // 起動直後の cursor は ❯ を描かない。文字で探すと永久に ready にならない
 test("cursor の起動直後の実画面も ready", async () => {
   expect(paneState(await paneFixture("startup-cursor"))).toBe("ready");
+});
+
+// ログイン待ちは入力を受けない。unknown にすると起動の timeout まで待ち、理由も残らない
+test("cursor のログイン待ちの実画面は login", async () => {
+  expect(paneState(await paneFixture("login-cursor"))).toBe("login");
+});
+
+test("応答本文のログイン案内では login にしない", async () => {
+  const ready = await paneFixture("ready-codex");
+  const anchor = "• up.sh と doctor.sh を確認します。";
+  expect(paneState(ready.replace(anchor, `${anchor}\n  Press any key to log in...`))).toBe("ready");
+});
+
+// 入力欄の無い画面でも、trust 対話と生成中の状態行はログイン案内の引用より強い
+const LOGIN_QUOTE = "Cursor Agent\nPress any key to log in...\n";
+test.each([
+  [
+    "trust 対話",
+    `${LOGIN_QUOTE}Do you trust the files in this folder?\n❯ 1. Yes\n  2. No\n`,
+    "trust",
+  ],
+  ["生成中の状態行", `${LOGIN_QUOTE}✽ Propagating… (6s · esc to interrupt)\n`, "working"],
+] as const)("%s の画面にログイン案内の引用があっても login にしない", (_label, screen, state) => {
+  expect(paneState(screen)).toBe(state);
+});
+
+// 実画面で確かめていない文言・識別行の欠けた画面は login にしない
+test.each([
+  "Cursor Agent\nPress any key to log in\n",
+  "Cursor Agent\nPress any key to log in…\n",
+  "Cursor Agent\npress any key to log in...\n",
+  "Press any key to log in...\n",
+])("未観測の画面 %p は login にしない", (screen) => {
+  expect(paneState(screen)).toBe("unknown");
 });
 
 test("trust 対話は ready より先に取る", () => {
@@ -673,13 +651,13 @@ test("読めない画面は unknown（停止と区別する）", () => {
   expect(paneState("\n\n  loading\n")).toBe("unknown");
 });
 
-test("env に印が無ければ申告をそのまま使う", () => {
-  expect(detectSelfKind({})).toBeUndefined();
-  expect(resolveSelfKind({}, "codex")).toBe("codex");
-});
-
-test("env の印と食い違う申告は落とす（自分自身に相談させない）", () => {
-  expect(resolveSelfKind({ CLAUDECODE: "1" }, "claude")).toBe("claude");
-  expect(() => resolveSelfKind({ CLAUDECODE: "1" }, "cursor")).toThrow(RosterError);
-  expect(resolveSelfKind({ CLAUDECODE: "" }, "cursor")).toBe("cursor");
+test("inputLine は入力欄の行だけを返し、貼り付けの placeholder が消えたことを見分けられる", () => {
+  const pasted =
+    "• You have 2 usage limit resets available.\n\n› [Pasted Content 1698 chars]\n\n  gpt-5.6 high · ~/repo\n";
+  const sent =
+    "• You have 2 usage limit resets available.\n\n• Working (3s • esc to interrupt)\n\n› Ask Codex to do anything\n\n  gpt-5.6 high · ~/repo · renaming... ⠼\n";
+  expect(inputLine(pasted)).toBe("› [Pasted Content 1698 chars]");
+  expect(inputLine(sent)).toBe("› Ask Codex to do anything");
+  expect(inputLine("answer 1\n❯ \n")).toBe("❯");
+  expect(inputLine("loading\n")).toBe("");
 });

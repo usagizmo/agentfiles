@@ -1,6 +1,6 @@
 # Dispatch（実装役）起動
 
-consult（助言・read-only）とは別層。**コード変更を伴う作業**を、明示した harness（+ 任意で kind）に interactive で渡す。
+consult（助言・read-only）とは別層。**コード変更を伴う作業**を、別 session の harness（既定は roster の `[resolve]`。`DISPATCH_KIND` で指名）に interactive で渡す。
 
 入口: `dispatch/scripts/dispatch-backend.sh`（session primitive は `agents/shared/tmux-session.sh`。入口 skill は `dispatch`）。
 
@@ -37,16 +37,16 @@ DISPATCH_BACKEND=tmux \
 | trust  | Claude trust 対話を自動 Yes | Claude trust 対話を自動 Yes（detached 前提） |
 | 完走   | marker + rc                 | 同じ（`WORKER-DONE-…`）                      |
 
-過剰権限（yolo / bypassPermissions 等）は roster 検証で落とす。workspace trust 以外の承認 UI は harness 既定に任せ、人が `tmux attach` する。
+過剰権限（yolo / bypassPermissions 等）は roster 検証で落とす。workspace trust 以外の承認 UI は harness 既定に任せ、人が `tmux -L <session> attach` する。
 
-## resolve からの使い方
+## 巡の終わり方
 
-実装役を立てるとき（長い実装・人の GO を挟む作業）:
+`collect` の回収ヘッダは `rc` と理由を持つ。`rc` を書かず再 `collect` できるのは `timeout` と `停滞`（出力にその時点の画面が付く）。終端（`dead`。以降 `ask` できない）は `消失` / `送信失敗` / `marker 無し`。述語と既定値は `worker-tmux.sh`。
 
-1. worktree を切って cd
-2. 作業指示を prompt ファイルへ書く（「2 を飛ばして 3 から」を含める）
-3. `DISPATCH_BACKEND=tmux`（必要なら `DISPATCH_KIND=…`）で `start`
-4. working を確認したら session 名と `tmux -L agentfiles attach -t <session>` を報告して終える（呼び出し側はこの session を `close` で殺さない）
-5. 短い往復だけに `collect` / `ask` / `close` を使う。`close` は実装中の worker を破棄する
+## 呼び出し元との分担
+
+worker への指示内容・diff の判定・fallback は呼び出し側 skill が持つ（resolve は「実装役へ渡す」）。ここが持つのは transport だけ。
+
+人が harness を指名して `resolve` ごと渡すとき（「codex で #12 を resolve して」）: worktree を切って cd し、prompt に「`resolve` を 2 を飛ばして 3 から」を含めて `DISPATCH_KIND=<kind>` で `start`。working を確認したら session 名と `tmux -L <session> attach` を報告して終える。`close` で殺さない。
 
 Codex の `-p`（`--profile`）は許可する。profile 内の `approval_policy` までは見ない（明示の `-c` 拒否の限界）。

@@ -10,13 +10,23 @@ description: >-
 
 1. **選出**: 引数が無ければ計画済みの先頭を取る（並びと Status 名は project 差分。無ければ聞く）
 2. **場所**: 計画も実装も課題用の worktree で行う。subagent（Agent tool）に委譲しない。cwd が本 step で課題用に作られた linked worktree（`git rev-parse --git-dir` と `--git-common-dir` が異なり、prompt に「2 を飛ばして 3 から」がある）なら既にその場所にいるので 3 へ
-   - `git worktree add` で切って cd し、3 へ。実装役を別 harness に渡すときは `dispatch` skill（`DISPATCH_BACKEND=tmux`。手順は `dispatch/references/dispatch.md`。長い作業は start 後に attach 案内して終え、close で殺さない）
+   - `git worktree add` で切って cd し、3 へ
    - 複数 repo を変える課題は、主 repo の worktree から `git worktree add` で他 repo の worktree を切る（workspace は増やさない）
-3. **計画**: Issue と関連コードを読み、`consult`（深い・事前）で GO を得る。既に方針が本文にあるなら、書く範囲と検証方針だけを出す
-4. **実装**
-5. **仕上げ**: 編集した repo ごとに、その worktree を cwd にして `finish`。規模の判定は課題全体で 1 回
+3. **計画**: Issue と関連コードを読む。本文に `refine` の項目（目的 / 受入条件 / 採用する方式と比較した代替 / 変更面 / 依存する Issue / 実物確認）が揃っていれば、触るパスと検証方法を決めて 4 へ。欠けていれば `consult`（深い・事前）で GO を得て、確定した項目を本文へ書いてから 4 へ。製品境界を越える新事実は「止まる条件」
+4. **実装**: 軽微（定義は `~/.agents/AGENTS.md` の「規模」）は自分で書く。それ以外は「実装役へ渡す」
+5. **仕上げ**: 編集した repo ごとに、その worktree を cwd にして `finish`。軽微かどうかは課題全体で 1 回決める。全 repo の `finish` が終わったら、開いている worker があれば `close`
 6. **検証**: project の検証 skill があればそれ。無ければ CI と同じ検査をローカルで通す。**CI を検査の代わりに使わない**
 7. **着地**: 統合先へ追随してから、project が定める経路で着地する。追随で前提が変わったら 3 に戻る。**複数 repo なら主 repo を最後に着地する**。依存順がそれを許さないなら止めて確認する
+
+### 実装役へ渡す
+
+書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[resolve]`。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
+
+1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する」
+2. `start` → `collect`。完走（rc=0）まで 3 へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`
+3. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直す点が無くなるまで繰り返す。自分のレビューでも `finish` の consult の指摘でも、修正の振り分けは同じ: 1 文で指示でき数行に収まるなら自分で直す。それ以外は `ask` で送って `collect`
+4. run dir を保持したまま親手順 5（仕上げ）へ戻る
+5. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・入力待ちで marker 無し）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない
 
 ### PR を使う面
 

@@ -1,25 +1,22 @@
 // アドバイザーの選出・完走判定・pane 状態判定。roster の解釈は roster.ts。
 //
-//   bun advisors.ts select --roster <file> --self <kind>
+//   bun advisors.ts select --roster <file>
 //   bun advisors.ts launch-argv --roster <file> --kind <kind>
 //   bun advisors.ts complete --output <file> --marker <token>
 //   bun advisors.ts verdict --output <file> --marker <token>
 //   bun advisors.ts extract --raw <file> [--prev <marker>]
 //   bun advisors.ts pane-state [--screen <file>]   （既定は stdin）
+//   bun advisors.ts input-line [--screen <file>]   （既定は stdin。入力欄の行。無ければ空行）
 //   bun advisors.ts trust-key [--screen <file>]    （既定は stdin）
-//   bun advisors.ts self-kind --declared <kind>
 //
 // stdout はどれも行で返す（sh がそのまま読める形。JSON を挟まない）。
-// 表に無い self は先頭 2 枠 + stderr へ警告。env の印と食い違う自己 kind の申告は落とす。
+// 選出は候補表の先頭 1 枠。自己 kind は見ない（書き手と別 session であれば足りる）。
 // TUI 画面の読み方はこのファイルだけが持つ。
 
 import { RosterError, type Slot, directLaunchArgv, flag, parseRoster } from "./roster.ts";
 
-export const MAX_ADVISORS = 2;
-
 export type Selection = {
   readonly chosen: readonly Slot[];
-  readonly warning: boolean;
 };
 
 export type CompleteReason = "出力なし" | "マーカー無し";
@@ -108,6 +105,20 @@ const contentLines = (text: string): readonly string[] => {
 export const lastContentLine = (text: string): string | undefined => contentLines(text).at(-1);
 
 /**
+ * 表示中の画面の入力欄の行（正規化済み）。無ければ空。
+ *
+ * 送信の確認に使う。送信されれば入力欄の中身（貼り付けの placeholder や本文の先頭行）が消える。
+ * 画面全体の変化は状態行のスピナーや時計でも起きるので、送信の証拠にならない。
+ */
+export const inputLine = (screen: string): string => {
+  const lines = screen.split(/\r?\n/).map(normalizeSnapshotLine);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (isInputLine(lines, i)) return lines[i] ?? "";
+  }
+  return "";
+};
+
+/**
  * marker が応答の最後にあるかを見る。
  *
  * 一致ではなく後方一致で取る —— 実行器によっては marker を直前の行の後ろへ
@@ -172,12 +183,30 @@ const STATUS_HEAD = /^(?:\p{So}\s*)?(?:[\p{L}\p{N}\u2026·]+(?:-[\p{L}\p{N}\u202
 /** 入力欄の右端に出る中断案内（cursor は状態行を持たない）。 */
 const INTERRUPT_HINT = /(?:ctrl\+c to stop|(?:esc|escape)(?:\s+\S+)? to interrupt)$/iu;
 
+// grok は括弧を使わず、スピナー + 状態語… + 経過秒 のあと右端に転送量と `[stop]` を描く
+const GROK_STATUS = /^\p{So}\s+(?:[\p{L}\p{N}\u2026·]+\s*){1,8}\d+(?:\.\d+)?s\s{2,}.*\[stop\]$/u;
+
 const isStatusLine = (line: string): boolean => {
+  if (GROK_STATUS.test(line)) return true;
   const matched = ELAPSED_TAIL.exec(line);
   return matched !== null && STATUS_HEAD.test(line.slice(0, matched.index));
 };
 
-export type PaneState = "trust" | "working" | "ready" | "unknown";
+/**
+ * 実行器がログインを待つ画面。人がログインするまで prompt は届かない。
+ *
+ * 実画面で確かめた実行器の行の組だけを置き、組の全行が行全体で揃うときだけ取る。
+ * trust / working より後に見る —— 生成中の応答本文や対話の画面にも同じ文が現れる。
+ */
+const LOGIN_SCREENS: readonly (readonly RegExp[])[] = [
+  // cursor-agent
+  [/^Cursor Agent$/u, /^Press any key to log in\.\.\.$/u],
+];
+
+const isLoginScreen = (lines: readonly string[]): boolean =>
+  LOGIN_SCREENS.some((screen) => screen.every((row) => lines.some((line) => row.test(line))));
+
+export type PaneState = "login" | "trust" | "working" | "ready" | "unknown";
 
 /**
  * 表示中の 1 画面から実行器の状態を読む。
@@ -200,7 +229,8 @@ export const paneState = (screen: string): PaneState => {
     if (lines.some((line) => TRUST_QUESTION.test(line)) && trustKey(screen) !== undefined) {
       return "trust";
     }
-    return lines.some(isStatusLine) ? "working" : "unknown";
+    if (lines.some(isStatusLine)) return "working";
+    return isLoginScreen(lines) ? "login" : "unknown";
   }
   // 入力欄の右端の中断案内と、入力欄まわりの状態行だけを見る（本文は見ない）
   if (INTERRUPT_HINT.test(lines[input] ?? "")) return "working";
@@ -224,41 +254,6 @@ export const trustKey = (screen: string): string | undefined => {
 };
 
 /**
- * 実行器が自分で立てる env の印。親から継承した印は create で落としてある。
- *
- * 印を持たない実行器がある。観測できないときだけ申告を使う —— 観測できたのに
- * 食い違う申告は、自分自身をアドバイザーに選ぶ事故になるので落とす。
- */
-const SELF_MARKER: readonly (readonly [string, string])[] = [
-  ["CLAUDECODE", "claude"],
-  ["CURSOR_INVOKED_AS", "cursor"],
-];
-
-export const detectSelfKind = (
-  env: Readonly<Record<string, string | undefined>>,
-): string | undefined => {
-  for (const [name, kind] of SELF_MARKER) {
-    if ((env[name] ?? "") !== "") return kind;
-  }
-  return undefined;
-};
-
-/** 使う自己 kind。観測と申告が食い違えば RosterError。 */
-export const resolveSelfKind = (
-  env: Readonly<Record<string, string | undefined>>,
-  declared: string,
-): string => {
-  const detected = detectSelfKind(env);
-  if (detected === undefined) return declared;
-  if (detected !== declared) {
-    throw new RosterError(
-      `自己 kind の申告が env の観測と違う: 申告 ${declared} / 観測 ${detected}`,
-    );
-  }
-  return detected;
-};
-
-/**
  * 前巡の marker より後ろ。巡ごとの応答だけを切り出す。
  *
  * 履歴には過去の巡も残る。marker は巡ごとに一意なので、最後の出現を境にする。
@@ -270,12 +265,10 @@ export const responseAfter = (raw: string, prev: string): string => {
   return rest.replace(/^\n+/u, "");
 };
 
-export const selectAdvisors = (slots: readonly Slot[], selfKind: string): Selection => {
-  const matched = slots.find((s) => s.members.includes(selfKind));
-  const remaining = matched === undefined ? slots : slots.filter((s) => s !== matched);
-  const chosen = remaining.slice(0, MAX_ADVISORS);
-  if (chosen.length === 0) throw new RosterError("選出できる枠が無い");
-  return { chosen, warning: matched === undefined };
+export const selectAdvisors = (slots: readonly Slot[]): Selection => {
+  const first = slots[0];
+  if (first === undefined) throw new RosterError("選出できる枠が無い");
+  return { chosen: [first] };
 };
 
 const main = async (): Promise<void> => {
@@ -284,14 +277,9 @@ const main = async (): Promise<void> => {
   try {
     if (cmd === "select") {
       const rosterPath = flag(argv, "--roster");
-      const selfKind = flag(argv, "--self");
       if (rosterPath === undefined) throw new RosterError("--roster が無い");
-      if (selfKind === undefined || selfKind === "") throw new RosterError("--self が無い");
       const { advisors } = parseRoster(await Bun.file(rosterPath).text());
-      const { chosen, warning } = selectAdvisors(advisors, selfKind);
-      if (warning) {
-        console.error(`WARN\t自己 kind が候補表に無い: ${selfKind}`);
-      }
+      const { chosen } = selectAdvisors(advisors);
       process.stdout.write(chosen.map((slot) => `${slot.kind}\n`).join(""));
       return;
     }
@@ -319,13 +307,7 @@ const main = async (): Promise<void> => {
       process.stdout.write(`${advisorVerdict(text, marker)}\n`);
       return;
     }
-    if (cmd === "self-kind") {
-      const declared = flag(argv, "--declared");
-      if (declared === undefined || declared === "") throw new RosterError("--declared が無い");
-      process.stdout.write(`${resolveSelfKind(process.env, declared)}\n`);
-      return;
-    }
-    if (cmd === "pane-state" || cmd === "trust-key") {
+    if (cmd === "pane-state" || cmd === "trust-key" || cmd === "input-line") {
       const screenPath = flag(argv, "--screen");
       const text =
         screenPath === undefined || screenPath === "-"
@@ -333,6 +315,10 @@ const main = async (): Promise<void> => {
           : await Bun.file(screenPath).text();
       if (cmd === "pane-state") {
         process.stdout.write(`${paneState(text)}\n`);
+        return;
+      }
+      if (cmd === "input-line") {
+        process.stdout.write(`${inputLine(text)}\n`);
         return;
       }
       const key = trustKey(text);
@@ -364,7 +350,7 @@ const main = async (): Promise<void> => {
       return;
     }
     throw new RosterError(
-      "使い方: advisors.ts select | launch-argv | complete | verdict | extract | pane-state | trust-key | self-kind",
+      "使い方: advisors.ts select | launch-argv | complete | verdict | extract | pane-state | trust-key | input-line",
     );
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);

@@ -3,7 +3,7 @@
 #
 #   CONSULT_BACKEND=tmux <skills root>/consult/scripts/consult-backend.sh <start|collect|ask|close> ...
 #
-# tmux → advisors-tmux.sh（CONSULT_SELF_KIND が別途必要）
+# tmux → advisors-tmux.sh
 # 将来の backend（例: cloud）はここに足す。未設定・未知は fatal。
 
 set -u

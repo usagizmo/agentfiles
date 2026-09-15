@@ -3,7 +3,9 @@
 # consult の advisors-tmux.sh（read-only・複数）とは別経路。silent fallback しない。
 #
 #   worker-tmux.sh start <prompt-file>                 run dir を stdout へ。巡 1 を送る
-#   worker-tmux.sh collect <run-dir> [wait-seconds]    marker 完走を待って出力。既定 1200 秒
+#   worker-tmux.sh collect <run-dir> [wait-seconds] [stall-seconds]
+#                          marker 完走を待って出力。既定 1200 秒。画面が stall 秒（既定 120）変わらず
+#                          処理中でもなければ「停滞」で早く戻る（承認待ちなどを 20 分待たせない）
 #   worker-tmux.sh ask <run-dir> <prompt-file>         次の巡を同じ session へ送る
 #   worker-tmux.sh close <run-dir>                     tmux session を破棄
 #
@@ -22,7 +24,7 @@ fatal() {
 fail_start() {
 	msg=$1
 	printf '(log の末尾)\n' >&2
-	tail -n 20 "$run/log" 2>/dev/null >&2 || true
+	tail -n 20 "$run/log" >&2 2>/dev/null || true
 	rm -rf "$run"
 	fatal "$msg"
 }
@@ -119,23 +121,11 @@ start)
 	fi
 
 	session=d-$(cat "$run/worker")-$rid
-	session=$(printf '%s' "$session" | tr -cd 'a-zA-Z0-9_-' | cut -c1-50)
 	printf '%s\n' "$session" >"$run/session"
 	caller_cwd=$PWD
-	if ! sh "$tmux_sh" create "$session" "$caller_cwd" -- "$@" >>"$run/log" 2>&1; then
-		fail_start "tmux create に失敗"
-	fi
-	# detached のため Claude workspace trust 対話が出たら Yes を選ぶ（consult と同じ）
-	sh "$tmux_sh" accept-trust "$session" 20 >>"$run/log" 2>&1 || true
-	sh "$tmux_sh" wait-ready "$session" 45 >>"$run/log" 2>&1
-	wr=$?
-	if [ "$wr" -eq 3 ]; then
-		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
-		fail_start "trust 対話を越えられない: $PWD"
-	fi
-	if [ "$wr" -ne 0 ]; then
-		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
-		fail_start "wait-ready に失敗（TUI 未準備）"
+	# 起こせなかった理由は open が log へ FATAL 行で残す
+	if ! sh "$tmux_sh" open "$session" "$caller_cwd" -- "$@" >>"$run/log" 2>&1; then
+		fail_start "worker を起こせない"
 	fi
 	if ! send_round "$run" 1; then
 		sh "$tmux_sh" kill "$session" >>"$run/log" 2>&1 || true
@@ -152,6 +142,10 @@ collect)
 	case $wait_s in
 	'' | *[!0-9]*) fatal "待ち秒数が数値でない: $wait_s" ;;
 	esac
+	stall_s=${3:-120}
+	case $stall_s in
+	'' | *[!0-9]*) fatal "停滞秒数が数値でない: $stall_s" ;;
+	esac
 	n=$(cat "$run/round")
 	[ -f "$run/marker.$n" ] || fatal "巡 $n の marker が無い"
 	marker=$(cat "$run/marker.$n")
@@ -166,6 +160,9 @@ collect)
 			: >"$run/dead"
 		else
 			session=$(cat "$run/session")
+			final=0
+			last_screen=""
+			last_change=$(date +%s)
 			while :; do
 				[ -f "$run/rc.$n" ] && break
 				if ! sh "$tmux_sh" exists "$session"; then
@@ -174,24 +171,74 @@ collect)
 					: >"$run/dead"
 					break
 				fi
-				sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log" || true
-				if bun "$complete_ts" complete --output "$run/raw.$n" --marker "$marker" \
-					>"$run/complete.$n.json" 2>>"$run/log"; then
+				# complete_rc: 0 完走 / 1 未完走 / それ以外は読めない・判定できない
+				complete_rc=2
+				if sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log"; then
+					bun "$complete_ts" complete --output "$run/raw.$n" --marker "$marker" \
+						>"$run/complete.$n.json" 2>>"$run/log"
+					complete_rc=$?
+				fi
+				if [ "$complete_rc" = 0 ]; then
 					bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
 						>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
 					printf '%s\n' 0 >"$run/rc.$n"
 					: >"$run/reason.$n"
 					break
 				fi
-				if [ "$(date +%s)" -ge "$deadline" ]; then
-					printf '%s\n' timeout >"$run/reason.$n"
-					if [ -f "$run/raw.$n" ]; then
-						bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
-							>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
+				# 停止の疑い: 画面が stall 秒変わらない、または deadline 到達
+				screen=$(sh "$tmux_sh" screen "$session" 2>>"$run/log") || screen=$last_screen
+				if [ "$screen" != "$last_screen" ]; then
+					last_screen=$screen
+					last_change=$(date +%s)
+				fi
+				stalled=0
+				[ $(($(date +%s) - last_change)) -ge "$stall_s" ] && stalled=1
+				at_deadline=0
+				[ "$(date +%s)" -ge "$deadline" ] && at_deadline=1
+				if [ "$stalled" = 0 ] && [ "$at_deadline" = 0 ]; then
+					sleep 1
+					continue
+				fi
+				if [ -f "$run/raw.$n" ]; then
+					bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
+						>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
+				fi
+				case $(sh "$tmux_sh" state "$session" 2>>"$run/log") in
+				working)
+					# 稼働中は deadline まで待つ。timeout は再 collect できる
+					if [ "$at_deadline" = 1 ]; then
+						printf '%s\n' timeout >"$run/reason.$n"
+						break
+					fi
+					sleep 1
+					continue
+					;;
+				ready)
+					# 入力待ちなら履歴をもう 1 度読んで完走判定をやり直す。
+					# 終端にするのは、その再読込が成功して未完走と判定できたときだけ。読めなければ timeout
+					if [ "$final" = 0 ]; then
+						final=1
+						continue
+					fi
+					if [ "$complete_rc" != 1 ]; then
+						printf '%s\n' timeout >"$run/reason.$n"
+						break
+					fi
+					printf '%s\n' 1 >"$run/rc.$n"
+					printf '%s\n' "marker 無し" >"$run/reason.$n"
+					: >"$run/dead"
+					break
+					;;
+				*)
+					# 読めない画面（承認待ちなど）。rc も dead も書かない
+					if [ "$at_deadline" = 1 ]; then
+						printf '%s\n' timeout >"$run/reason.$n"
+					else
+						printf '%s\n' "停滞" >"$run/reason.$n"
 					fi
 					break
-				fi
-				sleep 1
+					;;
+				esac
 			done
 		fi
 	fi

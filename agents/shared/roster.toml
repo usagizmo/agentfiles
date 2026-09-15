@@ -1,5 +1,5 @@
 # consult のアドバイザー候補（advisors）と resolve の実装役（resolve）。
-# 解釈と検証は roster.ts の parseRoster。選出と members の意味は agents/shared/advisors.ts の selectAdvisors。
+# 解釈と検証は roster.ts の parseRoster。選出は agents/shared/advisors.ts の selectAdvisors（表の順が優先順）。
 # advisors の read-only 手段は roster.ts の readOnlyArgs が末尾に足す。resolve には足さない。
 #
 # args は interactive CLI の追加引数（バイナリ名は kind。cursor は cursor-agent）。
@@ -13,29 +13,23 @@
 #   kind = "codex"
 #   args = ["--model", "gpt-5.6", "-c", "model_reasoning_effort=high"]
 #
-# grok 直:
-#   kind = "grok"
-#   args = ["--model", "grok-4.6", "--effort", "high"]
-#
-# grok を cursor 経由で（実行ファイルは cursor-agent。kind は cursor）:
-#   kind = "cursor"
-#   args = ["--model", "cursor-grok-4.6-high"]
-#
-# 3 枠目の members 同グループ: grok / cursor / opencode / command-code。
-# 起動は cursor のまま。OpenCode Go / Command Code の既定モデルは各 harness overlay。
-
-[[advisors]]
-kind = "claude"
-args = []
+# OpenCode Go / Command Code の既定モデルは各 harness overlay。
 
 [[advisors]]
 kind = "codex"
 args = []
 
 [[advisors]]
+kind = "claude"
+args = []
+
+[[advisors]]
+kind = "grok"
+args = ["--model", "grok-4.6", "--effort", "high"]
+
+[[advisors]]
 kind = "cursor"
 args = ["--model", "cursor-grok-4.6-high"]
-members = ["grok", "cursor", "opencode", "command-code"]
 
 [resolve]
 kind = "grok"

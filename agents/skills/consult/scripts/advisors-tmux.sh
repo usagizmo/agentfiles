@@ -6,10 +6,7 @@
 #   advisors-tmux.sh collect <run-dir> [wait-seconds]   今の巡の marker 完走を待って出力。既定 1200 秒
 #   advisors-tmux.sh ask <run-dir> <prompt-file>        次の巡を同じ session へ送る
 #   advisors-tmux.sh close <run-dir>                    tmux session を破棄
-#   advisors-tmux.sh verify <run-dir>                   今の巡の判定を並べ、全員「指摘なし」なら 0
-#
-# 必須 env:
-#   CONSULT_SELF_KIND  自己 kind（観測は env。LLM 自己申告は禁止）
+#   advisors-tmux.sh verify <run-dir>                   今の巡の判定を並べ、「指摘なし」なら 0
 #
 # 状態ファイル契約（round / marker / prompt / <a>/{start.rc,sent,rc,reason,out,dead}）。
 # silent fallback しない。
@@ -95,11 +92,6 @@ start)
 	[ -f "$roster" ] || fatal "候補表が無い: $roster"
 	[ -f "$select_ts" ] || fatal "選出スクリプトが無い: $select_ts"
 	[ -f "$tmux_sh" ] || fatal "tmux-session.sh が無い: $tmux_sh"
-	self=${CONSULT_SELF_KIND:-}
-	[ -n "$self" ] || fatal "CONSULT_SELF_KIND が無い（自己 kind は env で明示する）"
-	# env に自己の印があれば観測が優先。申告と食い違えば止まる
-	self=$(bun "$select_ts" self-kind --declared "$self") || fatal "自己 kind を確定できない"
-
 	prompt=${1:-}
 	[ -n "$prompt" ] && [ -s "$prompt" ] || fatal "prompt が空 / 不正: ${prompt:-未指定}"
 	case $prompt in
@@ -114,13 +106,12 @@ start)
 	rid=$(printf '%s' "$rid" | tr 'A-Z' 'a-z')
 	printf '%s\n' "$rid" >"$run/rid" || fatal "rid を書けない"
 	printf '%s\n' tmux >"$run/backend" || fatal "backend を書けない"
-	printf '%s\n' "$self" >"$run/self" || fatal "self を書けない"
 	cp "$roster" "$run/roster.toml" || fatal "候補表を配れない"
 	place_prompt "$run" "$prompt" 1
 	printf '%s\n' 1 >"$run/round" || fatal "round を書けない"
 
 	# select は選出した kind を行で返す
-	if ! bun "$select_ts" select --roster "$run/roster.toml" --self "$self" \
+	if ! bun "$select_ts" select --roster "$run/roster.toml" \
 		>"$run/advisors" 2>"$run/select.err"; then
 		cat "$run/select.err" >&2
 		rm -rf "$run"
@@ -140,7 +131,6 @@ start)
 			fatal "$run/$a を作れない"
 		}
 		session=c-$a-$rid
-		session=$(printf '%s' "$session" | tr -cd 'a-zA-Z0-9_-' | cut -c1-50)
 		printf '%s\n' "$session" >"$run/$a/session"
 		printf '%s\n' "$session" >"$run/$a/name"
 		# 起動 argv は 1 行 1 要素。sh の位置引数へそのまま積む
@@ -157,23 +147,9 @@ start)
 			printf '実行ファイルが PATH に無い: %s\n' "${1:-?}" >>"$run/$a/log"
 			continue
 		fi
-		if ! sh "$tmux_sh" create "$session" "$caller_cwd" -- "$@" >>"$run/$a/log" 2>&1; then
+		# 起こせなかった理由は open が log へ FATAL 行で残す
+		if ! sh "$tmux_sh" open "$session" "$caller_cwd" -- "$@" >>"$run/$a/log" 2>&1; then
 			printf '%s\n' 1 >"$run/$a/start.rc"
-			printf 'tmux create に失敗\n' >>"$run/$a/log"
-			continue
-		fi
-		# Claude の workspace trust 対話があれば Yes を選ぶ
-		sh "$tmux_sh" accept-trust "$session" 20 >>"$run/$a/log" 2>&1 || true
-		sh "$tmux_sh" wait-ready "$session" 45 >>"$run/$a/log" 2>&1
-		wr=$?
-		if [ "$wr" -ne 0 ]; then
-			printf '%s\n' 1 >"$run/$a/start.rc"
-			if [ "$wr" -eq 3 ]; then
-				printf 'trust 対話を越えられない: %s\n' "$caller_cwd" >>"$run/$a/log"
-			else
-				printf 'wait-ready に失敗（TUI 未準備）\n' >>"$run/$a/log"
-			fi
-			sh "$tmux_sh" kill "$session" >>"$run/$a/log" 2>&1 || true
 			continue
 		fi
 		if send_round "$run" "$a" 1; then
@@ -190,7 +166,7 @@ start)
 		while IFS= read -r a; do
 			[ -n "$a" ] || continue
 			printf '=== %s start 失敗 ===\n' "$a" >&2
-			tail -n 20 "$run/$a/log" 2>/dev/null >&2
+			tail -n 20 "$run/$a/log" >&2 2>/dev/null
 		done <"$run/advisors"
 		kill_sessions "$run"
 		rm -rf "$run"
