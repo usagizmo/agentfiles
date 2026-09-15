@@ -195,3 +195,19 @@ test("dispatch tmux: 画面が動かなくても作業中なら停滞にせず d
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("dispatch tmux: 停滞秒が deadline より短くても、入力待ちで marker が無ければ終端する", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "no-marker"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "20", "2"]);
+    expect(first.stdout).toContain("(rc=1 marker 無し)");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(true);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);

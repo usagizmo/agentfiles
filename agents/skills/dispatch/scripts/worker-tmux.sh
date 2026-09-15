@@ -185,31 +185,37 @@ collect)
 					: >"$run/reason.$n"
 					break
 				fi
-				# 画面が stall 秒変わらず、処理中でもなければ停滞（承認待ちなど）。rc も dead も書かない
+				# 停止の疑い: 画面が stall 秒変わらない、または deadline 到達
 				screen=$(sh "$tmux_sh" screen "$session" 2>>"$run/log") || screen=$last_screen
 				if [ "$screen" != "$last_screen" ]; then
 					last_screen=$screen
 					last_change=$(date +%s)
-				elif [ $(($(date +%s) - last_change)) -ge "$stall_s" ] &&
-					[ "$(sh "$tmux_sh" state "$session" 2>>"$run/log")" != working ]; then
-					printf '%s\n' "停滞" >"$run/reason.$n"
-					if [ -f "$run/raw.$n" ]; then
-						bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
-							>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
-					fi
-					break
 				fi
-				if [ "$(date +%s)" -ge "$deadline" ]; then
-					if [ -f "$run/raw.$n" ]; then
-						bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
-							>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
-					fi
-					# 稼働中なら timeout（再 collect できる）。入力待ちなら履歴をもう 1 度読んで完走判定をやり直す。
-					# 終端にするのは、その再読込が成功して未完走と判定できたときだけ。読めなければ timeout
-					if [ "$(sh "$tmux_sh" state "$session" 2>>"$run/log")" != ready ]; then
+				stalled=0
+				[ $(($(date +%s) - last_change)) -ge "$stall_s" ] && stalled=1
+				at_deadline=0
+				[ "$(date +%s)" -ge "$deadline" ] && at_deadline=1
+				if [ "$stalled" = 0 ] && [ "$at_deadline" = 0 ]; then
+					sleep 1
+					continue
+				fi
+				if [ -f "$run/raw.$n" ]; then
+					bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
+						>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
+				fi
+				case $(sh "$tmux_sh" state "$session" 2>>"$run/log") in
+				working)
+					# 稼働中は deadline まで待つ。timeout は再 collect できる
+					if [ "$at_deadline" = 1 ]; then
 						printf '%s\n' timeout >"$run/reason.$n"
 						break
 					fi
+					sleep 1
+					continue
+					;;
+				ready)
+					# 入力待ちなら履歴をもう 1 度読んで完走判定をやり直す。
+					# 終端にするのは、その再読込が成功して未完走と判定できたときだけ。読めなければ timeout
 					if [ "$final" = 0 ]; then
 						final=1
 						continue
@@ -222,8 +228,17 @@ collect)
 					printf '%s\n' "marker 無し" >"$run/reason.$n"
 					: >"$run/dead"
 					break
-				fi
-				sleep 1
+					;;
+				*)
+					# 読めない画面（承認待ちなど）。rc も dead も書かない
+					if [ "$at_deadline" = 1 ]; then
+						printf '%s\n' timeout >"$run/reason.$n"
+					else
+						printf '%s\n' "停滞" >"$run/reason.$n"
+					fi
+					break
+					;;
+				esac
 			done
 		fi
 	fi

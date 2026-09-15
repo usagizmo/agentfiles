@@ -1,11 +1,16 @@
 // advisors-tmux.sh の巡（start → collect → ask → collect → close）。
-// tmux / codex は偽物。偽 tmux は fake-tmux.ts。
+// tmux / 先頭 kind の harness は偽物。偽 tmux は fake-tmux.ts。
 
 import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
+import { ROSTER_URL, directBinary, parseRoster } from "../agents/shared/roster.ts";
 import { installFakeTmux } from "./fake-tmux.ts";
+
+// 起動されるのは実体 roster の先頭。並べ替えても gate が落ちないように名前で決め打ちしない
+const FIRST = parseRoster(await Bun.file(ROSTER_URL).text()).advisors[0]?.kind ?? "";
+const FIRST_BIN = directBinary(FIRST);
 
 const SCRIPT = new URL("../agents/skills/consult/scripts/advisors-tmux.sh", import.meta.url)
   .pathname;
@@ -13,7 +18,7 @@ const SCRIPT = new URL("../agents/skills/consult/scripts/advisors-tmux.sh", impo
 const FIXTURE = new URL("fixtures/pane-state", import.meta.url).pathname;
 
 const FAKE_BIN = `#!/bin/sh
-# PATH 上の偽 codex。open が直接 exec するので実バイナリが要る
+# PATH 上の偽 harness。open が直接 exec するので実バイナリが要る
 exit 0
 `;
 
@@ -46,10 +51,10 @@ const run = async (dir: string, argv: string[]) => {
 const setup = async () => {
   const dir = await mkdtemp(join(tmpdir(), "advisors-tmux-"));
   await installFakeTmux(dir);
-  await Bun.write(join(dir, "codex"), FAKE_BIN);
+  await Bun.write(join(dir, FIRST_BIN), FAKE_BIN);
   await Bun.write(join(dir, "prompt"), "Review the diff.\n");
   await Bun.write(join(dir, "reply"), "Applied 1. Re-review.\n");
-  await chmod(join(dir, "codex"), 0o755);
+  await chmod(join(dir, FIRST_BIN), 0o755);
   return dir;
 };
 
@@ -67,7 +72,7 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
 
     const first = await run(dir, ["collect", runDir, "5"]);
     expect(first.exitCode).toBe(0);
-    expect(first.stdout).toContain("=== codex 巡 1 (rc=0) ===");
+    expect(first.stdout).toContain(`=== ${FIRST} 巡 1 (rc=0) ===`);
     expect(first.stdout).toContain("answer 1");
 
     const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
@@ -93,7 +98,7 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
     const unverified = await run(dir, ["verify", runDir]);
     expect({ exitCode: unverified.exitCode, stdout: unverified.stdout }).toEqual({
       exitCode: 1,
-      stdout: `run: ${runDir}\nround: 2\nclosed: yes\ncodex: 不明\nverify: fail\n`,
+      stdout: `run: ${runDir}\nround: 2\nclosed: yes\n${FIRST}: 不明\nverify: fail\n`,
     });
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -107,7 +112,7 @@ test("tmux backend: 起こせなければ agent の log 末尾を出す", async 
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
     expect(started.stderr).toContain(
-      "=== codex start 失敗 ===\nFATAL\tsession が消えた（起動した harness が終了した）: c-codex-",
+      `=== ${FIRST} start 失敗 ===\nFATAL\tsession が消えた（起動した harness が終了した）: c-${FIRST}-`,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -120,7 +125,9 @@ test("tmux backend: ログイン待ちの agent は log に理由を残して起
     await Bun.write(join(dir, "login"), Bun.file(`${FIXTURE}/login-cursor`));
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
-    expect(started.stderr).toContain("=== codex start 失敗 ===\nFATAL\tログインが要る: codex\n");
+    expect(started.stderr).toContain(
+      `=== ${FIRST} start 失敗 ===\nFATAL\tログインが要る: ${FIRST_BIN}\n`,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -135,7 +142,7 @@ test("tmux backend: verify は今の巡が「指摘なし」のときだけ通�
     const fix = await run(dir, ["verify", runDir]);
     expect({ exitCode: fix.exitCode, stdout: fix.stdout }).toEqual({
       exitCode: 1,
-      stdout: `run: ${runDir}\nround: 1\nclosed: no\ncodex: 修正推奨\nverify: fail\n`,
+      stdout: `run: ${runDir}\nround: 1\nclosed: no\n${FIRST}: 修正推奨\nverify: fail\n`,
     });
 
     await Bun.write(join(dir, "verdict"), "判定: 指摘なし\n");
@@ -143,12 +150,12 @@ test("tmux backend: verify は今の巡が「指摘なし」のときだけ通�
     // 回収前は未終了
     const early = await run(dir, ["verify", runDir]);
     expect(early.exitCode).toBe(1);
-    expect(early.stdout).toContain("codex: 未回収");
+    expect(early.stdout).toContain(`${FIRST}: 未回収`);
     expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(0);
     const pass = await run(dir, ["verify", runDir]);
     expect({ exitCode: pass.exitCode, stdout: pass.stdout }).toEqual({
       exitCode: 0,
-      stdout: `run: ${runDir}\nround: 2\nclosed: no\ncodex: 指摘なし\nverify: pass\n`,
+      stdout: `run: ${runDir}\nround: 2\nclosed: no\n${FIRST}: 指摘なし\nverify: pass\n`,
     });
     expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
@@ -199,7 +206,7 @@ test("tmux backend: 貼り付けが反映されなければ Enter を送らず s
     await Bun.write(join(dir, "slow-paste"), "999\n");
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
-    expect(started.stderr).toContain("貼り付けが画面に反映されない");
+    expect(started.stderr).toContain("貼り付けが入力欄に反映されない");
     const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
     for (const srv of servers) {
       expect(await Bun.file(join(dir, srv, "enters")).exists()).toBe(false);
@@ -228,6 +235,36 @@ test("tmux backend: Enter を送り直しても入力欄に残るなら start �
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
     expect(started.stderr).toContain("送信されない（入力欄に残っている）");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 貼り付け前に状態行が動いても、入力欄に反映されるまで Enter を送らない", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "status-flicker"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    expect((await run(dir, ["collect", runDir, "5"])).stdout).toContain("answer 1");
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 入力欄が貼り付け前に戻ったら数え直し、続けて 2 回同じになってから Enter を 1 回送る", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "paste-flap"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    expect((await run(dir, ["collect", runDir, "5"])).stdout).toContain("answer 1");
+    const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+    expect(await readFile(join(dir, servers[0] ?? "", "enters"), "utf8")).toBe("enter\n");
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

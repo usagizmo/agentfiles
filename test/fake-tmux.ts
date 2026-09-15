@@ -3,7 +3,9 @@
 // paste は入力欄に pending として置き、capture で画面へ反映し、Enter で marker つきの応答を積む。
 // 反映前の Enter は落ちる（本物の TUI の挙動）。slow-paste があれば反映をその回数の capture だけ遅らせる。
 // drop-enter は反映後の最初の Enter を 1 回だけ落とす。drop-enter-always は全部落とす。capture-fail-after-enter は Enter 後の capture を失敗させる。
-// working-stall は応答の代わりに動かない作業中の状態行を出す。no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。
+// working-stall は応答の代わりに動かない作業中の状態行を出す。status-flicker は貼り付けが反映される前に
+// 状態行を 1 度だけ動かす。paste-flap は反映後の 2 回目の capture で一度貼り付け前の入力欄に戻り、
+// 4 回目の capture まで Enter を落とす。no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。
 // history-fail-after-first は 2 回目以降の履歴 capture を失敗させる。prompt-stall は応答の代わりに
 // 入力欄の無い問いを出して止まる。Enter の回数は enters に積む。
 
@@ -77,7 +79,10 @@ if args[0] == "send-keys":
         enters.write_text(enters.read_text() + "enter\\n" if enters.exists() else "enter\\n")
         pending = server / "pending"
         drop = root / "drop-enter"
+        flap = root / "paste-flap"
         if (root / "drop-enter-always").exists():
+            pass
+        elif flap.exists() and not (server / "flap-done").exists():
             pass
         elif pending.exists() and (server / "pending-rendered").exists() and drop.exists():
             drop.unlink()
@@ -100,7 +105,8 @@ if args[0] == "send-keys":
             # 送信で入力欄の placeholder は消える（本物の TUI は入力欄を描き直す）
             shown = screen.read_text().replace("› [Pasted Content]\\n", "")
             if (root / "prompt-stall").exists():
-                screen.write_text(shown + "Allow this command? (y/n)\\n")
+                # 対話は入力欄を出さない
+                screen.write_text("Allow this command? (y/n)\\n")
             elif (root / "working-stall").exists():
                 screen.write_text(shown + "• Working (6s • esc to interrupt)\\n")
             else:
@@ -120,7 +126,7 @@ if args[0] == "paste-buffer":
         buf.unlink()
     (server / "pending").write_text(text)
     slow = root / "slow-paste"
-    (server / "pending-delay").write_text(slow.read_text().strip() if slow.exists() else "0")
+    (server / "pending-delay").write_text(slow.read_text().strip() if slow.exists() else ("3" if (root / "status-flicker").exists() else "0"))
     raise SystemExit(0)
 
 if args[0] == "delete-buffer":
@@ -145,13 +151,26 @@ if args[0] == "capture-pane":
     pending = server / "pending"
     if pending.exists() and not (server / "pending-rendered").exists():
         delay = int((server / "pending-delay").read_text())
+        flicker = server / "flickered"
+        if (root / "status-flicker").exists() and not flicker.exists():
+            screen = server / "screen"
+            screen.write_text(screen.read_text() + "  model · thinking\\n")
+            flicker.write_text("")
         if delay > 0:
             (server / "pending-delay").write_text(str(delay - 1))
         else:
             screen = server / "screen"
             screen.write_text(screen.read_text() + "› [Pasted Content]\\n")
             (server / "pending-rendered").write_text("")
-    sys.stdout.write((server / "screen").read_text())
+    shown = (server / "screen").read_text()
+    if (root / "paste-flap").exists() and (server / "pending-rendered").exists():
+        n = int((server / "flap-count").read_text()) + 1 if (server / "flap-count").exists() else 1
+        (server / "flap-count").write_text(str(n))
+        if n == 2:
+            shown = shown.replace("› [Pasted Content]\\n", "")
+        if n >= 4:
+            (server / "flap-done").write_text("")
+    sys.stdout.write(shown)
     raise SystemExit(0)
 
 raise SystemExit("Unexpected tmux: " + repr(args))

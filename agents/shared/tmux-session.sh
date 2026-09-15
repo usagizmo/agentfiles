@@ -58,23 +58,6 @@ screen_of() {
 	tmux_session capture-pane -t "$1" -p 2>/dev/null
 }
 
-# 画面が prev から変わり、続けて 2 回同じ画面になるまで待つ。尽きたら 1
-wait_screen_settle() {
-	s_target=$1
-	s_prev=$2
-	s_ticks=$3
-	s_last=$s_prev
-	while [ "$s_ticks" -gt 0 ]; do
-		if s_now=$(screen_of "$s_target") && [ "$s_now" != "$s_prev" ]; then
-			[ "$s_now" = "$s_last" ] && return 0
-			s_last=$s_now
-		fi
-		sleep 0.2
-		s_ticks=$((s_ticks - 1))
-	done
-	return 1
-}
-
 # pane は base-index / pane-base-index に依存しない。session の pane id を引く
 target_of() {
 	t_id=$(tmux_session list-panes -t "=$session" -F '#{pane_id}' 2>/dev/null | head -n 1)
@@ -195,10 +178,26 @@ paste-file)
 		tmux_session delete-buffer -b "$buf" 2>/dev/null || true
 		fatal "paste できない"
 	}
-	# 貼り付けが画面に反映されて落ち着いてから Enter を送る（処理中に送ると入力欄に残る）
-	wait_screen_settle "$target" "$before" 50 || fatal "貼り付けが画面に反映されない: $session"
-	after=$(screen_of "$target") || fatal "画面を読めない: $session"
-	pasted=$(printf '%s\n' "$after" | bun "$advisors_ts" input-line) || fatal "入力欄を読めない: $session"
+	# 貼り付けが入力欄に反映されて落ち着いてから Enter を送る（処理中に送ると入力欄に残る）。
+	# 画面全体の変化は状態行でも起きるので、入力欄の行が変わったことを見る
+	before_in=$(printf '%s\n' "$before" | bun "$advisors_ts" input-line) || fatal "入力欄を読めない: $session"
+	p_ticks=50
+	pasted=$before_in
+	# 2 回続けて同じ（貼り付け前の行に戻る・読めない回があれば数え直す）
+	while [ "$p_ticks" -gt 0 ]; do
+		if now=$(screen_of "$target"); then
+			now_in=$(printf '%s\n' "$now" | bun "$advisors_ts" input-line) || fatal "入力欄を読めない: $session"
+			if [ "$now_in" != "$before_in" ] && [ "$now_in" = "$pasted" ]; then
+				break
+			fi
+			pasted=$now_in
+		else
+			pasted=$before_in
+		fi
+		sleep 0.2
+		p_ticks=$((p_ticks - 1))
+	done
+	[ "$p_ticks" -gt 0 ] || fatal "貼り付けが入力欄に反映されない: $session"
 	# 送信の証拠は入力欄の中身が消えること（画面全体は状態行の動きでも変わる）。
 	# 起動直後の実行器は貼り付けの直後の Enter を取りこぼすので、消えるまで 1 秒おきに送り直す（最大 5 回）
 	p_tries=0

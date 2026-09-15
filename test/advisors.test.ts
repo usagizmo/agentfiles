@@ -55,14 +55,11 @@ const withResolve = (resolve: string): Roster =>
 
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
+// 並び順と args は quota 切れで人が並べ替える運用値。順序を固定せず、妥当性だけを見る
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind)).toEqual(["codex", "claude", "grok", "cursor"]);
-  expect(roster[2]?.args).toEqual(["--model", "grok-4.6", "--effort", "high"]);
-  expect(roster[3]?.args).toEqual(["--model", "cursor-grok-4.6-high"]);
-  expect(parsed.resolve).toEqual({
-    kind: "grok",
-    args: ["--model", "grok-4.6", "--effort", "high"],
-  });
+  expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex", "cursor", "grok"]);
+  for (const slot of roster) expect(() => directLaunchArgv(slot)).not.toThrow();
+  expect(() => directResolveLaunchArgv(parsed.resolve)).not.toThrow();
 });
 
 test("resolve は無いと止まり、未知キー・承認を飛ばす flag も止まる", () => {
@@ -109,7 +106,7 @@ test("resolve は read-only を要求しない", () => {
 });
 
 test("選出は候補表の先頭 1 枠（自己 kind を見ない）", () => {
-  expect(kinds(selectAdvisors(roster))).toEqual(["codex"]);
+  expect(kinds(selectAdvisors(roster))).toEqual(roster.slice(0, 1).map((s) => s.kind));
   const swapped = parseRoster(
     toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'),
   ).advisors;
