@@ -23,7 +23,7 @@ description: >-
 書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[resolve]`。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
 
 1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する」
-2. `start` → `collect`。timeout は同じ run を再 `collect`
+2. `start` → `collect`。完走（rc=0）まで 3 へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`
 3. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直させる点は `ask` で送って `collect`。無くなるまで繰り返す
 4. `close`
 5. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・入力待ちで marker 無し）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない

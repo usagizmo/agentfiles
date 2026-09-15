@@ -158,3 +158,40 @@ test("dispatch tmux: deadline の再読込が失敗したら終端にせず time
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("dispatch tmux: 画面が動かず処理中でもなければ deadline を待たず停滞で戻る", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "prompt-stall"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const t0 = Date.now();
+    const first = await run(dir, ["collect", runDir, "20", "2"]);
+    expect(Date.now() - t0).toBeLessThan(15_000);
+    expect(first.stdout).toContain("(rc=1 停滞)");
+    expect(first.stdout).toContain("Allow this command?");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(false);
+    expect(await Bun.file(join(runDir, "rc.1")).exists()).toBe(false);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("dispatch tmux: 画面が動かなくても作業中なら停滞にせず deadline まで待つ", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "working-stall"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "5", "2"]);
+    expect(first.stdout).toContain("(rc=1 timeout)");
+    expect(first.stdout).not.toContain("停滞");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(false);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);

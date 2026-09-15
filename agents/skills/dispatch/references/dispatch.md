@@ -41,7 +41,7 @@ DISPATCH_BACKEND=tmux \
 
 ## 巡の終わり方
 
-`collect` の回収ヘッダは `rc` と理由を持つ。`timeout` は稼働中で `rc` を書かず、同じ run を再 `collect` できる。終端（`dead`。以降 `ask` できない）は `消失` / `送信失敗` / `marker 無し`（deadline で入力待ちに戻り、履歴を読み直しても marker が無い）。判定は `worker-tmux.sh`。
+`collect` の回収ヘッダは `rc` と理由を持つ。`rc` を書かず再 `collect` できるのは `timeout` と `停滞`（出力にその時点の画面が付く）。終端（`dead`。以降 `ask` できない）は `消失` / `送信失敗` / `marker 無し`。述語と既定値は `worker-tmux.sh`。
 
 ## 呼び出し元との分担
 
