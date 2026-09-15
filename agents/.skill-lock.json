@@ -28,6 +28,16 @@
       "pluginName": "mattpocock-skills",
       "installedAt": "2026-09-09T20:35:15.115Z",
       "updatedAt": "2026-09-09T20:35:15.115Z"
+    },
+    "swiftui-expert-skill": {
+      "source": "avdlee/swiftui-agent-skill",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/avdlee/swiftui-agent-skill.git",
+      "skillPath": "skills/swiftui-expert-skill/SKILL.md",
+      "skillFolderHash": "4cd8389809408fdf008ddde78dccf560198cecb0",
+      "pluginName": "swiftui-expert",
+      "installedAt": "2026-09-15T17:31:14.286Z",
+      "updatedAt": "2026-09-15T17:31:14.286Z"
     }
   },
   "dismissed": {
@@ -35,14 +45,13 @@
   },
   "lastSelectedAgents": [
     "amp",
-    "antigravity",
-    "antigravity-cli",
     "cline",
     "codex",
     "cursor",
-    "deepagents",
+    "droid",
     "gemini-cli",
     "github-copilot",
+    "kilo",
     "kimi-code-cli",
     "opencode",
     "warp",
