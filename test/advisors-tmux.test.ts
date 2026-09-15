@@ -220,3 +220,15 @@ test("tmux backend: 送信後の画面を読めなければ Enter を送り直�
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("tmux backend: Enter を送り直しても入力欄に残るなら start を止める", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "drop-enter-always"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(2);
+    expect(started.stderr).toContain("送信されない（入力欄に残っている）");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);

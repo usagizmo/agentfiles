@@ -10,6 +10,7 @@ import { expect, test } from "bun:test";
 import {
   advisorComplete,
   advisorVerdict,
+  inputLine,
   isChromeLine,
   lastContentLine,
   paneState,
@@ -515,13 +516,19 @@ test("complete CLI は JSON と終了コードを返す", async () => {
 const PANE = `${ROOT}test/fixtures/pane-state`;
 const paneFixture = (name: string) => Bun.file(`${PANE}/${name}`).text();
 
-test.each(["claude", "codex", "cursor"] as const)("%s の作業中の実画面は working", async (kind) => {
-  expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
-});
+test.each(["claude", "codex", "cursor", "grok"] as const)(
+  "%s の作業中の実画面は working",
+  async (kind) => {
+    expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
+  },
+);
 
-test.each(["claude", "codex", "cursor"] as const)("%s の入力待ちの実画面は ready", async (kind) => {
-  expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
-});
+test.each(["claude", "codex", "cursor", "grok"] as const)(
+  "%s の入力待ちの実画面は ready",
+  async (kind) => {
+    expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
+  },
+);
 
 // 起動直後の cursor は ❯ を描かない。文字で探すと永久に ready にならない
 test("cursor の起動直後の実画面も ready", async () => {
@@ -645,4 +652,15 @@ test("状態行と同じ形の本文行は working 側に倒す", async () => {
 
 test("読めない画面は unknown（停止と区別する）", () => {
   expect(paneState("\n\n  loading\n")).toBe("unknown");
+});
+
+test("inputLine は入力欄の行だけを返し、貼り付けの placeholder が消えたことを見分けられる", () => {
+  const pasted =
+    "• You have 2 usage limit resets available.\n\n› [Pasted Content 1698 chars]\n\n  gpt-5.6 high · ~/repo\n";
+  const sent =
+    "• You have 2 usage limit resets available.\n\n• Working (3s • esc to interrupt)\n\n› Ask Codex to do anything\n\n  gpt-5.6 high · ~/repo · renaming... ⠼\n";
+  expect(inputLine(pasted)).toBe("› [Pasted Content 1698 chars]");
+  expect(inputLine(sent)).toBe("› Ask Codex to do anything");
+  expect(inputLine("answer 1\n❯ \n")).toBe("❯");
+  expect(inputLine("loading\n")).toBe("");
 });

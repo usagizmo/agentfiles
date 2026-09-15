@@ -58,24 +58,6 @@ screen_of() {
 	tmux_session capture-pane -t "$1" -p 2>/dev/null
 }
 
-# 画面が prev から変わるまで 0.2 秒刻みで待つ。変わったら 0、読めたが変わらなければ 1、1 度も読めなければ 2
-wait_screen_change() {
-	w_target=$1
-	w_prev=$2
-	w_ticks=$3
-	w_seen=0
-	while [ "$w_ticks" -gt 0 ]; do
-		if w_now=$(screen_of "$w_target"); then
-			[ "$w_now" != "$w_prev" ] && return 0
-			w_seen=1
-		fi
-		sleep 0.2
-		w_ticks=$((w_ticks - 1))
-	done
-	[ "$w_seen" = 1 ] && return 1
-	return 2
-}
-
 # 画面が prev から変わり、続けて 2 回同じ画面になるまで待つ。尽きたら 1
 wait_screen_settle() {
 	s_target=$1
@@ -203,6 +185,7 @@ paste-file)
 	file=${1:-}
 	[ -n "$file" ] && [ -f "$file" ] || fatal "file が不正: ${file:-未指定}"
 	require_session
+	require_judge
 	target=$(target_of) || fatal "pane が無い: $session"
 	buf="consult-paste-$$"
 	before=$(screen_of "$target") || fatal "画面を読めない: $session"
@@ -215,14 +198,19 @@ paste-file)
 	# 貼り付けが画面に反映されて落ち着いてから Enter を送る（処理中に送ると入力欄に残る）
 	wait_screen_settle "$target" "$before" 50 || fatal "貼り付けが画面に反映されない: $session"
 	after=$(screen_of "$target") || fatal "画面を読めない: $session"
-	tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない"
-	# 読めたのに画面が動かないときだけ Enter をもう 1 度送る
-	wait_screen_change "$target" "$after" 10
-	case $? in
-	0) ;;
-	1) tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない" ;;
-	*) fatal "送信後の画面を読めない: $session" ;;
-	esac
+	pasted=$(printf '%s\n' "$after" | bun "$advisors_ts" input-line) || fatal "入力欄を読めない: $session"
+	# 送信の証拠は入力欄の中身が消えること（画面全体は状態行の動きでも変わる）。
+	# 起動直後の実行器は貼り付けの直後の Enter を取りこぼすので、消えるまで 1 秒おきに送り直す（最大 5 回）
+	p_tries=0
+	while :; do
+		tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない"
+		p_tries=$((p_tries + 1))
+		sleep 1
+		now=$(screen_of "$target") || fatal "送信後の画面を読めない: $session"
+		now_in=$(printf '%s\n' "$now" | bun "$advisors_ts" input-line) || fatal "入力欄を読めない: $session"
+		[ "$now_in" != "$pasted" ] && break
+		[ "$p_tries" -lt 5 ] || fatal "送信されない（入力欄に残っている）: $session"
+	done
 	;;
 capture)
 	require_session

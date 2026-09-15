@@ -6,6 +6,7 @@
 //   bun advisors.ts verdict --output <file> --marker <token>
 //   bun advisors.ts extract --raw <file> [--prev <marker>]
 //   bun advisors.ts pane-state [--screen <file>]   （既定は stdin）
+//   bun advisors.ts input-line [--screen <file>]   （既定は stdin。入力欄の行。無ければ空行）
 //   bun advisors.ts trust-key [--screen <file>]    （既定は stdin）
 //
 // stdout はどれも行で返す（sh がそのまま読める形。JSON を挟まない）。
@@ -104,6 +105,20 @@ const contentLines = (text: string): readonly string[] => {
 export const lastContentLine = (text: string): string | undefined => contentLines(text).at(-1);
 
 /**
+ * 表示中の画面の入力欄の行（正規化済み）。無ければ空。
+ *
+ * 送信の確認に使う。送信されれば入力欄の中身（貼り付けの placeholder や本文の先頭行）が消える。
+ * 画面全体の変化は状態行のスピナーや時計でも起きるので、送信の証拠にならない。
+ */
+export const inputLine = (screen: string): string => {
+  const lines = screen.split(/\r?\n/).map(normalizeSnapshotLine);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (isInputLine(lines, i)) return lines[i] ?? "";
+  }
+  return "";
+};
+
+/**
  * marker が応答の最後にあるかを見る。
  *
  * 一致ではなく後方一致で取る —— 実行器によっては marker を直前の行の後ろへ
@@ -168,7 +183,11 @@ const STATUS_HEAD = /^(?:\p{So}\s*)?(?:[\p{L}\p{N}\u2026·]+(?:-[\p{L}\p{N}\u202
 /** 入力欄の右端に出る中断案内（cursor は状態行を持たない）。 */
 const INTERRUPT_HINT = /(?:ctrl\+c to stop|(?:esc|escape)(?:\s+\S+)? to interrupt)$/iu;
 
+// grok は括弧を使わず、スピナー + 状態語… + 経過秒 のあと右端に転送量と `[stop]` を描く
+const GROK_STATUS = /^\p{So}\s+(?:[\p{L}\p{N}\u2026·]+\s*){1,8}\d+(?:\.\d+)?s\s{2,}.*\[stop\]$/u;
+
 const isStatusLine = (line: string): boolean => {
+  if (GROK_STATUS.test(line)) return true;
   const matched = ELAPSED_TAIL.exec(line);
   return matched !== null && STATUS_HEAD.test(line.slice(0, matched.index));
 };
@@ -288,7 +307,7 @@ const main = async (): Promise<void> => {
       process.stdout.write(`${advisorVerdict(text, marker)}\n`);
       return;
     }
-    if (cmd === "pane-state" || cmd === "trust-key") {
+    if (cmd === "pane-state" || cmd === "trust-key" || cmd === "input-line") {
       const screenPath = flag(argv, "--screen");
       const text =
         screenPath === undefined || screenPath === "-"
@@ -296,6 +315,10 @@ const main = async (): Promise<void> => {
           : await Bun.file(screenPath).text();
       if (cmd === "pane-state") {
         process.stdout.write(`${paneState(text)}\n`);
+        return;
+      }
+      if (cmd === "input-line") {
+        process.stdout.write(`${inputLine(text)}\n`);
         return;
       }
       const key = trustKey(text);
@@ -327,7 +350,7 @@ const main = async (): Promise<void> => {
       return;
     }
     throw new RosterError(
-      "使い方: advisors.ts select | launch-argv | complete | verdict | extract | pane-state | trust-key",
+      "使い方: advisors.ts select | launch-argv | complete | verdict | extract | pane-state | trust-key | input-line",
     );
   } catch (error) {
     const message = error instanceof RosterError ? error.message : String(error);

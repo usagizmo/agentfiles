@@ -2,9 +2,10 @@
 // server は socket ごとに dir を持ち、その中に session の画面と buffer を置く。
 // paste は入力欄に pending として置き、capture で画面へ反映し、Enter で marker つきの応答を積む。
 // 反映前の Enter は落ちる（本物の TUI の挙動）。slow-paste があれば反映をその回数の capture だけ遅らせる。
-// drop-enter は反映後の最初の Enter を 1 回だけ落とす。capture-fail-after-enter は Enter 後の capture を失敗させる。
-// no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。
-// history-fail-after-first は 2 回目以降の履歴 capture を失敗させる。Enter の回数は enters に積む。
+// drop-enter は反映後の最初の Enter を 1 回だけ落とす。drop-enter-always は全部落とす。capture-fail-after-enter は Enter 後の capture を失敗させる。
+// working-stall は応答の代わりに動かない作業中の状態行を出す。no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。
+// history-fail-after-first は 2 回目以降の履歴 capture を失敗させる。prompt-stall は応答の代わりに
+// 入力欄の無い問いを出して止まる。Enter の回数は enters に積む。
 
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
@@ -76,7 +77,9 @@ if args[0] == "send-keys":
         enters.write_text(enters.read_text() + "enter\\n" if enters.exists() else "enter\\n")
         pending = server / "pending"
         drop = root / "drop-enter"
-        if pending.exists() and (server / "pending-rendered").exists() and drop.exists():
+        if (root / "drop-enter-always").exists():
+            pass
+        elif pending.exists() and (server / "pending-rendered").exists() and drop.exists():
             drop.unlink()
         elif pending.exists() and (server / "pending-rendered").exists():
             text = pending.read_text()
@@ -94,7 +97,14 @@ if args[0] == "send-keys":
             prompts.write_text(str(n))
             verdict = (root / "verdict").read_text() if (root / "verdict").exists() else ""
             screen = server / "screen"
-            screen.write_text(screen.read_text() + ("answer %d\\n%s%s\\n❯ \\n" % (n, verdict, marker)))
+            # 送信で入力欄の placeholder は消える（本物の TUI は入力欄を描き直す）
+            shown = screen.read_text().replace("› [Pasted Content]\\n", "")
+            if (root / "prompt-stall").exists():
+                screen.write_text(shown + "Allow this command? (y/n)\\n")
+            elif (root / "working-stall").exists():
+                screen.write_text(shown + "• Working (6s • esc to interrupt)\\n")
+            else:
+                screen.write_text(shown + ("answer %d\\n%s%s\\n❯ \\n" % (n, verdict, marker)))
     raise SystemExit(0)
 
 if args[0] == "load-buffer":
