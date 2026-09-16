@@ -5,6 +5,7 @@
 #   advisors-tmux.sh start <prompt-file>                run dir を stdout へ。巡 1 を送る
 #   advisors-tmux.sh collect <run-dir> [wait-seconds]   今の巡の marker 完走を待って出力。既定 1200 秒
 #   advisors-tmux.sh ask <run-dir> <prompt-file>        次の巡を同じ session へ送る
+#   advisors-tmux.sh replace <run-dir>                  dead を次の候補で起こし直し、巡 1〜今の巡の依頼と回収済み応答を連結して送る
 #   advisors-tmux.sh close <run-dir>                    tmux session を破棄
 #   advisors-tmux.sh verify <run-dir>                   今の巡の判定を並べ、「指摘なし」なら 0
 #
@@ -30,6 +31,7 @@ place_prompt() {
 	p_n=$3
 	p_rid=$(cat "$p_run/rid") || fatal "rid が無い"
 	p_marker=ADVISOR-DONE-$p_rid-$p_n
+	cp "$p_src" "$p_run/prompt.$p_n.body" || fatal "prompt 原本を配れない"
 	cp "$p_src" "$p_run/prompt.$p_n" || fatal "prompt を配れない"
 	printf '%s\n' "$p_marker" >"$p_run/marker.$p_n" || fatal "marker を書けない"
 	printf '\n\n質問・異論・指摘なしのどれでも、応答の最後の行に %s をそのまま書いて応答を終えよ。この指令行は書かない。\n' "$p_marker" >>"$p_run/prompt.$p_n" ||
@@ -51,24 +53,80 @@ live_advisors() {
 	done <"$1/advisors"
 }
 
-# 巡 n の prompt を 1 session へ paste する
+# 巡 n の prompt を 1 session へ paste する。第 4 引数があればその file を送る
 send_round() {
 	s_run=$1
 	s_a=$2
 	s_n=$3
+	s_file=${4:-$s_run/prompt.$s_n}
 	s_session=$(cat "$s_run/$s_a/session" 2>/dev/null) || return 1
 	if ! sh "$tmux_sh" exists "$s_session"; then
 		printf 'session が消えている（巡 %s）\n' "$s_n" >>"$s_run/$s_a/log"
 		printf '%s\n' 1 >"$s_run/$s_a/sent.$s_n"
 		return 1
 	fi
-	if sh "$tmux_sh" paste-file "$s_session" "$s_run/prompt.$s_n" >>"$s_run/$s_a/log" 2>&1; then
+	if sh "$tmux_sh" paste-file "$s_session" "$s_file" >>"$s_run/$s_a/log" 2>&1; then
 		printf '%s\n' 0 >"$s_run/$s_a/sent.$s_n"
 		return 0
 	fi
 	printf '%s\n' 1 >"$s_run/$s_a/sent.$s_n"
 	printf 'paste-file に失敗（巡 %s）\n' "$s_n" >>"$s_run/$s_a/log"
 	return 1
+}
+
+# 指令行と応答末尾の当該 marker 行だけを除いて付ける
+append_response() {
+	[ -f "$1" ] || return 0
+	awk -v marker="$2" '
+		$0 ~ /^質問・異論・指摘なしのどれでも、応答の最後の行に / && $0 ~ /この指令行は書かない。$/ { next }
+		{ lines[++n] = $0 }
+		END {
+			while (n > 0 && (lines[n] ~ /^[ \t]*$/ || lines[n] ~ /^[ \t]*[❯›>][ \t]*$/)) n--
+			if (n > 0 && lines[n] == marker) n--
+			while (n > 0 && (lines[n] ~ /^[ \t]*$/ || lines[n] ~ /^[ \t]*[❯›>][ \t]*$/)) n--
+			for (i = 1; i <= n; i++) print lines[i]
+		}
+	' "$1" >>"$3"
+}
+
+# 巡 k の回収済み応答（rc.k == 0 の advisor の out.k。dead でも除外しない）
+out_of() {
+	o_run=$1
+	o_k=$2
+	while IFS= read -r a; do
+		[ -n "$a" ] || continue
+		[ "$(cat "$o_run/$a/rc.$o_k" 2>/dev/null)" = 0 ] || continue
+		[ -f "$o_run/$a/out.$o_k" ] || continue
+		printf '%s\n' "$o_run/$a/out.$o_k"
+		return 0
+	done <"$o_run/advisors"
+	return 1
+}
+
+# 巡 1〜n-1 の依頼と応答、巡 n の依頼を連結し、今の巡の marker 指令を末尾に付ける
+compose_replace_prompt() {
+	c_run=$1
+	c_n=$2
+	c_out=$3
+	c_marker=$(cat "$c_run/marker.$c_n") || return 1
+	: >"$c_out"
+	k=1
+	while [ "$k" -lt "$c_n" ]; do
+		[ -f "$c_run/prompt.$k.body" ] || return 1
+		printf '## 巡 %s の依頼\n\n' "$k" >>"$c_out"
+		cat "$c_run/prompt.$k.body" >>"$c_out" || return 1
+		printf '\n## 巡 %s の応答\n\n' "$k" >>"$c_out"
+		if c_resp=$(out_of "$c_run" "$k"); then
+			c_prev=$(cat "$c_run/marker.$k") || return 1
+			append_response "$c_resp" "$c_prev" "$c_out"
+		fi
+		printf '\n' >>"$c_out"
+		k=$((k + 1))
+	done
+	[ -f "$c_run/prompt.$c_n.body" ] || return 1
+	printf '## 巡 %s の依頼\n\n' "$c_n" >>"$c_out"
+	cat "$c_run/prompt.$c_n.body" >>"$c_out" || return 1
+	printf '\n\n質問・異論・指摘なしのどれでも、応答の最後の行に %s をそのまま書いて応答を終えよ。この指令行は書かない。\n' "$c_marker" >>"$c_out"
 }
 
 kill_sessions() {
@@ -81,8 +139,66 @@ kill_sessions() {
 	done <"$k_run/advisors"
 }
 
+record_tried() {
+	r_run=$1
+	r_a=$2
+	if [ -f "$r_run/tried" ] && grep -qx "$r_a" "$r_run/tried"; then
+		return 0
+	fi
+	printf '%s\n' "$r_a" >>"$r_run/tried"
+}
+
+# kind を 1 つ起こして巡 n の prompt を送る。起こせない / 送信失敗 / 送信直後の fatal は 1
+start_kind() {
+	sk_run=$1
+	sk_a=$2
+	sk_n=$3
+	sk_cwd=$4
+	sk_file=${5:-$sk_run/prompt.$sk_n}
+	record_tried "$sk_run" "$sk_a"
+	mkdir -p "$sk_run/$sk_a" || return 1
+	sk_rid=$(cat "$sk_run/rid") || return 1
+	session=c-$sk_a-$sk_rid
+	printf '%s\n' "$session" >"$sk_run/$sk_a/session"
+	printf '%s\n' "$session" >"$sk_run/$sk_a/name"
+	if ! bun "$select_ts" launch-argv --roster "$sk_run/roster.toml" --kind "$sk_a" \
+		>"$sk_run/$sk_a/argv" 2>>"$sk_run/$sk_a/log"; then
+		printf '%s\n' 1 >"$sk_run/$sk_a/start.rc"
+		printf 'launch-argv に失敗\n' >>"$sk_run/$sk_a/log"
+		return 1
+	fi
+	set --
+	while IFS= read -r arg; do set -- "$@" "$arg"; done <"$sk_run/$sk_a/argv"
+	if [ $# -eq 0 ] || ! command -v "$1" >/dev/null 2>&1; then
+		printf '%s\n' 1 >"$sk_run/$sk_a/start.rc"
+		printf '実行ファイルが PATH に無い: %s\n' "${1:-?}" >>"$sk_run/$sk_a/log"
+		return 1
+	fi
+	if ! sh "$tmux_sh" open "$session" "$sk_cwd" -- "$@" >>"$sk_run/$sk_a/log" 2>&1; then
+		printf '%s\n' 1 >"$sk_run/$sk_a/start.rc"
+		return 1
+	fi
+	if ! send_round "$sk_run" "$sk_a" "$sk_n" "$sk_file"; then
+		printf '%s\n' 1 >"$sk_run/$sk_a/start.rc"
+		printf 'prompt 送信に失敗\n' >>"$sk_run/$sk_a/log"
+		sh "$tmux_sh" kill "$session" >>"$sk_run/$sk_a/log" 2>&1 || true
+		return 1
+	fi
+	case $(sh "$tmux_sh" state "$session" 2>>"$sk_run/$sk_a/log") in
+	fatal)
+		printf '%s\n' 1 >"$sk_run/$sk_a/start.rc"
+		printf '%s\n' "不通" >"$sk_run/$sk_a/reason.$sk_n"
+		: >"$sk_run/$sk_a/dead"
+		sh "$tmux_sh" kill "$session" >>"$sk_run/$sk_a/log" 2>&1 || true
+		return 1
+		;;
+	esac
+	printf '%s\n' 0 >"$sk_run/$sk_a/start.rc"
+	return 0
+}
+
 cmd=${1:-}
-[ -n "$cmd" ] || fatal "使い方: advisors-tmux.sh start <prompt-file> | collect <run-dir> [秒] | ask <run-dir> <prompt-file> | close <run-dir> | verify <run-dir>"
+[ -n "$cmd" ] || fatal "使い方: advisors-tmux.sh start <prompt-file> | collect <run-dir> [秒] | ask <run-dir> <prompt-file> | replace <run-dir> | close <run-dir> | verify <run-dir>"
 shift
 
 case "$cmd" in
@@ -110,64 +226,35 @@ start)
 	place_prompt "$run" "$prompt" 1
 	printf '%s\n' 1 >"$run/round" || fatal "round を書けない"
 
-	# select は選出した kind を行で返す
+	# select は候補列を行で返す。起こせるまで順に試す
 	if ! bun "$select_ts" select --roster "$run/roster.toml" \
-		>"$run/advisors" 2>"$run/select.err"; then
+		>"$run/candidates" 2>"$run/select.err"; then
 		cat "$run/select.err" >&2
 		rm -rf "$run"
 		fatal "選出できない"
 	fi
 	cat "$run/select.err" >&2 || true
-	[ -s "$run/advisors" ] || fatal "選出結果が空"
+	[ -s "$run/candidates" ] || fatal "選出結果が空"
+	: >"$run/tried"
+	: >"$run/advisors"
 
-	# 選出された kind ごとに独立 session。cwd は呼び出し元
 	caller_cwd=$PWD
 	started=0
 	while IFS= read -r a; do
 		[ -n "$a" ] || continue
-		mkdir -p "$run/$a" || {
-			kill_sessions "$run"
-			rm -rf "$run"
-			fatal "$run/$a を作れない"
-		}
-		session=c-$a-$rid
-		printf '%s\n' "$session" >"$run/$a/session"
-		printf '%s\n' "$session" >"$run/$a/name"
-		# 起動 argv は 1 行 1 要素。sh の位置引数へそのまま積む
-		if ! bun "$select_ts" launch-argv --roster "$run/roster.toml" --kind "$a" \
-			>"$run/$a/argv" 2>>"$run/$a/log"; then
-			printf '%s\n' 1 >"$run/$a/start.rc"
-			printf 'launch-argv に失敗\n' >>"$run/$a/log"
-			continue
+		if start_kind "$run" "$a" 1 "$caller_cwd"; then
+			printf '%s\n' "$a" >>"$run/advisors"
+			started=1
+			break
 		fi
-		set --
-		while IFS= read -r arg; do set -- "$@" "$arg"; done <"$run/$a/argv"
-		if [ $# -eq 0 ] || ! command -v "$1" >/dev/null 2>&1; then
-			printf '%s\n' 1 >"$run/$a/start.rc"
-			printf '実行ファイルが PATH に無い: %s\n' "${1:-?}" >>"$run/$a/log"
-			continue
-		fi
-		# 起こせなかった理由は open が log へ FATAL 行で残す
-		if ! sh "$tmux_sh" open "$session" "$caller_cwd" -- "$@" >>"$run/$a/log" 2>&1; then
-			printf '%s\n' 1 >"$run/$a/start.rc"
-			continue
-		fi
-		if send_round "$run" "$a" 1; then
-			started=$((started + 1))
-			printf '%s\n' 0 >"$run/$a/start.rc"
-		else
-			printf '%s\n' 1 >"$run/$a/start.rc"
-			printf '初回 prompt 送信に失敗\n' >>"$run/$a/log"
-			sh "$tmux_sh" kill "$session" >>"$run/$a/log" 2>&1 || true
-		fi
-	done <"$run/advisors"
+	done <"$run/candidates"
 
 	if [ "$started" -eq 0 ]; then
 		while IFS= read -r a; do
 			[ -n "$a" ] || continue
 			printf '=== %s start 失敗 ===\n' "$a" >&2
 			tail -n 20 "$run/$a/log" >&2 2>/dev/null
-		done <"$run/advisors"
+		done <"$run/tried"
 		kill_sessions "$run"
 		rm -rf "$run"
 		fatal "アドバイザーを 1 つも起こせなかった"
@@ -222,6 +309,19 @@ collect)
 				: >"$run/$a/dead"
 				continue
 			fi
+			case $(sh "$tmux_sh" state "$session" 2>>"$run/$a/log") in
+			fatal)
+				sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
+				if [ -f "$run/$a/raw.$n" ]; then
+					bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
+						>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
+				fi
+				printf '%s\n' 1 >"$run/$a/rc.$n"
+				printf '%s\n' "不通" >"$run/$a/reason.$n"
+				: >"$run/$a/dead"
+				continue
+				;;
+			esac
 			sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
 			if bun "$select_ts" complete --output "$run/$a/raw.$n" --marker "$marker" \
 				>"$run/$a/complete.$n.json" 2>>"$run/$a/log"; then
@@ -264,11 +364,15 @@ collect)
 		printf '\n'
 	done <"$run/advisors"
 
+	passed=0
 	while IFS= read -r a; do
 		[ -n "$a" ] || continue
 		[ "$(cat "$run/$a/reason.$n" 2>/dev/null)" = "不在" ] && continue
+		[ -f "$run/$a/dead" ] && continue
 		[ "$(cat "$run/$a/rc.$n" 2>/dev/null)" = 0 ] || exit 1
+		passed=1
 	done <"$run/advisors"
+	[ "$passed" -eq 1 ] || exit 1
 	exit 0
 	;;
 
@@ -321,6 +425,38 @@ ask)
 	done
 	[ "$sent" -ge 1 ] || fatal "巡 $next を 1 つも送れなかった"
 	printf '%s\n' "$next"
+	;;
+
+replace)
+	run=${1:-}
+	require_run "$run"
+	live=$(live_advisors "$run")
+	if [ -n "$live" ]; then
+		exit 0
+	fi
+	[ -f "$run/candidates" ] || fatal "候補列が無い"
+	n=$(cat "$run/round")
+	[ -f "$run/prompt.$n" ] || fatal "巡 $n の prompt が無い"
+	combined=$(mktemp "${TMPDIR:-/tmp}/consult-replace.XXXXXX") || fatal "連結 prompt を作れない"
+	if ! compose_replace_prompt "$run" "$n" "$combined"; then
+		rm -f "$combined"
+		fatal "巡の prompt を連結できない"
+	fi
+	caller_cwd=$PWD
+	while IFS= read -r a; do
+		[ -n "$a" ] || continue
+		if [ -f "$run/tried" ] && grep -qx "$a" "$run/tried"; then
+			continue
+		fi
+		if start_kind "$run" "$a" "$n" "$caller_cwd" "$combined"; then
+			rm -f "$combined"
+			printf '%s\n' "$a" >>"$run/advisors"
+			exit 0
+		fi
+	done <"$run/candidates"
+	rm -f "$combined"
+	printf '候補枯渇\n' >&2
+	exit 1
 	;;
 
 close)

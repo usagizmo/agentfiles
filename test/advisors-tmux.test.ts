@@ -1,7 +1,7 @@
 // advisors-tmux.sh の巡（start → collect → ask → collect → close）。
 // tmux / 先頭 kind の harness は偽物。偽 tmux は fake-tmux.ts。
 
-import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -34,7 +34,7 @@ const run = async (dir: string, argv: string[]) => {
     env: {
       ...process.env,
       ...CLEAN,
-      PATH: `${dir}:${process.env["PATH"]}`,
+      PATH: `${dir}:/usr/bin:/bin`,
       TMPDIR: dir,
     },
     stdout: "pipe",
@@ -48,14 +48,31 @@ const run = async (dir: string, argv: string[]) => {
   return { stdout, stderr, exitCode };
 };
 
-const setup = async () => {
+const ADVISORS = parseRoster(await Bun.file(ROSTER_URL).text()).advisors;
+
+const setup = async (bins: readonly string[] = [FIRST_BIN]) => {
   const dir = await mkdtemp(join(tmpdir(), "advisors-tmux-"));
   await installFakeTmux(dir);
-  await Bun.write(join(dir, FIRST_BIN), FAKE_BIN);
+  for (const bin of bins) {
+    await Bun.write(join(dir, bin), FAKE_BIN);
+    await chmod(join(dir, bin), 0o755);
+  }
+  await symlink(process.execPath, join(dir, "bun"));
   await Bun.write(join(dir, "prompt"), "Review the diff.\n");
   await Bun.write(join(dir, "reply"), "Applied 1. Re-review.\n");
-  await chmod(join(dir, FIRST_BIN), 0o755);
   return dir;
+};
+
+const allBins = (): string[] => [...new Set(ADVISORS.map((s) => directBinary(s.kind)))];
+
+const putCapacity = async (dir: string) => {
+  const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+  expect(servers).toHaveLength(1);
+  await Bun.write(join(dir, servers[0] ?? "", "screen"), Bun.file(`${FIXTURE}/codex-capacity.txt`));
+};
+
+const putCapacityOn = async (dir: string, session: string) => {
+  await Bun.write(join(dir, `srv-${session}`, "screen"), Bun.file(`${FIXTURE}/codex-capacity.txt`));
 };
 
 test("tmux backend: 巡をまたいで送り、close で session を破棄する", async () => {
@@ -253,6 +270,127 @@ test("tmux backend: 貼り付け前に状態行が動いても、入力欄に反
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("tmux backend: capacity 画面は deadline を待たず不通で終端する", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    await putCapacity(dir);
+    const t0 = Date.now();
+    const first = await run(dir, ["collect", runDir, "8"]);
+    expect(Date.now() - t0).toBeLessThan(4_000);
+    expect(first.exitCode).toBe(1);
+    expect(first.stdout).toContain("(rc=1 不通)");
+    expect(await Bun.file(join(runDir, FIRST, "dead")).exists()).toBe(true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test("tmux backend: replace は dead を次の kind で起こし直す", async () => {
+  const dir = await setup(allBins());
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    expect(await readFile(join(runDir, "advisors"), "utf8")).toBe(`${FIRST}\n`);
+    await putCapacity(dir);
+    expect((await run(dir, ["collect", runDir, "8"])).exitCode).toBe(1);
+    const replaced = await run(dir, ["replace", runDir]);
+    expect(replaced.exitCode).toBe(0);
+    const second = ADVISORS[1]?.kind ?? "";
+    expect(second).not.toBe("");
+    expect(await readFile(join(runDir, "advisors"), "utf8")).toContain(`${second}\n`);
+    expect(await readFile(join(runDir, "tried"), "utf8")).toContain(`${FIRST}\n`);
+    expect(await readFile(join(runDir, "tried"), "utf8")).toContain(`${second}\n`);
+    expect(await Bun.file(join(runDir, second, "dead")).exists()).toBe(false);
+    expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(0);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 2 巡目の replace は巡 1 から今の巡までを連結して送る", async () => {
+  const dir = await setup(allBins());
+  try {
+    await Bun.write(
+      join(dir, "prompt"),
+      "The token ADVISOR-DONE- is a protocol marker.\nReview the diff.\n",
+    );
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(0);
+    expect((await run(dir, ["ask", runDir, join(dir, "reply")])).exitCode).toBe(0);
+    await putCapacity(dir);
+    expect((await run(dir, ["collect", runDir, "8"])).exitCode).toBe(1);
+    const replaced = await run(dir, ["replace", runDir]);
+    expect(replaced.exitCode).toBe(0);
+    const second = ADVISORS[1]?.kind ?? "";
+    const rid = (await readFile(join(runDir, "rid"), "utf8")).trim();
+    const pasted = await readFile(join(dir, `srv-c-${second}-${rid}`, "pasted"), "utf8");
+    expect(pasted).toContain("## 巡 1 の依頼");
+    expect(pasted).toContain("The token ADVISOR-DONE- is a protocol marker.");
+    expect(pasted).toContain("Review the diff.");
+    expect(pasted).toContain("## 巡 1 の応答");
+    expect(pasted).toContain("answer 1");
+    expect(pasted).toContain("## 巡 2 の依頼");
+    expect(pasted).toContain("Applied 1. Re-review.");
+    expect(pasted).not.toContain(`ADVISOR-DONE-${rid}-1`);
+    expect(pasted).toContain(`ADVISOR-DONE-${rid}-2`);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("tmux backend: 2 回目の replace は rc=0 の応答を渡し dead でも落とさない", async () => {
+  const dir = await setup(allBins());
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const rid = (await readFile(join(runDir, "rid"), "utf8")).trim();
+    const second = ADVISORS[1]?.kind ?? "";
+    const third = ADVISORS[2]?.kind ?? "";
+    expect(second).not.toBe("");
+    expect(third).not.toBe("");
+    await putCapacity(dir);
+    expect((await run(dir, ["collect", runDir, "8"])).exitCode).toBe(1);
+    expect((await run(dir, ["replace", runDir])).exitCode).toBe(0);
+    expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(0);
+    expect((await run(dir, ["ask", runDir, join(dir, "reply")])).exitCode).toBe(0);
+    await putCapacityOn(dir, `c-${second}-${rid}`);
+    expect((await run(dir, ["collect", runDir, "8"])).exitCode).toBe(1);
+    expect((await run(dir, ["replace", runDir])).exitCode).toBe(0);
+    const pasted = await readFile(join(dir, `srv-c-${third}-${rid}`, "pasted"), "utf8");
+    expect(pasted).toContain("## 巡 1 の応答");
+    expect(pasted).toContain("answer 1");
+    expect(pasted).not.toContain("Selected model is at capacity");
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 45_000);
+
+test("tmux backend: replace は候補が尽きたら候補枯渇で止まる", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    await putCapacity(dir);
+    expect((await run(dir, ["collect", runDir, "8"])).exitCode).toBe(1);
+    const replaced = await run(dir, ["replace", runDir]);
+    expect(replaced.exitCode).not.toBe(0);
+    expect(`${replaced.stdout}${replaced.stderr}`).toContain("候補枯渇");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 15_000);
 
 test("tmux backend: 入力欄が貼り付け前に戻ったら数え直し、続けて 2 回同じになってから Enter を 1 回送る", async () => {
   const dir = await setup();

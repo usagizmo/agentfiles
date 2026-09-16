@@ -1,7 +1,7 @@
 #!/bin/sh
 # consult の明示 backend セレクタ。黙って別経路へ倒さない。
 #
-#   CONSULT_BACKEND=tmux <skills root>/consult/scripts/consult-backend.sh <start|collect|ask|close> ...
+#   CONSULT_BACKEND=tmux <skills root>/consult/scripts/consult-backend.sh <start|collect|ask|replace|close|verify> ...
 #
 # tmux → advisors-tmux.sh
 # 将来の backend（例: cloud）はここに足す。未設定・未知は fatal。

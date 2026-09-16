@@ -125,6 +125,7 @@ if args[0] == "paste-buffer":
     if "-d" in args:
         buf.unlink()
     (server / "pending").write_text(text)
+    (server / "pasted").write_text(text)
     slow = root / "slow-paste"
     (server / "pending-delay").write_text(slow.read_text().strip() if slow.exists() else ("3" if (root / "status-flicker").exists() else "0"))
     raise SystemExit(0)

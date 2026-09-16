@@ -14,6 +14,7 @@ import {
   isChromeLine,
   lastContentLine,
   paneState,
+  responseAfter,
   selectAdvisors,
   type Selection,
   trustKey,
@@ -105,13 +106,13 @@ test("resolve は read-only を要求しない", () => {
   expect(c.resolve.kind).toBe("claude");
 });
 
-test("選出は候補表の先頭 1 枠（自己 kind を見ない）", () => {
-  expect(kinds(selectAdvisors(roster))).toEqual(roster.slice(0, 1).map((s) => s.kind));
+test("選出は候補表の順（全枠。自己 kind を見ない）", () => {
+  expect(kinds(selectAdvisors(roster))).toEqual(roster.map((s) => s.kind));
   const swapped = parseRoster(
     toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'),
   ).advisors;
-  expect(kinds(selectAdvisors(swapped))).toEqual(["claude"]);
-  expect(selectAdvisors(swapped).chosen).toHaveLength(1);
+  expect(kinds(selectAdvisors(swapped))).toEqual(["claude", "codex"]);
+  expect(selectAdvisors(swapped).chosen).toHaveLength(2);
 });
 
 test("kind は 32 文字まで（tmux の session 名・socket 名に使う）", () => {
@@ -520,6 +521,14 @@ test.each(["claude", "codex", "cursor", "grok"] as const)(
   },
 );
 
+test("grok の Writing edit (3) 状態行は working", async () => {
+  const screen = await paneFixture("working-grok-edit");
+  expect(screen).toContain("Writing edit (3)… 12s");
+  expect(screen).toContain("19m57s ⇣156k [stop]");
+  expect(paneState(screen)).toBe("working");
+  expect(paneState(screen.replace("19m57s ⇣156k", "9.3s ⇣1.56k"))).toBe("working");
+});
+
 test.each(["claude", "codex", "cursor", "grok"] as const)(
   "%s の入力待ちの実画面は ready",
   async (kind) => {
@@ -660,4 +669,71 @@ test("inputLine は入力欄の行だけを返し、貼り付けの placeholder 
   expect(inputLine(sent)).toBe("› Ask Codex to do anything");
   expect(inputLine("answer 1\n❯ \n")).toBe("❯");
   expect(inputLine("loading\n")).toBe("");
+});
+
+const paneFixturePath = (name: string) => `${ROOT}test/fixtures/advisor-pane/${name}`;
+
+test("折り返した marker は完走", async () => {
+  expect(advisorComplete(await Bun.file(paneFixturePath("wrap-2-lines")).text(), MARKER)).toEqual({
+    ok: true,
+  });
+});
+
+test("行頭空白つきの折り返し marker は完走", async () => {
+  expect(advisorComplete(await Bun.file(paneFixturePath("wrap-indent")).text(), MARKER)).toEqual({
+    ok: true,
+  });
+});
+
+test("折り返し marker のあとに本文が続くと未完", async () => {
+  expect(
+    advisorComplete(await Bun.file(paneFixturePath("marker-then-body")).text(), MARKER),
+  ).toEqual({ ok: false, reason: "マーカー無し" });
+});
+
+test("prompt のエコーは未完", async () => {
+  expect(advisorComplete(await Bun.file(paneFixturePath("prompt-echo")).text(), MARKER)).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test("入力欄以降の偽 marker は未完", async () => {
+  expect(
+    advisorComplete(await Bun.file(paneFixturePath("fake-after-input")).text(), MARKER),
+  ).toEqual({ ok: false, reason: "マーカー無し" });
+});
+
+test("折り返した前巡 marker から第 2 巡を切り出す", async () => {
+  const text = await Bun.file(paneFixturePath("wrap-prev-round")).text();
+  const rest = responseAfter(text, "ADVISOR-DONE-prev-1");
+  expect(rest).toContain("round 2 body");
+  expect(rest).not.toContain("round 1 body");
+});
+
+test("折り返し marker でも判定行を取る", async () => {
+  expect(advisorVerdict(await Bun.file(paneFixturePath("wrap-verdict")).text(), MARKER)).toBe(
+    "修正推奨",
+  );
+});
+
+test("codex の capacity 画面は fatal", async () => {
+  expect(paneState(await paneFixture("codex-capacity.txt"))).toBe("fatal");
+});
+
+test("本文に引用した capacity 行では fatal にしない", async () => {
+  const ready = await paneFixture("ready-codex");
+  const anchor = "• up.sh と doctor.sh を確認します。";
+  expect(paneState(ready.replace(anchor, `${anchor}\nSelected model is at capacity.`))).toBe(
+    "ready",
+  );
+});
+
+test("生成中の capacity 行では fatal にしない", async () => {
+  const working = await paneFixture("working-codex");
+  const input = "› Ask Codex to do anything";
+  expect(working).toContain(input);
+  expect(paneState(working.replace(input, `${input}\nSelected model is at capacity.`))).toBe(
+    "working",
+  );
 });

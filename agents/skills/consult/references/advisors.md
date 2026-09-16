@@ -24,6 +24,8 @@ CONSULT_BACKEND=tmux \
 CONSULT_BACKEND=tmux \
   <skills root>/consult/scripts/consult-backend.sh ask <run-dir> <prompt-file>
 CONSULT_BACKEND=tmux \
+  <skills root>/consult/scripts/consult-backend.sh replace <run-dir>
+CONSULT_BACKEND=tmux \
   <skills root>/consult/scripts/consult-backend.sh close <run-dir>
 CONSULT_BACKEND=tmux \
   <skills root>/consult/scripts/consult-backend.sh verify <run-dir>
@@ -39,6 +41,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 <skills root>/consult/scripts/consult-backend.sh start <prompt-file>      # run dir を stdout へ返し、巡 1 を送る
 <skills root>/consult/scripts/consult-backend.sh collect <run-dir> [秒]   # 今の巡が出揃うまで待って出力
 <skills root>/consult/scripts/consult-backend.sh ask <run-dir> <prompt-file>  # 次の巡を同じ agent へ送る
+<skills root>/consult/scripts/consult-backend.sh replace <run-dir>        # dead を次の候補で起こし直し、巡 1〜今の巡の依頼と回収済み応答を連結して送る
 <skills root>/consult/scripts/consult-backend.sh close <run-dir>          # session / tab を閉じる
 <skills root>/consult/scripts/consult-backend.sh verify <run-dir>         # 今の巡の判定を出す。「指摘なし」で 0
 ```
@@ -49,7 +52,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 - 巡は `start` が 1、`ask` のたびに +1。**`ask` は今の巡を `collect` してから**。timeout した agent は確定せず、再 `collect` で続きを待てる。`ask` は、timeout した agent が止まったまま完走していなければ終端して残りで進み、完走していれば `collect` を要求し、まだ働いていれば止まる
 - agent は文脈を保っている。`ask` の本文は 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
 - 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle / done は読むきっかけであって完了ではない
-- 回収ヘッダの `rc≠0` は未完了。`消失`（session/agent が居なくなった）・`送信失敗`・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
+- 回収ヘッダの `rc≠0` は未完了。`消失`（session/agent が居なくなった）・`送信失敗`・`不通`（fatal）・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
 - timeout の巡は pane / `tmux capture` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
 - **どのモードでも最後に `close` を呼ぶ**。完了・終端を確認してから閉じる
 - `verify` は `close` 済みでも読める。1 行目から `run:` / `round:` / `closed:` / `<kind>: <判定>`… / `verify: pass|fail`。判定は応答末尾の `判定: …` 行だけから取る（`advisors.ts` の `verdict`）。判定行が無い完走は `不明`、回収前は `未回収`、終端した agent は `終端` で判定に数えない。rc 0 で判定行あり以外が 1 つでもあれば fail、数える agent が 0 でも fail（未レビュー）
@@ -69,4 +72,5 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 ## 失敗時
 
 - `rc` が 0 以外 → 回収ヘッダの理由と log の末尾を見る。**失敗・未完了は隠さない**
+- `不通`（fatal）は終端。`replace` で次 kind、候補枯渇なら未レビュー
 - 揃わないときの次手は呼び出し側 skill

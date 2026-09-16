@@ -1,7 +1,7 @@
 // worker-tmux.sh の巡（start → collect → ask → collect → close）。
 // tmux / claude は偽物。偽 tmux は fake-tmux.ts。
 
-import { chmod, mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -195,6 +195,30 @@ test("dispatch tmux: 画面が動かなくても作業中なら停滞にせず d
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("dispatch tmux: capacity 画面は deadline を待たず不通で終端する", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+    expect(servers).toHaveLength(1);
+    await Bun.write(
+      join(dir, servers[0] ?? "", "screen"),
+      Bun.file(`${FIXTURE}/codex-capacity.txt`),
+    );
+    const t0 = Date.now();
+    const first = await run(dir, ["collect", runDir, "8", "8"]);
+    expect(Date.now() - t0).toBeLessThan(4_000);
+    expect(first.exitCode).toBe(1);
+    expect(first.stdout).toContain("(rc=1 不通)");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(true);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 15_000);
 
 test("dispatch tmux: 停滞秒が deadline より短くても、入力待ちで marker が無ければ終端する", async () => {
   const dir = await setup();
