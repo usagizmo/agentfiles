@@ -144,6 +144,7 @@ open)
 			exit 0
 			;;
 		login) fatal "ログインが要る: $bin" ;;
+		fatal) fatal "不通: $bin" ;;
 		trust)
 			# workspace trust 対話は Yes を 1 度だけ選ぶ。選択肢番号は画面から読む
 			# （初期選択に依存しない。番号が読めない・送れないときは Enter を送らない）
@@ -214,7 +215,7 @@ paste-file)
 capture)
 	require_session
 	target=$(target_of) || fatal "pane が無い: $session"
-	tmux_session capture-pane -t "$target" -p -S - -E -
+	tmux_session capture-pane -t "$target" -p -J -S - -E -
 	;;
 screen)
 	require_session

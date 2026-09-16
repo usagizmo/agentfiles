@@ -58,14 +58,14 @@ local gate の入口が無い repo では、**CI の定義から同じ検査を�
 1. `bash <skills root>/pr/scripts/sync-and-push.sh [<base>]` で push する。衝突が出たら解消して再実行する
 2. sync 後、ready 前に HEAD の意味を見る。差し戻し基準は `resolve` の承認後表。**実物確認の Pass 後でも、確認中の修正などで新 commit があるなら Ready に入らず**、この skill を抜けて呼ぶ側へ戻し `finish`（必要なら再検証 / 再確認）させる。面変化も同時なら呼ぶ側が **要** 行へ進む。再確認だけが残ったときだけ **Draft PR** 節の 2 以降へ（作成・Draft 化・再開欄を済ませて止まる）
 3. PR が無ければ `gh pr create --base <base>`（draft にしない）。あれば title / body を更新する
-4. Draft のままなら、**push のあと**に `gh pr ready` する（ready してから push しない）
-5. `gh pr checks <number> --watch` で CI 完了までブロック。失敗したらログを見て修正・コミットし 1 に戻る。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
+4. `bash <skills root>/pr/scripts/ready-and-watch.sh <number>`（Draft なら ready し、createdAt が Ready 時刻以降の pull_request run を待って watch）
+5. 失敗したらログを見て修正・コミットし 1 に戻る。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
 
 **commit を足したら必ず 1 へ戻る。CI が緑になったあとも同じ。**「もう通ったから push だけ」で追随を飛ばすと、base から離れたまま積み上がり、着地の直前に大きな rebase と衝突が出る。
 
 CI が通ったら完了。**merge はここでしない。**
 
-**CI 進行中の SSOT**: `gh pr checks <number> --json bucket` のいずれかが `pending`（CheckRun / StatusContext の差は gh が正規化する）。素の人間向け出力を読まない。
+**CI 進行中の SSOT**: `gh pr checks <number> --json bucket` のいずれかが `pending`（CheckRun / StatusContext の差は gh が正規化する）。素の人間向け出力を読まない。Ready 直後は Draft 時の結果が残るので、createdAt が Ready 時刻以降の pull_request run を見る。
 
 ## Body / Issue 連携
 

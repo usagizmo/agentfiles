@@ -10,7 +10,7 @@
 //   bun advisors.ts trust-key [--screen <file>]    （既定は stdin）
 //
 // stdout はどれも行で返す（sh がそのまま読める形。JSON を挟まない）。
-// 選出は候補表の先頭 1 枠。自己 kind は見ない（書き手と別 session であれば足りる）。
+// 選出は候補表の順。自己 kind は見ない（書き手と別 session であれば足りる）。
 // TUI 画面の読み方はこのファイルだけが持つ。
 
 import { RosterError, type Slot, directLaunchArgv, flag, parseRoster } from "./roster.ts";
@@ -104,6 +104,37 @@ const contentLines = (text: string): readonly string[] => {
 
 export const lastContentLine = (text: string): string | undefined => contentLines(text).at(-1);
 
+export type LocateMarker =
+  | { readonly ok: true; readonly lineCount: number; readonly joined: string }
+  | { readonly ok: false };
+
+const stripLead = (line: string): string => line.replace(/^\s+/u, "");
+
+const joinTail = (lines: readonly string[], n: number): string =>
+  lines
+    .slice(lines.length - n)
+    .map(stripLead)
+    .join("");
+
+/**
+ * content 末尾最大 3 行を行頭空白と改行なしで連結し、marker の後方一致だけを取る。
+ *
+ * 入力欄より後ろは読まない。部分一致は使わない。
+ */
+export const locateMarker = (text: string, marker: string): LocateMarker => {
+  if (marker === "") return { ok: false };
+  const lines = contentLines(text);
+  if (lines.length === 0) return { ok: false };
+  const maxN = Math.min(3, lines.length);
+  for (let n = 1; n <= maxN; n++) {
+    const joined = joinTail(lines, n);
+    if (joined.endsWith(marker)) {
+      return { ok: true, lineCount: n, joined };
+    }
+  }
+  return { ok: false };
+};
+
 /**
  * 表示中の画面の入力欄の行（正規化済み）。無ければ空。
  *
@@ -121,13 +152,13 @@ export const inputLine = (screen: string): string => {
 /**
  * marker が応答の最後にあるかを見る。
  *
- * 一致ではなく後方一致で取る —— 実行器によっては marker を直前の行の後ろへ
- * 続けて描く。marker より後ろに本文が来ていないことは、これでも見える。
+ * 末尾最大 3 行の連結に対する後方一致で取る。折り返しと、marker を直前の行の
+ * 後ろへ続けて描く実行器の両方を見る。marker より後ろに本文が来ていないことは、
+ * これでも見える。
  */
 export const advisorComplete = (text: string, marker: string): CompleteResult => {
-  const last = lastContentLine(text);
-  if (last === undefined) return { ok: false, reason: "出力なし" };
-  if (!last.endsWith(marker)) return { ok: false, reason: "マーカー無し" };
+  if (contentLines(text).length === 0) return { ok: false, reason: "出力なし" };
+  if (!locateMarker(text, marker).ok) return { ok: false, reason: "マーカー無し" };
   return { ok: true };
 };
 
@@ -139,18 +170,18 @@ export type VerdictResult = Verdict | "不明";
 const VERDICT_LINE = /^判定[:：]\s*(指摘なし|修正推奨|再考推奨)\s*$/u;
 
 /**
- * 応答末尾の判定行。marker の直前の行、または marker を後ろへ続けた行から取る。
+ * 応答末尾の判定行。連結後の残り、無ければその直前の content 行から取る。
  *
  * 読む範囲は完走判定と同じ（最後の入力欄より前）。別の範囲を読むと、入力欄側の
  * 文字列で判定を差し替えられる。履歴には送った prompt も残り、そこには 3 つの
- * 判定語が並ぶので、本文中の語では取らず、marker の手前の 1 行だけを見る。
+ * 判定語が並ぶので、本文中の語では取らず、marker の手前だけを見る。
  */
 export const advisorVerdict = (text: string, marker: string): VerdictResult => {
+  const located = locateMarker(text, marker);
+  if (!located.ok) return "不明";
   const lines = contentLines(text);
-  const last = lines.at(-1);
-  if (last === undefined || !last.endsWith(marker)) return "不明";
-  const inline = last.slice(0, -marker.length).trim();
-  const candidate = inline === "" ? (lines.at(-2) ?? "") : inline;
+  const inline = located.joined.slice(0, -marker.length).trim();
+  const candidate = inline === "" ? (lines.at(-located.lineCount - 1) ?? "") : inline;
   const m = VERDICT_LINE.exec(candidate);
   return m === null ? "不明" : (m[1] as Verdict);
 };
@@ -183,8 +214,9 @@ const STATUS_HEAD = /^(?:\p{So}\s*)?(?:[\p{L}\p{N}\u2026·]+(?:-[\p{L}\p{N}\u202
 /** 入力欄の右端に出る中断案内（cursor は状態行を持たない）。 */
 const INTERRUPT_HINT = /(?:ctrl\+c to stop|(?:esc|escape)(?:\s+\S+)? to interrupt)$/iu;
 
-// grok は括弧を使わず、スピナー + 状態語… + 経過秒 のあと右端に転送量と `[stop]` を描く
-const GROK_STATUS = /^\p{So}\s+(?:[\p{L}\p{N}\u2026·]+\s*){1,8}\d+(?:\.\d+)?s\s{2,}.*\[stop\]$/u;
+// grok は経過を括弧に入れず、スピナー + 状態語（括弧つき数字を許す）… + 経過秒 のあと右端に転送量と `[stop]` を描く
+const GROK_STATUS =
+  /^\p{So}\s+(?:[\p{L}\p{N}\u2026·]+(?:\s+\(\d+\))?…?\s*){1,8}\d+(?:\.\d+)?s\s{2,}.*\[stop\]$/u;
 
 const isStatusLine = (line: string): boolean => {
   if (GROK_STATUS.test(line)) return true;
@@ -206,7 +238,11 @@ const LOGIN_SCREENS: readonly (readonly RegExp[])[] = [
 const isLoginScreen = (lines: readonly string[]): boolean =>
   LOGIN_SCREENS.some((screen) => screen.every((row) => lines.some((line) => row.test(line))));
 
-export type PaneState = "login" | "trust" | "working" | "ready" | "unknown";
+export const HARNESS_FATAL: readonly RegExp[] = [/^Selected model is at capacity\.$/u];
+
+const isFatalLine = (line: string): boolean => HARNESS_FATAL.some((re) => re.test(line));
+
+export type PaneState = "login" | "trust" | "working" | "ready" | "fatal" | "unknown";
 
 /**
  * 表示中の 1 画面から実行器の状態を読む。
@@ -232,7 +268,7 @@ export const paneState = (screen: string): PaneState => {
     if (lines.some(isStatusLine)) return "working";
     return isLoginScreen(lines) ? "login" : "unknown";
   }
-  // 入力欄の右端の中断案内と、入力欄まわりの状態行だけを見る（本文は見ない）
+  // 入力欄の右端の中断案内と、入力欄まわりの状態行・致命行だけを見る（本文は見ない）
   if (INTERRUPT_HINT.test(lines[input] ?? "")) return "working";
   const around = lines.slice(input);
   for (let i = input - 1; i >= 0; i--) {
@@ -240,7 +276,9 @@ export const paneState = (screen: string): PaneState => {
     around.push(lines[i] ?? "");
     break;
   }
-  return around.some(isStatusLine) ? "working" : "ready";
+  if (around.some(isStatusLine)) return "working";
+  if (around.some(isFatalLine)) return "fatal";
+  return "ready";
 };
 
 /** trust 対話で Yes を選ぶ選択肢番号。番号が読めなければ undefined。 */
@@ -256,19 +294,25 @@ export const trustKey = (screen: string): string | undefined => {
 /**
  * 前巡の marker より後ろ。巡ごとの応答だけを切り出す。
  *
- * 履歴には過去の巡も残る。marker は巡ごとに一意なので、最後の出現を境にする。
+ * 履歴には過去の巡も残る。marker は巡ごとに一意。折り返しも locateMarker で取る。
  */
 export const responseAfter = (raw: string, prev: string): string => {
   if (prev === "") return raw.replace(/^\n+/u, "");
-  const at = raw.lastIndexOf(prev);
-  const rest = at < 0 ? raw : raw.slice(at + prev.length);
-  return rest.replace(/^\n+/u, "");
+  const lines = contentLines(raw);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (locateMarker(lines.slice(0, i + 1).join("\n"), prev).ok) {
+      return lines
+        .slice(i + 1)
+        .join("\n")
+        .replace(/^\n+/u, "");
+    }
+  }
+  return raw.replace(/^\n+/u, "");
 };
 
 export const selectAdvisors = (slots: readonly Slot[]): Selection => {
-  const first = slots[0];
-  if (first === undefined) throw new RosterError("選出できる枠が無い");
-  return { chosen: [first] };
+  if (slots.length === 0) throw new RosterError("選出できる枠が無い");
+  return { chosen: slots };
 };
 
 const main = async (): Promise<void> => {

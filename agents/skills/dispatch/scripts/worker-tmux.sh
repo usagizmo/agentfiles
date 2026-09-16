@@ -171,6 +171,19 @@ collect)
 					: >"$run/dead"
 					break
 				fi
+				case $(sh "$tmux_sh" state "$session" 2>>"$run/log") in
+				fatal)
+					sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log" || true
+					if [ -f "$run/raw.$n" ]; then
+						bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
+							>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
+					fi
+					printf '%s\n' 1 >"$run/rc.$n"
+					printf '%s\n' "不通" >"$run/reason.$n"
+					: >"$run/dead"
+					break
+					;;
+				esac
 				# complete_rc: 0 完走 / 1 未完走 / それ以外は読めない・判定できない
 				complete_rc=2
 				if sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log"; then

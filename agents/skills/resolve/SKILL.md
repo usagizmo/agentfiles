@@ -22,11 +22,15 @@ description: >-
 
 書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[resolve]`。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
 
-1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する」
+1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する。`git add -A` で staging する（index を読む gate と lint-staged のため。修正後も再 stage）。commit / push / branch は禁止」
 2. `start` → `collect`。完走（rc=0）まで 3 へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`
-3. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直す点が無くなるまで繰り返す。自分のレビューでも `finish` の consult の指摘でも、修正の振り分けは同じ: 1 文で指示でき数行に収まるなら自分で直す。それ以外は `ask` で送って `collect`
+3. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直す点が無くなるまで繰り返す。自分のレビューでも `finish` の consult の指摘でも、修正の振り分けは同じ: 1 文で指示でき数行に収まるなら自分で直す。それ以外は `ask` で送って `collect`。親のレビュー対象は staged / unstaged / untracked 全体。実装役の gate 通過は `finish` を代替しない
 4. run dir を保持したまま親手順 5（仕上げ）へ戻る
-5. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・入力待ちで marker 無し）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない
+5. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・入力待ちで marker 無し・不通）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない
+
+### 複数課題を並列に進める
+
+課題ごとに worktree と dispatch run を 1 つ。並列にできるのは、触るファイルが重ならず、課題間に依存が無く、共有する実行資源（dev home / port / build dir）を分けられるものだけ。`collect` は短い待機（例 60 秒）で run を巡回し、完走した課題から親手順 5〜7（仕上げ・検証・着地。PR を使う面 / 使わない面の分岐を含む）を個別に適用する。consult は課題ごとに独立。
 
 ### PR を使う面
 
