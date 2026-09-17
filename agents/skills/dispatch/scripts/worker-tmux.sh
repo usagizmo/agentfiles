@@ -192,10 +192,16 @@ collect)
 					complete_rc=$?
 				fi
 				if [ "$complete_rc" = 0 ]; then
-					bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
-						>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
-					printf '%s\n' 0 >"$run/rc.$n"
-					: >"$run/reason.$n"
+					# 切り出せなかった raw を rc=0 で渡さない（範囲は extract が決める）
+					if bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
+						>"$run/out.$n" 2>>"$run/log"; then
+						printf '%s\n' 0 >"$run/rc.$n"
+						: >"$run/reason.$n"
+					else
+						cp "$run/raw.$n" "$run/out.$n"
+						printf '%s\n' 1 >"$run/rc.$n"
+						printf '%s\n' "抽出失敗" >"$run/reason.$n"
+					fi
 					break
 				fi
 				# 停止の疑い: 画面が stall 秒変わらない、または deadline 到達

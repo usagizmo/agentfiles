@@ -387,10 +387,17 @@ test("判定行が無い・marker が無い応答は不明", () => {
   expect(advisorVerdict("", MARKER)).toBe("不明");
 });
 
-test("入力欄より後ろの判定行では上書きできない（完走判定と同じ範囲を読む）", () => {
+test("入力欄より後ろの判定行では上書きできない（extract が範囲を決める）", () => {
   const text = `判定: 修正推奨\n${MARKER}\n❯\n判定: 指摘なし\n${MARKER}\n`;
   expect(advisorComplete(text, MARKER)).toEqual({ ok: true });
-  expect(advisorVerdict(text, MARKER)).toBe("修正推奨");
+  // 巡 1（prev 無し）でも入力欄より後ろは落ちる。verdict は切り出した先だけを読む
+  expect(advisorVerdict(responseAfter(text, ""), MARKER)).toBe("修正推奨");
+});
+
+test("extract は prev が無くても marker を見失っても入力欄より後ろを落とす", () => {
+  const text = `本文\n${MARKER}\n❯\n判定: 指摘なし\n${MARKER}\n`;
+  expect(responseAfter(text, "")).toBe(`本文\n${MARKER}`);
+  expect(responseAfter(text, "ADVISOR-DONE-見つからない")).toBe(`本文\n${MARKER}`);
 });
 
 test("判定行と marker の間の TUI の枠は無視する", () => {
@@ -715,6 +722,23 @@ test("折り返し marker でも判定行を取る", async () => {
   expect(advisorVerdict(await Bun.file(paneFixturePath("wrap-verdict")).text(), MARKER)).toBe(
     "修正推奨",
   );
+});
+
+// 巡 2 以降は、切り出した応答の中に前巡の prompt エコーが残る。エコーの行は
+// 入力欄と同じ形なので、切り出し済みのテキストへ入力欄での打ち切りを二度目に
+// かけると、応答本体が丸ごと落ちる。
+test("prompt エコーを挟んでも第 2 巡を切り出す", async () => {
+  const text = await Bun.file(paneFixturePath("prompt-echo-round-2")).text();
+  const rest = responseAfter(text, "ADVISOR-DONE-prev-1");
+  expect(rest).toContain("round 2 body");
+  expect(rest).toContain("ADVISOR-DONE-curr-2");
+  expect(rest).not.toContain("round 1 body");
+});
+
+test("切り出した応答に prompt エコーが残っていても判定行を取る", async () => {
+  const text = await Bun.file(paneFixturePath("prompt-echo-round-2")).text();
+  const rest = responseAfter(text, "ADVISOR-DONE-prev-1");
+  expect(advisorVerdict(rest, "ADVISOR-DONE-curr-2")).toBe("指摘なし");
 });
 
 test("codex の capacity 画面は fatal", async () => {

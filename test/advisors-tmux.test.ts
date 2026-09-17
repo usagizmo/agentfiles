@@ -65,6 +65,22 @@ const setup = async (bins: readonly string[] = [FIRST_BIN]) => {
 
 const allBins = (): string[] => [...new Set(ADVISORS.map((s) => directBinary(s.kind)))];
 
+// PATH の bun を、extract のときだけ落ちる shim に差し替える。
+// extract は raw を読めれば落ちないので、入力からは起こせない
+const breakExtract = async (dir: string) => {
+  await rm(join(dir, "bun"), { force: true });
+  await Bun.write(
+    join(dir, "bun"),
+    `#!/bin/sh
+for a in "$@"; do
+	[ "$a" = extract ] && exit 9
+done
+exec ${process.execPath} "$@"
+`,
+  );
+  await chmod(join(dir, "bun"), 0o755);
+};
+
 const putCapacity = async (dir: string) => {
   const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
   expect(servers).toHaveLength(1);
@@ -402,6 +418,27 @@ test("tmux backend: 入力欄が貼り付け前に戻ったら数え直し、続
     expect((await run(dir, ["collect", runDir, "5"])).stdout).toContain("answer 1");
     const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
     expect(await readFile(join(dir, servers[0] ?? "", "enters"), "utf8")).toBe("enter\n");
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+// 判定が読むのは切り出し済みの out.N だけ。切り出せなかった raw を rc=0 で渡すと、
+// 入力欄より後ろに置かれた偽の判定行で verify を通せてしまう
+test("tmux backend: extract が落ちた巡は判定に数えず verify を通さない", async () => {
+  const dir = await setup();
+  try {
+    await breakExtract(dir);
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    expect((await run(dir, ["collect", runDir, "5"])).exitCode).toBe(1);
+    expect(await readFile(join(runDir, FIRST, "rc.1"), "utf8")).toBe("1\n");
+    const verified = await run(dir, ["verify", runDir]);
+    expect(verified.exitCode).toBe(1);
+    expect(verified.stdout).toContain("抽出失敗");
+    expect(verified.stdout).toContain("verify: fail");
     expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });

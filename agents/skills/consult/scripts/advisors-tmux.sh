@@ -325,10 +325,17 @@ collect)
 			sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
 			if bun "$select_ts" complete --output "$run/$a/raw.$n" --marker "$marker" \
 				>"$run/$a/complete.$n.json" 2>>"$run/$a/log"; then
-				bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
-					>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
-				printf '%s\n' 0 >"$run/$a/rc.$n"
-				: >"$run/$a/reason.$n"
+				# 判定は out.N だけを読み、画面の範囲は extract が決める。切り出せ
+				# なかった raw を rc=0 で渡すと、入力欄以降の偽判定で上書きされる
+				if bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
+					>"$run/$a/out.$n" 2>>"$run/$a/log"; then
+					printf '%s\n' 0 >"$run/$a/rc.$n"
+					: >"$run/$a/reason.$n"
+				else
+					cp "$run/$a/raw.$n" "$run/$a/out.$n"
+					printf '%s\n' 1 >"$run/$a/rc.$n"
+					printf '%s\n' "抽出失敗" >"$run/$a/reason.$n"
+				fi
 			fi
 		done <"$run/advisors"
 		[ "$pending" -eq 0 ] && break

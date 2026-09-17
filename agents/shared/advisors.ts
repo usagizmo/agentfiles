@@ -84,6 +84,18 @@ export const isChromeLine = (line: string): boolean => {
 };
 
 /**
+ * 枠だけ落とした行。入力欄での打ち切りはしない。
+ *
+ * 画面そのものではなく、`extract` が切り出した応答を読むときに使う。切り出した
+ * 中にも送った prompt のエコーが残るので、そこで打ち切ると応答本体が落ちる。
+ */
+const chromeStrippedLines = (text: string): readonly string[] =>
+  text
+    .split(/\r?\n/)
+    .map(normalizeSnapshotLine)
+    .filter((line) => !isChromeLine(line));
+
+/**
  * 応答の最後の行。TUI の枠と、入力欄から後ろを落として読む。
  *
  * 入力欄の後ろには状態行が来る実行器がある。行の形を数え上げても追随できない
@@ -119,11 +131,10 @@ const joinTail = (lines: readonly string[], n: number): string =>
 /**
  * content 末尾最大 3 行を行頭空白と改行なしで連結し、marker の後方一致だけを取る。
  *
- * 入力欄より後ろは読まない。部分一致は使わない。
+ * 部分一致は使わない。
  */
-export const locateMarker = (text: string, marker: string): LocateMarker => {
+export const locateMarkerIn = (lines: readonly string[], marker: string): LocateMarker => {
   if (marker === "") return { ok: false };
-  const lines = contentLines(text);
   if (lines.length === 0) return { ok: false };
   const maxN = Math.min(3, lines.length);
   for (let n = 1; n <= maxN; n++) {
@@ -134,6 +145,16 @@ export const locateMarker = (text: string, marker: string): LocateMarker => {
   }
   return { ok: false };
 };
+
+/**
+ * 画面そのものから取る入口。入力欄より後ろは読まない。
+ *
+ * 既に `contentLines` を通した行を持っているなら `locateMarkerIn` を使う。
+ * 濾した行にも過去の巡の prompt エコーが残るので、二度濾すと最新巡の prompt で
+ * 切れて応答本体が落ちる。
+ */
+export const locateMarker = (text: string, marker: string): LocateMarker =>
+  locateMarkerIn(contentLines(text), marker);
 
 /**
  * 表示中の画面の入力欄の行（正規化済み）。無ければ空。
@@ -172,14 +193,14 @@ const VERDICT_LINE = /^判定[:：]\s*(指摘なし|修正推奨|再考推奨)\s
 /**
  * 応答末尾の判定行。連結後の残り、無ければその直前の content 行から取る。
  *
- * 読む範囲は完走判定と同じ（最後の入力欄より前）。別の範囲を読むと、入力欄側の
- * 文字列で判定を差し替えられる。履歴には送った prompt も残り、そこには 3 つの
- * 判定語が並ぶので、本文中の語では取らず、marker の手前だけを見る。
+ * 読むのは `extract` が切り出した応答。marker の直前だけを見るので、履歴に残る
+ * prompt の 3 つの判定語は拾わない。入力欄で打ち切ると応答本体ごと落ちるため、
+ * ここでは枠だけ落とす。入力欄より後ろを落とすのは `responseAfter`。
  */
 export const advisorVerdict = (text: string, marker: string): VerdictResult => {
-  const located = locateMarker(text, marker);
+  const lines = chromeStrippedLines(text);
+  const located = locateMarkerIn(lines, marker);
   if (!located.ok) return "不明";
-  const lines = contentLines(text);
   const inline = located.joined.slice(0, -marker.length).trim();
   const candidate = inline === "" ? (lines.at(-located.lineCount - 1) ?? "") : inline;
   const m = VERDICT_LINE.exec(candidate);
@@ -294,20 +315,19 @@ export const trustKey = (screen: string): string | undefined => {
 /**
  * 前巡の marker より後ろ。巡ごとの応答だけを切り出す。
  *
- * 履歴には過去の巡も残る。marker は巡ごとに一意。折り返しも locateMarker で取る。
+ * 履歴には過去の巡も残る。marker は巡ごとに一意。折り返しも locateMarkerIn で取る。
+ *
+ * 前巡が無いときも marker を見失ったときも入力欄より後ろは落とす。読む範囲を
+ * 決めるのはここだけで、切り出した先の `advisorVerdict` は範囲を持たない。
  */
 export const responseAfter = (raw: string, prev: string): string => {
-  if (prev === "") return raw.replace(/^\n+/u, "");
   const lines = contentLines(raw);
+  const from = (start: number): string => lines.slice(start).join("\n").replace(/^\n+/u, "");
+  if (prev === "") return from(0);
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (locateMarker(lines.slice(0, i + 1).join("\n"), prev).ok) {
-      return lines
-        .slice(i + 1)
-        .join("\n")
-        .replace(/^\n+/u, "");
-    }
+    if (locateMarkerIn(lines.slice(0, i + 1), prev).ok) return from(i + 1);
   }
-  return raw.replace(/^\n+/u, "");
+  return from(0);
 };
 
 export const selectAdvisors = (slots: readonly Slot[]): Selection => {
