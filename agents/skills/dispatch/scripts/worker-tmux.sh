@@ -10,7 +10,7 @@
 #   worker-tmux.sh close <run-dir>                     tmux session を破棄
 #
 # env:
-#   DISPATCH_KIND   任意。roster の [resolve] を上書きする kind（例: claude / codex）
+#   DISPATCH_KIND   任意。roster の [[workers]] から引く kind（表に無ければ起動しない）
 #
 # 完走述語は advisors.ts complete（consult と共有。marker SSOT）。
 
@@ -108,10 +108,10 @@ start)
 	# kind も argv も roster.ts が返す（toml をここで読み直さない）
 	set -- --roster "$run/roster.toml"
 	[ -n "${DISPATCH_KIND:-}" ] && set -- "$@" --kind "$DISPATCH_KIND"
-	bun "$roster_ts" resolve-launch-argv "$@" --print kind \
-		>"$run/worker" 2>>"$run/log" || fail_start "resolve.kind を読めない"
-	bun "$roster_ts" resolve-launch-argv "$@" --print argv \
-		>"$run/argv" 2>>"$run/log" || fail_start "resolve-launch-argv に失敗"
+	bun "$roster_ts" worker-launch-argv "$@" --print kind \
+		>"$run/worker" 2>>"$run/log" || fail_start "worker.kind を読めない"
+	bun "$roster_ts" worker-launch-argv "$@" --print argv \
+		>"$run/argv" 2>>"$run/log" || fail_start "worker-launch-argv に失敗"
 
 	# 起動 argv は 1 行 1 要素。sh の位置引数へそのまま積む
 	set --

@@ -24,8 +24,10 @@ import {
   RosterError,
   directBinary,
   directLaunchArgv,
-  directResolveLaunchArgv,
+  directWorkerLaunchArgv,
   parseRoster,
+  selectWorker,
+  type Slot,
   readOnlyArgs,
   type Roster,
 } from "../agents/shared/roster.ts";
@@ -33,10 +35,11 @@ import {
 const rosterText = await Bun.file(ROSTER_URL).text();
 const parsed = parseRoster(rosterText);
 const roster = parsed.advisors;
+const worker = selectWorker(parsed.workers);
 
-const RESOLVE_TOML = '[resolve]\nkind = "claude"\nargs = []\n';
+const WORKER_TOML = '[[workers]]\nkind = "claude"\nargs = []\n';
 
-/** JSON の枠配列を TOML の `advisors` へ写し、resolve を添える（テスト入力を短く保つ）。 */
+/** JSON の枠配列を TOML の `advisors` へ写し、workers を添える（テスト入力を短く保つ）。 */
 const toml = (json: string): string => {
   const slots = JSON.parse(json) as Record<string, unknown>[];
   const tables = slots.map(
@@ -45,13 +48,13 @@ const toml = (json: string): string => {
         .map(([k, v]) => `${k} = ${JSON.stringify(v)}`)
         .join(", ")} }`,
   );
-  return `advisors = [${tables.join(", ")}]\n${RESOLVE_TOML}`;
+  return `advisors = [${tables.join(", ")}]\n${WORKER_TOML}`;
 };
 
-/** resolve table だけ差し替えて読む。 */
-const withResolve = (resolve: string): Roster =>
+/** workers の表だけ差し替えて読む。 */
+const withWorker = (workers: string): Roster =>
   parseRoster(
-    `${toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]').replace(RESOLVE_TOML, "")}${resolve}`,
+    `${toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]').replace(WORKER_TOML, "")}${workers}`,
   );
 
 const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
@@ -60,31 +63,32 @@ const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 test("実体の宣言 file が検証を通る", () => {
   expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex", "cursor", "grok"]);
   for (const slot of roster) expect(() => directLaunchArgv(slot)).not.toThrow();
-  expect(() => directResolveLaunchArgv(parsed.resolve)).not.toThrow();
+  expect(() => directWorkerLaunchArgv(worker)).not.toThrow();
 });
 
-test("resolve は無いと止まり、未知キーも止まる", () => {
-  expect(() => withResolve("")).toThrow("resolve");
-  expect(() => withResolve('[resolve]\nkind = "grok"\nargs = []\nmodel = "x"\n')).toThrow("model");
-  expect(() => withResolve('[resolve]\nkind = "Grok"\nargs = []\n')).toThrow("kind");
-  expect(() => withResolve('[resolve]\nkind = "grok"\nargs = ["--"]\n')).toThrow(RosterError);
+test("workers は無いと止まり、未知キーも止まる", () => {
+  expect(() => withWorker("")).toThrow("workers");
+  expect(() => withWorker('[[workers]]\nkind = "grok"\nargs = []\nmodel = "x"\n')).toThrow("model");
+  expect(() => withWorker('[[workers]]\nkind = "Grok"\nargs = []\n')).toThrow("kind");
+  expect(() => withWorker('[[workers]]\nkind = "grok"\nargs = ["--"]\n')).toThrow(RosterError);
 });
 
 // 実装役は背面の detached session で動き、承認 UI に応える人が居ない。
 // 止めると承認待ちのまま巡が終わる
-test("resolve は承認を飛ばす指定を通す", () => {
+test("worker は承認を飛ばす指定を通す", () => {
   expect(
-    withResolve('[resolve]\nkind = "codex"\nargs = ["-c", "approval_policy=never"]\n').resolve.args,
+    withWorker('[[workers]]\nkind = "codex"\nargs = ["-c", "approval_policy=never"]\n').workers[0]
+      ?.args,
   ).toEqual(["-c", "approval_policy=never"]);
   expect(
-    withResolve('[resolve]\nkind = "devin"\nargs = ["--permission-mode", "dangerous"]\n').resolve
-      .args,
+    withWorker('[[workers]]\nkind = "devin"\nargs = ["--permission-mode", "dangerous"]\n')
+      .workers[0]?.args,
   ).toEqual(["--permission-mode", "dangerous"]);
-  expect(withResolve('[resolve]\nkind = "grok"\nargs = ["--yolo"]\n').resolve.args).toEqual([
+  expect(withWorker('[[workers]]\nkind = "grok"\nargs = ["--yolo"]\n').workers[0]?.args).toEqual([
     "--yolo",
   ]);
   expect(
-    directResolveLaunchArgv({ kind: "claude", args: ["--permission-mode", "bypassPermissions"] }),
+    directWorkerLaunchArgv({ kind: "claude", args: ["--permission-mode", "bypassPermissions"] }),
   ).toEqual(["claude", "--permission-mode", "bypassPermissions"]);
 });
 
@@ -99,31 +103,41 @@ test("advisors は承認を飛ばす指定を止める", () => {
 });
 
 // 回収は TUI の画面を読む。--print で走らせると巡が回らない
-test("resolve でも interactive 以外の起動は止まる", () => {
-  expect(() => withResolve('[resolve]\nkind = "claude"\nargs = ["--print"]\n')).toThrow(
+test("worker でも interactive 以外の起動は止まる", () => {
+  expect(() => withWorker('[[workers]]\nkind = "claude"\nargs = ["--print"]\n')).toThrow(
     "interactive",
   );
-  expect(() => withResolve('[resolve]\nkind = "claude"\nargs = ["-p", "x"]\n')).toThrow(
+  expect(() => withWorker('[[workers]]\nkind = "claude"\nargs = ["-p", "x"]\n')).toThrow(
     "interactive",
   );
-  expect(withResolve('[resolve]\nkind = "codex"\nargs = ["-p", "fast"]\n').resolve.args).toEqual([
-    "-p",
-    "fast",
-  ]);
+  expect(
+    withWorker('[[workers]]\nkind = "codex"\nargs = ["-p", "fast"]\n').workers[0]?.args,
+  ).toEqual(["-p", "fast"]);
 });
 
-test("resolve の起動 argv は binary + args で read-only を足さない", () => {
-  const argv = directResolveLaunchArgv(parsed.resolve);
-  expect(argv).toEqual([directBinary(parsed.resolve.kind), ...parsed.resolve.args]);
+// 指名で args が空に落ちると、権限も sandbox も harness の global config へ戻る
+test("worker の指名は表から引き、表に無い kind は起動しない", () => {
+  const two = withWorker(
+    '[[workers]]\nkind = "grok"\nargs = ["--yolo"]\n\n[[workers]]\nkind = "devin"\nargs = ["--permission-mode", "dangerous"]\n',
+  ).workers;
+  expect(selectWorker(two).kind).toBe("grok");
+  expect(selectWorker(two, "")).toEqual(two[0] as Slot);
+  expect(selectWorker(two, "devin").args).toEqual(["--permission-mode", "dangerous"]);
+  expect(() => selectWorker(two, "claude")).toThrow("claude");
 });
 
-test("resolve は read-only を要求しない", () => {
-  const r = withResolve('[resolve]\nkind = "codex"\nargs = ["-s", "workspace-write"]\n');
-  expect(r.resolve.args).toEqual(["-s", "workspace-write"]);
-  const c = withResolve(
-    '[resolve]\nkind = "claude"\nargs = ["--permission-mode", "acceptEdits"]\n',
+test("worker の起動 argv は binary + args で read-only を足さない", () => {
+  const argv = directWorkerLaunchArgv(worker);
+  expect(argv).toEqual([directBinary(worker.kind), ...worker.args]);
+});
+
+test("worker は read-only を要求しない", () => {
+  const r = withWorker('[[workers]]\nkind = "codex"\nargs = ["-s", "workspace-write"]\n');
+  expect(r.workers[0]?.args).toEqual(["-s", "workspace-write"]);
+  const c = withWorker(
+    '[[workers]]\nkind = "claude"\nargs = ["--permission-mode", "acceptEdits"]\n',
   );
-  expect(c.resolve.kind).toBe("claude");
+  expect(c.workers[0]?.kind).toBe("claude");
 });
 
 test("選出は候補表の順（全枠。自己 kind を見ない）", () => {
@@ -136,9 +150,9 @@ test("選出は候補表の順（全枠。自己 kind を見ない）", () => {
 });
 
 test("kind は 32 文字まで（tmux の session 名・socket 名に使う）", () => {
-  const resolveKind = (kind: string) => withResolve(`[resolve]\nkind = "${kind}"\nargs = []\n`);
-  expect(resolveKind("a".repeat(32)).resolve.kind).toBe("a".repeat(32));
-  expect(() => resolveKind("a".repeat(33))).toThrow("kind");
+  const workerKind = (kind: string) => withWorker(`[[workers]]\nkind = "${kind}"\nargs = []\n`);
+  expect(workerKind("a".repeat(32)).workers[0]?.kind).toBe("a".repeat(32));
+  expect(() => workerKind("a".repeat(33))).toThrow("kind");
 });
 
 test("起動されないキーは落とす", () => {
@@ -244,13 +258,13 @@ test("directLaunchArgv は kind バイナリ + args + read-only", () => {
   ]);
 });
 
-test("directResolveLaunchArgv は read-only を付けない（dispatch / 実装役）", () => {
-  expect(directResolveLaunchArgv({ kind: "claude", args: ["--model", "claude-opus-5"] })).toEqual([
+test("directWorkerLaunchArgv は read-only を付けない（dispatch / 実装役）", () => {
+  expect(directWorkerLaunchArgv({ kind: "claude", args: ["--model", "claude-opus-5"] })).toEqual([
     "claude",
     "--model",
     "claude-opus-5",
   ]);
-  expect(directResolveLaunchArgv({ kind: "grok", args: [] })).toEqual(["grok"]);
+  expect(directWorkerLaunchArgv({ kind: "grok", args: [] })).toEqual(["grok"]);
 });
 
 test("codex の read-only は -s read-only", () => {
@@ -291,7 +305,7 @@ args = []
 [[advisors]]
 kind = "cursor"
 args = ["--model", "x # not a comment"]
-${RESOLVE_TOML}`;
+${WORKER_TOML}`;
   const slots = parseRoster(text).advisors;
   expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
   expect(slots[1]?.args).toEqual(["--model", "x # not a comment"]);

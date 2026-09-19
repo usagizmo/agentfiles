@@ -1,6 +1,7 @@
-# consult のアドバイザー候補（advisors）と resolve の実装役（resolve）。
+# consult のアドバイザー候補（advisors）と dispatch の実装役の候補（workers。先頭が既定）。
 # 解釈と検証は roster.ts の parseRoster。選出は agents/shared/advisors.ts の selectAdvisors（表の順が優先順）。
-# advisors の read-only 手段は roster.ts の readOnlyArgs が末尾に足す。resolve には足さない。
+# advisors の read-only 手段は roster.ts の readOnlyArgs が末尾に足す。workers には足さない。
+# DISPATCH_KIND は workers の表から引く。表に無い kind は起動しない。
 #
 # args は interactive CLI の追加引数（バイナリ名は kind。cursor は cursor-agent）。
 # 空配列ならその kind の harness 既定。
@@ -13,9 +14,7 @@
 #   kind = "codex"
 #   args = ["--model", "gpt-5.6", "-c", "model_reasoning_effort=high"]
 #
-# devin / SWE-2 high:
-#   kind = "devin"
-#   args = ["--model", "swe-2-high", "--permission-mode", "dangerous"]
+# workers は承認で止めない起動を置く（背面で動く）。advisors には置かない。
 #
 # OpenCode Go / Command Code の既定モデルは各 harness overlay。
 
@@ -35,6 +34,10 @@ args = ["--model", "grok-4.6", "--effort", "high"]
 kind = "cursor"
 args = ["--model", "cursor-grok-4.6-high"]
 
-[resolve]
+[[workers]]
+kind = "grok"
+args = ["--model", "grok-4.6", "--effort", "high", "--permission-mode", "bypassPermissions"]
+
+[[workers]]
 kind = "devin"
 args = ["--model", "swe-2-high", "--permission-mode", "dangerous"]

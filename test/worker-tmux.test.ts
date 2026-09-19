@@ -1,10 +1,12 @@
 // worker-tmux.sh の巡（start → collect → ask → collect → close）。
-// tmux / claude は偽物。偽 tmux は fake-tmux.ts。
+// tmux と実行器は偽物。偽 tmux は fake-tmux.ts。
+// kind は roster の既定 worker から引く（表の中身をテストに写さない）。
 
 import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
+import { ROSTER_URL, parseRoster, selectWorker } from "../agents/shared/roster.ts";
 import { installFakeTmux } from "./fake-tmux.ts";
 
 const SCRIPT = new URL("../agents/skills/dispatch/scripts/worker-tmux.sh", import.meta.url)
@@ -14,13 +16,16 @@ const FIXTURE = new URL("fixtures/pane-state", import.meta.url).pathname;
 
 const FAKE_BIN = `#!/bin/sh\nexit 0\n`;
 
+const KIND = selectWorker(parseRoster(await Bun.file(ROSTER_URL).text()).workers).kind;
+
 const run = async (dir: string, argv: string[]) => {
   const proc = Bun.spawn(["sh", SCRIPT, ...argv], {
     env: {
       ...process.env,
       PATH: `${dir}:${process.env["PATH"]}`,
       TMPDIR: dir,
-      DISPATCH_KIND: "claude",
+      // 呼び出し元の指名を持ち込まない（既定 worker の選出を見るテスト）
+      DISPATCH_KIND: "",
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -36,10 +41,10 @@ const run = async (dir: string, argv: string[]) => {
 const setup = async () => {
   const dir = await mkdtemp(join(tmpdir(), "worker-tmux-"));
   await installFakeTmux(dir);
-  await Bun.write(join(dir, "claude"), FAKE_BIN);
+  await Bun.write(join(dir, KIND), FAKE_BIN);
   await Bun.write(join(dir, "prompt"), "Implement the fix.\n");
   await Bun.write(join(dir, "reply"), "Continue with tests.\n");
-  await chmod(join(dir, "claude"), 0o755);
+  await chmod(join(dir, KIND), 0o755);
   return dir;
 };
 
@@ -50,7 +55,7 @@ test("dispatch tmux: 起こせなければ log 末尾を出す", async () => {
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
     expect(started.stderr).toContain(
-      "(log の末尾)\nFATAL\tsession が消えた（起動した harness が終了した）: d-claude-",
+      `(log の末尾)\nFATAL\tsession が消えた（起動した harness が終了した）: d-${KIND}-`,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -63,7 +68,7 @@ test("dispatch tmux: ログイン待ちなら理由を出して起動を止め�
     await Bun.write(join(dir, "login"), Bun.file(`${FIXTURE}/login-cursor`));
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(2);
-    expect(started.stderr).toContain("FATAL\tログインが要る: claude\n");
+    expect(started.stderr).toContain(`FATAL\tログインが要る: ${KIND}\n`);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -80,11 +85,11 @@ test("dispatch tmux: 巡をまたいで送り、close で session を破棄す�
     const runDir = started.stdout.trim();
     expect(await readFile(join(runDir, "backend"), "utf8")).toBe("tmux\n");
     expect(await readFile(join(runDir, "layer"), "utf8")).toBe("dispatch\n");
-    expect(await readFile(join(runDir, "worker"), "utf8")).toBe("claude\n");
+    expect(await readFile(join(runDir, "worker"), "utf8")).toBe(`${KIND}\n`);
 
     const first = await run(dir, ["collect", runDir, "5"]);
     expect(first.exitCode).toBe(0);
-    expect(first.stdout).toContain("claude");
+    expect(first.stdout).toContain(KIND);
     expect(first.stdout).toContain("answer 1");
 
     const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
