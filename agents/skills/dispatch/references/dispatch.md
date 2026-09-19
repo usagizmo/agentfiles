@@ -29,15 +29,17 @@ DISPATCH_BACKEND=tmux \
 
 ## Permission（consult との差）
 
-|        | Consult                     | Dispatch                                     |
-| ------ | --------------------------- | -------------------------------------------- |
-| 目的   | 助言・レビュー              | 実装・調査などの作業                         |
-| argv   | `readOnlyArgs` を末尾に付与 | **付けない**（`directResolveLaunchArgv`）    |
-| bypass | 拒否                        | 拒否（承認スキップ flag は同様に禁止）       |
-| trust  | Claude trust 対話を自動 Yes | Claude trust 対話を自動 Yes（detached 前提） |
-| 完走   | marker + rc                 | 同じ（`WORKER-DONE-…`）                      |
+|        | Consult                     | Dispatch                                  |
+| ------ | --------------------------- | ----------------------------------------- |
+| 目的   | 助言・レビュー              | 実装・調査などの作業                      |
+| argv   | `readOnlyArgs` を末尾に付与 | **付けない**（`directResolveLaunchArgv`） |
+| bypass | 拒否                        | `[resolve]` の指定に従う                  |
+| trust  | trust 対話を自動 Yes        | trust 対話を自動 Yes（detached 前提）     |
+| 完走   | marker + rc                 | 同じ（`WORKER-DONE-…`）                   |
 
-過剰権限（yolo / bypassPermissions 等）は roster 検証で落とす。workspace trust 以外の承認 UI は harness 既定に任せ、人が `tmux -L <session> attach` する。
+承認で止めない起動は `[resolve]` に置く（devin は `--permission-mode dangerous`）。実装役の argv で roster 検証が落とすのは interactive 以外の起動だけ。advisors は承認スキップも read-only 解除も落とす。
+
+trust 以外の承認 UI が出た巡は `collect` が `停滞` で戻る（終端しない）。人が `tmux -L <session> attach` して応える。
 
 ## 巡の終わり方
 

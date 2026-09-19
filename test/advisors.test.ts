@@ -63,33 +63,53 @@ test("実体の宣言 file が検証を通る", () => {
   expect(() => directResolveLaunchArgv(parsed.resolve)).not.toThrow();
 });
 
-test("resolve は無いと止まり、未知キー・承認を飛ばす flag も止まる", () => {
+test("resolve は無いと止まり、未知キーも止まる", () => {
   expect(() => withResolve("")).toThrow("resolve");
   expect(() => withResolve('[resolve]\nkind = "grok"\nargs = []\nmodel = "x"\n')).toThrow("model");
   expect(() => withResolve('[resolve]\nkind = "Grok"\nargs = []\n')).toThrow("kind");
-  expect(() => withResolve('[resolve]\nkind = "grok"\nargs = ["--yolo"]\n')).toThrow("--yolo");
   expect(() => withResolve('[resolve]\nkind = "grok"\nargs = ["--"]\n')).toThrow(RosterError);
 });
 
-test("resolve でも承認を飛ばす指定は止まる", () => {
+// 実装役は背面の detached session で動き、承認 UI に応える人が居ない。
+// 止めると承認待ちのまま巡が終わる
+test("resolve は承認を飛ばす指定を通す", () => {
+  expect(
+    withResolve('[resolve]\nkind = "codex"\nargs = ["-c", "approval_policy=never"]\n').resolve.args,
+  ).toEqual(["-c", "approval_policy=never"]);
+  expect(
+    withResolve('[resolve]\nkind = "devin"\nargs = ["--permission-mode", "dangerous"]\n').resolve
+      .args,
+  ).toEqual(["--permission-mode", "dangerous"]);
+  expect(withResolve('[resolve]\nkind = "grok"\nargs = ["--yolo"]\n').resolve.args).toEqual([
+    "--yolo",
+  ]);
+  expect(
+    directResolveLaunchArgv({ kind: "claude", args: ["--permission-mode", "bypassPermissions"] }),
+  ).toEqual(["claude", "--permission-mode", "bypassPermissions"]);
+});
+
+// 承認を飛ばせるのは実装役だけ。advisors は read-only のまま
+test("advisors は承認を飛ばす指定を止める", () => {
   expect(() =>
-    withResolve('[resolve]\nkind = "codex"\nargs = ["-c", "approval_policy=never"]\n'),
+    parseRoster(toml('[{"kind":"codex","args":["-c","approval_policy=never"]}]')),
   ).toThrow("approval_policy");
   expect(() =>
-    withResolve('[resolve]\nkind = "claude"\nargs = ["--permission-mode", "bypassPermissions"]\n'),
-  ).toThrow("bypassPermissions");
-  expect(() =>
-    withResolve('[resolve]\nkind = "claude"\nargs = ["--permission-mode=dontAsk"]\n'),
-  ).toThrow("dontAsk");
-  expect(() => withResolve('[resolve]\nkind = "codex"\nargs = ["-a", "never"]\n')).toThrow(
-    "ask-for-approval",
-  );
-  expect(() =>
-    directResolveLaunchArgv({
-      kind: "claude",
-      args: ["--permission-mode", "bypassPermissions"],
-    }),
+    directLaunchArgv({ kind: "claude", args: ["--permission-mode", "dangerous"] }),
   ).toThrow(RosterError);
+});
+
+// 回収は TUI の画面を読む。--print で走らせると巡が回らない
+test("resolve でも interactive 以外の起動は止まる", () => {
+  expect(() => withResolve('[resolve]\nkind = "claude"\nargs = ["--print"]\n')).toThrow(
+    "interactive",
+  );
+  expect(() => withResolve('[resolve]\nkind = "claude"\nargs = ["-p", "x"]\n')).toThrow(
+    "interactive",
+  );
+  expect(withResolve('[resolve]\nkind = "codex"\nargs = ["-p", "fast"]\n').resolve.args).toEqual([
+    "-p",
+    "fast",
+  ]);
 });
 
 test("resolve の起動 argv は binary + args で read-only を足さない", () => {
@@ -539,7 +559,7 @@ test("complete CLI は JSON と終了コードを返す", async () => {
 const PANE = `${ROOT}test/fixtures/pane-state`;
 const paneFixture = (name: string) => Bun.file(`${PANE}/${name}`).text();
 
-test.each(["claude", "codex", "cursor", "grok"] as const)(
+test.each(["claude", "codex", "cursor", "devin", "grok"] as const)(
   "%s の作業中の実画面は working",
   async (kind) => {
     expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
@@ -554,7 +574,7 @@ test("grok の Writing edit (3) 状態行は working", async () => {
   expect(paneState(screen.replace("19m57s ⇣156k", "9.3s ⇣1.56k"))).toBe("working");
 });
 
-test.each(["claude", "codex", "cursor", "grok"] as const)(
+test.each(["claude", "codex", "cursor", "devin", "grok"] as const)(
   "%s の入力待ちの実画面は ready",
   async (kind) => {
     expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
@@ -605,6 +625,39 @@ test("trust 対話は ready より先に取る", () => {
     "Do you trust the files in this folder?\n\n❯ 1. Yes, I trust this folder\n  2. No\n";
   expect(paneState(screen)).toBe("trust");
   expect(trustKey(screen)).toBe("1");
+});
+
+// devin は選択肢に区切りを打たない（`❭ 1 Yes, trust`）。番号を読めないと trust を越えられない
+test("devin の trust 対話の実画面は trust", async () => {
+  const screen = await paneFixture("trust-devin");
+  expect(screen).toContain("❭ 1 Yes, trust");
+  expect(paneState(screen)).toBe("trust");
+  expect(trustKey(screen)).toBe("1");
+});
+
+// devin は送信済みの発言にも入力欄と同じ caret を描く。発言を入力欄と読むと、
+// 欄の消えた承認待ちを ready と読み、働いている worker を marker 無しで終端する
+test("devin の承認待ちの実画面は unknown（ready にしない）", async () => {
+  const screen = await paneFixture("approve-devin");
+  expect(screen).toContain("❭ 1 Yes  (Approve once)");
+  expect(paneState(screen)).toBe("unknown");
+});
+
+// bypass で起こした devin は入力欄の上の罫線に見出しを描く。罫線と読めないと
+// 入力欄も状態行も見つからない
+test("devin の入力欄は罫線の見出しの下でも読める", async () => {
+  expect(await paneFixture("ready-devin")).toContain("(bypass permissions on)");
+  expect(inputLine(await paneFixture("ready-devin"))).toBe(
+    "❭ Ask Devin to build features, fix bugs, or work on your code",
+  );
+  expect(inputLine(await paneFixture("working-devin"))).toBe("❭ Guide Devin while it works");
+});
+
+// 見出しつき罫線を何でも枠と読むと、応答本文の罫線まで落として抽出が欠ける
+test("応答本文の見出しつき罫線は落とさない", () => {
+  expect(responseAfter("本文\n─── (重要な制約) ───\n詳細\n", "")).toBe(
+    "本文\n─── (重要な制約) ───\n詳細",
+  );
 });
 
 // この判定器自身をレビューさせると、応答本文に trust / working の文がそのまま出る。

@@ -83,29 +83,35 @@ const splitFlag = (
   return { name: token, value: next };
 };
 
-/** 承認を飛ばす flag を止める。readOnly なら read-only を弱める指定も止める。 */
+/**
+ * 起動 argv の検査。どちらの枠でも interactive TUI 以外の起動は止める。
+ *
+ * readOnly（advisors）は承認を飛ばす指定と read-only を弱める指定も止める。
+ * 実装役（resolve）は止めない —— 背面の detached session で動き、承認 UI に
+ * 応える人が居ない。権限の広さは `roster.toml` の `[resolve]` が決める。
+ */
 const rejectBypass = (args: readonly string[], readOnly: boolean, kind: string): void => {
   for (let i = 0; i < args.length; i++) {
     const token = args[i] ?? "";
     if (token === "--") throw new RosterError("args に -- は置けない");
     const { name, value } = splitFlag(token, args[i + 1]);
-    if (BYPASS.has(name)) throw new RosterError(`承認を飛ばす flag: ${token}`);
     // interactive TUI のみ。--print は拒否。-p は Codex の --profile だけ許可
     if (name === "--print" || (name === "-p" && kind !== "codex")) {
       throw new RosterError(`interactive 以外の起動: ${token}`);
     }
+    if (!readOnly) continue;
+    const config =
+      name === "-c" || name === "--config" ? ((value ?? "").split("=")[0] ?? "") : undefined;
+    if (BYPASS.has(name)) throw new RosterError(`承認を飛ばす flag: ${token}`);
     if (name === "--permission-mode" && APPROVAL_SKIPPING_MODES.has(value ?? "")) {
       throw new RosterError(`承認を飛ばす --permission-mode: ${value}`);
     }
     if ((name === "-a" || name === "--ask-for-approval") && value === "never") {
       throw new RosterError("承認を飛ばす --ask-for-approval: never");
     }
-    const config =
-      name === "-c" || name === "--config" ? ((value ?? "").split("=")[0] ?? "") : undefined;
     if (config === "approval_policy") {
       throw new RosterError(`承認を飛ばす config: ${value ?? "(無し)"}`);
     }
-    if (!readOnly) continue;
     if (name === "--permission-mode" && value !== "plan") {
       throw new RosterError(`--permission-mode は plan だけ: ${value ?? "(無し)"}`);
     }
@@ -192,7 +198,7 @@ export const directLaunchArgv = (slot: Slot): string[] => {
   return [directBinary(slot.kind), ...slot.args, ...readOnlyArgs(slot.kind)];
 };
 
-/** resolve / dispatch 用。read-only を足さない（実装役。bypass と --print は拒否。-p は Codex の --profile だけ）。 */
+/** resolve / dispatch 用。read-only を足さない（実装役。--print は拒否。-p は Codex の --profile だけ）。 */
 export const directResolveLaunchArgv = (worker: Worker): string[] => {
   rejectBypass(worker.args, false, worker.kind);
   return [directBinary(worker.kind), ...worker.args];

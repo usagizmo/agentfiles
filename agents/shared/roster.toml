@@ -13,6 +13,10 @@
 #   kind = "codex"
 #   args = ["--model", "gpt-5.6", "-c", "model_reasoning_effort=high"]
 #
+# devin / SWE-2 high:
+#   kind = "devin"
+#   args = ["--model", "swe-2-high", "--permission-mode", "dangerous"]
+#
 # OpenCode Go / Command Code の既定モデルは各 harness overlay。
 
 [[advisors]]
@@ -32,5 +36,5 @@ kind = "cursor"
 args = ["--model", "cursor-grok-4.6-high"]
 
 [resolve]
-kind = "grok"
-args = ["--model", "grok-4.6", "--effort", "high"]
+kind = "devin"
+args = ["--model", "swe-2-high", "--permission-mode", "dangerous"]
