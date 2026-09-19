@@ -463,6 +463,24 @@ test.each([
   });
 });
 
+test("codex の完了時刻の脚注 done H:MM AM は本文でない", () => {
+  expect(
+    advisorComplete(`判定: 指摘なし\n${CLAUDE_MARKER}\n\n  done 3:25 AM\n`, CLAUDE_MARKER),
+  ).toEqual({
+    ok: true,
+  });
+});
+
+test.each(["done", "done 3:25 AM 追加の指摘"])(
+  "完了時刻の形が揃わない done 行は本文: %s",
+  (content) => {
+    expect(advisorComplete(`${CLAUDE_MARKER}\n${content}`, CLAUDE_MARKER)).toEqual({
+      ok: false,
+      reason: "マーカー無し",
+    });
+  },
+);
+
 test("上下の罫線に囲まれた矢印入力欄から応答の末尾を読める", () => {
   expect(advisorComplete(CURSOR_SNAPSHOT, CURSOR_MARKER)).toEqual({ ok: true });
 });
