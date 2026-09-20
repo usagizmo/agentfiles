@@ -25,8 +25,8 @@ export type CompleteResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: CompleteReason };
 
-const BOX = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯]/u;
-const BOX_STRIP = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯·]/gu;
+const BOX = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯❭]/u;
+const BOX_STRIP = /[\u2500-\u257F\u2580-\u259F╭╮╯╰❯❭·]/gu;
 
 /**
  * 行頭の字下げと箇条書きの点、行末の幅埋め・カーソル・右端の時刻を落とす。
@@ -48,14 +48,35 @@ const normalizeSnapshotLine = (line: string): string =>
  * 地に置く `>` は取らない —— 引用行と見分けが付かず、応答の中の引用より後ろを
  * 落としてしまう。枠の中の `>` だけを取る。
  */
-const INPUT_CARET = /^(?:[│|]\s*[›❯>]|[›❯])(?:\s|$)/u;
+const INPUT_CARET = /^(?:[│|]\s*[›❯❭>]|[›❯❭])(?:\s|$)/u;
 
-/** caret の後ろが番号なら選択肢（`❯ 1. Yes`）。入力欄ではない。 */
-const CHOICE_CARET = /^(?:[│|]\s*)?[›❯>]\s*\d+[.)]/u;
+/**
+ * 横罫線で囲った入力欄の枠。罫線の中に見出しを描く実行器がある。
+ *
+ * 見出しは実画面で確かめた文言だけを取る —— 括弧の中を何でも許すと、応答本文の
+ * 罫線（`─── (重要な制約) ───`）まで枠として落とす。
+ */
+const RULE_LINE = /^[─━]{3,}(?:\s*\(bypass permissions on\)\s*[─━]*)?$/u;
+
+/**
+ * 送信済みの発言にも入力欄と同じ caret を描く実行器がある（devin の `❭`）。
+ * その caret は横罫線の直下にあるときだけ入力欄と取る —— 履歴の発言を入力欄と
+ * 読むと、対話で欄が消えている画面を ready と誤読する。
+ */
+const FRAMED_CARET = /^❭/u;
+
+/**
+ * caret の後ろが番号なら選択肢（`❯ 1. Yes`）。入力欄ではない。
+ *
+ * 区切りを打たない実行器がある（devin の `❭ 1 Yes, trust`）。区切り無しは
+ * Yes / No が続くときだけ取る —— 入力欄に打った `1 つ目は…` を選択肢と誤読しない。
+ */
+const CHOICE_CARET = /^(?:[│|]\s*)?[›❯❭>]\s*\d+(?:[.)]|\s+(?:Yes|No)\b)/u;
 
 const isInputLine = (lines: readonly string[], index: number): boolean => {
   const line = lines[index] ?? "";
   if (CHOICE_CARET.test(line)) return false;
+  if (FRAMED_CARET.test(line)) return RULE_LINE.test(lines[index - 1] ?? "");
   if (INPUT_CARET.test(line)) return true;
   // 横罫線に囲まれた入力欄だけを取る。本文の矢印行は残す。
   return (
@@ -68,11 +89,13 @@ const isInputLine = (lines: readonly string[], index: number): boolean => {
 export const isChromeLine = (line: string): boolean => {
   const trimmed = line.trim();
   if (trimmed === "") return true;
+  if (RULE_LINE.test(trimmed)) return true;
   if (trimmed.startsWith("Shift+Tab:")) return true;
   const stripped = trimmed.replace(BOX_STRIP, "").trim();
   if (stripped === "") return true;
   // 経過時間の脚注。応答の後ろに出るので、落とさないと marker が最後の行にならない
   if (stripped.startsWith("Worked for ")) return true;
+  if (/^done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(stripped)) return true;
   if (
     /^[✻✽✶✳✢✷] [\w\p{L}\p{M}]+ for (?:\d+[hms]\s*)+· done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(
       trimmed,
@@ -239,8 +262,13 @@ const INTERRUPT_HINT = /(?:ctrl\+c to stop|(?:esc|escape)(?:\s+\S+)? to interrup
 const GROK_STATUS =
   /^\p{So}\s+(?:[\p{L}\p{N}\u2026·]+(?:\s+\(\d+\))?…?\s*){1,8}\d+(?:\.\d+)?s\s{2,}.*\[stop\]$/u;
 
+// devin はスピナー + 状態語 · 経過 のあと、括弧に中断案内だけを入れる（経過は括弧の外）
+const DEVIN_STATUS =
+  /^[\p{So}\s]{0,6}(?:[\p{L}\p{N}\u2026]+\s*){1,6}·\s*(?:\d+(?:\.\d+)?\s*[hms]\s*)+\((?:esc|escape|ctrl\+c)[^)]*(?:interrupt|stop)\)$/u;
+
 const isStatusLine = (line: string): boolean => {
   if (GROK_STATUS.test(line)) return true;
+  if (DEVIN_STATUS.test(line)) return true;
   const matched = ELAPSED_TAIL.exec(line);
   return matched !== null && STATUS_HEAD.test(line.slice(0, matched.index));
 };
@@ -306,7 +334,7 @@ export const paneState = (screen: string): PaneState => {
 export const trustKey = (screen: string): string | undefined => {
   for (const raw of screen.split(/\r?\n/)) {
     const line = normalizeSnapshotLine(raw).replace(/^[^\p{L}\p{N}]+/u, "");
-    const matched = /^(\d)[.)]\s*Yes\b/u.exec(line);
+    const matched = /^(\d)(?:[.)]|\s)\s*Yes\b/u.exec(line);
     if (matched?.[1] !== undefined) return matched[1];
   }
   return undefined;

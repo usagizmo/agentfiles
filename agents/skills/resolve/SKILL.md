@@ -20,7 +20,7 @@ description: >-
 
 ### 実装役へ渡す
 
-書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[resolve]`。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
+書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[[workers]]` の先頭。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
 
 1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する。`git add -A` で staging する（index を読む gate と lint-staged のため。修正後も再 stage）。commit / push / branch は禁止」
 2. `start` → `collect`。完走（rc=0）まで 3 へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`

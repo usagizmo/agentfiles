@@ -3,7 +3,7 @@ name: dispatch
 description: >-
   作業（実装・調査）を別 session の harness に interactive で渡す transport。
   「claude で実装して」「codex で調べて」など harness + 作業指示があるとき（DISPATCH_KIND で指名）、
-  または resolve が実装役（roster の [resolve]）を起動するときに使う。consult（助言）とは別層。
+  または resolve が実装役（roster の [[workers]]）を起動するときに使う。consult（助言）とは別層。
 ---
 
 # 作業ディスパッチ
