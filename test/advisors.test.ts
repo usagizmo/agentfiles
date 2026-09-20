@@ -62,7 +62,13 @@ const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 // 並び順と args は quota 切れで人が並べ替える運用値。順序を固定せず、妥当性だけを見る
 test("実体の宣言 file が検証を通る", () => {
   expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex"]);
-  expect(parsed.workers.map((s) => s.kind).sort()).toEqual(["cmd", "devin", "grok", "opencode"]);
+  expect(parsed.workers.map((s) => s.kind).sort()).toEqual([
+    "cmd",
+    "cursor",
+    "devin",
+    "grok",
+    "opencode",
+  ]);
   for (const slot of roster) expect(() => directLaunchArgv(slot)).not.toThrow();
   for (const slot of parsed.workers) expect(() => directWorkerLaunchArgv(slot)).not.toThrow();
 });

@@ -3,7 +3,7 @@
 # advisors の read-only 手段は roster.ts の readOnlyArgs が末尾に足す。workers には足さない。
 # DISPATCH_KIND は workers の表から引く。表に無い kind は起動しない。
 #
-# args は interactive CLI の追加引数（バイナリ名は kind）。
+# args は interactive CLI の追加引数（バイナリ名は kind。cursor は cursor-agent）。
 # 空配列ならその kind の harness 既定。
 #
 # claude / opus 5 high:
@@ -37,6 +37,10 @@ args = ["--model", "opencode-go/deepseek-v4.1-flash", "--auto"]
 [[workers]]
 kind = "grok"
 args = ["--model", "grok-4.6", "--effort", "high", "--permission-mode", "bypassPermissions"]
+
+[[workers]]
+kind = "cursor"
+args = ["--model", "cursor-grok-4.6-high", "--force"]
 
 [[workers]]
 kind = "devin"
