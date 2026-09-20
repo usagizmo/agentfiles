@@ -70,7 +70,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 
 ## agent 設定の配置方針
 
-- `./AGENTS.md` はこの repo 自体の instructions とし、`./.claude/CLAUDE.md` は Claude 互換入口として `../AGENTS.md` へ symlink する
+- `./AGENTS.md` はこの repo 自体の instructions とする。`./.claude/CLAUDE.md` は**置かない**
 - `./agents/` は agent 共通 instructions / skills の SSOT とする
 - **`SKILL.md` 以外は、モデルがそのファイルに何をするかで置き場が決まる**（読む → `references/`、実行する → `scripts/`、成果物に使う → `assets/`）。大きさでは分けない。何を `references/` へ出すかの判断は `docs` skill の品質基準
 - `./test/` は `bun test` の gate。skills の `scripts/` `assets/`・`.githooks/`・共通 `AGENTS.md`・tracked ファイルのコメントを検査する。agent へは**投影しない**（`lib/inventory.sh` に載せない）
