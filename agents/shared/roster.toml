@@ -3,7 +3,7 @@
 # advisors の read-only 手段は roster.ts の readOnlyArgs が末尾に足す。workers には足さない。
 # DISPATCH_KIND は workers の表から引く。表に無い kind は起動しない。
 #
-# args は interactive CLI の追加引数（バイナリ名は kind。cursor は cursor-agent）。
+# args は interactive CLI の追加引数（バイナリ名は kind）。
 # 空配列ならその kind の harness 既定。
 #
 # claude / opus 5 high:
@@ -16,7 +16,7 @@
 #
 # workers は承認で止めない起動を置く（背面で動く）。advisors には置かない。
 #
-# OpenCode Go / Command Code の既定モデルは各 harness overlay。
+# opencode に effort の flag は無い。effort は harnesses/opencode/opencode.json。
 
 [[advisors]]
 kind = "codex"
@@ -26,13 +26,13 @@ args = []
 kind = "claude"
 args = []
 
-[[advisors]]
-kind = "grok"
-args = ["--model", "grok-4.6", "--effort", "high"]
+[[workers]]
+kind = "cmd"
+args = ["--model", "deepseek/deepseek-v4.1-flash", "--effort", "max", "--yolo"]
 
-[[advisors]]
-kind = "cursor"
-args = ["--model", "cursor-grok-4.6-high"]
+[[workers]]
+kind = "opencode"
+args = ["--model", "opencode-go/deepseek-v4.1-flash", "--auto"]
 
 [[workers]]
 kind = "grok"

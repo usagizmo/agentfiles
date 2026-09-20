@@ -61,9 +61,23 @@ const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 // 並び順と args は quota 切れで人が並べ替える運用値。順序を固定せず、妥当性だけを見る
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex", "cursor", "grok"]);
+  expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex"]);
+  expect(parsed.workers.map((s) => s.kind).sort()).toEqual(["cmd", "devin", "grok", "opencode"]);
   for (const slot of roster) expect(() => directLaunchArgv(slot)).not.toThrow();
-  expect(() => directWorkerLaunchArgv(worker)).not.toThrow();
+  for (const slot of parsed.workers) expect(() => directWorkerLaunchArgv(slot)).not.toThrow();
+});
+
+// 既定の実装役は表の先頭。kind を推測させないため、起動 argv ごと固定する
+test("dispatch の既定の実装役は cmd の deepseek max", () => {
+  expect(worker.kind).toBe("cmd");
+  expect(directWorkerLaunchArgv(worker)).toEqual([
+    "cmd",
+    "--model",
+    "deepseek/deepseek-v4.1-flash",
+    "--effort",
+    "max",
+    "--yolo",
+  ]);
 });
 
 test("workers は無いと止まり、未知キーも止まる", () => {
@@ -231,10 +245,12 @@ test("壊れた TOML はパーサの位置を残す", () => {
 });
 
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
-  const cursor = roster.find((s) => s.kind === "cursor");
-  if (cursor === undefined) throw new Error("cursor 枠が無い");
-  const argv = directLaunchArgv(cursor);
-  expect(argv).toEqual([directBinary("cursor"), ...cursor.args, ...readOnlyArgs("cursor")]);
+  const grok: Slot = { kind: "grok", args: ["--model", "grok-4.6", "--effort", "high"] };
+  expect(directLaunchArgv(grok)).toEqual([
+    directBinary("grok"),
+    ...grok.args,
+    ...readOnlyArgs("grok"),
+  ]);
 });
 
 test("空の args でも read-only は付く", () => {
@@ -249,8 +265,7 @@ test("directLaunchArgv は kind バイナリ + args + read-only", () => {
   if (claude === undefined) throw new Error("claude 枠が無い");
   expect(directLaunchArgv(claude)).toEqual(["claude", ...readOnlyArgs("claude")]);
   expect(directBinary("cursor")).toBe("cursor-agent");
-  const cursor = roster.find((s) => s.kind === "cursor");
-  if (cursor === undefined) throw new Error("cursor 枠が無い");
+  const cursor: Slot = { kind: "cursor", args: ["--model", "cursor-grok-4.6-high"] };
   expect(directLaunchArgv(cursor)).toEqual([
     "cursor-agent",
     ...cursor.args,
