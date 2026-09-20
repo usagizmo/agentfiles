@@ -11,5 +11,6 @@
   "reasoningEffort": {
     "deepseek/deepseek-v4.1-flash": "max",
     "z-ai/glm-5.3-flash": "max"
-  }
+  },
+  "zeroDataRetention": true
 }
