@@ -1,0 +1,40 @@
+
+❯ Run this exact shell command and report its output: sleep 75 && echo done
+
+✻ Thought for 1 second [ctrl+o to expand]
+
+⠶ Running it in the background (it would block for 75s), then waiting for its result.
+
+ SHELL  [sleep 75 && echo done]
+ │ Started shell command in the background.
+ │ Task: s0hob6rq
+ └  ... +8 lines [ctrl+o to expand]
+
+✻ Thought for 1 second [ctrl+o to expand]
+
+ SHELL(output)  [s0hob6rq]
+ │ [waited 30s, the wait condition did not occur; the process is still running. Call shell_output ag
+ └  ... +4 lines [ctrl+o to expand]
+
+ SHELL(output)  [s0hob6rq]
+ │ [waited 38.2s, the process exited]
+ │ Task: s0hob6rq (shell, completed)
+ └  ... +7 lines [ctrl+o to expand]
+
+⠶ Output:
+
+  done
+
+  Exit code 0.
+
+✻ Worked for 1m 22s
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Ask your question...
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  » permission bypass on [shift+tab]
+  ? for shortcuts · taste off
+
+
+
+

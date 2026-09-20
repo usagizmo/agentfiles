@@ -1,0 +1,40 @@
+     coining "hash" in its computing sense, and his 1963 paper "File Organization and Addressing" became a
+     canonical reference.
+
+     The 1960s brought theoretical rigor. Donald Knuth, in The Art of Computer Programming, Volume 3: Sorting and
+     Searching (1973), devoted a long, celebrated chapter to hashing, analyzing collision resolution mathematically.
+      Before that, binary searching was the default for ordered data; hashing offered average-case constant-time
+     operations, a dramatic departure.
+
+     Collision handling developed along two great branches. Open addressing, where a colliding key probes other
+     slots, was explored by Peterson and refined by Amdahl; separate chaining, where each bucket holds a list,
+     became the workhorse of implementations from Lisp to Java. In 1968, Robert Morris described the now-famous
+     folding and division methods, and the Fibonacci hashing trick emerged as a way to scatter keys cheaply.
+
+     The 1970s and 1980s saw hashing mature. Universal hashing, introduced by Carter and Wegman in 1979, gave a
+     randomized guarantee against adversarial worst cases — a profound theoretical advance. Linear probing received
+     deeper analysis; coalesced hashing, cuckoo hashing (2001), and Robin Hood hashing explored new trade-offs in
+     probe length and clustering.
+
+     Practical software followed. Hash tables became fixtures of programming languages: Lisp's equal hash tables,
+     Perl's hashes (1987), Python's dict (1991), Java's HashMap, Ruby's hashes, and JavaScript's objects and later
+     Map. Each brought engineering lessons — Python's dict became a symbol of "the best default data structure,"
+     with its 2016 redesign incorporating compact insertion-ordered arrays.
+
+     Hashing also underpinned advances far beyond lookup tables: cryptographic hashing (MD5, SHA family) for
+     integrity, consistent hashing (Karger et al., 1997) for distributed systems and load balancing, Bloom filters (
+     1970) for probabilistic membership, and Merkle trees (1979) for verifying large datasets. Modern distributed
+     databases, caches, and blockchains all rest on the same primitive.
+
+     Today, hash tables are everywhere — compilers, operating systems, networks, databases, and the internet's
+     routing infrastructure. They
+
+     ▣  Build · DeepSeek V4.1 Flash
+
+  ┃
+  ┃
+  ┃
+  ┃  Build auto · DeepSeek V4.1 Flash OpenCode Go
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                                                               tab agents  ctrl+p commands
+

@@ -1,0 +1,40 @@
+     Practical software followed. Hash tables became fixtures of programming languages: Lisp's equal hash tables,
+     Perl's hashes (1987), Python's dict (1991), Java's HashMap, Ruby's hashes, and JavaScript's objects and later
+     Map. Each brought engineering lessons — Python's dict became a symbol of "the best default data structure,"
+     with its 2016 redesign incorporating compact insertion-ordered arrays.
+
+     Hashing also underpinned advances far beyond lookup tables: cryptographic hashing (MD5, SHA family) for
+     integrity, consistent hashing (Karger et al., 1997) for distributed systems and load balancing, Bloom filters (
+     1970) for probabilistic membership, and Merkle trees (1979) for verifying large datasets. Modern distributed
+     databases, caches, and blockchains all rest on the same primitive.
+
+     Today, hash tables are everywhere — compilers, operating systems, networks, databases, and the internet's
+     routing infrastructure. They embody a simple, durable insight: that a little computation can replace a lot of
+     searching. Few ideas in computer science have traveled so far from such humble origins.
+
+  ┃
+  ┃  $ python3 -c 'print(sum(range(100)))'
+  ┃
+  ┃  4950
+  ┃
+
+     4950
+
+     ▣  Build · DeepSeek V4.1 Flash · 9.5s
+
+  ┃
+  ┃  Reply with exactly: WORKER-DONE-k3m9qz
+  ┃
+
+     WORKER-DONE-k3m9qz
+
+     ▣  Build · DeepSeek V4.1 Flash · 1.5s
+
+  ┃
+  ┃  Reply with exactly: PONG-2
+  ┃
+  ┃  Build auto · DeepSeek V4.1 Flash OpenCode Go
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ~/workspace                                                                          14.4K (1%) · $0 ctrl+p
+                                                                                                        commands
+

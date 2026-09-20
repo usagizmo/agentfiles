@@ -588,12 +588,26 @@ test("complete CLI は JSON と終了コードを返す", async () => {
 const PANE = `${ROOT}test/fixtures/pane-state`;
 const paneFixture = (name: string) => Bun.file(`${PANE}/${name}`).text();
 
-test.each(["claude", "codex", "cursor", "devin", "grok"] as const)(
+test.each(["claude", "cmd", "codex", "cursor", "devin", "grok", "opencode"] as const)(
   "%s の作業中の実画面は working",
   async (kind) => {
     expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
   },
 );
+
+// cmd のスピナーは frame ごとに字が変わり、`·` の frame は箇条書きの点として落ちる
+test("cmd の点スピナーの実画面も working", async () => {
+  const screen = await paneFixture("working-cmd-dot");
+  expect(screen).toContain(" · Outlining…  esc to interrupt • 0s • ↓ 0");
+  expect(paneState(screen)).toBe("working");
+});
+
+// 経過が分に乗ると `1m 4s` になる。秒だけの形で書くと分を跨いだ巡で ready と誤読する
+test("cmd の分を跨いだ状態行も working", async () => {
+  const screen = await paneFixture("working-cmd");
+  expect(screen).toContain("esc to interrupt • 10s • ↓ 1.5k");
+  expect(paneState(screen.replace("10s • ↓ 1.5k", "1m 4s • ↓ 425"))).toBe("working");
+});
 
 test("grok の Writing edit (3) 状態行は working", async () => {
   const screen = await paneFixture("working-grok-edit");
@@ -603,12 +617,46 @@ test("grok の Writing edit (3) 状態行は working", async () => {
   expect(paneState(screen.replace("19m57s ⇣156k", "9.3s ⇣1.56k"))).toBe("working");
 });
 
-test.each(["claude", "codex", "cursor", "devin", "grok"] as const)(
+test.each(["claude", "cmd", "codex", "cursor", "devin", "grok", "opencode"] as const)(
   "%s の入力待ちの実画面は ready",
   async (kind) => {
     expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
   },
 );
+
+// opencode は送信済みの発言も入力欄と同じ縦罫で描く。履歴の発言を欄と読むと、
+// 送信で中身が消えたことを観測できず、Enter を送り続けて止まる
+test("opencode の入力欄は履歴の発言ではなく欄の中身を返す", async () => {
+  const typed = await paneFixture("typed-opencode");
+  expect(typed).toContain("┃  Reply with exactly: WORKER-DONE-k3m9qz");
+  expect(inputLine(typed)).toBe("┃  Reply with exactly: PONG-2");
+  expect(inputLine(await paneFixture("ready-opencode"))).toBe("┃");
+});
+
+// 打ちかけの本文は欄の途中の行に載る。見つけた行で切ると未送信の本文が応答に残り、
+// prompt に書かれた marker をそのまま完走と読む
+test("opencode の打ちかけの入力は応答に混ざらない", async () => {
+  const typed = await paneFixture("typed-opencode");
+  expect(advisorComplete(typed, "PONG-2")).toEqual({ ok: false, reason: "マーカー無し" });
+  expect(responseAfter(typed, "")).not.toContain("PONG-2");
+  // 欄より前の巡の応答はそのまま読める
+  expect(advisorComplete(typed, "WORKER-DONE-k3m9qz")).toEqual({ ok: true });
+});
+
+// 巡ごとの脚注が末尾に残ると、完走した巡を永久に未完走と読む
+test("opencode の実画面は応答末尾の marker を読める", async () => {
+  const screen = await paneFixture("ready-opencode");
+  expect(screen).toContain("▣  Build · DeepSeek V4.1 Flash · 1.5s");
+  expect(advisorComplete(screen, "WORKER-DONE-k3m9qz")).toEqual({ ok: true });
+});
+
+// cmd は経過の脚注の頭にスピナーの字を残す。落とさないと marker が最後の行にならず、
+// 完走した巡を永久に未完走と読む
+test("cmd の実画面は応答末尾の marker を読める", async () => {
+  const screen = await paneFixture("ready-cmd");
+  expect(screen).toContain("✻ Worked for 1m 22s");
+  expect(advisorComplete(screen, "Exit code 0.")).toEqual({ ok: true });
+});
 
 // 起動直後の cursor は ❯ を描かない。文字で探すと永久に ready にならない
 test("cursor の起動直後の実画面も ready", async () => {
