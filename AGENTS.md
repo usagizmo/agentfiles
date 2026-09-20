@@ -124,6 +124,8 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 3. `./init.sh` で配線
 4. `./doctor.sh` で検査
 
+配線しただけでは consult / dispatch から起動できない。`agents/shared/roster.toml` の枠に加えて、`advisors.ts` がその実行器の画面を読めることが要る（読めないと起動待ちで止まり、完走も観測できない）。実端末の画面を `test/fixtures/pane-state/` へ採り、test で固定する。advisors の枠は `roster.ts` の `readOnlyArgs` に read-only 手段が要る。
+
 hooks の tripwire:
 
 - `harnesses/<agent>/` 配下の空の `hooks.json`（中身 `{"hooks": {}}`）は「空 overlay を先回りで作らない」の明示的な例外。中身を埋めたり配線を外したりしない
