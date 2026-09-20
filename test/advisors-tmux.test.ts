@@ -1,5 +1,8 @@
 // advisors-tmux.sh の巡（start → collect → ask → collect → close）。
 // tmux / 先頭 kind の harness は偽物。偽 tmux は fake-tmux.ts。
+//
+// 各 test は画面の変化を待つ間ずっと遊んでいる。test ごとに temp dir も偽 tmux の
+// server も分かれるので concurrent で回す（直列だとこの file だけで 80 秒近い）。
 
 import { chmod, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -116,7 +119,7 @@ const putCapacityOn = async (dir: string, session: string) => {
   await Bun.write(join(dir, `srv-${session}`, "screen"), Bun.file(`${FIXTURE}/codex-capacity.txt`));
 };
 
-test("tmux backend: 巡をまたいで送り、close で session を破棄する", async () => {
+test.concurrent("tmux backend: 巡をまたいで送り、close で session を破棄する", async () => {
   const dir = await setup();
   try {
     const started = await run(dir, ["start", join(dir, "prompt")]);
@@ -163,7 +166,7 @@ test("tmux backend: 巡をまたいで送り、close で session を破棄する
   }
 }, 30_000);
 
-test("tmux backend: 起こせなければ agent の log 末尾を出す", async () => {
+test.concurrent("tmux backend: 起こせなければ agent の log 末尾を出す", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "die"), "");
@@ -177,7 +180,7 @@ test("tmux backend: 起こせなければ agent の log 末尾を出す", async 
   }
 }, 30_000);
 
-test("tmux backend: ログイン待ちの agent は log に理由を残して起こせなかった扱いにする", async () => {
+test.concurrent("tmux backend: ログイン待ちの agent は log に理由を残して起こせなかった扱いにする", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "login"), Bun.file(`${FIXTURE}/login-cursor`));
@@ -191,7 +194,7 @@ test("tmux backend: ログイン待ちの agent は log に理由を残して起
   }
 }, 30_000);
 
-test("tmux backend: verify は今の巡が「指摘なし」のときだけ通る", async () => {
+test.concurrent("tmux backend: verify は今の巡が「指摘なし」のときだけ通る", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "verdict"), "判定: 修正推奨\n");
@@ -221,7 +224,7 @@ test("tmux backend: verify は今の巡が「指摘なし」のときだけ通�
   }
 }, 30_000);
 
-test("tmux backend: paste は反映を待ってから Enter を 1 回送る（反映前の Enter は落ちる）", async () => {
+test.concurrent("tmux backend: paste は反映を待ってから Enter を 1 回送る（反映前の Enter は落ちる）", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "slow-paste"), "3\n");
@@ -242,7 +245,7 @@ test("tmux backend: paste は反映を待ってから Enter を 1 回送る（�
   }
 }, 30_000);
 
-test("tmux backend: 反映後に落ちた Enter は 1 回だけ送り直す", async () => {
+test.concurrent("tmux backend: 反映後に落ちた Enter は 1 回だけ送り直す", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "drop-enter"), "");
@@ -258,7 +261,7 @@ test("tmux backend: 反映後に落ちた Enter は 1 回だけ送り直す", as
   }
 }, 30_000);
 
-test("tmux backend: 貼り付けが反映されなければ Enter を送らず start を止める", async () => {
+test.concurrent("tmux backend: 貼り付けが反映されなければ Enter を送らず start を止める", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "slow-paste"), "999\n");
@@ -274,7 +277,7 @@ test("tmux backend: 貼り付けが反映されなければ Enter を送らず s
   }
 }, 30_000);
 
-test("tmux backend: 送信後の画面を読めなければ Enter を送り直さず start を止める", async () => {
+test.concurrent("tmux backend: 送信後の画面を読めなければ Enter を送り直さず start を止める", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "capture-fail-after-enter"), "");
@@ -286,7 +289,7 @@ test("tmux backend: 送信後の画面を読めなければ Enter を送り直�
   }
 }, 30_000);
 
-test("tmux backend: Enter を送り直しても入力欄に残るなら start を止める", async () => {
+test.concurrent("tmux backend: Enter を送り直しても入力欄に残るなら start を止める", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "drop-enter-always"), "");
@@ -298,7 +301,7 @@ test("tmux backend: Enter を送り直しても入力欄に残るなら start �
   }
 }, 30_000);
 
-test("tmux backend: 貼り付け前に状態行が動いても、入力欄に反映されるまで Enter を送らない", async () => {
+test.concurrent("tmux backend: 貼り付け前に状態行が動いても、入力欄に反映されるまで Enter を送らない", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "status-flicker"), "");
@@ -312,7 +315,7 @@ test("tmux backend: 貼り付け前に状態行が動いても、入力欄に反
   }
 }, 30_000);
 
-test("tmux backend: capacity 画面は deadline を待たず不通で終端する", async () => {
+test.concurrent("tmux backend: capacity 画面は deadline を待たず不通で終端する", async () => {
   const dir = await setup();
   try {
     const started = await run(dir, ["start", join(dir, "prompt")]);
@@ -330,7 +333,7 @@ test("tmux backend: capacity 画面は deadline を待たず不通で終端す�
   }
 }, 15_000);
 
-test("tmux backend: replace は dead を次の kind で起こし直す", async () => {
+test.concurrent("tmux backend: replace は dead を次の kind で起こし直す", async () => {
   const dir = await setup(allBins());
   try {
     const started = await run(dir, ["start", join(dir, "prompt")]);
@@ -354,7 +357,7 @@ test("tmux backend: replace は dead を次の kind で起こし直す", async (
   }
 }, 30_000);
 
-test("tmux backend: 2 巡目の replace は巡 1 から今の巡までを連結して送る", async () => {
+test.concurrent("tmux backend: 2 巡目の replace は巡 1 から今の巡までを連結して送る", async () => {
   const dir = await setup(allBins());
   try {
     await Bun.write(
@@ -388,7 +391,7 @@ test("tmux backend: 2 巡目の replace は巡 1 から今の巡までを連結�
   }
 }, 30_000);
 
-test("tmux backend: 2 回目の replace は rc=0 の応答を渡し dead でも落とさない", async () => {
+test.concurrent("tmux backend: 2 回目の replace は rc=0 の応答を渡し dead でも落とさない", async () => {
   const [, second, third] = ["codex", "claude", "grok"] as const;
   const { dir, script } = await setupWithAdvisors(["codex", "claude", "grok"]);
   const call = (argv: string[]) => run(dir, argv, script);
@@ -415,7 +418,7 @@ test("tmux backend: 2 回目の replace は rc=0 の応答を渡し dead でも�
   }
 }, 45_000);
 
-test("tmux backend: replace は候補が尽きたら候補枯渇で止まる", async () => {
+test.concurrent("tmux backend: replace は候補が尽きたら候補枯渇で止まる", async () => {
   const dir = await setup();
   try {
     const started = await run(dir, ["start", join(dir, "prompt")]);
@@ -431,7 +434,7 @@ test("tmux backend: replace は候補が尽きたら候補枯渇で止まる", a
   }
 }, 15_000);
 
-test("tmux backend: 入力欄が貼り付け前に戻ったら数え直し、続けて 2 回同じになってから Enter を 1 回送る", async () => {
+test.concurrent("tmux backend: 入力欄が貼り付け前に戻ったら数え直し、続けて 2 回同じになってから Enter を 1 回送る", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "paste-flap"), "");
@@ -449,7 +452,7 @@ test("tmux backend: 入力欄が貼り付け前に戻ったら数え直し、続
 
 // 判定が読むのは切り出し済みの out.N だけ。切り出せなかった raw を rc=0 で渡すと、
 // 入力欄より後ろに置かれた偽の判定行で verify を通せてしまう
-test("tmux backend: extract が落ちた巡は判定に数えず verify を通さない", async () => {
+test.concurrent("tmux backend: extract が落ちた巡は判定に数えず verify を通さない", async () => {
   const dir = await setup();
   try {
     await breakExtract(dir);
