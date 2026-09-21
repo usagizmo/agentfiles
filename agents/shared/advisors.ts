@@ -73,10 +73,40 @@ const FRAMED_CARET = /^❭/u;
  */
 const CHOICE_CARET = /^(?:[│|]\s*)?[›❯❭>]\s*\d+(?:[.)]|\s+(?:Yes|No)\b)/u;
 
+/**
+ * caret を持たず、縦罫の gutter に入力欄を描く実行器がある（opencode の `┃`）。
+ *
+ * 送信済みの発言も同じ gutter で描くので、行の形では見分けられない。gutter の
+ * 連なりが横罫（`╹▀▀`）で閉じているものだけを入力欄と取る。その連なりの最後の
+ * 行は mode と model の脚注で、入力欄ではない。
+ */
+const GUTTER = /^┃/u;
+const GUTTER_RULE = /^╹[▀▀-▟]*$/u;
+
+const isGutterInput = (lines: readonly string[], index: number): boolean => {
+  let end = index;
+  while (end < lines.length && GUTTER.test(lines[end] ?? "")) end++;
+  return GUTTER_RULE.test(lines[end] ?? "") && index < end - 1;
+};
+
+/**
+ * 入力欄の始まる行。欄が複数行のときはその先頭。
+ *
+ * 応答を切るのは欄の先頭。打ちかけの本文は欄の途中の行に載るので、見つけた
+ * 行で切ると未送信の本文が応答に残り、そこに marker があれば完走と誤読する。
+ */
+const inputBlockStart = (lines: readonly string[], index: number): number => {
+  if (!GUTTER.test(lines[index] ?? "")) return index;
+  let start = index;
+  while (start > 0 && GUTTER.test(lines[start - 1] ?? "")) start--;
+  return start;
+};
+
 const isInputLine = (lines: readonly string[], index: number): boolean => {
   const line = lines[index] ?? "";
   if (CHOICE_CARET.test(line)) return false;
   if (FRAMED_CARET.test(line)) return RULE_LINE.test(lines[index - 1] ?? "");
+  if (GUTTER.test(line)) return isGutterInput(lines, index);
   if (INPUT_CARET.test(line)) return true;
   // 横罫線に囲まれた入力欄だけを取る。本文の矢印行は残す。
   return (
@@ -93,8 +123,12 @@ export const isChromeLine = (line: string): boolean => {
   if (trimmed.startsWith("Shift+Tab:")) return true;
   const stripped = trimmed.replace(BOX_STRIP, "").trim();
   if (stripped === "") return true;
-  // 経過時間の脚注。応答の後ろに出るので、落とさないと marker が最後の行にならない
-  if (stripped.startsWith("Worked for ")) return true;
+  // 経過時間の脚注。応答の後ろに出るので、落とさないと marker が最後の行にならない。
+  // 脚注の頭にスピナーの字を残す実行器がある（cmd の `✻ Worked for 1m 22s`）
+  if (/^(?:[✻✽✶✳✢✷]\s+)?Worked for /u.test(stripped)) return true;
+  // 巡ごとの脚注に mode · model · 経過を描く実行器がある（opencode の
+  // `▣  Build · DeepSeek V4.1 Flash · 9.5s`）
+  if (/^▣\s+\S.*·\s*(?:\d+(?:\.\d+)?\s*[hms]\s*)+$/u.test(trimmed)) return true;
   if (/^done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(stripped)) return true;
   if (
     /^[✻✽✶✳✢✷] [\w\p{L}\p{M}]+ for (?:\d+[hms]\s*)+· done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(
@@ -130,7 +164,7 @@ const contentLines = (text: string): readonly string[] => {
   let end = lines.length;
   for (let i = lines.length - 1; i >= 0; i--) {
     if (isInputLine(lines, i)) {
-      end = i;
+      end = inputBlockStart(lines, i);
       break;
     }
   }
@@ -185,10 +219,26 @@ export const locateMarker = (text: string, marker: string): LocateMarker =>
  * 送信の確認に使う。送信されれば入力欄の中身（貼り付けの placeholder や本文の先頭行）が消える。
  * 画面全体の変化は状態行のスピナーや時計でも起きるので、送信の証拠にならない。
  */
+/**
+ * gutter の入力欄の、中身が載っている行。空なら欄の最後の行。
+ *
+ * gutter の欄は上下に空の余白を持ち、打った本文はその間の行に載る。欄の最後の行を
+ * そのまま返すと、何を打っても同じ空行になり、送信も貼り付けも観測できない。
+ */
+const gutterFieldLine = (lines: readonly string[], index: number): string => {
+  for (let i = index; i >= 0 && GUTTER.test(lines[i] ?? ""); i--) {
+    const line = lines[i] ?? "";
+    if (line.replace(BOX_STRIP, "").trim() !== "") return line;
+  }
+  return lines[index] ?? "";
+};
+
 export const inputLine = (screen: string): string => {
   const lines = screen.split(/\r?\n/).map(normalizeSnapshotLine);
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (isInputLine(lines, i)) return lines[i] ?? "";
+    if (!isInputLine(lines, i)) continue;
+    const line = lines[i] ?? "";
+    return GUTTER.test(line) ? gutterFieldLine(lines, i) : line;
   }
   return "";
 };
@@ -266,9 +316,21 @@ const GROK_STATUS =
 const DEVIN_STATUS =
   /^[\p{So}\s]{0,6}(?:[\p{L}\p{N}\u2026]+\s*){1,6}·\s*(?:\d+(?:\.\d+)?\s*[hms]\s*)+\((?:esc|escape|ctrl\+c)[^)]*(?:interrupt|stop)\)$/u;
 
+// cmd はスピナー + 状態語… のあと、中断案内・経過・転送量を `•` で継ぐ（括弧に入れない。
+// 経過は `1m 4s` の形にもなる）。スピナーの字は frame ごとに変わり、`·` の frame は
+// 箇条書きの点として normalizeSnapshotLine が落とすので、頭は無くても取る
+const CMD_STATUS =
+  /^(?:[\p{So}·]\s+)?(?:[\p{L}\p{N}…]+\s+){1,6}esc to interrupt\s*•\s*(?:\d+(?:\.\d+)?\s*[hms]\s*)+•\s*[↓↑]\s*\d+(?:\.\d+)?[km]?$/u;
+
+// opencode は入力欄を閉じる横罫の外に進捗の帯と中断案内を描く。右端の手掛かり帯は
+// 状態で入れ替わるので、帯と案内だけを見る（経過も転送量も描かない）
+const OPENCODE_STATUS = /^⬝+\s+esc interrupt(?:\s{2,}\S.*)?$/u;
+
 const isStatusLine = (line: string): boolean => {
   if (GROK_STATUS.test(line)) return true;
   if (DEVIN_STATUS.test(line)) return true;
+  if (CMD_STATUS.test(line)) return true;
+  if (OPENCODE_STATUS.test(line)) return true;
   const matched = ELAPSED_TAIL.exec(line);
   return matched !== null && STATUS_HEAD.test(line.slice(0, matched.index));
 };

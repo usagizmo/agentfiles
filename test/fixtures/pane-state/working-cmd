@@ -1,0 +1,40 @@
+
+  The 1970s and 1980s saw hash functions grow more sophisticated. Early functions were simple modular
+  arithmetic; later work emphasized universal hashing, introduced by J. Lawrence Carter and Mark N. Wegman
+  in 1979, which showed that choosing a hash function randomly from a family guarantees good average-case
+  behavior against any adversarial input. This idea underpinned modern hash function design and, later,
+  cryptographic concerns.
+
+  The 1990s reoriented hash tables for practical systems. Dynamic resizing—rehashing to grow the
+  table—became standard, giving amortized O(1) insertion. Languages absorbed the structure into their
+  cores: Perl's hashes, Python's dictionaries, Java's HashMap, Ruby's hashes, and C++11's
+  std::unordered_map. Each implementation made trade-offs between memory, speed, and iteration order.
+
+  A major security crisis arrived in 2003, when researchers showed that algorithmic complexity attacks
+  could force hash collisions, degrading O(1) operations to O(n). Attackers flooded web servers with
+  specially crafted parameter names, exhausting CPU. The response reshaped the field: languages adopted
+  randomized and keyed hash functions, most notably SipHash, introduced by Jean-Philippe Aumasson and
+  Daniel J. Bernstein in 2012, which became the default for Python, Ruby, and Rust.
+
+  The most recent chapter is open-addressing revival. SwissTable, developed at Google around 2017 and
+  released as C++'s absl::flat_hash_map, uses a control byte array and SIMD probing to achieve
+  cache-friendly, extremely fast lookups. Rust's hashbrown and Python's compact dict layout follow similar
+  principles.
+
+  Today the hash table is nearly ubiquitous—powering compilers, databases, caches, and language runtimes.
+  From Luhn's 1953 memo to SwissTable's SIMD probes, its history is a lesson in how a simple idea, refined
+  through decades of theory and engineering, becomes infrastructure no one thinks about.
+
+ SHELL  [python3 -c 'print(sum(range(100)))']
+ └ 4950
+
+ ⌘ Tracing…  esc to interrupt • 10s • ↓ 1.5k
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Ask your question...
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  » permission bypass on [shift+tab]
+  ? for shortcuts · taste off
+
+
+
+

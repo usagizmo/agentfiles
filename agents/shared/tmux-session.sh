@@ -200,15 +200,26 @@ paste-file)
 	done
 	[ "$p_ticks" -gt 0 ] || fatal "貼り付けが入力欄に反映されない: $session"
 	# 送信の証拠は入力欄の中身が消えること（画面全体は状態行の動きでも変わる）。
-	# 起動直後の実行器は貼り付けの直後の Enter を取りこぼすので、消えるまで 1 秒おきに送り直す（最大 5 回）
+	# 起動直後の実行器は貼り付けの直後の Enter を取りこぼすので、消えるまで送り直す（最大 5 回）。
+	# 1 回あたり 0.2 秒おきに 1 秒まで見る —— 固定で 1 秒待つと、消えたあとも待ち続ける
 	p_tries=0
-	while :; do
+	p_sent=0
+	while [ "$p_sent" -eq 0 ]; do
 		tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない"
 		p_tries=$((p_tries + 1))
-		sleep 1
-		now=$(screen_of "$target") || fatal "送信後の画面を読めない: $session"
-		now_in=$(printf '%s\n' "$now" | bun "$advisors_ts" input-line) || fatal "入力欄を読めない: $session"
-		[ "$now_in" != "$pasted" ] && break
+		p_ticks=5
+		while [ "$p_ticks" -gt 0 ]; do
+			sleep 0.2
+			p_ticks=$((p_ticks - 1))
+			now=$(screen_of "$target") || fatal "送信後の画面を読めない: $session"
+			now_in=$(printf '%s\n' "$now" | bun "$advisors_ts" input-line) ||
+				fatal "入力欄を読めない: $session"
+			if [ "$now_in" != "$pasted" ]; then
+				p_sent=1
+				break
+			fi
+		done
+		[ "$p_sent" -eq 1 ] && break
 		[ "$p_tries" -lt 5 ] || fatal "送信されない（入力欄に残っている）: $session"
 	done
 	;;

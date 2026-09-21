@@ -61,9 +61,29 @@ const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 // 並び順と args は quota 切れで人が並べ替える運用値。順序を固定せず、妥当性だけを見る
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex", "cursor", "grok"]);
+  expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex"]);
+  expect(parsed.workers.map((s) => s.kind).sort()).toEqual([
+    "cmd",
+    "cursor",
+    "devin",
+    "grok",
+    "opencode",
+  ]);
   for (const slot of roster) expect(() => directLaunchArgv(slot)).not.toThrow();
-  expect(() => directWorkerLaunchArgv(worker)).not.toThrow();
+  for (const slot of parsed.workers) expect(() => directWorkerLaunchArgv(slot)).not.toThrow();
+});
+
+// 既定の実装役は表の先頭。kind を推測させないため、起動 argv ごと固定する
+test("dispatch の既定の実装役は cmd の deepseek max", () => {
+  expect(worker.kind).toBe("cmd");
+  expect(directWorkerLaunchArgv(worker)).toEqual([
+    "cmd",
+    "--model",
+    "deepseek/deepseek-v4.1-flash",
+    "--effort",
+    "max",
+    "--yolo",
+  ]);
 });
 
 test("workers は無いと止まり、未知キーも止まる", () => {
@@ -129,6 +149,15 @@ test("worker の指名は表から引き、表に無い kind は起動しない"
 test("worker の起動 argv は binary + args で read-only を足さない", () => {
   const argv = directWorkerLaunchArgv(worker);
   expect(argv).toEqual([directBinary(worker.kind), ...worker.args]);
+});
+
+// kind とバイナリ名が違う唯一の枠。取り違えると起動そのものが失敗する
+test("cursor の実行ファイルは cursor-agent", () => {
+  expect(directBinary("cursor")).toBe("cursor-agent");
+  expect(directWorkerLaunchArgv({ kind: "cursor", args: ["--force"] })).toEqual([
+    "cursor-agent",
+    "--force",
+  ]);
 });
 
 test("worker は read-only を要求しない", () => {
@@ -199,8 +228,16 @@ test("= 連結と別名の bypass も落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"grok","args":["--no-plan"]}]'))).toThrow(RosterError);
 });
 
+// read-only 手段を持つ kind だけが相談役になれる。実装役の kind をそのまま
+// advisors へ移すと、read-only を付けられないまま起動してしまう
 test("read-only 手段が無い kind は宣言時に落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"gemini","args":[]}]'))).toThrow(RosterError);
+  for (const kind of ["cmd", "opencode", "grok", "cursor", "devin"]) {
+    expect(() => readOnlyArgs(kind)).toThrow("read-only 手段が無い kind");
+    expect(() => parseRoster(toml(`[{"kind":"${kind}","args":[]}]`))).toThrow(
+      "read-only 手段が無い kind",
+    );
+  }
 });
 
 test("起動 argv も bypass を落とす", () => {
@@ -231,10 +268,12 @@ test("壊れた TOML はパーサの位置を残す", () => {
 });
 
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
-  const cursor = roster.find((s) => s.kind === "cursor");
-  if (cursor === undefined) throw new Error("cursor 枠が無い");
-  const argv = directLaunchArgv(cursor);
-  expect(argv).toEqual([directBinary("cursor"), ...cursor.args, ...readOnlyArgs("cursor")]);
+  const codex: Slot = { kind: "codex", args: ["--model", "gpt-5.6"] };
+  expect(directLaunchArgv(codex)).toEqual([
+    directBinary("codex"),
+    ...codex.args,
+    ...readOnlyArgs("codex"),
+  ]);
 });
 
 test("空の args でも read-only は付く", () => {
@@ -248,14 +287,6 @@ test("directLaunchArgv は kind バイナリ + args + read-only", () => {
   const claude = roster.find((s) => s.kind === "claude");
   if (claude === undefined) throw new Error("claude 枠が無い");
   expect(directLaunchArgv(claude)).toEqual(["claude", ...readOnlyArgs("claude")]);
-  expect(directBinary("cursor")).toBe("cursor-agent");
-  const cursor = roster.find((s) => s.kind === "cursor");
-  if (cursor === undefined) throw new Error("cursor 枠が無い");
-  expect(directLaunchArgv(cursor)).toEqual([
-    "cursor-agent",
-    ...cursor.args,
-    ...readOnlyArgs("cursor"),
-  ]);
 });
 
 test("directWorkerLaunchArgv は read-only を付けない（dispatch / 実装役）", () => {
@@ -271,25 +302,6 @@ test("codex の read-only は -s read-only", () => {
   expect(readOnlyArgs("codex")).toEqual(["-s", "read-only"]);
 });
 
-test("grok の read-only は plan と --no-subagents", () => {
-  expect(readOnlyArgs("grok")).toEqual(["--permission-mode", "plan", "--no-subagents"]);
-});
-
-test("cursor の read-only は --mode plan", () => {
-  expect(readOnlyArgs("cursor")).toEqual(["--mode", "plan"]);
-  const argv = directLaunchArgv({
-    kind: "cursor",
-    args: ["--model", "cursor-grok-4.6-high"],
-  });
-  expect(argv).toEqual([
-    directBinary("cursor"),
-    "--model",
-    "cursor-grok-4.6-high",
-    "--mode",
-    "plan",
-  ]);
-});
-
 test("実体 file のコメントに model 指定の例が残っている", () => {
   expect(rosterText).toContain('#   args = ["--model", "claude-opus-5", "--effort", "high"]');
   expect(rosterText).not.toContain("_comment");
@@ -303,11 +315,11 @@ kind = "claude"
 args = []
 
 [[advisors]]
-kind = "cursor"
+kind = "codex"
 args = ["--model", "x # not a comment"]
 ${WORKER_TOML}`;
   const slots = parseRoster(text).advisors;
-  expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
+  expect(slots.map((s) => s.kind)).toEqual(["claude", "codex"]);
   expect(slots[1]?.args).toEqual(["--model", "x # not a comment"]);
 });
 
@@ -573,12 +585,26 @@ test("complete CLI は JSON と終了コードを返す", async () => {
 const PANE = `${ROOT}test/fixtures/pane-state`;
 const paneFixture = (name: string) => Bun.file(`${PANE}/${name}`).text();
 
-test.each(["claude", "codex", "cursor", "devin", "grok"] as const)(
+test.each(["claude", "cmd", "codex", "cursor", "devin", "grok", "opencode"] as const)(
   "%s の作業中の実画面は working",
   async (kind) => {
     expect(paneState(await paneFixture(`working-${kind}`))).toBe("working");
   },
 );
+
+// cmd のスピナーは frame ごとに字が変わり、`·` の frame は箇条書きの点として落ちる
+test("cmd の点スピナーの実画面も working", async () => {
+  const screen = await paneFixture("working-cmd-dot");
+  expect(screen).toContain(" · Outlining…  esc to interrupt • 0s • ↓ 0");
+  expect(paneState(screen)).toBe("working");
+});
+
+// 経過が分に乗ると `1m 4s` になる。秒だけの形で書くと分を跨いだ巡で ready と誤読する
+test("cmd の分を跨いだ状態行も working", async () => {
+  const screen = await paneFixture("working-cmd");
+  expect(screen).toContain("esc to interrupt • 10s • ↓ 1.5k");
+  expect(paneState(screen.replace("10s • ↓ 1.5k", "1m 4s • ↓ 425"))).toBe("working");
+});
 
 test("grok の Writing edit (3) 状態行は working", async () => {
   const screen = await paneFixture("working-grok-edit");
@@ -588,12 +614,46 @@ test("grok の Writing edit (3) 状態行は working", async () => {
   expect(paneState(screen.replace("19m57s ⇣156k", "9.3s ⇣1.56k"))).toBe("working");
 });
 
-test.each(["claude", "codex", "cursor", "devin", "grok"] as const)(
+test.each(["claude", "cmd", "codex", "cursor", "devin", "grok", "opencode"] as const)(
   "%s の入力待ちの実画面は ready",
   async (kind) => {
     expect(paneState(await paneFixture(`ready-${kind}`))).toBe("ready");
   },
 );
+
+// opencode は送信済みの発言も入力欄と同じ縦罫で描く。履歴の発言を欄と読むと、
+// 送信で中身が消えたことを観測できず、Enter を送り続けて止まる
+test("opencode の入力欄は履歴の発言ではなく欄の中身を返す", async () => {
+  const typed = await paneFixture("typed-opencode");
+  expect(typed).toContain("┃  Reply with exactly: WORKER-DONE-k3m9qz");
+  expect(inputLine(typed)).toBe("┃  Reply with exactly: PONG-2");
+  expect(inputLine(await paneFixture("ready-opencode"))).toBe("┃");
+});
+
+// 打ちかけの本文は欄の途中の行に載る。見つけた行で切ると未送信の本文が応答に残り、
+// prompt に書かれた marker をそのまま完走と読む
+test("opencode の打ちかけの入力は応答に混ざらない", async () => {
+  const typed = await paneFixture("typed-opencode");
+  expect(advisorComplete(typed, "PONG-2")).toEqual({ ok: false, reason: "マーカー無し" });
+  expect(responseAfter(typed, "")).not.toContain("PONG-2");
+  // 欄より前の巡の応答はそのまま読める
+  expect(advisorComplete(typed, "WORKER-DONE-k3m9qz")).toEqual({ ok: true });
+});
+
+// 巡ごとの脚注が末尾に残ると、完走した巡を永久に未完走と読む
+test("opencode の実画面は応答末尾の marker を読める", async () => {
+  const screen = await paneFixture("ready-opencode");
+  expect(screen).toContain("▣  Build · DeepSeek V4.1 Flash · 1.5s");
+  expect(advisorComplete(screen, "WORKER-DONE-k3m9qz")).toEqual({ ok: true });
+});
+
+// cmd は経過の脚注の頭にスピナーの字を残す。落とさないと marker が最後の行にならず、
+// 完走した巡を永久に未完走と読む
+test("cmd の実画面は応答末尾の marker を読める", async () => {
+  const screen = await paneFixture("ready-cmd");
+  expect(screen).toContain("✻ Worked for 1m 22s");
+  expect(advisorComplete(screen, "Exit code 0.")).toEqual({ ok: true });
+});
 
 // 起動直後の cursor は ❯ を描かない。文字で探すと永久に ready にならない
 test("cursor の起動直後の実画面も ready", async () => {

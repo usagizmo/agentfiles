@@ -1,6 +1,8 @@
 // worker-tmux.sh の巡（start → collect → ask → collect → close）。
 // tmux と実行器は偽物。偽 tmux は fake-tmux.ts。
 // kind は roster の既定 worker から引く（表の中身をテストに写さない）。
+//
+// 待ちが長く、test ごとに temp dir も偽 tmux の server も分かれるので concurrent で回す。
 
 import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -48,7 +50,7 @@ const setup = async () => {
   return dir;
 };
 
-test("dispatch tmux: 起こせなければ log 末尾を出す", async () => {
+test.concurrent("dispatch tmux: 起こせなければ log 末尾を出す", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "die"), "");
@@ -62,7 +64,7 @@ test("dispatch tmux: 起こせなければ log 末尾を出す", async () => {
   }
 }, 30_000);
 
-test("dispatch tmux: ログイン待ちなら理由を出して起動を止める", async () => {
+test.concurrent("dispatch tmux: ログイン待ちなら理由を出して起動を止める", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "login"), Bun.file(`${FIXTURE}/login-cursor`));
@@ -74,7 +76,7 @@ test("dispatch tmux: ログイン待ちなら理由を出して起動を止め�
   }
 }, 30_000);
 
-test("dispatch tmux: 巡をまたいで送り、close で session を破棄する", async () => {
+test.concurrent("dispatch tmux: 巡をまたいで送り、close で session を破棄する", async () => {
   const dir = await setup();
   try {
     const started = await run(dir, ["start", join(dir, "prompt")]);
@@ -110,7 +112,7 @@ test("dispatch tmux: 巡をまたいで送り、close で session を破棄す�
   }
 }, 30_000);
 
-test("dispatch tmux: 入力待ちで marker が無ければ collect が終端にし、ask できない", async () => {
+test.concurrent("dispatch tmux: 入力待ちで marker が無ければ collect が終端にし、ask できない", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "no-marker"), "");
@@ -129,7 +131,7 @@ test("dispatch tmux: 入力待ちで marker が無ければ collect が終端に
   }
 }, 30_000);
 
-test("dispatch tmux: deadline で入力待ちでも、読み直して marker があれば完走", async () => {
+test.concurrent("dispatch tmux: deadline で入力待ちでも、読み直して marker があれば完走", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "late-marker"), "");
@@ -146,7 +148,7 @@ test("dispatch tmux: deadline で入力待ちでも、読み直して marker が
   }
 }, 30_000);
 
-test("dispatch tmux: deadline の再読込が失敗したら終端にせず timeout", async () => {
+test.concurrent("dispatch tmux: deadline の再読込が失敗したら終端にせず timeout", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "no-marker"), "");
@@ -164,7 +166,7 @@ test("dispatch tmux: deadline の再読込が失敗したら終端にせず time
   }
 }, 30_000);
 
-test("dispatch tmux: 画面が動かず処理中でもなければ deadline を待たず停滞で戻る", async () => {
+test.concurrent("dispatch tmux: 画面が動かず処理中でもなければ deadline を待たず停滞で戻る", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "prompt-stall"), "");
@@ -184,7 +186,7 @@ test("dispatch tmux: 画面が動かず処理中でもなければ deadline を�
   }
 }, 30_000);
 
-test("dispatch tmux: 画面が動かなくても作業中なら停滞にせず deadline まで待つ", async () => {
+test.concurrent("dispatch tmux: 画面が動かなくても作業中なら停滞にせず deadline まで待つ", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "working-stall"), "");
@@ -201,7 +203,7 @@ test("dispatch tmux: 画面が動かなくても作業中なら停滞にせず d
   }
 }, 30_000);
 
-test("dispatch tmux: capacity 画面は deadline を待たず不通で終端する", async () => {
+test.concurrent("dispatch tmux: capacity 画面は deadline を待たず不通で終端する", async () => {
   const dir = await setup();
   try {
     const started = await run(dir, ["start", join(dir, "prompt")]);
@@ -225,7 +227,7 @@ test("dispatch tmux: capacity 画面は deadline を待たず不通で終端す�
   }
 }, 15_000);
 
-test("dispatch tmux: 停滞秒が deadline より短くても、入力待ちで marker が無ければ終端する", async () => {
+test.concurrent("dispatch tmux: 停滞秒が deadline より短くても、入力待ちで marker が無ければ終端する", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "no-marker"), "");

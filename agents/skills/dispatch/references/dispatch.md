@@ -37,7 +37,7 @@ DISPATCH_BACKEND=tmux \
 | trust  | trust 対話を自動 Yes        | trust 対話を自動 Yes（detached 前提）    |
 | 完走   | marker + rc                 | 同じ（`WORKER-DONE-…`）                  |
 
-承認で止めない起動は `[[workers]]` に置く（grok は `--permission-mode bypassPermissions`）。実装役の argv で roster 検証が落とすのは interactive 以外の起動だけ。advisors は承認スキップも read-only 解除も落とす。
+承認で止めない起動は `[[workers]]` に置く（既定の cmd は `--yolo`）。実装役の argv で roster 検証が落とすのは interactive 以外の起動だけ。advisors は承認スキップも read-only 解除も落とす。
 
 trust 以外の承認 UI が出た巡は `collect` が `停滞` で戻る（終端しない）。人が `tmux -L <session> attach` して応える。
 

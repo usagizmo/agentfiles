@@ -16,7 +16,7 @@
 #
 # workers は承認で止めない起動を置く（背面で動く）。advisors には置かない。
 #
-# OpenCode Go / Command Code の既定モデルは各 harness overlay。
+# opencode に effort の flag は無い。effort は harnesses/opencode/opencode.json。
 
 [[advisors]]
 kind = "codex"
@@ -26,17 +26,21 @@ args = []
 kind = "claude"
 args = []
 
-[[advisors]]
-kind = "grok"
-args = ["--model", "grok-4.6", "--effort", "high"]
+[[workers]]
+kind = "cmd"
+args = ["--model", "deepseek/deepseek-v4.1-flash", "--effort", "max", "--yolo"]
 
-[[advisors]]
-kind = "cursor"
-args = ["--model", "cursor-grok-4.6-high"]
+[[workers]]
+kind = "opencode"
+args = ["--model", "opencode-go/deepseek-v4.1-flash", "--auto"]
 
 [[workers]]
 kind = "grok"
 args = ["--model", "grok-4.6", "--effort", "high", "--permission-mode", "bypassPermissions"]
+
+[[workers]]
+kind = "cursor"
+args = ["--model", "cursor-grok-4.6-high", "--force"]
 
 [[workers]]
 kind = "devin"
