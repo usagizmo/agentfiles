@@ -2,7 +2,7 @@
 // tmux / 先頭 kind の harness は偽物。偽 tmux は fake-tmux.ts。
 //
 // 各 test は画面の変化を待つ間ずっと遊んでいる。test ごとに temp dir も偽 tmux の
-// server も分かれるので concurrent で回す（直列だとこの file だけで 80 秒近い）。
+// server も分かれるので concurrent で回す。
 
 import { chmod, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";

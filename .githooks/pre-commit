@@ -38,11 +38,11 @@ bun run typecheck || exit 1
 # lint-staged より後に置く。partial commit は一時 index を `GIT_INDEX_FILE` で渡す。
 # 先に落とすと整形結果が commit される index へ戻らない。
 #
-# 検査は test/pre-commit.test.ts。
-#
-# 実端末を駆動する test は待ちが長く、直列だと gate が 2 分を超える。file を worker へ
+# 実端末を駆動する test は画面の変化を待つ間ずっと遊んでいる。file を worker へ
 # 分け、既定の 5 秒 timeout を上げる —— process を起こす test は他の worker と CPU を
 # 分け合うと 5 秒に収まらない（待ちの長さは test 側の timeout 引数が持つ）。
+#
+# 検査は test/pre-commit.test.ts。
 for name in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
 	unset "$name"
 done
