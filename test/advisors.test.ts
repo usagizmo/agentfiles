@@ -151,6 +151,15 @@ test("worker の起動 argv は binary + args で read-only を足さない", ()
   expect(argv).toEqual([directBinary(worker.kind), ...worker.args]);
 });
 
+// kind とバイナリ名が違う唯一の枠。取り違えると起動そのものが失敗する
+test("cursor の実行ファイルは cursor-agent", () => {
+  expect(directBinary("cursor")).toBe("cursor-agent");
+  expect(directWorkerLaunchArgv({ kind: "cursor", args: ["--force"] })).toEqual([
+    "cursor-agent",
+    "--force",
+  ]);
+});
+
 test("worker は read-only を要求しない", () => {
   const r = withWorker('[[workers]]\nkind = "codex"\nargs = ["-s", "workspace-write"]\n');
   expect(r.workers[0]?.args).toEqual(["-s", "workspace-write"]);
@@ -219,8 +228,16 @@ test("= 連結と別名の bypass も落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"grok","args":["--no-plan"]}]'))).toThrow(RosterError);
 });
 
+// read-only 手段を持つ kind だけが相談役になれる。実装役の kind をそのまま
+// advisors へ移すと、read-only を付けられないまま起動してしまう
 test("read-only 手段が無い kind は宣言時に落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"gemini","args":[]}]'))).toThrow(RosterError);
+  for (const kind of ["cmd", "opencode", "grok", "cursor", "devin"]) {
+    expect(() => readOnlyArgs(kind)).toThrow("read-only 手段が無い kind");
+    expect(() => parseRoster(toml(`[{"kind":"${kind}","args":[]}]`))).toThrow(
+      "read-only 手段が無い kind",
+    );
+  }
 });
 
 test("起動 argv も bypass を落とす", () => {
@@ -251,11 +268,11 @@ test("壊れた TOML はパーサの位置を残す", () => {
 });
 
 test("起動 argv は宣言の args のあとに read-only を足す", () => {
-  const grok: Slot = { kind: "grok", args: ["--model", "grok-4.6", "--effort", "high"] };
-  expect(directLaunchArgv(grok)).toEqual([
-    directBinary("grok"),
-    ...grok.args,
-    ...readOnlyArgs("grok"),
+  const codex: Slot = { kind: "codex", args: ["--model", "gpt-5.6"] };
+  expect(directLaunchArgv(codex)).toEqual([
+    directBinary("codex"),
+    ...codex.args,
+    ...readOnlyArgs("codex"),
   ]);
 });
 
@@ -270,13 +287,6 @@ test("directLaunchArgv は kind バイナリ + args + read-only", () => {
   const claude = roster.find((s) => s.kind === "claude");
   if (claude === undefined) throw new Error("claude 枠が無い");
   expect(directLaunchArgv(claude)).toEqual(["claude", ...readOnlyArgs("claude")]);
-  expect(directBinary("cursor")).toBe("cursor-agent");
-  const cursor: Slot = { kind: "cursor", args: ["--model", "cursor-grok-4.6-high"] };
-  expect(directLaunchArgv(cursor)).toEqual([
-    "cursor-agent",
-    ...cursor.args,
-    ...readOnlyArgs("cursor"),
-  ]);
 });
 
 test("directWorkerLaunchArgv は read-only を付けない（dispatch / 実装役）", () => {
@@ -292,25 +302,6 @@ test("codex の read-only は -s read-only", () => {
   expect(readOnlyArgs("codex")).toEqual(["-s", "read-only"]);
 });
 
-test("grok の read-only は plan と --no-subagents", () => {
-  expect(readOnlyArgs("grok")).toEqual(["--permission-mode", "plan", "--no-subagents"]);
-});
-
-test("cursor の read-only は --mode plan", () => {
-  expect(readOnlyArgs("cursor")).toEqual(["--mode", "plan"]);
-  const argv = directLaunchArgv({
-    kind: "cursor",
-    args: ["--model", "cursor-grok-4.6-high"],
-  });
-  expect(argv).toEqual([
-    directBinary("cursor"),
-    "--model",
-    "cursor-grok-4.6-high",
-    "--mode",
-    "plan",
-  ]);
-});
-
 test("実体 file のコメントに model 指定の例が残っている", () => {
   expect(rosterText).toContain('#   args = ["--model", "claude-opus-5", "--effort", "high"]');
   expect(rosterText).not.toContain("_comment");
@@ -324,11 +315,11 @@ kind = "claude"
 args = []
 
 [[advisors]]
-kind = "cursor"
+kind = "codex"
 args = ["--model", "x # not a comment"]
 ${WORKER_TOML}`;
   const slots = parseRoster(text).advisors;
-  expect(slots.map((s) => s.kind)).toEqual(["claude", "cursor"]);
+  expect(slots.map((s) => s.kind)).toEqual(["claude", "codex"]);
   expect(slots[1]?.args).toEqual(["--model", "x # not a comment"]);
 });
 

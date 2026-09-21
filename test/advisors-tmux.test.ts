@@ -32,8 +32,8 @@ const CLEAN = {
   CURSOR_INVOKED_AS: undefined,
 } as const;
 
-const run = async (dir: string, argv: string[], script: string = SCRIPT) => {
-  const proc = Bun.spawn(["sh", script, ...argv], {
+const run = async (dir: string, argv: string[]) => {
+  const proc = Bun.spawn(["sh", SCRIPT, ...argv], {
     env: {
       ...process.env,
       ...CLEAN,
@@ -68,31 +68,6 @@ const setup = async (bins: readonly string[] = [FIRST_BIN]) => {
 
 const allBins = (): string[] => [...new Set(ADVISORS.map((s) => directBinary(s.kind)))];
 
-/**
- * 候補を指定した表で backend を動かす複製。実体 roster の枠数は運用値で、
- * 候補を何度も差し替える巡は枠数が足りないと書けない。
- *
- * 表は script の隣が SSOT なので、script ごと temp へ写して差し替える
- * （env で表の在処を切り替える口は作らない）。
- */
-const setupWithAdvisors = async (kinds: readonly string[]) => {
-  const dir = await setup([...new Set(kinds.map(directBinary))]);
-  const scripts = join(dir, "scripts");
-  // symlink の実体ごと写す（roster.toml / advisors.ts は shared への symlink）
-  await Bun.spawn([
-    "cp",
-    "-RL",
-    new URL("../agents/skills/consult/scripts", import.meta.url).pathname,
-    scripts,
-  ]).exited;
-  const advisors = kinds.map((kind) => `[[advisors]]\nkind = "${kind}"\nargs = []\n`).join("\n");
-  await Bun.write(
-    join(scripts, "roster.toml"),
-    `${advisors}\n[[workers]]\nkind = "grok"\nargs = ["--yolo"]\n`,
-  );
-  return { dir, script: join(scripts, "advisors-tmux.sh") };
-};
-
 // PATH の bun を、extract のときだけ落ちる shim に差し替える。
 // extract は raw を読めれば落ちないので、入力からは起こせない
 const breakExtract = async (dir: string) => {
@@ -113,10 +88,6 @@ const putCapacity = async (dir: string) => {
   const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
   expect(servers).toHaveLength(1);
   await Bun.write(join(dir, servers[0] ?? "", "screen"), Bun.file(`${FIXTURE}/codex-capacity.txt`));
-};
-
-const putCapacityOn = async (dir: string, session: string) => {
-  await Bun.write(join(dir, `srv-${session}`, "screen"), Bun.file(`${FIXTURE}/codex-capacity.txt`));
 };
 
 test.concurrent("tmux backend: 巡をまたいで送り、close で session を破棄する", async () => {
@@ -390,33 +361,6 @@ test.concurrent("tmux backend: 2 巡目の replace は巡 1 から今の巡ま�
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
-
-test.concurrent("tmux backend: 2 回目の replace は rc=0 の応答を渡し dead でも落とさない", async () => {
-  const [, second, third] = ["codex", "claude", "grok"] as const;
-  const { dir, script } = await setupWithAdvisors(["codex", "claude", "grok"]);
-  const call = (argv: string[]) => run(dir, argv, script);
-  try {
-    const started = await call(["start", join(dir, "prompt")]);
-    expect(started.exitCode).toBe(0);
-    const runDir = started.stdout.trim();
-    const rid = (await readFile(join(runDir, "rid"), "utf8")).trim();
-    await putCapacity(dir);
-    expect((await call(["collect", runDir, "8"])).exitCode).toBe(1);
-    expect((await call(["replace", runDir])).exitCode).toBe(0);
-    expect((await call(["collect", runDir, "5"])).exitCode).toBe(0);
-    expect((await call(["ask", runDir, join(dir, "reply")])).exitCode).toBe(0);
-    await putCapacityOn(dir, `c-${second}-${rid}`);
-    expect((await call(["collect", runDir, "8"])).exitCode).toBe(1);
-    expect((await call(["replace", runDir])).exitCode).toBe(0);
-    const pasted = await readFile(join(dir, `srv-c-${third}-${rid}`, "pasted"), "utf8");
-    expect(pasted).toContain("## 巡 1 の応答");
-    expect(pasted).toContain("answer 1");
-    expect(pasted).not.toContain("Selected model is at capacity");
-    expect((await call(["close", runDir])).exitCode).toBe(0);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}, 45_000);
 
 test.concurrent("tmux backend: replace は候補が尽きたら候補枯渇で止まる", async () => {
   const dir = await setup();
