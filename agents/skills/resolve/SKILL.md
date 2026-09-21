@@ -12,7 +12,7 @@ description: >-
 2. **場所**: 計画も実装も課題用の worktree で行う。subagent（Agent tool）に委譲しない。cwd が本 step で課題用に作られた linked worktree（`git rev-parse --git-dir` と `--git-common-dir` が異なり、prompt に「2 を飛ばして 3 から」がある）なら既にその場所にいるので 3 へ
    - `git worktree add` で切って cd し、3 へ
    - 複数 repo を変える課題は、主 repo の worktree から `git worktree add` で他 repo の worktree を切る（workspace は増やさない）
-3. **計画**: Issue と関連コードを読む。本文に `refine` の項目（目的 / 受入条件 / 採用する方式と比較した代替 / 変更面 / 依存する Issue / 実物確認）が揃っていれば、触るパスと検証方法を決めて 4 へ。欠けていれば `consult`（深い・事前）で GO を得て、確定した項目を本文へ書いてから 4 へ。製品境界を越える新事実は「止まる条件」
+3. **計画**: Issue と関連コードを読み、本文の計画（`refine` の項目）が現在のコード・依存・要件に適合するかを確かめる。適合すれば触るパスと検証方法を決めて 4 へ。項目が欠ける・前提が変わった・中規模以上で設計記述が無いなら、`consult`（深い・事前）で GO を得て、確定した項目を本文へ書いてから 4 へ。製品境界を越える新事実は「止まる条件」
 4. **実装**: 軽微（定義は `~/.agents/AGENTS.md` の「規模」）は自分で書く。それ以外は「実装役へ渡す」
 5. **仕上げ**: 編集した repo ごとに、その worktree を cwd にして `finish`。軽微かどうかは課題全体で 1 回決める。全 repo の `finish` が終わったら、開いている worker があれば `close`
 6. **検証**: project の検証 skill があればそれ。無ければ CI と同じ検査をローカルで通す。**CI を検査の代わりに使わない**
@@ -22,11 +22,12 @@ description: >-
 
 書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[[workers]]` の先頭。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
 
-1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する。`git add -A` で staging する（index を読む gate と lint-staged のため。修正後も再 stage）。commit / push / branch は禁止」
-2. `start` → `collect`。完走（rc=0）まで 3 へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`
-3. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直す点が無くなるまで繰り返す。自分のレビューでも `finish` の consult の指摘でも、修正の振り分けは同じ: 1 文で指示でき数行に収まるなら自分で直す。それ以外は `ask` で送って `collect`。親のレビュー対象は staged / unstaged / untracked 全体。実装役の gate 通過は `finish` を代替しない
-4. run dir を保持したまま親手順 5（仕上げ）へ戻る
-5. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・入力待ちで marker 無し・不通）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない
+1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 設計記述と不変条件 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。設計記述の前提が成立しないと分かったら、その部分の実装を止め、根拠と判断が要る点を報告する。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する。`git add -A` で staging する（index を読む gate と lint-staged のため。修正後も再 stage）。commit / push / branch は禁止」
+2. `start` → `collect`。完走（rc=0）まで次へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`
+3. 前提破綻（実装役の報告・親の発見を問わない）または修正済みの原因の再発があれば、個別修正より先に扱う: `finish` の consult ループ中ならそのループ。それ以外は親手順 3 へ戻って設計記述を改訂し本文へ反映してから、実装役へ再開を指示する（transport は `dispatch`）
+4. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直す点が無くなるまで 3 から繰り返す。自分のレビューでも `finish` の consult の指摘でも、修正の振り分けは同じ: 指摘を原因単位（`consult` のループ）にまとめ、原因ごとに対象経路と検証を決めてから、1 文で指示でき数行に収まるなら自分で直す。それ以外は `ask` で送って `collect`。親のレビュー対象は staged / unstaged / untracked 全体。実装役の gate 通過は `finish` を代替しない
+5. run dir を保持したまま親手順 5（仕上げ）へ戻る
+6. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・入力待ちで marker 無し・不通）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない
 
 ### 複数課題を並列に進める
 
@@ -67,6 +68,6 @@ description: >-
 
 ## 止まる条件
 
-- 製品境界を越える（機能の追加・削除 / 新しいユーザー可視挙動 / 新たな永続形式・migration / 認証・決済・外部送信・公開・破壊的操作の追加 / 設計骨格が変わる新事実）→ 止めて確認する。判定表があれば project 差分が持つ。Issue 本文に固定済みの製品判断はやり直さない。本文に無い新事実だけが対象
-- 実装中に Issue 本文が変わった → 止めて再承認を待つ
+- 製品境界を越える（機能の追加・削除 / 新しいユーザー可視挙動 / 新たな永続形式・migration / 認証・決済・外部送信・公開・破壊的操作の追加 / 承認済みの製品契約・公開 API を変える設計骨格の新事実。内部の所有・導出・更新経路の変更は含まない）→ 止めて確認する。判定表があれば project 差分が持つ。Issue 本文に固定済みの製品判断はやり直さない。本文に無い新事実だけが対象
+- 実装中に Issue 本文が外部（人・他 session）で変わった → 止めて再承認を待つ。自分の構造見直しで設計記述を改訂したときは、製品境界を越えない限り止まらず本文へ反映して続ける
 - CI が詰まって進まない → 止めて報告する

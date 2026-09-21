@@ -50,7 +50,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 - **kind の位置引数は渡さない**
 - **`start` が返した run dir を控え、以降のコマンドにそのまま渡す**
 - 巡は `start` が 1、`ask` のたびに +1。**`ask` は今の巡を `collect` してから**。timeout した agent は確定せず、再 `collect` で続きを待てる。`ask` は、timeout した agent が止まったまま完走していなければ終端して残りで進み、完走していれば `collect` を要求し、まだ働いていれば止まる
-- agent は文脈を保っている。`ask` の本文は 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
+- agent は文脈を保っている。`ask` の本文は 原因表 / 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
 - 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle / done は読むきっかけであって完了ではない
 - 回収ヘッダの `rc≠0` は未完了。`消失`（session/agent が居なくなった）・`送信失敗`・`不通`（fatal）・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
 - timeout の巡は pane / `tmux capture` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
@@ -65,12 +65,13 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 
 **アドバイザーにコードを変更させない**。read-only 手段と、それを打ち消す args の棄却は `roster.ts` の `readOnlyArgs` / `rejectBypass`。tmux 経路の起動 argv は `directLaunchArgv`（`launch-argv`）。`--tools` は調査に使うツールの絞り込みであって担保ではない。起動は interactive TUI のみ。
 
-実行器の状態行と、それを引用した応答本文が同じ文字列になることがある（codex の `• Working (…)`）。分けられないので `working` 側に倒す —— `ask` は `working` でも `unknown` でも終端しないので、巡が進まないときは `close` で閉じる。
+実行器の状態行と、それを引用した応答本文が同じ文字列になることがある（codex の `• Working (…)`）。分けられないので `working` 側に倒す —— `ask` は `working` でも `unknown` でも終端しないので、巡が進まないときは失敗時の手順で復旧する。
 
 **画面の読み方は `advisors.ts` だけが持つ**（`paneState` / `trustKey`）。判定に渡すのは表示中の 1 画面（`tmux-session.sh screen` / `state`）で、履歴ではない。`unknown` は「読めない」であって「停止」ではないので、`ask` は `ready` のときだけ終端する。trust 対話は Yes の選択肢番号を画面から読んで送り、消えたことを確かめる（初期選択に依存しない）。
 
 ## 失敗時
 
 - `rc` が 0 以外 → 回収ヘッダの理由と log の末尾を見る。**失敗・未完了は隠さない**
-- `不通`（fatal）は終端。`replace` で次 kind、候補枯渇なら未レビュー
+- 終端（`消失`・`送信失敗`・`不通`・`ask` が終端した `timeout`）→ `replace` で次 kind へ引き継ぐ（同じ run。巡 1〜今の巡の依頼と回収済み応答を連結）。`候補枯渇` なら未レビュー
+- 巡が進まない（`working` / `unknown` のまま）→ `close` し、巡 1〜今の巡の依頼と回収済み応答を連結した prompt で新しい `start` を行い、同じレビューとして続ける（`replace` は close 済みの run を受け付けない）。この `close` はレビューの終了ではない
 - 揃わないときの次手は呼び出し側 skill
