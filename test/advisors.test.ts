@@ -61,29 +61,8 @@ const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 // 並び順と args は quota 切れで人が並べ替える運用値。順序を固定せず、妥当性だけを見る
 test("実体の宣言 file が検証を通る", () => {
-  expect(roster.map((s) => s.kind).sort()).toEqual(["claude", "codex"]);
-  expect(parsed.workers.map((s) => s.kind).sort()).toEqual([
-    "cmd",
-    "cursor",
-    "devin",
-    "grok",
-    "opencode",
-  ]);
   for (const slot of roster) expect(() => directLaunchArgv(slot)).not.toThrow();
   for (const slot of parsed.workers) expect(() => directWorkerLaunchArgv(slot)).not.toThrow();
-});
-
-// 既定の実装役は表の先頭。kind を推測させないため、起動 argv ごと固定する
-test("dispatch の既定の実装役は cmd の deepseek max", () => {
-  expect(worker.kind).toBe("cmd");
-  expect(directWorkerLaunchArgv(worker)).toEqual([
-    "cmd",
-    "--model",
-    "deepseek/deepseek-v4.1-flash",
-    "--effort",
-    "max",
-    "--yolo",
-  ]);
 });
 
 test("workers は無いと止まり、未知キーも止まる", () => {

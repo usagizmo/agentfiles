@@ -27,6 +27,20 @@ kind = "claude"
 args = []
 
 [[workers]]
+kind = "claude"
+args = ["--model", "claude-opus-5-5", "--effort", "low", "--permission-mode", "bypassPermissions"]
+
+[[workers]]
+kind = "codex"
+args = [
+  "--model",
+  "gpt-6-luna",
+  "-c",
+  "model_reasoning_effort=max",
+  "--dangerously-bypass-approvals-and-sandbox",
+]
+
+[[workers]]
 kind = "cmd"
 args = ["--model", "deepseek/deepseek-v4.1-flash", "--effort", "max", "--yolo"]
 
