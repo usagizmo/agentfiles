@@ -22,7 +22,7 @@ description: >-
 
 書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[[workers]]` の先頭。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
 
-1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 設計記述と不変条件 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。設計記述の前提が成立しないと分かったら、その部分の実装を止め、根拠と判断が要る点を報告する。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する。`git add -A` で staging する（index を読む gate と lint-staged のため。修正後も再 stage）。commit / push / branch は禁止」
+1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 設計記述と不変条件 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。設計記述の前提が成立しないと分かったら、その部分の実装を止め、根拠と判断が要る点を報告する。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する。作業中に気づいた不具合・改善・既存の不備は、ボーイスカウトルール（`~/.agents/AGENTS.md`）に従い同じ差分で直し、報告に「周辺で直したもの」として列挙する。ブランチのスコープを大きく超えるもの・製品判断が要るものは直さず報告する。`git add -A` で staging する（index を読む gate と lint-staged のため。修正後も再 stage）。commit / push / branch は禁止」
 2. `start` → `collect`。完走（rc=0）まで次へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`
 3. 前提破綻（実装役の報告・親の発見を問わない）または修正済みの原因の再発があれば、個別修正より先に扱う: `finish` の consult ループ中ならそのループ。それ以外は親手順 3 へ戻って設計記述を改訂し本文へ反映してから、実装役へ再開を指示する（transport は `dispatch`）
 4. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直す点が無くなるまで 3 から繰り返す。自分のレビューでも `finish` の consult の指摘でも、修正の振り分けは同じ: 指摘を原因単位（`consult` のループ）にまとめ、原因ごとに対象経路と検証を決めてから、1 文で指示でき数行に収まるなら自分で直す。それ以外は `ask` で送って `collect`。親のレビュー対象は staged / unstaged / untracked 全体。実装役の gate 通過は `finish` を代替しない
