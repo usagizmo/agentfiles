@@ -8,7 +8,7 @@ description: >-
 
 # 課題解決
 
-1. **選出**: 引数が無ければ計画済みの先頭を取る（並びと Status 名は project 差分。無ければ聞く）
+1. **選出**: 引数が無ければ、計画済みのうち未着地の依存を持たない先頭を取る。依存は Issue の blocked_by（並びと Status 名は project 差分。無ければ聞く）
 2. **場所**: 計画も実装も課題用の worktree で行う。subagent（Agent tool）に委譲しない。cwd が本 step で課題用に作られた linked worktree（`git rev-parse --git-dir` と `--git-common-dir` が異なり、prompt に「2 を飛ばして 3 から」がある）なら既にその場所にいるので 3 へ
    - `git worktree add` で切って cd し、3 へ
    - 複数 repo を変える課題は、主 repo の worktree から `git worktree add` で他 repo の worktree を切る（workspace は増やさない）
