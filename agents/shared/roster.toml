@@ -6,9 +6,9 @@
 # args は interactive CLI の追加引数（バイナリ名は kind。cursor は cursor-agent）。
 # 空配列ならその kind の harness 既定。
 #
-# claude / opus 5 high:
+# claude / opus 5.5:
 #   kind = "claude"
-#   args = ["--model", "claude-opus-5", "--effort", "high"]
+#   args = ["--model", "claude-opus-5-5"]
 #
 # codex / gpt-5.6 high:
 #   kind = "codex"

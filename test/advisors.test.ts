@@ -282,7 +282,7 @@ test("codex の read-only は -s read-only", () => {
 });
 
 test("実体 file のコメントに model 指定の例が残っている", () => {
-  expect(rosterText).toContain('#   args = ["--model", "claude-opus-5", "--effort", "high"]');
+  expect(rosterText).toContain('#   args = ["--model", "claude-opus-5-5"]');
   expect(rosterText).not.toContain("_comment");
 });
 
