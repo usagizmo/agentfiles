@@ -19,16 +19,6 @@
       "installedAt": "2026-05-05T08:23:42.455Z",
       "updatedAt": "2026-09-09T20:35:40.592Z"
     },
-    "grilling": {
-      "source": "mattpocock/skills",
-      "sourceType": "github",
-      "sourceUrl": "https://github.com/mattpocock/skills.git",
-      "skillPath": "skills/productivity/grilling/SKILL.md",
-      "skillFolderHash": "f0732035b8b1b60ae39454e4191caef32fa91903",
-      "pluginName": "mattpocock-skills",
-      "installedAt": "2026-09-09T20:35:15.115Z",
-      "updatedAt": "2026-09-09T20:35:15.115Z"
-    },
     "swiftui-expert-skill": {
       "source": "avdlee/swiftui-agent-skill",
       "sourceType": "github",
