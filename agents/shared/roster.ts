@@ -56,7 +56,7 @@ const isStringArray = (v: unknown): v is string[] =>
 
 export const readOnlyArgs = (kind: string): readonly string[] => {
   if (kind === "codex") return ["-s", "read-only"];
-  if (kind === "claude") return ["--permission-mode", "plan"];
+  if (kind === "claude") return ["--permission-mode", "plan", "--disallowedTools=ExitPlanMode"];
   throw new RosterError(`read-only 手段が無い kind: ${kind}`);
 };
 
