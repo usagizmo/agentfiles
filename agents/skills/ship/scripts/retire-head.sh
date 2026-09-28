@@ -45,17 +45,26 @@ fi
 
 git fetch --prune origin
 
-# 消してよいのは origin/<base> の祖先だけ。local と origin/<head> は別々に見る。
+# 消してよいのは origin/<base> に取り込まれた tip だけ。local と origin/<head> は別々に見る。
 # merge のあとに origin/<head> へ載った commit は、local からは観測できない。
 merged_into_base() {
   git merge-base --is-ancestor "$1" "refs/remotes/origin/${base}"
 }
 
+# local は patch 同値まで認める。サーバー側 rebase（gh pr update-branch --rebase）で
+# origin/<head> の SHA だけが書き換わり、local は旧 SHA のまま残るため。
+# base に同じ patch が無い commit（`git cherry` の `+`）が 1 つでもあれば取り込まれていない。
+local_merged_into_base() {
+  merged_into_base "$1" && return 0
+  cherry=$(git cherry "refs/remotes/origin/${base}" "$1") || return 1
+  ! printf '%s\n' "$cherry" | grep -q '^+'
+}
+
 local_tip=$(git rev-parse --verify --quiet "refs/heads/${head}" || true)
 remote_tip=$(git rev-parse --verify --quiet "refs/remotes/origin/${head}" || true)
 
-if [ -n "$local_tip" ] && ! merged_into_base "$local_tip"; then
-  say "local ${head} が origin/${base} の祖先でない。消さない"
+if [ -n "$local_tip" ] && ! local_merged_into_base "$local_tip"; then
+  say "local ${head} に origin/${base} へ取り込まれていない commit がある。消さない"
   exit 1
 fi
 if [ -n "$remote_tip" ] && ! merged_into_base "$remote_tip"; then
@@ -95,7 +104,7 @@ if [ -n "$worktree_of_head" ]; then
 fi
 
 if [ -n "$local_tip" ]; then
-  # -D は HEAD と upstream に依存しない。祖先判定は上で済ませてある。
+  # -D は HEAD と upstream に依存しない。取り込み判定は上で済ませてある。
   git branch -D "$head" >/dev/null
   say "local ${head} を消した"
 fi

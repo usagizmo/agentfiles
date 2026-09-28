@@ -1,7 +1,7 @@
 #!/bin/sh
 # retire-head.sh の消す条件を固定する。
 #
-# 消してよいのは origin/<base> の祖先だけ。1 つでも検証が欠けたら何も消さない。
+# 消してよいのは origin/<base> に取り込まれた tip だけ（local は patch 同値まで）。1 つでも検証が欠けたら何も消さない。
 # 対象が既に無い巡は成功で終わる。
 #
 # ネットワークに出ない。origin は一時 dir の bare repo。gh は PATH の stub。
@@ -215,6 +215,70 @@ if [ -n "$(git -C "$TMP/ahead-local/work" rev-parse --verify --quiet refs/heads/
   ok
 else
   fail "ahead-local: 消した"
+fi
+
+# --- サーバー側 rebase 後に merge された PR の古い local は消す ---
+# base が先へ進み、origin/feat だけが rebase され、local feat は旧 SHA のまま残る。
+rebased() {
+  root="$TMP/$1"
+  mkdir -p "$root"
+  git init --bare -b main "$root/origin.git" >/dev/null
+  git clone "$root/origin.git" "$root/work" >/dev/null 2>&1
+  git -C "$root/work" checkout -b main >/dev/null 2>&1
+  printf 'base\n' >"$root/work/README"
+  git -C "$root/work" add README
+  git -C "$root/work" commit -m init >/dev/null
+  git -C "$root/work" push -u origin main >/dev/null 2>&1
+  git -C "$root/work" worktree add -b feat "$root/wt" >/dev/null 2>&1
+  printf 'feat\n' >"$root/wt/FEAT"
+  git -C "$root/wt" add FEAT
+  git -C "$root/wt" commit -m feat >/dev/null
+  git -C "$root/wt" push -u origin feat >/dev/null 2>&1
+  printf 'other\n' >"$root/work/OTHER"
+  git -C "$root/work" add OTHER
+  git -C "$root/work" commit -m other >/dev/null
+  git -C "$root/work" push origin main >/dev/null 2>&1
+  git clone "$root/origin.git" "$root/server" >/dev/null 2>&1
+  git -C "$root/server" checkout feat >/dev/null 2>&1
+  git -C "$root/server" rebase origin/main >/dev/null 2>&1
+  git -C "$root/server" push -f origin feat >/dev/null 2>&1
+  git -C "$root/server" checkout main >/dev/null 2>&1
+  git -C "$root/server" merge --no-ff feat -m merge >/dev/null
+  git -C "$root/server" push origin main >/dev/null 2>&1
+}
+
+rebased rebased
+if run "$TMP/rebased/work" "$TMP/rebased"; then
+  ok
+else
+  fail "rebased: 落ちた: $(cat "$TMP/rebased.err")"
+fi
+if [ ! -e "$TMP/rebased/wt" ] &&
+  [ -z "$(git -C "$TMP/rebased/work" rev-parse --verify --quiet refs/heads/feat)" ] &&
+  [ -z "$(origin_ref "$TMP/rebased" refs/heads/feat)" ]; then
+  ok
+else
+  fail "rebased: 残った"
+fi
+
+# --- サーバー側 rebase 後でも、local に独自 commit があれば何も消さない ---
+rebased rebased-ahead
+printf 'own\n' >"$TMP/rebased-ahead/wt/OWN"
+git -C "$TMP/rebased-ahead/wt" add OWN
+git -C "$TMP/rebased-ahead/wt" commit -m own >/dev/null
+run "$TMP/rebased-ahead/work" "$TMP/rebased-ahead"
+rebased_ahead_code=$?
+if [ "$rebased_ahead_code" -ne 0 ]; then
+  ok
+else
+  fail "rebased-ahead: 未統合の local feat を消した"
+fi
+if [ -e "$TMP/rebased-ahead/wt" ] &&
+  [ -n "$(git -C "$TMP/rebased-ahead/work" rev-parse --verify --quiet refs/heads/feat)" ] &&
+  [ -n "$(origin_ref "$TMP/rebased-ahead" refs/heads/feat)" ]; then
+  ok
+else
+  fail "rebased-ahead: 消した"
 fi
 
 # --- cwd が対象 worktree の中なら消さず、移動先を出す ---
