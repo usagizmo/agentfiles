@@ -11,10 +11,10 @@ description: >-
 
 ## 方向
 
-| 方向     | 統合先            | 対象        | 操作台                 |
-| -------- | ----------------- | ----------- | ---------------------- |
-| 取り込み | cwd の作業 branch | 共有 branch | cwd                    |
-| 着地     | 共有 branch       | 作業 branch | その面の live checkout |
+| 方向     | 統合先            | 対象        | 操作台                                 |
+| -------- | ----------------- | ----------- | -------------------------------------- |
+| 取り込み | cwd の作業 branch | 共有 branch | cwd                                    |
+| 着地     | 共有 branch       | 作業 branch | その面の live checkout（無ければ cwd） |
 
 判別できないときは人に聞く。**統合先を推測しない**。
 
@@ -22,7 +22,7 @@ description: >-
 
 ## 形
 
-本数は `git -C <操作台> rev-list --count HEAD..<対象>`。**形は本数だけ**で決まる。
+本数は `git -C <操作台> rev-list --count <統合先>..<対象>`。**形は本数だけ**で決まる。
 
 | 本数   | 形                     |
 | ------ | ---------------------- |
@@ -38,7 +38,7 @@ description: >-
 
 ## 着地の検査
 
-統合先の木は自分以外も読む（どの木かは project 差分。live checkout）。着地なら、検査の前に `<skills root>/merge/scripts/ensure-integration-ref.sh <操作台> <統合先 ref>` を呼ぶ（作成と条件付き switch。述語は script が SSOT）。統合先に居ることは ensure のあと、この検査で確かめる。次を 1 つでも観測したら、直さずに報告して止まる。
+統合先の木は自分以外も読む（どの木かは project 差分。live checkout）。着地なら、検査の前に `<skills root>/merge/scripts/ensure-integration-ref.sh <操作台> <統合先 ref>` を呼ぶ（作成と条件付き switch。述語は script が SSOT）。ensure のあと統合先がどの worktree にも checkout されていなければ、この検査は通さず「checkout の無い着地」へ進む。統合先に居ることは ensure のあと、この検査で確かめる。次を 1 つでも観測したら、直さずに報告して止まる。
 
 - dirty（`status --porcelain` が空でない）
 - HEAD が統合先の branch でない（**両側とも full ref**。`symbolic-ref HEAD` と座標の `refs/heads/<name>` を比べる。`--short` / `git branch --show-current` は `temp` 対 `refs/heads/temp` で常に不一致になる）
@@ -50,11 +50,21 @@ description: >-
 
 **例外は、自分が始めた `--no-ff` の `--abort` だけ**。`--abort` したらそこで止めて報告する。`--no-verify` / `--no-gpg-sign` で通し直さない。
 
+## checkout の無い着地
+
+統合先がどの worktree にも checkout されていなければ（`worktree list --porcelain` の `branch refs/heads/<name>` に無い）、木を読む者が居ないので ref だけで着地する。switch も一時 worktree も作らない。
+
+```
+<skills root>/merge/scripts/land-ref.sh <操作台> <統合先 ref> <対象> ["<message>"]
+```
+
+形・祖先関係・checkout の有無・比較更新は script が SSOT。`<message>` は 2 本以上のときだけ渡し、書き方は「形」と同じ。非 0 なら直さずに報告して止まる。
+
 ## 手順
 
 1. 方向を決め、対象ブランチと操作台を確定する
-2. 操作台で `git log --oneline HEAD..<対象>` と `git diff HEAD...<対象>` を読む
-3. 祖先関係を確かめる。着地なら ensure を呼んでから「着地の検査」も通す
+2. 操作台で `git log --oneline <統合先>..<対象>` と `git diff <統合先>...<対象>` を読む
+3. 祖先関係を確かめる。着地なら ensure を呼び、統合先が checkout されていなければ「checkout の無い着地」で終える。それ以外は「着地の検査」を通す
 4. 本数を取り、形の表に従う
 5. 着地なら、merge 後に操作台が clean で統合先に居ることを確かめる
 
