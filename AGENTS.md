@@ -8,7 +8,7 @@ private な案件の repo 名・Issue / PR 番号・社内固有の文言を、t
 
 ## 着地までの権限
 
-commit も merge もエージェントが行う。**push だけは人が行う。**
+commit と merge はエージェントが行う。**push は `main` への着地後の `main` だけをエージェントが行い、それ以外は人が行う。**
 
 **配布は merge では起きない。**`~/.agents` の symlink 先はこの repo の working tree なので、この checkout でファイルを書いた瞬間に全 project の全工程へ配布される。
 
@@ -18,6 +18,8 @@ commit も merge もエージェントが行う。**push だけは人が行う�
 ## 統合
 
 GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。形は `merge` skill。
+
+`main` へ着地したら `main` を push し、`temp` へ `main` を取り込む（`merge` skill の取り込み）。
 
 ## 層契約
 
