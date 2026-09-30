@@ -8,6 +8,9 @@
 #                          処理中でもなければ「停滞」で早く戻る（承認待ちなどを 20 分待たせない）
 #   worker-tmux.sh ask <run-dir> <prompt-file>         次の巡を同じ session へ送る
 #   worker-tmux.sh close <run-dir>                     tmux session を破棄
+#   worker-tmux.sh watch <registry> [wait-seconds]     複数 run を 1 本で見張り、作業中でなくなった run を
+#                          1 件返す（既定 1200 秒。何も起きなければ exit 3）。registry は「key run-dir」の行で、
+#                          同じ key は最後の行だけを見る。同じ registry の watch は 1 本だけ（lock）
 #
 # env:
 #   DISPATCH_KIND   任意。roster の [[workers]] から引く kind（表に無ければ起動しない）
@@ -54,6 +57,10 @@ place_prompt() {
 	printf '%s\n' "$p_marker" >"$p_run/marker.$p_n" || fatal "marker を書けない"
 	printf '\n\n作業の区切りとして、応答の最後の行に %s をそのまま書いて応答を終えよ。この指令行は書かない。\n' "$p_marker" >>"$p_run/prompt.$p_n" ||
 		fatal "marker を prompt へ追記できない"
+	# 入力欄へは本文を貼らず、本文のファイルを指す 1 行だけを送る。複数行の貼り付けは実行器が
+	# 「貼り付けられた外部テキスト」として扱い、そこに書かれた依頼を実行しない
+	printf '依頼の本文は %s にある。全文を読み、書かれた指示どおりに進めよ。応答の最後の行に %s をそのまま書いて応答を終えよ。\n' \
+		"$p_run/prompt.$p_n" "$p_marker" >"$p_run/send.$p_n" || fatal "送信行を書けない"
 }
 
 require_run() {
@@ -72,7 +79,7 @@ send_round() {
 		printf '%s\n' 1 >"$s_run/sent.$s_n"
 		return 1
 	fi
-	if sh "$tmux_sh" paste-file "$s_session" "$s_run/prompt.$s_n" >>"$s_run/log" 2>&1; then
+	if sh "$tmux_sh" paste-file "$s_session" "$s_run/send.$s_n" >>"$s_run/log" 2>&1; then
 		printf '%s\n' 0 >"$s_run/sent.$s_n"
 		return 0
 	fi
@@ -321,6 +328,77 @@ ask)
 	printf '%s\n' "$next" >"$run/round" || fatal "round を書けない"
 	send_round "$run" "$next" || fatal "巡 $next を送れなかった"
 	printf '%s\n' "$next"
+	;;
+
+watch)
+	registry=${1:-}
+	[ -n "$registry" ] && [ -f "$registry" ] || fatal "registry が不正: ${registry:-未指定}"
+	wait_s=${2:-1200}
+	case $wait_s in
+	'' | *[!0-9]*) fatal "待ち秒数が数値でない: $wait_s" ;;
+	esac
+	lock=$registry.lock
+	if ! mkdir "$lock" 2>/dev/null; then
+		holder=$(cat "$lock/pid" 2>/dev/null) || holder=""
+		if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+			fatal "同じ registry を見張る watch が動いている（pid $holder）"
+		fi
+		# 持ち主の居ない lock は前の watch の残り
+		rm -rf "$lock"
+		mkdir "$lock" 2>/dev/null || fatal "lock を取れない: $lock"
+	fi
+	printf '%s\n' $$ >"$lock/pid"
+	trap 'rm -rf "$lock"' EXIT INT TERM HUP
+	deadline=$(($(date +%s) + wait_s))
+	while :; do
+		# 同じ key は最後の行だけ（起動し直した run が古い run を置き換える）
+		latest=$(awk 'NF >= 2 { run[$1] = $2; if (!($1 in seen)) { seen[$1] = 1; order[++k] = $1 } }
+			END { for (i = 1; i <= k; i++) print order[i], run[order[i]] }' "$registry")
+		found=""
+		while read -r key w_run; do
+			[ -n "$key" ] || continue
+			[ -f "$w_run/closed" ] && continue
+			[ -f "$w_run/round" ] || continue
+			w_n=$(cat "$w_run/round")
+			if [ ! -f "$w_run/rc.$w_n" ]; then
+				# 1 秒だけ待つ collect で状態を確かめる。作業中なら timeout で戻る
+				sh "$0" collect "$w_run" 1 0 >/dev/null 2>&1
+			fi
+			w_rc=$(cat "$w_run/rc.$w_n" 2>/dev/null) || w_rc=""
+			w_reason=$(cat "$w_run/reason.$w_n" 2>/dev/null) || w_reason=""
+			if [ "$w_rc" = 0 ]; then
+				w_state=done
+			elif [ -f "$w_run/dead" ]; then
+				w_state=dead
+			else
+				case $w_reason in
+				"marker 無し") w_state=idle ;;
+				停滞) w_state=blocked ;;
+				*) w_state=working ;;
+				esac
+			fi
+			[ "$w_state" = working ] && continue
+			[ "$(cat "$w_run/watched.$w_n" 2>/dev/null)" = "$w_state" ] && continue
+			# idle / blocked は描画の途中を拾わないよう、2 周続けて同じときだけ返す
+			if [ "$w_state" = idle ] || [ "$w_state" = blocked ]; then
+				if [ "$(cat "$w_run/watch-seen.$w_n" 2>/dev/null)" != "$w_state" ]; then
+					printf '%s\n' "$w_state" >"$w_run/watch-seen.$w_n"
+					continue
+				fi
+			fi
+			printf '%s\n' "$w_state" >"$w_run/watched.$w_n"
+			found="$key	$w_n	$w_state	$w_run"
+			break
+		done <<EOF
+$latest
+EOF
+		if [ -n "$found" ]; then
+			printf '%s\n' "$found"
+			exit 0
+		fi
+		[ "$(date +%s)" -ge "$deadline" ] && exit 3
+		sleep 5
+	done
 	;;
 
 close)

@@ -32,7 +32,7 @@ description: >-
 
 ### 複数課題を並列に進める
 
-課題ごとに worktree と dispatch run を 1 つ。並列にできるのは、触るファイルが重ならず、課題間に依存が無く、共有する実行資源（dev home / port / build dir）を分けられるものだけ。`collect` は短い待機（例 60 秒）で run を巡回し、完走した課題から親手順 5〜8（検証・実物確認・仕上げ・着地。PR を使う面 / 使わない面の分岐を含む）を個別に適用する。consult は課題ごとに独立。
+課題ごとに worktree と dispatch run を 1 つ。並列にできるのは、触るファイルが重ならず、課題間に依存が無く、共有する実行資源（dev home / port / build dir）を分けられるものだけ。run は dispatch の `watch` 1 本で見張り（registry に「課題 run-dir」を積む）、返った run を `collect` で回収して、完走した課題から親手順 5〜8（検証・実物確認・仕上げ・着地。PR を使う面 / 使わない面の分岐を含む）を個別に適用する。consult は課題ごとに独立。
 
 ### PR を使う面
 
