@@ -15,7 +15,7 @@ description: >-
 3. **計画**: Issue と関連コードを読み、本文の計画（`refine` の項目）が現在のコード・依存・要件に適合するかを確かめる。適合すれば触るパスと検証方法を決めて 4 へ。項目が欠ける・前提が変わった・中規模以上で設計記述が無いなら、`consult`（深い・事前）で GO を得て、確定した項目を本文へ書いてから 4 へ。製品境界を越える新事実は「止まる条件」
 4. **実装**: 軽微（定義は `~/.agents/AGENTS.md` の「規模」）は自分で書く。それ以外は「実装役へ渡す」
 5. **検証**: project の検証 skill があればそれ。無ければ CI と同じ検査をローカルで通す。**CI を検査の代わりに使わない**。実物確認の前に必ず通す（壊れた実物を人に見せない）
-6. **実物確認**: 要（基準は「PR を使う面」）なら実物を示し、明示承認を待つ。修正が出たら 4 → 5 → 6 を繰り返す。この往復では `finish` を回さない（仕様が固まる前の diff を consult で磨かない）。実物に push が要る面（Web の Preview 等）は、`finish` 前でも commit して Draft PR を出してよい。その commit も 7 の consult の対象
+6. **実物確認**: 要（基準は「PR を使う面」）なら、統合先へ追随して 5 を通し直してから実物を示し、明示承認を待つ。修正が出たら 4 → 5 → 6 を繰り返す。この往復では `finish` を回さない（仕様が固まる前の diff を consult で磨かない）。実物に push が要る面（Web の Preview 等）は、`finish` 前でも commit して Draft PR を出してよい。その commit も 7 の consult の対象
 7. **仕上げ**: 承認後（不要なら 5 の後）、編集した repo ごとに、その worktree を cwd にして `finish`。軽微かどうかは課題全体で 1 回決める。`finish` の修正で見せた面が変わったら 5 → 6 で再確認し、そこで修正が出たら 4 から入り直す。全 repo の `finish` が終わったら、開いている worker があれば `close`
 8. **着地**: 統合先へ追随してから、project が定める経路で着地する。追随で前提が変わったら 3 に戻る。**複数 repo なら主 repo を最後に着地する**。依存順がそれを許さないなら止めて確認する
 
@@ -24,11 +24,11 @@ description: >-
 書き手と仕上げ（レビュー・docs・commit）のセッションを分ける。実装役は roster の `[[workers]]` の先頭。transport（`start` / `collect` / `ask` / `close`）は `dispatch` skill。
 
 1. prompt を `mktemp` のファイルへ書く: Issue 本文 / 設計記述と不変条件 / 触るパス / 検証コマンド（project の lint・test）/ 「計画しない。設計記述の前提が成立しないと分かったら、その部分の実装を止め、根拠と判断が要る点を報告する。`resolve` `finish` `consult` `commit` を実行しない。実装して lint / test を通し、変更ファイルと検証結果を報告する。作業中に気づいた不具合・改善・既存の不備は、ボーイスカウトルール（`~/.agents/AGENTS.md`）に従い同じ差分で直し、報告に「周辺で直したもの」として列挙する。ブランチのスコープを大きく超えるもの・製品判断が要るものは直さず報告する。`git add -A` で staging する（index を読む gate と lint-staged のため。修正後も再 stage）。commit / push / branch は禁止」
-2. `start` → `collect`。完走（rc=0）まで次へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`
+2. `start` → `collect`。完走（rc=0）まで次へ進まない。`timeout` は同じ run を再 `collect`。`停滞` は付いてきた画面を読む: 承認待ちなら `tmux -L <session> attach` を人に案内して待ち、作業中か判別できなければ再 `collect`。`marker 無し` も付いてきた画面を読む: background の shell / monitor 待ちなら再 `collect`、止まっていれば継続（最後に marker を書く指示を含む）を `ask` で送る。継続の `ask` は 1 巡につき 1 回まで。送った次の巡も `marker 無し` なら終端とみなし 6 へ進む
 3. 前提破綻（実装役の報告・親の発見を問わない）または修正済みの原因の再発があれば、個別修正より先に扱う: `finish` の consult ループ中ならそのループ。それ以外は親手順 3 へ戻って設計記述を改訂し本文へ反映してから、実装役へ再開を指示する（transport は `dispatch`）
 4. diff を自分で読み、受入条件・本文の方針・設計原則に照らす。直す点が無くなるまで 3 から繰り返す。自分のレビューでも `finish` の consult の指摘でも、修正の振り分けは同じ: 指摘を原因単位（`consult` のループ）にまとめ、原因ごとに対象経路と検証を決めてから、1 文で指示でき数行に収まるなら自分で直す。それ以外は `ask` で送って `collect`。親のレビュー対象は staged / unstaged / untracked 全体。実装役の gate 通過は `finish` を代替しない
 5. run dir を保持したまま親手順 5（検証）へ戻る
-6. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・入力待ちで marker 無し・不通）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない
+6. `start` が fatal なら自分で実装する。run dir を得たあとに `collect` / `ask` が終端（消失・送信失敗・不通）を返したら `close` し、残りを自分で実装する。どちらも報告に書く。別 harness へ倒さない
 
 ### 複数課題を並列に進める
 

@@ -36,6 +36,14 @@ complete_ts=$here/advisors.ts
 tmux_sh=$here/tmux-session.sh
 roster_toml=$here/roster.toml
 
+# 巡 $2 の履歴を raw.$2 へ読み、完走を判定する。
+# rc: 0 完走 / 1 未完走 / それ以外は読めない・判定できない
+judge_round() {
+	sh "$tmux_sh" capture "$3" >"$1/raw.$2" 2>>"$1/log" || return 2
+	bun "$complete_ts" complete --output "$1/raw.$2" --marker "$(cat "$1/marker.$2")" \
+		>"$1/complete.$2.json" 2>>"$1/log"
+}
+
 place_prompt() {
 	p_run=$1
 	p_src=$2
@@ -148,7 +156,6 @@ collect)
 	esac
 	n=$(cat "$run/round")
 	[ -f "$run/marker.$n" ] || fatal "巡 $n の marker が無い"
-	marker=$(cat "$run/marker.$n")
 	prev=""
 	[ "$n" -gt 1 ] && prev=$(cat "$run/marker.$((n - 1))")
 	deadline=$(($(date +%s) + wait_s))
@@ -184,24 +191,18 @@ collect)
 					break
 					;;
 				esac
-				# complete_rc: 0 完走 / 1 未完走 / それ以外は読めない・判定できない
-				complete_rc=2
-				if sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log"; then
-					bun "$complete_ts" complete --output "$run/raw.$n" --marker "$marker" \
-						>"$run/complete.$n.json" 2>>"$run/log"
-					complete_rc=$?
-				fi
+				judge_round "$run" "$n" "$session"
+				complete_rc=$?
 				if [ "$complete_rc" = 0 ]; then
-					# 切り出せなかった raw を rc=0 で渡さない（範囲は extract が決める）
+					# 完走している。切り出せなければ raw を付けて渡し、巡は続けられる
 					if bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
 						>"$run/out.$n" 2>>"$run/log"; then
-						printf '%s\n' 0 >"$run/rc.$n"
 						: >"$run/reason.$n"
 					else
 						cp "$run/raw.$n" "$run/out.$n"
-						printf '%s\n' 1 >"$run/rc.$n"
 						printf '%s\n' "抽出失敗" >"$run/reason.$n"
 					fi
+					printf '%s\n' 0 >"$run/rc.$n"
 					break
 				fi
 				# 停止の疑い: 画面が stall 秒変わらない、または deadline 到達
@@ -233,8 +234,8 @@ collect)
 					continue
 					;;
 				ready)
-					# 入力待ちなら履歴をもう 1 度読んで完走判定をやり直す。
-					# 終端にするのは、その再読込が成功して未完走と判定できたときだけ。読めなければ timeout
+					# 入力待ちなら履歴をもう 1 度読んで完走判定をやり直す。読めなければ timeout。
+					# 未完走でも終端ではない（入力を受けられる）。rc も dead も書かず、再 collect か ask で続ける
 					if [ "$final" = 0 ]; then
 						final=1
 						continue
@@ -243,9 +244,7 @@ collect)
 						printf '%s\n' timeout >"$run/reason.$n"
 						break
 					fi
-					printf '%s\n' 1 >"$run/rc.$n"
 					printf '%s\n' "marker 無し" >"$run/reason.$n"
-					: >"$run/dead"
 					break
 					;;
 				*)
@@ -296,26 +295,27 @@ ask)
 			: >"$run/dead"
 			fatal "生きている worker が無い"
 		fi
-		sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log" ||
-			fatal "巡 $n を読めない（collect をやり直す）"
-		bun "$complete_ts" complete --output "$run/raw.$n" --marker "$(cat "$run/marker.$n")" \
-			>/dev/null 2>>"$run/log"
-		case $? in
-		0) fatal "巡 $n は完走している（collect で回収してから ask する）" ;;
-		1) ;;
-		*) fatal "巡 $n を判定できない（collect をやり直す）" ;;
-		esac
-		case $(sh "$tmux_sh" state "$session") in
-		working) fatal "巡 $n はまだ処理中（collect を先に通す）" ;;
-		ready) ;;
-		*) fatal "巡 $n の状態を読めない（終端しない。collect をやり直す）" ;;
-		esac
+		# collect と同じく、入力待ちを見てから履歴をもう 1 度読んで未完走を確かめる
+		for pass in 1 2; do
+			judge_round "$run" "$n" "$session"
+			case $? in
+			0) fatal "巡 $n は完走している（collect で回収してから ask する）" ;;
+			1) ;;
+			*) fatal "巡 $n を判定できない（collect をやり直す）" ;;
+			esac
+			[ "$pass" = 2 ] && break
+			case $(sh "$tmux_sh" state "$session") in
+			working) fatal "巡 $n はまだ処理中（collect を先に通す）" ;;
+			ready) ;;
+			*) fatal "巡 $n の状態を読めない（終端しない。collect をやり直す）" ;;
+			esac
+		done
+		# 入力待ちで未完走の巡は marker 無しで閉じ、次の巡で継続を指示する
 		printf '%s\n' 1 >"$run/rc.$n"
-		printf '%s\n' "timeout" >"$run/reason.$n"
-		: >"$run/dead"
-		fatal "生きている worker が無い"
+		printf '%s\n' "marker 無し" >"$run/reason.$n"
+	elif [ "$(cat "$run/rc.$n")" != 0 ]; then
+		fatal "巡 $n は失敗終端（ask できない）"
 	fi
-	[ "$(cat "$run/rc.$n")" = 0 ] || fatal "巡 $n は失敗終端（ask できない）"
 	next=$((n + 1))
 	place_prompt "$run" "$prompt" "$next"
 	printf '%s\n' "$next" >"$run/round" || fatal "round を書けない"

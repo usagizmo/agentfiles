@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { ROSTER_URL, directBinary, parseRoster } from "../agents/shared/roster.ts";
-import { installFakeTmux } from "./fake-tmux.ts";
+import { breakExtract, installFakeTmux } from "./fake-tmux.ts";
 
 // 起動されるのは実体 roster の先頭。並べ替えても gate が落ちないように名前で決め打ちしない
 const FIRST = parseRoster(await Bun.file(ROSTER_URL).text()).advisors[0]?.kind ?? "";
@@ -70,20 +70,6 @@ const allBins = (): string[] => [...new Set(ADVISORS.map((s) => directBinary(s.k
 
 // PATH の bun を、extract のときだけ落ちる shim に差し替える。
 // extract は raw を読めれば落ちないので、入力からは起こせない
-const breakExtract = async (dir: string) => {
-  await rm(join(dir, "bun"), { force: true });
-  await Bun.write(
-    join(dir, "bun"),
-    `#!/bin/sh
-for a in "$@"; do
-	[ "$a" = extract ] && exit 9
-done
-exec ${process.execPath} "$@"
-`,
-  );
-  await chmod(join(dir, "bun"), 0o755);
-};
-
 const putCapacity = async (dir: string) => {
   const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
   expect(servers).toHaveLength(1);

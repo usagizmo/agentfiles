@@ -5,11 +5,11 @@
 // drop-enter は反映後の最初の Enter を 1 回だけ落とす。drop-enter-always は全部落とす。capture-fail-after-enter は Enter 後の capture を失敗させる。
 // working-stall は応答の代わりに動かない作業中の状態行を出す。status-flicker は貼り付けが反映される前に
 // 状態行を 1 度だけ動かす。paste-flap は反映後の 2 回目の capture で一度貼り付け前の入力欄に戻り、
-// 4 回目の capture まで Enter を落とす。no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。
+// 4 回目の capture まで Enter を落とす。no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。held-marker は release-marker が置かれたあとの画面 capture（-S 無し）で marker を書く。
 // history-fail-after-first は 2 回目以降の履歴 capture を失敗させる。prompt-stall は応答の代わりに
 // 入力欄の無い問いを出して止まる。Enter の回数は enters に積む。
 
-import { chmod } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const FAKE_TMUX = `#!/usr/bin/env python3
@@ -97,6 +97,9 @@ if args[0] == "send-keys":
             if (root / "late-marker").exists():
                 (server / "late-marker").write_text(marker)
                 marker = ""
+            if (root / "held-marker").exists():
+                (server / "held-marker").write_text(marker)
+                marker = ""
             prompts = server / "prompts"
             n = int(prompts.read_text()) + 1 if prompts.exists() else 1
             prompts.write_text(str(n))
@@ -149,6 +152,11 @@ if args[0] == "capture-pane":
         screen = server / "screen"
         screen.write_text(screen.read_text() + late.read_text() + "\\n❯ \\n")
         late.unlink()
+    held = server / "held-marker"
+    if held.exists() and not history and (root / "release-marker").exists():
+        screen = server / "screen"
+        screen.write_text(screen.read_text() + held.read_text() + "\\n❯ \\n")
+        held.unlink()
     pending = server / "pending"
     if pending.exists() and not (server / "pending-rendered").exists():
         delay = int((server / "pending-delay").read_text())
@@ -180,4 +188,19 @@ raise SystemExit("Unexpected tmux: " + repr(args))
 export const installFakeTmux = async (dir: string): Promise<void> => {
   await Bun.write(join(dir, "tmux"), FAKE_TMUX);
   await chmod(join(dir, "tmux"), 0o755);
+};
+
+// PATH の先頭に置く bun。extract だけを落とし、それ以外は本物へ渡す。
+export const breakExtract = async (dir: string): Promise<void> => {
+  await rm(join(dir, "bun"), { force: true });
+  await Bun.write(
+    join(dir, "bun"),
+    `#!/bin/sh
+for a in "$@"; do
+	[ "$a" = extract ] && exit 9
+done
+exec ${process.execPath} "$@"
+`,
+  );
+  await chmod(join(dir, "bun"), 0o755);
 };

@@ -23,10 +23,6 @@
     "type": "command",
     "command": "~/.claude/statusline.py"
   },
-  "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "diagram-design@diagram-design": true
-  },
   "extraKnownMarketplaces": {
     "diagram-design": {
       "source": {

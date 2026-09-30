@@ -207,6 +207,15 @@ test("= 連結と別名の bypass も落とす", () => {
   expect(() => parseRoster(toml('[{"kind":"grok","args":["--no-plan"]}]'))).toThrow(RosterError);
 });
 
+// claude の相談役は plan mode のまま答えを本文に書く。ExitPlanMode を呼ぶと承認待ちで止まり、marker が出ない
+test("claude の read-only は plan mode で ExitPlanMode を使わせない", () => {
+  expect(readOnlyArgs("claude")).toEqual([
+    "--permission-mode",
+    "plan",
+    "--disallowedTools=ExitPlanMode",
+  ]);
+});
+
 // read-only 手段を持つ kind だけが相談役になれる。実装役の kind をそのまま
 // advisors へ移すと、read-only を付けられないまま起動してしまう
 test("read-only 手段が無い kind は宣言時に落とす", () => {
@@ -282,7 +291,7 @@ test("codex の read-only は -s read-only", () => {
 });
 
 test("実体 file のコメントに model 指定の例が残っている", () => {
-  expect(rosterText).toContain('#   args = ["--model", "claude-opus-5", "--effort", "high"]');
+  expect(rosterText).toContain('#   args = ["--model", "claude-opus-5-5"]');
   expect(rosterText).not.toContain("_comment");
 });
 

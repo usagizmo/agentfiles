@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { ROSTER_URL, parseRoster, selectWorker } from "../agents/shared/roster.ts";
-import { installFakeTmux } from "./fake-tmux.ts";
+import { breakExtract, installFakeTmux } from "./fake-tmux.ts";
 
 const SCRIPT = new URL("../agents/skills/dispatch/scripts/worker-tmux.sh", import.meta.url)
   .pathname;
@@ -112,7 +112,7 @@ test.concurrent("dispatch tmux: 巡をまたいで送り、close で session を
   }
 }, 30_000);
 
-test.concurrent("dispatch tmux: 入力待ちで marker が無ければ collect が終端にし、ask できない", async () => {
+test.concurrent("dispatch tmux: 入力待ちで marker が無くても終端にせず、ask で継続を送れる", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "no-marker"), "");
@@ -121,10 +121,35 @@ test.concurrent("dispatch tmux: 入力待ちで marker が無ければ collect �
     const runDir = started.stdout.trim();
     const first = await run(dir, ["collect", runDir, "2"]);
     expect(first.stdout).toContain("(rc=1 marker 無し)");
-    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(true);
+    expect(await Bun.file(join(runDir, "rc.1")).exists()).toBe(false);
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(false);
     const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
-    expect(asked.exitCode).toBe(2);
-    expect(asked.stderr).toContain("worker は終端している");
+    expect({ exitCode: asked.exitCode, stdout: asked.stdout }).toEqual({
+      exitCode: 0,
+      stdout: "2\n",
+    });
+    expect(await readFile(join(runDir, "reason.1"), "utf8")).toBe("marker 無し\n");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(false);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test.concurrent("dispatch tmux: marker 無しで戻った巡も、再 collect で完走を回収できる", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "held-marker"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "2"]);
+    expect(first.stdout).toContain("(rc=1 marker 無し)");
+    await Bun.write(join(dir, "release-marker"), "");
+    const second = await run(dir, ["collect", runDir, "5"]);
+    expect(second.exitCode).toBe(0);
+    expect(second.stdout).toContain("answer 1");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(false);
     expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -227,16 +252,59 @@ test.concurrent("dispatch tmux: capacity 画面は deadline を待たず不通�
   }
 }, 15_000);
 
-test.concurrent("dispatch tmux: 停滞秒が deadline より短くても、入力待ちで marker が無ければ終端する", async () => {
+test.concurrent("dispatch tmux: 停滞秒が deadline より短ければ、入力待ちで marker が無いとき deadline を待たず戻る", async () => {
   const dir = await setup();
   try {
     await Bun.write(join(dir, "no-marker"), "");
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(0);
     const runDir = started.stdout.trim();
+    const t0 = Date.now();
     const first = await run(dir, ["collect", runDir, "20", "2"]);
+    expect(Date.now() - t0).toBeLessThan(20_000);
     expect(first.stdout).toContain("(rc=1 marker 無し)");
-    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(true);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test.concurrent("dispatch tmux: 切り出せなくても完走した巡は raw を付けて rc=0 で返し、ask できる", async () => {
+  const dir = await setup();
+  try {
+    await breakExtract(dir);
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "5"]);
+    expect(first.exitCode).toBe(0);
+    expect(first.stdout).toContain("(rc=0 抽出失敗)");
+    expect(first.stdout).toContain("answer 1");
+    const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
+    expect({ exitCode: asked.exitCode, stdout: asked.stdout }).toEqual({
+      exitCode: 0,
+      stdout: "2\n",
+    });
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test.concurrent("dispatch tmux: ask は入力待ちを見たあと履歴を読み直し、遅れて出た marker で完走と判定する", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "held-marker"), "");
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const first = await run(dir, ["collect", runDir, "2"]);
+    expect(first.stdout).toContain("(rc=1 marker 無し)");
+    await Bun.write(join(dir, "release-marker"), "");
+    const asked = await run(dir, ["ask", runDir, join(dir, "reply")]);
+    expect(asked.exitCode).toBe(2);
+    expect(asked.stderr).toContain("巡 1 は完走している");
+    expect(await Bun.file(join(runDir, "rc.1")).exists()).toBe(false);
     expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
