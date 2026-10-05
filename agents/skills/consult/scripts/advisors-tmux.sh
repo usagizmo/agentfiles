@@ -393,7 +393,7 @@ ask)
 	[ -n "$live" ] || fatal "生きている advisor が無い"
 	for a in $live; do
 		[ -f "$run/$a/rc.$n" ] && continue
-		[ -f "$run/$a/reason.$n" ] || fatal "巡 $n が未回収: $a（collect を先に通す）"
+		[ -f "$run/$a/reason.$n" ] || fatal "巡 $n が未回収: ${a}（collect を先に通す）"
 		# timeout: 完走なら collect を要求。稼働中なら止める。止まって未完走なら終端
 		session=$(cat "$run/$a/session")
 		if ! sh "$tmux_sh" exists "$session"; then

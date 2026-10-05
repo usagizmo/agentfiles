@@ -341,7 +341,7 @@ watch)
 	if ! mkdir "$lock" 2>/dev/null; then
 		holder=$(cat "$lock/pid" 2>/dev/null) || holder=""
 		if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
-			fatal "同じ registry を見張る watch が動いている（pid $holder）"
+			fatal "同じ registry を見張る watch が動いている（pid ${holder}）"
 		fi
 		# 持ち主の居ない lock は前の watch の残り
 		rm -rf "$lock"
