@@ -4,7 +4,7 @@
 //
 // 待ちが長く、test ごとに temp dir も偽 tmux の server も分かれるので concurrent で回す。
 
-import { chmod, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -306,6 +306,109 @@ test.concurrent("dispatch tmux: ask は入力待ちを見たあと履歴を読�
     expect(asked.stderr).toContain("巡 1 は完走している");
     expect(await Bun.file(join(runDir, "rc.1")).exists()).toBe(false);
     expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+const serverOf = async (dir: string): Promise<string> => {
+  const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+  expect(servers).toHaveLength(1);
+  return join(dir, servers[0] ?? "");
+};
+
+test.concurrent("dispatch tmux: 入力欄へは本文を貼らず、本文のファイルを指す 1 行と marker の指示だけを送る", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const pasted = await readFile(join(await serverOf(dir), "pasted"), "utf8");
+    const marker = (await readFile(join(runDir, "marker.1"), "utf8")).trim();
+    expect(pasted.trimEnd().split("\n")).toHaveLength(1);
+    expect(pasted).toContain(join(runDir, "prompt.1"));
+    expect(pasted).toContain(marker);
+    expect(pasted).not.toContain("Implement the fix.");
+    const body = await readFile(join(runDir, "prompt.1"), "utf8");
+    expect(body).toContain("Implement the fix.");
+    expect(body).toContain(marker);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test.concurrent("dispatch tmux: watch は完走した run を返し、同じ巡を 2 度返さない", async () => {
+  const dir = await setup();
+  try {
+    const runDir = (await run(dir, ["start", join(dir, "prompt")])).stdout.trim();
+    const registry = join(dir, "runs");
+    await Bun.write(registry, `k1 ${runDir}\n`);
+    const first = await run(dir, ["watch", registry, "20"]);
+    expect({ exitCode: first.exitCode, stdout: first.stdout }).toEqual({
+      exitCode: 0,
+      stdout: `k1\t1\tdone\t${runDir}\n`,
+    });
+    const again = await run(dir, ["watch", registry, "1"]);
+    expect({ exitCode: again.exitCode, stdout: again.stdout }).toEqual({ exitCode: 3, stdout: "" });
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test.concurrent("dispatch tmux: watch は同じ key の最後の行だけを見る", async () => {
+  const dir = await setup();
+  try {
+    const runDir = (await run(dir, ["start", join(dir, "prompt")])).stdout.trim();
+    const registry = join(dir, "runs");
+    // 完走した run のあとに同じ key の別 run（ここでは未起動の dir）が来たら、完走した方は見ない
+    const replaced = join(dir, "replaced");
+    await mkdir(replaced);
+    await Bun.write(registry, `k1 ${runDir}\nk1 ${replaced}\n`);
+    const watched = await run(dir, ["watch", registry, "1"]);
+    expect({ exitCode: watched.exitCode, stdout: watched.stdout }).toEqual({
+      exitCode: 3,
+      stdout: "",
+    });
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test.concurrent("dispatch tmux: watch は入力待ちで marker の無い run を idle として返す", async () => {
+  const dir = await setup();
+  try {
+    await Bun.write(join(dir, "no-marker"), "");
+    const runDir = (await run(dir, ["start", join(dir, "prompt")])).stdout.trim();
+    const registry = join(dir, "runs");
+    await Bun.write(registry, `k1 ${runDir}\n`);
+    const watched = await run(dir, ["watch", registry, "30"]);
+    expect({ exitCode: watched.exitCode, stdout: watched.stdout }).toEqual({
+      exitCode: 0,
+      stdout: `k1\t1\tidle\t${runDir}\n`,
+    });
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test.concurrent("dispatch tmux: 同じ registry の watch は 1 本だけ", async () => {
+  const dir = await setup();
+  try {
+    const registry = join(dir, "runs");
+    await Bun.write(registry, "");
+    await mkdir(`${registry}.lock`);
+    await Bun.write(join(`${registry}.lock`, "pid"), `${process.pid}\n`);
+    const held = await run(dir, ["watch", registry, "1"]);
+    expect(held.exitCode).toBe(2);
+    expect(held.stderr).toContain("同じ registry を見張る watch が動いている");
+    // 持ち主の居ない lock は取り直せる
+    await Bun.write(join(`${registry}.lock`, "pid"), "999999999\n");
+    const retaken = await run(dir, ["watch", registry, "1"]);
+    expect(retaken.exitCode).toBe(3);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

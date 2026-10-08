@@ -1,7 +1,7 @@
 #!/bin/sh
 # dispatch の明示 backend セレクタ。黙って別経路へ倒さない。
 #
-#   DISPATCH_BACKEND=tmux <skills root>/dispatch/scripts/dispatch-backend.sh <start|collect|ask|close> ...
+#   DISPATCH_BACKEND=tmux <skills root>/dispatch/scripts/dispatch-backend.sh <start|collect|ask|close|watch> ...
 #
 # tmux → worker-tmux.sh（DISPATCH_KIND 任意）
 # 将来の backend（例: cloud）はここに足す。未設定・未知は fatal。
