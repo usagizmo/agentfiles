@@ -42,6 +42,13 @@ else
   lease="${dest}:"
 fi
 
+# pre-push hook が長いと、hook の間に ssh 接続が idle で切られて push 本体が落ちる。
+# git 側の ssh 指定（GIT_SSH_COMMAND / GIT_SSH / core.sshCommand）が無いときだけ keepalive を付ける。
+# ~/.ssh/config の ServerAliveInterval には優先する。
+if [ -z "${GIT_SSH_COMMAND+x}" ] && [ -z "${GIT_SSH+x}" ] && ! git config --get core.sshCommand >/dev/null; then
+  export GIT_SSH_COMMAND="ssh -o ServerAliveInterval=15"
+fi
+
 echo "sync-and-push: origin の ${dest} へ push する" >&2
 if ! git push --force-with-lease="${lease}" --set-upstream origin "HEAD:${dest}"; then
   echo "sync-and-push: origin の ${dest} への push に失敗した" >&2
