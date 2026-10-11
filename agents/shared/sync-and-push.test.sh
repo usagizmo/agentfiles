@@ -224,6 +224,47 @@ else
   fail "lease: origin/feat が他人の tip のままではない"
 fi
 
+# --- push の ssh keepalive。人が ssh の指定を持っているときは触らない ---
+# $1 はケース名。残りは script へ渡す環境（env の引数）。push 時点の GIT_SSH_COMMAND を記録する。
+keepalive_case() {
+  name="$1"
+  shift
+  sandbox "$name"
+  git -C "$TMP/$name/work" checkout -b feat >/dev/null 2>&1
+  printf 'feat\n' >>"$TMP/$name/work/README"
+  git -C "$TMP/$name/work" add README
+  git -C "$TMP/$name/work" commit -m feat >/dev/null
+  mkdir -p "$TMP/$name/bin"
+  cat >"$TMP/$name/bin/git" <<GITWRAP
+#!/bin/sh
+if [ "\$1" = push ]; then
+  printf '%s' "\${GIT_SSH_COMMAND-<unset>}" >"$TMP/$name/ssh-command"
+fi
+exec "$REAL_GIT" "\$@"
+GITWRAP
+  chmod +x "$TMP/$name/bin/git"
+  # push が落ちると記録が無く、呼び出し側の照合が落ちる。
+  (cd "$TMP/$name/work" && env "$@" PATH="$TMP/$name/bin:$PATH" bash "$SCRIPT" main >/dev/null 2>"$TMP/$name.err")
+  cat "$TMP/$name/ssh-command" 2>/dev/null
+}
+
+got=$(unset GIT_SSH_COMMAND GIT_SSH; keepalive_case keepalive-unset)
+case "$got" in
+*"ServerAliveInterval="*) ok ;;
+*) fail "keepalive-unset: keepalive が付いていない: $got" ;;
+esac
+got=$(unset GIT_SSH; keepalive_case keepalive-command GIT_SSH_COMMAND="ssh -o Mine=1")
+if [ "$got" = "ssh -o Mine=1" ]; then ok; else fail "keepalive-command: GIT_SSH_COMMAND を書き換えた: $got"; fi
+got=$(unset GIT_SSH_COMMAND; keepalive_case keepalive-ssh GIT_SSH=/usr/bin/ssh)
+if [ "$got" = "<unset>" ]; then ok; else fail "keepalive-ssh: GIT_SSH があるのに付けた: $got"; fi
+got=$(
+  unset GIT_SSH_COMMAND GIT_SSH
+  git config --global core.sshCommand "ssh -o Cfg=1"
+  keepalive_case keepalive-config
+  git config --global --unset core.sshCommand
+)
+if [ "$got" = "<unset>" ]; then ok; else fail "keepalive-config: core.sshCommand があるのに付けた: $got"; fi
+
 # --- base 自身へは送らない ---
 sandbox base
 main_before=$(origin_ref "$TMP/base" refs/heads/main)
