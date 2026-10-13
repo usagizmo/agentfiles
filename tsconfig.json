@@ -19,5 +19,5 @@
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true
   },
-  "include": ["agents/**/*.ts", "test/**/*.ts"]
+  "include": ["agents/**/*.ts", "harnesses/**/*.ts", "test/**/*.ts"]
 }
