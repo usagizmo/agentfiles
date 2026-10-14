@@ -18,7 +18,8 @@ usage() {
 [ $# -eq 1 ] || usage
 pr="$1"
 
-INTERVAL=5
+# rate limit（REST・GraphQL とも 5,000 / 時）は同じ user の全 session で共有する。
+INTERVAL=30
 GRACE=120
 MAX_SYNCS=3
 MAX_READ_FAILS=3
@@ -66,11 +67,13 @@ checks_fails=0
 
 while :; do
   # 一時失敗はその回を読み飛ばす。連続したら error。
-  if ! view=$(gh pr view "$pr" --json state,mergeStateStatus,headRefOid,headRefName,baseRefName \
-    --jq '[.state, .mergeStateStatus, .headRefOid, .headRefName, .baseRefName] | @tsv' 2>"$ERR") || [ -z "$view" ]; then
+  # 毎回の読み出しは REST。GraphQL の rate limit を pr checks だけに残す。
+  if ! view=$(gh api "repos/{owner}/{repo}/pulls/${pr}" \
+    --jq '[(if .merged_at then "MERGED" elif .state == "closed" then "CLOSED" else "OPEN" end),
+      ((.mergeable_state // "unknown") | ascii_upcase), .head.sha, .head.ref, .base.ref] | @tsv' 2>"$ERR") || [ -z "$view" ]; then
     view_fails=$((view_fails + 1))
     if [ "$view_fails" -ge "$MAX_READ_FAILS" ]; then
-      say "gh pr view ${pr} が ${view_fails} 回続けて読めない: $(cat "$ERR")"
+      say "PR #${pr} が ${view_fails} 回続けて読めない: $(cat "$ERR")"
       finish error 1
     fi
     sleep "$INTERVAL"
