@@ -76,6 +76,10 @@ CI が通ったら完了。**merge はここでしない。**
 
 部分対応に留まる Issue は closing keyword を使わず `Refs #101` 等の参照にする。
 
+## 画像
+
+本文に画像を載せるときは、PR を作ってから `<skills root>/pr/scripts/upload-images.sh <owner>/<repo> <PR 番号> <file>...` で上げ、出力の URL を本文に貼る（`gh pr edit`）。置き場・パス・前提は script が SSOT。対象 repo に画像用のブランチ・commit を**作らない**。
+
 ## タイトル
 
 ```

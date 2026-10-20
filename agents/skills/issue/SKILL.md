@@ -24,3 +24,7 @@ description: >-
 2. 本文を用意する。project 差分が対象行を要求するなら、その形式で置く
 3. `gh issue create --repo <repo> --title <title> --body-file <body-file>` をこの入口だけが呼び、作成した Issue を控える
 4. project 差分が指定した label を、同じ `<repo>` の作成済み Issue に付ける（`gh issue edit <number> --repo <repo> --add-label <label>`）
+
+## 画像
+
+本文に画像を載せるときは、3 の後に `<skills root>/issue/scripts/upload-images.sh <repo> <Issue 番号> <file>...` で上げ、出力の URL を本文に貼る（`gh issue edit <number> --repo <repo> --body-file <body-file>`）。置き場・パス・前提は script が SSOT。対象 repo に画像用のブランチ・commit を**作らない**。
