@@ -6,12 +6,15 @@
 #   tmux-session.sh capture <session>
 #   tmux-session.sh screen <session>
 #   tmux-session.sh state <session>
+#   tmux-session.sh poll <session>
 #   tmux-session.sh exists <session>
 #   tmux-session.sh kill <session>
 #
 # open は detached な 1 pane session を作って cmd を直接 exec し（login shell 経由にしない）、
 # 入力を受ける画面になるまで待つ。起こせなければ session を破棄し、理由を FATAL 行に出して exit 2。
 # capture は履歴全体、screen は表示中の 1 画面。状態判定に使うのは screen だけ。
+# state は観測だけ。poll は巡の途中で重なった trust 対話を受け入れてから状態を返す（実行器を待つ側はこちら）。
+# poll は失敗も状態語で返す（越えられない・越えた先が login / fatal・session / pane の消失は fatal。理由は stderr）。
 # 画面の読み方は隣の advisors.ts（PaneState）が SSOT。bun が要る。
 
 set -u
@@ -22,7 +25,7 @@ fatal() {
 }
 
 cmd=${1:-}
-[ -n "$cmd" ] || fatal "使い方: tmux-session.sh open|paste-file|capture|screen|state|exists|kill <session> ..."
+[ -n "$cmd" ] || fatal "使い方: tmux-session.sh open|paste-file|capture|screen|state|poll|exists|kill <session> ..."
 shift
 session=${1:-}
 [ -n "$session" ] || fatal "session 名が無い"
@@ -76,6 +79,67 @@ advisors_ts=$here/advisors.ts
 require_judge() {
 	[ -f "$advisors_ts" ] || fatal "画面判定が無い: $advisors_ts"
 	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
+}
+
+# trust 対話の受け入れの選択肢を選ぶ。選択肢番号は画面から読む
+# （初期選択に依存しない。番号が読めない・送れないときは Enter を送らない）
+answer_trust() {
+	a_key=$(printf '%s\n' "$2" | bun "$advisors_ts" trust-key) ||
+		fatal "trust 対話の受け入れの選択肢を読めない"
+	tmux_session send-keys -t "$1" "$a_key" || fatal "選択肢を送れない: $a_key"
+	sleep 0.2
+	tmux_session send-keys -t "$1" C-m || fatal "Enter を送れない"
+}
+
+# 入力欄を描いたあとに trust 対話を重ねる実行器がある（codex は起動の 1〜2 秒後）。
+# open のあとに対話が出たら、受け入れて消えるまで待つ。対話の前に送った prompt は
+# 対話を越えたあとに走るので、貼り直さない。越えた先が ready / working なら 0、
+# login / fatal なら 1（越えた先の状態語は l_state）、越えられなければ 2
+pass_late_trust() {
+	answer_trust "$1" "$2"
+	# 越えた証拠は、読めた画面が trust 以外の状態語になること。capture や判定の失敗・unknown は
+	# 消えた証拠にしない（遷移中の空画面を越えたと読むと、続く Enter を対話へ送る）
+	l_ticks=20
+	while [ "$l_ticks" -gt 0 ]; do
+		sleep 0.5
+		l_ticks=$((l_ticks - 1))
+		l_snap=$(screen_of "$1") || continue
+		l_state=$(printf '%s\n' "$l_snap" | bun "$advisors_ts" pane-state) || continue
+		case $l_state in
+		ready | working) return 0 ;;
+		login | fatal) return 1 ;;
+		esac
+	done
+	return 2
+}
+
+# 送る途中で重なった trust 対話を越える。越えた先へ入力を送れなければ止める
+late_trust_or_fatal() {
+	pass_late_trust "$1" "$2" && return 0
+	case $? in
+	1) fatal "trust 対話のあとに入力を受けない画面になった（$l_state）: $session" ;;
+	*) fatal "trust 対話を越えられない: $session" ;;
+	esac
+}
+
+# poll の本体。前提が崩れたら fatal で抜ける（呼び出し側の subshell が受ける）
+poll_state() {
+	require_session
+	require_judge
+	p_target=$(target_of) || fatal "pane が無い: $session"
+	p_snap=$(tmux_session capture-pane -t "$p_target" -p 2>/dev/null) || p_snap=""
+	p_state=$(printf '%s\n' "$p_snap" | bun "$advisors_ts" pane-state) || p_state=unknown
+	if [ "$p_state" = trust ]; then
+		if pass_late_trust "$p_target" "$p_snap"; then
+			p_state=$l_state
+		else
+			case $? in
+			1) fatal "trust 対話のあとに入力を受けない画面になった（$l_state）: $session" ;;
+			*) fatal "trust 対話を越えられない: $session" ;;
+			esac
+		fi
+	fi
+	printf '%s\n' "$p_state"
 }
 
 # session を作り、起動 argv を直接 exec する。harness が終われば pane / session と server が消える
@@ -146,14 +210,9 @@ open)
 		login) fatal "ログインが要る: $bin" ;;
 		fatal) fatal "不通: $bin" ;;
 		trust)
-			# workspace trust 対話は Yes を 1 度だけ選ぶ。選択肢番号は画面から読む
-			# （初期選択に依存しない。番号が読めない・送れないときは Enter を送らない）
+			# workspace trust 対話は 1 度だけ受け入れる
 			if [ "$answered" -eq 0 ]; then
-				key=$(printf '%s\n' "$snap" | bun "$advisors_ts" trust-key) ||
-					fatal "trust 対話の Yes を読めない"
-				tmux_session send-keys -t "$target" "$key" || fatal "選択肢を送れない: $key"
-				sleep 0.2
-				tmux_session send-keys -t "$target" C-m || fatal "Enter を送れない"
+				answer_trust "$target" "$snap"
 				answered=1
 			fi
 			;;
@@ -187,6 +246,10 @@ paste-file)
 	# 2 回続けて同じ（貼り付け前の行に戻る・読めない回があれば数え直す）
 	while [ "$p_ticks" -gt 0 ]; do
 		if now=$(screen_of "$target"); then
+			if [ "$(printf '%s\n' "$now" | bun "$advisors_ts" pane-state)" = trust ]; then
+				late_trust_or_fatal "$target" "$now"
+				continue
+			fi
 			now_in=$(printf '%s\n' "$now" | bun "$advisors_ts" input-line) || fatal "入力欄を読めない: $session"
 			if [ "$now_in" != "$before_in" ] && [ "$now_in" = "$pasted" ]; then
 				break
@@ -212,6 +275,11 @@ paste-file)
 			sleep 0.2
 			p_ticks=$((p_ticks - 1))
 			now=$(screen_of "$target") || fatal "送信後の画面を読めない: $session"
+			# 対話に取られた Enter は送信していない。越えてから送り直す
+			if [ "$(printf '%s\n' "$now" | bun "$advisors_ts" pane-state)" = trust ]; then
+				late_trust_or_fatal "$target" "$now"
+				break
+			fi
 			now_in=$(printf '%s\n' "$now" | bun "$advisors_ts" input-line) ||
 				fatal "入力欄を読めない: $session"
 			if [ "$now_in" != "$pasted" ]; then
@@ -239,6 +307,15 @@ state)
 	target=$(target_of) || fatal "pane が無い: $session"
 	tmux_session capture-pane -t "$target" -p 2>/dev/null |
 		bun "$advisors_ts" pane-state
+	;;
+poll)
+	# 待つ側は状態語だけで分岐する。内部の失敗（session / pane の消失・trust の送信失敗）は
+	# fatal へ写し、理由は stderr に残す。判定器の失敗だけは unknown（停止とは読まない）
+	if p_out=$(poll_state); then
+		printf '%s\n' "$p_out"
+	else
+		printf '%s\n' fatal
+	fi
 	;;
 exists)
 	tmux_session has-session -t "=$session" 2>/dev/null

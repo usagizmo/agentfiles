@@ -57,6 +57,9 @@ if args[0] == "kill-server":
     (root / "gone").write_text("")
     raise SystemExit(0)
 if args[0] == "send-keys":
+    # send-fail: キーを送れない
+    if (root / "send-fail").exists():
+        raise SystemExit(1)
     keys = args[args.index("-t") + 2:]
     with (root / "keys").open("a") as f:
         f.write(" ".join(keys) + "\\n")
@@ -304,6 +307,87 @@ test("state: 表示中の画面の状態語を返す", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("state: trust 対話は観測だけで、キーを送らない", async () => {
+  const dir = await setup(TRUST_SCREEN, await readFile(join(FIXTURE, "ready-claude"), "utf8"));
+  try {
+    await rm(join(dir, "absent"));
+    expect(await runScript(dir, ["state", "s"])).toEqual({
+      stdout: "trust\n",
+      stderr: "",
+      exitCode: 0,
+    });
+    expect(await exists(join(dir, "keys"))).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// codex は起動の入力欄を描いたあとに trust 対話を重ねる。巡の途中で待つ側が越える
+test("poll: 重なった trust 対話を受け入れてから状態語を返す", async () => {
+  const dir = await setup(TRUST_SCREEN, await readFile(join(FIXTURE, "ready-claude"), "utf8"));
+  try {
+    await rm(join(dir, "absent"));
+    expect(await runScript(dir, ["poll", "s"])).toEqual({
+      stdout: "ready\n",
+      stderr: "",
+      exitCode: 0,
+    });
+    expect(await readFile(join(dir, "keys"), "utf8")).toBe("1\nC-m\n");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// 越えた先がログイン待ちなら、待つ側が終端できるよう fatal を返し、理由を残す
+test("poll: 受け入れた先がログイン待ちなら fatal と理由を返す", async () => {
+  const dir = await setup(TRUST_SCREEN, await readFile(join(FIXTURE, "login-cursor"), "utf8"));
+  try {
+    await rm(join(dir, "absent"));
+    expect(await runScript(dir, ["poll", "s"])).toEqual({
+      stdout: "fatal\n",
+      stderr: "FATAL\ttrust 対話のあとに入力を受けない画面になった（login）: s\n",
+      exitCode: 0,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// 待つ側は状態語だけで分岐する。内部の失敗を空の状態語にすると通常の待ちと読む
+test.each([
+  ["session が消えた", "gone", "session が無い: s"],
+  ["trust の選択肢を送れない", "send-fail", "選択肢を送れない: 1"],
+])("poll: %s ときも fatal と理由を返す", async (_label, flag, reason) => {
+  const dir = await setup(TRUST_SCREEN, await readFile(join(FIXTURE, "ready-claude"), "utf8"));
+  try {
+    await rm(join(dir, "absent"));
+    await writeFile(join(dir, flag), "");
+    expect(await runScript(dir, ["poll", "s"])).toEqual({
+      stdout: "fatal\n",
+      stderr: `FATAL\t${reason}\n`,
+      exitCode: 0,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// 遷移中の空画面（unknown）を対話が消えた証拠にすると、続く Enter を対話へ送る
+test("poll: 受け入れたあと読めない画面のままなら越えたとみなさない", async () => {
+  const dir = await setup(TRUST_SCREEN, "");
+  try {
+    await rm(join(dir, "absent"));
+    expect(await runScript(dir, ["poll", "s"])).toEqual({
+      stdout: "fatal\n",
+      stderr: "FATAL\ttrust 対話を越えられない: s\n",
+      exitCode: 0,
+    });
+    expect(await readFile(join(dir, "keys"), "utf8")).toBe("1\nC-m\n");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 20_000);
 
 // 共有 server は起こした呼び出し元の cwd・env・実行環境を後続の session へ漏らす
 test("open: tmux の呼び出しはすべて session 名の socket へ向ける", async () => {

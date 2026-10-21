@@ -7,7 +7,9 @@
 // 状態行を 1 度だけ動かす。paste-flap は反映後の 2 回目の capture で一度貼り付け前の入力欄に戻り、
 // 4 回目の capture まで Enter を落とす。no-marker は応答に marker を書かない。late-marker は履歴 capture（-S）を 1 度読まれたあとの画面 capture で marker を書く。held-marker は release-marker が置かれたあとの画面 capture（-S 無し）で marker を書く。
 // history-fail-after-first は 2 回目以降の履歴 capture を失敗させる。prompt-stall は応答の代わりに
-// 入力欄の無い問いを出して止まる。Enter の回数は enters に積む。
+// 入力欄の無い問いを出して止まる。late-trust は入力欄を描いたあと、その回数の capture の後に trust 対話を画面へ重ねる
+// （codex の起動画面）。対話の下では貼り付けと送信が進み、対話を越えると見えるようになる。
+// 対話中は選択肢の番号のあとの Enter が対話を閉じる（trust-stuck なら閉じない）。Enter の回数は enters に積む。
 
 import { chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -72,8 +74,21 @@ if args[0] == "list-panes":
     sys.stdout.write("%" + sock + "\\n")
     raise SystemExit(0)
 
+TRUST_SCREEN = "  Trust this folder? Codex can read, edit, and run files here.\\n› 1. Trust and continue\\n  2. Back to Agent Command Center\\n"
+
 if args[0] == "send-keys":
     target()
+    if (server / "trust-open").exists():
+        if "1" in args:
+            (server / "trust-chosen").write_text("")
+            raise SystemExit(0)
+        if "C-m" in args and (server / "trust-chosen").exists():
+            # trust-stuck: 受け入れても対話が消えない
+            if (root / "trust-stuck").exists():
+                raise SystemExit(0)
+            (server / "trust-open").unlink()
+            (server / "trusted").write_text("")
+            raise SystemExit(0)
     if "C-m" in args:
         enters = server / "enters"
         enters.write_text(enters.read_text() + "enter\\n" if enters.exists() else "enter\\n")
@@ -142,6 +157,14 @@ if args[0] == "capture-pane":
     if (root / "capture-fail-after-enter").exists() and (server / "enters").exists():
         raise SystemExit(1)
     history = "-S" in args
+    late_trust = root / "late-trust"
+    if late_trust.exists() and not (server / "trust-shown").exists():
+        count = server / "captures"
+        n = int(count.read_text()) + 1 if count.exists() else 1
+        count.write_text(str(n))
+        if n > int(late_trust.read_text()):
+            (server / "trust-shown").write_text("")
+            (server / "trust-open").write_text("")
     seen = server / "history-seen"
     if history:
         if (root / "history-fail-after-first").exists() and seen.exists():
@@ -179,6 +202,8 @@ if args[0] == "capture-pane":
             shown = shown.replace("› [Pasted Content]\\n", "")
         if n >= 4:
             (server / "flap-done").write_text("")
+    if (server / "trust-open").exists():
+        shown = TRUST_SCREEN
     sys.stdout.write(shown)
     raise SystemExit(0)
 

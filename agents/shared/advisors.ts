@@ -144,16 +144,32 @@ export const isChromeLine = (line: string): boolean => {
 };
 
 /**
+ * 応答の後ろに実行器が足す案内（codex の `└ Tip: Use /theme …`）。
+ *
+ * 末尾にあるときだけ落とす —— 途中の同じ形は tool 出力の 1 行目でもありうるので本文として残す。
+ * marker の後ろに同じ形の応答本文が 1 行だけ続く画面は、この案内と区別できず完走と読む。
+ */
+const TRAILING_NOTICE = /^└\s+Tip: /u;
+
+const dropTrailingNotices = (lines: readonly string[]): readonly string[] => {
+  let end = lines.length;
+  while (end > 0 && TRAILING_NOTICE.test((lines[end - 1] ?? "").trim())) end--;
+  return lines.slice(0, end);
+};
+
+/**
  * 枠だけ落とした行。入力欄での打ち切りはしない。
  *
  * 画面そのものではなく、`extract` が切り出した応答を読むときに使う。切り出した
  * 中にも送った prompt のエコーが残るので、そこで打ち切ると応答本体が落ちる。
  */
 const chromeStrippedLines = (text: string): readonly string[] =>
-  text
-    .split(/\r?\n/)
-    .map(normalizeSnapshotLine)
-    .filter((line) => !isChromeLine(line));
+  dropTrailingNotices(
+    text
+      .split(/\r?\n/)
+      .map(normalizeSnapshotLine)
+      .filter((line) => !isChromeLine(line)),
+  );
 
 /**
  * 応答の最後の行。TUI の枠と、入力欄から後ろを落として読む。
@@ -171,7 +187,7 @@ const contentLines = (text: string): readonly string[] => {
       break;
     }
   }
-  return lines.slice(0, end).filter((line) => !isChromeLine(line));
+  return dropTrailingNotices(lines.slice(0, end).filter((line) => !isChromeLine(line)));
 };
 
 export const lastContentLine = (text: string): string | undefined => contentLines(text).at(-1);
@@ -395,11 +411,15 @@ export const paneState = (screen: string): PaneState => {
   return "ready";
 };
 
-/** trust 対話で Yes を選ぶ選択肢番号。番号が読めなければ undefined。 */
+/**
+ * trust 対話で受け入れる選択肢の番号。番号が読めなければ undefined。
+ *
+ * 受け入れの語は実行器ごとに違う（`Yes, I trust this folder` / codex の `Trust and continue`）。
+ */
 export const trustKey = (screen: string): string | undefined => {
   for (const raw of screen.split(/\r?\n/)) {
     const line = normalizeSnapshotLine(raw).replace(/^[^\p{L}\p{N}]+/u, "");
-    const matched = /^(\d)(?:[.)]|\s)\s*Yes\b/u.exec(line);
+    const matched = /^(\d)(?:[.)]|\s)\s*(?:Yes|Trust and continue)\b/u.exec(line);
     if (matched?.[1] !== undefined) return matched[1];
   }
   return undefined;
