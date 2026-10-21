@@ -456,6 +456,29 @@ test.each(["codex", "grok"] as const)("%s の pane から marker を読める", 
   expect(advisorComplete(pane, "ADVISOR-DONE-heaaqd")).toEqual({ ok: true });
 });
 
+const CODEX_LIMIT_MARKER = "ADVISOR-DONE-6zvm8i-1";
+// 実 pane の応答以降を採録し、作業ディレクトリと読んだファイル名だけ匿名化する。
+const CODEX_LIMIT_SNAPSHOT = await Bun.file(
+  `${ROOT}test/fixtures/advisor-pane/codex-limit-warning`,
+).text();
+
+test("codex の利用枠残量の警告行は本文でない", () => {
+  expect(advisorComplete(CODEX_LIMIT_SNAPSHOT, CODEX_LIMIT_MARKER)).toEqual({ ok: true });
+  expect(advisorVerdict(responseAfter(CODEX_LIMIT_SNAPSHOT, ""), CODEX_LIMIT_MARKER)).toBe(
+    "指摘なし",
+  );
+});
+
+test.each(["⚠ 5h limit: 37% left · resets at 14:51 · /status 追加の指摘", "⚠ 5h limit: 37% left"])(
+  "利用枠警告の形が揃わない行は本文: %s",
+  (content) => {
+    expect(advisorComplete(`${CODEX_LIMIT_MARKER}\n${content}`, CODEX_LIMIT_MARKER)).toEqual({
+      ok: false,
+      reason: "マーカー無し",
+    });
+  },
+);
+
 const CURSOR_MARKER = "ADVISOR-DONE-gmjsqm";
 // 実 pane の応答以降を採録し、作業ディレクトリだけ匿名化する。
 const CURSOR_SNAPSHOT = await Bun.file(`${ROOT}test/fixtures/advisor-pane/cursor`).text();

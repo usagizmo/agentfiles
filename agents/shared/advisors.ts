@@ -130,6 +130,9 @@ export const isChromeLine = (line: string): boolean => {
   // `▣  Build · DeepSeek V4.1 Flash · 9.5s`）
   if (/^▣\s+\S.*·\s*(?:\d+(?:\.\d+)?\s*[hms]\s*)+$/u.test(trimmed)) return true;
   if (/^done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(stripped)) return true;
+  // 利用枠の残量警告を応答の後ろへ描く実行器がある（codex の
+  // `⚠ 5h limit: 37% left · resets at 14:51 · /status`）
+  if (/^⚠\s+\S+ limit: \d+% left · resets at [^·]+ · \/status$/u.test(trimmed)) return true;
   if (
     /^[✻✽✶✳✢✷] [\w\p{L}\p{M}]+ for (?:\d+[hms]\s*)+· done \d{1,2}:\d{2}(?:\s*[AP]M)?$/u.test(
       trimmed,
