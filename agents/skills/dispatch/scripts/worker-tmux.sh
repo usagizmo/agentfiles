@@ -185,7 +185,7 @@ collect)
 					: >"$run/dead"
 					break
 				fi
-				case $(sh "$tmux_sh" state "$session" 2>>"$run/log") in
+				case $(sh "$tmux_sh" poll "$session" 2>>"$run/log") in
 				fatal)
 					sh "$tmux_sh" capture "$session" >"$run/raw.$n" 2>>"$run/log" || true
 					if [ -f "$run/raw.$n" ]; then
@@ -230,7 +230,7 @@ collect)
 					bun "$complete_ts" extract --raw "$run/raw.$n" --prev "$prev" \
 						>"$run/out.$n" 2>>"$run/log" || cp "$run/raw.$n" "$run/out.$n"
 				fi
-				case $(sh "$tmux_sh" state "$session" 2>>"$run/log") in
+				case $(sh "$tmux_sh" poll "$session" 2>>"$run/log") in
 				working)
 					# 稼働中は deadline まで待つ。timeout は再 collect できる
 					if [ "$at_deadline" = 1 ]; then
@@ -311,7 +311,7 @@ ask)
 			*) fatal "巡 $n を判定できない（collect をやり直す）" ;;
 			esac
 			[ "$pass" = 2 ] && break
-			case $(sh "$tmux_sh" state "$session") in
+			case $(sh "$tmux_sh" poll "$session") in
 			working) fatal "巡 $n はまだ処理中（collect を先に通す）" ;;
 			ready) ;;
 			*) fatal "巡 $n の状態を読めない（終端しない。collect をやり直す）" ;;

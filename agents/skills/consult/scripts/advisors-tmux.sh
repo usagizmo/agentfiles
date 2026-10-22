@@ -184,7 +184,7 @@ start_kind() {
 		sh "$tmux_sh" kill "$session" >>"$sk_run/$sk_a/log" 2>&1 || true
 		return 1
 	fi
-	case $(sh "$tmux_sh" state "$session" 2>>"$sk_run/$sk_a/log") in
+	case $(sh "$tmux_sh" poll "$session" 2>>"$sk_run/$sk_a/log") in
 	fatal)
 		printf '%s\n' 1 >"$sk_run/$sk_a/start.rc"
 		printf '%s\n' "不通" >"$sk_run/$sk_a/reason.$sk_n"
@@ -309,7 +309,7 @@ collect)
 				: >"$run/$a/dead"
 				continue
 			fi
-			case $(sh "$tmux_sh" state "$session" 2>>"$run/$a/log") in
+			case $(sh "$tmux_sh" poll "$session" 2>>"$run/$a/log") in
 			fatal)
 				sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
 				if [ -f "$run/$a/raw.$n" ]; then
@@ -412,7 +412,7 @@ ask)
 		*) fatal "巡 $n の $a を判定できない（終端しない。collect をやり直す）" ;;
 		esac
 		# 終端してよいのは、表示中の画面が入力待ちに戻っているときだけ
-		case $(sh "$tmux_sh" state "$session") in
+		case $(sh "$tmux_sh" poll "$session") in
 		working) fatal "巡 $n を $a がまだ処理中（collect を先に通す）" ;;
 		ready) ;;
 		*) fatal "巡 $n の $a の状態を読めない（終端しない。collect をやり直す）" ;;

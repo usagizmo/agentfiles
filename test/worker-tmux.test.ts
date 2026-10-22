@@ -252,6 +252,27 @@ test.concurrent("dispatch tmux: capacity 画面は deadline を待たず不通�
   }
 }, 15_000);
 
+// poll が trust 対話を越えられずに失敗したら、通常の待ちや timeout にせず不通で終端する
+test.concurrent("dispatch tmux: 巡の途中の trust 対話を越えられなければ不通で終端する", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+    expect(servers).toHaveLength(1);
+    await Bun.write(join(dir, "trust-stuck"), "");
+    await Bun.write(join(dir, servers[0] ?? "", "trust-open"), "");
+    const first = await run(dir, ["collect", runDir, "40", "40"]);
+    expect(first.exitCode).toBe(1);
+    expect(first.stdout).toContain("(rc=1 不通)");
+    expect(await Bun.file(join(runDir, "dead")).exists()).toBe(true);
+    expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
 test.concurrent("dispatch tmux: 停滞秒が deadline より短ければ、入力待ちで marker が無いとき deadline を待たず戻る", async () => {
   const dir = await setup();
   try {

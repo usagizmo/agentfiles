@@ -59,7 +59,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 
 ## レイアウト
 
-選出した kind の **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`。tmux server は session ごとに分かれ（socket 名 = session 名）、人が `tmux -L <session> attach` で覗ける。起動待ち（workspace trust 対話の Yes・起こせない理由）は `tmux-session.sh open` が持つ。
+選出した kind の **独立した tmux session**（`c-<kind>-<id>`）。split しない。cwd は呼び出し元の `$PWD`。tmux server は session ごとに分かれ（socket 名 = session 名）、人が `tmux -L <session> attach` で覗ける。起動待ち（workspace trust 対話の受け入れ・起こせない理由）は `tmux-session.sh open` が持つ。
 
 ## 不変条件
 
@@ -67,7 +67,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 
 実行器の状態行と、それを引用した応答本文が同じ文字列になることがある（codex の `• Working (…)`）。分けられないので `working` 側に倒す —— `ask` は `working` でも `unknown` でも終端しないので、巡が進まないときは失敗時の手順で復旧する。
 
-**画面の読み方は `advisors.ts` だけが持つ**（`paneState` / `trustKey`）。判定に渡すのは表示中の 1 画面（`tmux-session.sh screen` / `state`）で、履歴ではない。`unknown` は「読めない」であって「停止」ではないので、`ask` は `ready` のときだけ終端する。trust 対話は Yes の選択肢番号を画面から読んで送り、消えたことを確かめる（初期選択に依存しない）。
+**画面の読み方は `advisors.ts` だけが持つ**（`paneState` / `trustKey`）。判定に渡すのは表示中の 1 画面（`tmux-session.sh screen` / `state` / `poll`）で、履歴ではない。`unknown` は「読めない」であって「停止」ではないので、`ask` は `ready` のときだけ終端する。trust 対話は受け入れの選択肢番号を画面から読んで送り、消えたことを確かめる（初期選択に依存しない）。起動のあとに重なる対話（codex）は `poll` と `paste-file` が越える。
 
 ## 失敗時
 

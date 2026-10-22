@@ -720,6 +720,14 @@ test("devin の trust 対話の実画面は trust", async () => {
   expect(trustKey(screen)).toBe("1");
 });
 
+// codex は受け入れの選択肢を Yes でなく `Trust and continue` と描く
+test("codex の trust 対話の実画面は trust", async () => {
+  const screen = await paneFixture("trust-codex");
+  expect(screen).toContain("› 1. Trust and continue");
+  expect(paneState(screen)).toBe("trust");
+  expect(trustKey(screen)).toBe("1");
+});
+
 // devin は送信済みの発言にも入力欄と同じ caret を描く。発言を入力欄と読むと、
 // 欄の消えた承認待ちを ready と読み、働いている worker を marker 無しで終端する
 test("devin の承認待ちの実画面は unknown（ready にしない）", async () => {
@@ -840,6 +848,29 @@ test("折り返した marker は完走", async () => {
   expect(advisorComplete(await Bun.file(paneFixturePath("wrap-2-lines")).text(), MARKER)).toEqual({
     ok: true,
   });
+});
+
+test("marker の後ろに codex の Tip 行が出ても完走", async () => {
+  expect(
+    advisorComplete(await Bun.file(paneFixturePath("codex-tip")).text(), "ADVISOR-DONE-heaaqd"),
+  ).toEqual({
+    ok: true,
+  });
+});
+
+test("marker の後ろの Tip 行に応答本文が続けば未完", () => {
+  expect(
+    advisorComplete(`${MARKER}\n  └ Tip: Use /theme to choose a theme.\n本文\n`, MARKER),
+  ).toEqual({
+    ok: false,
+    reason: "マーカー無し",
+  });
+});
+
+test("応答の途中の Tip 行は本文として残す", () => {
+  expect(responseAfter("前置き\n  └ Tip: 先に lint を通す\n本文\n", "")).toBe(
+    "前置き\n└ Tip: 先に lint を通す\n本文",
+  );
 });
 
 test("行頭空白つきの折り返し marker は完走", async () => {

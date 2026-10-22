@@ -202,6 +202,36 @@ test.concurrent("tmux backend: paste は反映を待ってから Enter を 1 回
   }
 }, 30_000);
 
+// codex は入力欄を描いてから trust 対話を重ねる。貼り付け・送信・応答待ちのどこで重なっても、
+// 対話を越えて prompt を 1 回だけ走らせる
+test.concurrent.each([
+  ["貼り付けの反映待ち", "2"],
+  ["送信の確認", "4"],
+  ["応答待ち", "6"],
+])(
+  "tmux backend: 起動のあとに遅れて出る trust 対話を%sで越える",
+  async (_label, captures) => {
+    const dir = await setup();
+    try {
+      await Bun.write(join(dir, "late-trust"), `${captures}\n`);
+      const started = await run(dir, ["start", join(dir, "prompt")]);
+      expect(started.exitCode).toBe(0);
+      const runDir = started.stdout.trim();
+      const first = await run(dir, ["collect", runDir, "5"]);
+      expect(first.exitCode).toBe(0);
+      expect(first.stdout).toContain("answer 1");
+      const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+      expect(servers).toHaveLength(1);
+      expect(await Bun.file(join(dir, servers[0] ?? "", "trusted")).exists()).toBe(true);
+      expect(await readFile(join(dir, servers[0] ?? "", "prompts"), "utf8")).toBe("1");
+      expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  30_000,
+);
+
 test.concurrent("tmux backend: 反映後に落ちた Enter は 1 回だけ送り直す", async () => {
   const dir = await setup();
   try {
@@ -289,6 +319,26 @@ test.concurrent("tmux backend: capacity 画面は deadline を待たず不通で
     await rm(dir, { recursive: true, force: true });
   }
 }, 15_000);
+
+// poll が trust 対話を越えられずに失敗したら、通常の待ちや timeout にせず不通で終端する
+test.concurrent("tmux backend: 巡の途中の trust 対話を越えられなければ不通で終端する", async () => {
+  const dir = await setup();
+  try {
+    const started = await run(dir, ["start", join(dir, "prompt")]);
+    expect(started.exitCode).toBe(0);
+    const runDir = started.stdout.trim();
+    const servers = (await readdir(dir)).filter((name) => name.startsWith("srv-"));
+    expect(servers).toHaveLength(1);
+    await Bun.write(join(dir, "trust-stuck"), "");
+    await Bun.write(join(dir, servers[0] ?? "", "trust-open"), "");
+    const first = await run(dir, ["collect", runDir, "40"]);
+    expect(first.exitCode).toBe(1);
+    expect(first.stdout).toContain("(rc=1 不通)");
+    expect(await Bun.file(join(runDir, FIRST, "dead")).exists()).toBe(true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
 
 test.concurrent("tmux backend: replace は dead を次の kind で起こし直す", async () => {
   const dir = await setup(allBins());
