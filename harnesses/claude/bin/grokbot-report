@@ -1,0 +1,60 @@
+#!/bin/zsh
+# デスク（Grok Bot）へ ccd の作業報告を webhook で送る。使い方は usage。
+# 宛先は ~/.config/grokbot/ccd-webhook.env の WEBHOOK_URL / WEBHOOK_KEY。秘密情報なので repo に入れない。
+# 引数と本文の検査は env を読む前に済ませる。検査で落ちたときは何も送らない。
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+使い方: grokbot-report <件名> <本文>
+        grokbot-report <件名> < 本文
+
+デスク（Grok Bot）へ ccd の作業報告を送る。本文の引数が無いときは標準入力から読む。
+
+送らずに失敗する条件:
+  - 引数が無い、または件名が空
+  - 件名が - で始まる（オプションと区別できない）
+  - 本文が空（空白だけを含む）
+  - 本文を標準入力から読むのに、標準入力が端末
+
+オプション:
+  -h, --help  この使い方を表示して終わる（何も送らない）
+EOF
+}
+
+die() {
+  print -u2 -r -- "grokbot-report: $1"
+  print -u2 -r -- "使い方: grokbot-report --help"
+  exit 2
+}
+
+(( $# >= 1 )) || die "件名と本文がありません"
+case "$1" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  -*) die "件名を - で始めることはできません（未知のオプション: $1）" ;;
+  '') die "件名が空です" ;;
+esac
+TITLE="$1"
+
+if (( $# >= 2 )); then
+  BODY="$2"
+else
+  [[ ! -t 0 ]] || die "本文がありません（引数でも標準入力でも渡せます。標準入力が端末のままです）"
+  BODY="$(cat)"
+fi
+[[ -n "${BODY//[[:space:]]/}" ]] || die "本文が空です"
+
+source "$HOME/.config/grokbot/ccd-webhook.env"
+
+SOURCE="ccd@$(hostname -s)"
+JSON=$(SOURCE="$SOURCE" TITLE="$TITLE" BODY="$BODY" python3 -c 'import json,os;print(json.dumps({"source":os.environ["SOURCE"],"title":os.environ["TITLE"],"text":os.environ["BODY"]},ensure_ascii=False))')
+
+out=$(mktemp)
+trap 'rm -f "$out"' EXIT
+code=$(curl -s -o "$out" -w '%{http_code}' -X POST "$WEBHOOK_URL" -H "Authorization: Bearer $WEBHOOK_KEY" -H 'Content-Type: application/json' --data "$JSON")
+echo "HTTP $code"
+[ "$code" -lt 300 ] || { cat "$out"; exit 1; }

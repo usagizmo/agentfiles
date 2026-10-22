@@ -32,6 +32,9 @@ inventory_define() {
   inv_symlink harnesses/claude/statusline.py "$HOME/.claude/statusline.py"
   inv_home "$HOME/.claude/hooks"
   inv_guard_dir "$HOME/.claude/hooks"
+  # ccd がデスクへ作業報告を送るコマンド。webhook の宛先と鍵は ~/.config/grokbot/（配らない）
+  inv_home "$HOME/.local/bin"
+  inv_symlink harnesses/claude/bin/grokbot-report "$HOME/.local/bin/grokbot-report"
 
   # --- Codex ---
   # Codex は ~/.agents/skills をネイティブに読む。union は harness 固有 overlay のみ
