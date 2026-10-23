@@ -64,7 +64,7 @@ trust 以外の承認 UI が出た巡は `collect` が `停滞` で戻る（終�
 
 worker への指示内容・diff の判定・fallback は呼び出し側 skill が持つ（resolve は「実装役へ渡す」）。ここが持つのは transport だけ。
 
-人が harness を指名して `resolve` ごと渡すとき（「codex で #12 を resolve して」）: worktree を切って cd し、prompt に「`resolve` を 2 を飛ばして 3 から」を含めて `DISPATCH_KIND=<kind>` で `start`。working を確認したら session 名と `tmux -L <session> attach` を報告して終える。`close` で殺さない。
+人が harness を指名して `resolve` ごと渡すとき（「codex で #12 を resolve して」）: `resolve` step 2 の場所に worktree を切って cd し、prompt に「`resolve` を 2 を飛ばして 3 から」を含めて `DISPATCH_KIND=<kind>` で `start`。working を確認したら session 名と `tmux -L <session> attach` を報告して終える。`close` で殺さない。
 
 `DISPATCH_KIND` は `[[workers]]` に宣言した kind だけ指名できる。表に無い kind は起動前に落ちる。
 

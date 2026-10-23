@@ -10,8 +10,8 @@ description: >-
 
 1. **選出**: 引数が無ければ、計画済みのうち未着地の依存を持たない先頭を取る。依存は Issue の blocked_by（並びと Status 名は project 差分。無ければ聞く）
 2. **場所**: 計画も実装も課題用の worktree で行う。subagent（Agent tool）に委譲しない。cwd が本 step で課題用に作られた linked worktree（`git rev-parse --git-dir` と `--git-common-dir` が異なり、prompt に「2 を飛ばして 3 から」がある）なら既にその場所にいるので 3 へ
-   - `git worktree add` で切って cd し、3 へ
-   - 複数 repo を変える課題は、主 repo の worktree から `git worktree add` で他 repo の worktree を切る（workspace は増やさない）
+   - `git worktree add` で `~/claude-worktrees/<切る対象 repo の main checkout の basename>/<name>` に切って cd し、3 へ。main checkout 配下に**作らない**。basename が同じ別 repo は衝突しうるが、Desktop と揃えて許容する
+   - 複数 repo を変える課題は、主 repo の worktree から `git worktree add` で他 repo の worktree を同じ規則の場所に切る（workspace は増やさない）
 3. **計画**: Issue と関連コードを読み、影響範囲（下記）を洗い出して、本文の計画（`refine` の項目）が現在のコード・依存・要件に適合するかを確かめる。適合すれば触るパスと検証方法を決めて 4 へ。項目が欠ける・前提が変わった・中規模以上で設計記述が無いなら、`consult`（深い・事前）で GO を得て、確定した項目を本文へ書いてから 4 へ。製品境界を越える新事実は「止まる条件」
    - 影響範囲: diff の外で変わりうるもの（caller / consumer・共有状態と設定・人に見せる面・他 repo）を挙げ、本文の変更面と突き合わせる。安全と言える根拠の事実を 1 つ選び、主張で済ませず呼び出し箇所を読むか実コードを走らせて確かめる。挙げた面は検証方法に入れる
 4. **実装**: 軽微（定義は `~/.agents/AGENTS.md` の「規模」）は自分で書く。それ以外は「実装役へ渡す」

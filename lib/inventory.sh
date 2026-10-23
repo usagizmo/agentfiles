@@ -32,6 +32,7 @@ inventory_define() {
   inv_symlink harnesses/claude/statusline.py "$HOME/.claude/statusline.py"
   inv_home "$HOME/.claude/hooks"
   inv_guard_dir "$HOME/.claude/hooks"
+  inv_symlink harnesses/claude/hooks/worktree.ts "$HOME/.claude/hooks/worktree.ts"
   # ccd がデスクへ作業報告を送るコマンド。webhook の宛先と鍵は ~/.config/grokbot/（配らない）
   inv_home "$HOME/.local/bin"
   inv_symlink harnesses/claude/bin/grokbot-report "$HOME/.local/bin/grokbot-report"
