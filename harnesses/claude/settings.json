@@ -23,6 +23,41 @@
     "type": "command",
     "command": "~/.claude/statusline.py"
   },
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.claude/hooks/worktree.ts create",
+            "timeout": 1800
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.claude/hooks/worktree.ts remove",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.claude/hooks/worktree.ts subagent-stop",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  },
   "extraKnownMarketplaces": {
     "diagram-design": {
       "source": {
