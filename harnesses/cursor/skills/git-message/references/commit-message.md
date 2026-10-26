@@ -1,0 +1,1 @@
+../../../../../agents/shared/commit-message.md

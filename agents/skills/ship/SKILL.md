@@ -35,7 +35,7 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
    衝突は rebase 上で解消して再実行する。SHA が動いたら前提の CI を取り直し、通るまで待つ
 2. auto-merge を有効化する:
    ```
-   gh pr merge <number> --merge --auto --subject "{PR タイトル} (#{PR 番号})" --body "{箇条書き body または空}"
+   gh pr merge <number> --merge --auto --subject "<subject>" --body "<body>"
    ```
    auto-merge が使えない環境では `--auto` なしで同じコマンドを実行する
 3. merge を待つ:
@@ -50,8 +50,4 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
 
 ## マージコミット
 
-```
-{gitmoji} {変更内容を凝縮した説明} (#N)
-```
-
-gitmoji は `references/gitmoji.md`。`--subject` に `(#N)` を必ず付ける。body はコミット群の箇条書き。不要なら `--body ""`。
+`--subject` と `--body` は `references/merge-message.md` の「PR の merge」。

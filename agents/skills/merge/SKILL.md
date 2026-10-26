@@ -30,7 +30,7 @@ description: >-
 | 1      | `--ff-only`            |
 | 2 以上 | `--no-ff`              |
 
-`--ff-only` に**メッセージを付けない**。`--no-ff` のメッセージは直前コミットの言語・スタイルに合わせ、gitmoji を 1 つ選ぶ（`references/gitmoji.md`）。タイトルを `Merge branch '...'` にしない。
+`--ff-only` に**メッセージを付けない**。`--no-ff` のメッセージは `references/merge-message.md`。
 
 ## 衝突
 
@@ -73,8 +73,5 @@ git -C <操作台> merge --ff-only <対象>
 ```
 
 ```
-git -C <操作台> merge --no-ff <対象> -m "{gitmoji} {変更の本質}
-
-- {サマリー1}
-- {サマリー2}"
+git -C <操作台> merge --no-ff <対象> -m "<message>"
 ```

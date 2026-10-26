@@ -57,6 +57,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 | `[grok]`         | `harnesses/grok` / `~/.grok` 配下の Grok 設定                                                             |
 | `[opencode]`     | `harnesses/opencode` / `~/.config/opencode` 配下の opencode 設定                                          |
 | `[command-code]` | `harnesses/command-code` / `~/.commandcode` 配下の Command Code 設定                                      |
+| `[cursor]`       | `harnesses/cursor` / `~/.cursor` 配下の Cursor 設定                                                       |
 | `[pi]`           | `harnesses/pi` / `~/.pi/agent` 配下の pi 設定                                                             |
 | `[lint]`         | oxlint / oxfmt の設定と commit gate（`package.json` / `.oxlintrc.json` / `.oxfmtrc.json` / `.githooks/`） |
 
@@ -100,7 +101,7 @@ GitHub Issues は無効。統合は `temp` へ積んで `main` へ落とす。�
 
 `agents/shared/<name>` を SSOT にし、使う skill から相対 symlink を張る。**どの skill にも所有させない。**
 
-**張り先も同じ規則で決まる**（拡張子ではない）。symlink は実体と同名にし、`../../../shared/<同名>` を指す。
+**張り先も同じ規則で決まる**（拡張子ではない）。symlink は実体と同名にし、`../../../shared/<同名>` を指す（`harnesses/<agent>/skills/` からは `../../../../../agents/shared/<同名>`）。
 
 - skill 本文に書くのは**自分の相対パスだけ**。投影先でも repo でも解決できる形にする
 - **`shared/` に置く条件は 1 つ**: 2 つ以上の skill が同じものを使っている。1 つの skill しか使わないものは、その skill 側の対応する dir に実体で置く

@@ -5,7 +5,7 @@ description: >-
   push は `scripts/sync-and-push.sh` で行い、素の `git push` は使わない。
 ---
 
-PR を作り、呼ぶ側が指定した経路で **Draft PR** で止めるか、Ready-for-review まで持っていく。タイトル先頭に gitmoji。呼ぶ側（`resolve` 等）が経路を決める。`pr` は経路を推測しない。
+PR を作り、呼ぶ側が指定した経路で **Draft PR** で止めるか、Ready-for-review まで持っていく。呼ぶ側（`resolve` 等）が経路を決める。`pr` は経路を推測しない。
 
 | 経路         | 終わり                                       |
 | ------------ | -------------------------------------------- |
@@ -82,8 +82,4 @@ CI が通ったら完了。**merge はここでしない。**
 
 ## タイトル
 
-```
-{gitmoji} {変更内容を凝縮した説明}
-```
-
-gitmoji は `references/gitmoji.md`。
+`references/pr-title.md`。

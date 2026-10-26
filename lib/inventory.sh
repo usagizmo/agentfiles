@@ -73,6 +73,13 @@ inventory_define() {
   inv_symlink harnesses/command-code/settings.json "$HOME/.commandcode/settings.json"
   inv_symlink harnesses/command-code/config.json "$HOME/.commandcode/config.json"
 
+  # --- Cursor ---
+  # Cursor は `~/.agents/skills` をネイティブに読む。`~/.cursor/skills` には Cursor 固有 skill だけを置く
+  # `~/.cursor/skills` は Cloud Agents へ同期される。Cursor が書き込む skill も repo で管理する
+  inv_section "cursor"
+  inv_home "$HOME/.cursor"
+  inv_symlink harnesses/cursor/skills "$HOME/.cursor/skills"
+
   # --- pi ---
   # home は `~/.pi/agent`（auth / sessions / cache を同居させる）。tracked な葉だけ symlink
   # `models.json` の apiKey は `$CMD_API_KEY` 参照。実値は fish の env.fish（untracked）
