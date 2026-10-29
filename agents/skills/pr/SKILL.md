@@ -58,7 +58,7 @@ local gate の入口が無い repo では、**CI の定義から同じ検査を�
 1. `bash <skills root>/pr/scripts/sync-and-push.sh [<base>]` で push する。衝突が出たら解消して再実行する
 2. PR が無ければ `gh pr create --base <base>`（draft にしない）。あれば title / body を更新する
 3. `bash <skills root>/pr/scripts/ready-and-watch.sh <number>`（Draft なら ready し、createdAt が Ready 時刻以降の pull_request run を待って watch）
-4. 失敗したらログを見て修正・コミットし 1 に戻る。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
+4. 失敗したらログを見て修正・コミットし 1 に戻る。呼び出し元が修正の経路を定めていれば、失敗を返してそこで直す。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
 
 **commit を足したら必ず 1 へ戻る。CI が緑になったあとも同じ。**「もう通ったから push だけ」で追随を飛ばすと、base から離れたまま積み上がり、着地の直前に大きな rebase と衝突が出る。
 

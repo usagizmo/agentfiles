@@ -30,6 +30,8 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
 
 `<base>` は `gh pr view <number> --json baseRefName --jq .baseRefName` の値。取れない・空なら止める。
 
+呼び出し元が承認した head SHA を固定したとき（追随で検証・承認した中身が変わってはいけない）は 1〜3 の代わりに `gh pr merge <number> --merge --match-head-commit <SHA> --subject "<subject>" --body "<body>"` を 1 回だけ実行する（`--auto` を付けない）。拒否されたら追随せず、理由を呼び出し元へ返して止める。
+
 1. head を最新 base に載せる。PR head の worktree で:
    ```
    bash <skills root>/ship/scripts/sync-and-push.sh <base>
