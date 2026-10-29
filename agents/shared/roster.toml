@@ -20,7 +20,7 @@
 
 [[advisors]]
 kind = "codex"
-args = []
+args = ["--model", "gpt-6.1-terra", "-c", "model_reasoning_effort=xhigh"]
 
 [[advisors]]
 kind = "claude"
