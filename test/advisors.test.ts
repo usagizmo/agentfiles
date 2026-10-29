@@ -26,6 +26,7 @@ import {
   parseRoster,
   selectWorker,
   type Slot,
+  inlineArgs,
   readOnlyArgs,
   type Roster,
 } from "../agents/shared/roster.ts";
@@ -242,13 +243,18 @@ test("壊れた TOML はパーサの位置を残す", () => {
   expect(message.length).toBeGreaterThan("TOML として読めない:".length);
 });
 
-test("起動 argv は宣言の args のあとに read-only を足す", () => {
+test("起動 argv は宣言の args のあとに read-only と inline を足す", () => {
   const codex: Slot = { kind: "codex", args: ["--model", "gpt-5.6"] };
   expect(directLaunchArgv(codex)).toEqual([
     directBinary("codex"),
     ...codex.args,
     ...readOnlyArgs("codex"),
+    ...inlineArgs("codex"),
   ]);
+});
+
+test("codex の advisor は inline 画面で起動する", () => {
+  expect(directLaunchArgv({ kind: "codex", args: [] })).toContain("--no-alt-screen");
 });
 
 test("空の args でも read-only は付く", () => {

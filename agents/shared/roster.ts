@@ -60,6 +60,10 @@ export const readOnlyArgs = (kind: string): readonly string[] => {
   throw new RosterError(`read-only 手段が無い kind: ${kind}`);
 };
 
+/** advisor の応答は capture（履歴全体）から読む。alternate screen の TUI は履歴を残さないので inline で起こす。 */
+export const inlineArgs = (kind: string): readonly string[] =>
+  kind === "codex" ? ["--no-alt-screen"] : [];
+
 const fail = (message: string, path: string): never => {
   throw new RosterError(`${path}: ${message}`);
 };
@@ -196,7 +200,12 @@ export const directBinary = (kind: string): string => {
 /** interactive CLI を起動する argv（read-only を末尾に足す）。 */
 export const directLaunchArgv = (slot: Slot): string[] => {
   rejectBypass(slot.args, true, slot.kind);
-  return [directBinary(slot.kind), ...slot.args, ...readOnlyArgs(slot.kind)];
+  return [
+    directBinary(slot.kind),
+    ...slot.args,
+    ...readOnlyArgs(slot.kind),
+    ...inlineArgs(slot.kind),
+  ];
 };
 
 /** dispatch 用。read-only を足さない（実装役。--print は拒否。-p は Codex の --profile だけ）。 */
