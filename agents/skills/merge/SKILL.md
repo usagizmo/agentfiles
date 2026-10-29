@@ -22,7 +22,7 @@ description: >-
 
 ## 形
 
-本数は `git -C <操作台> rev-list --count <統合先>..<対象>`。**形は本数だけ**で決まる。
+本数は `git -C <操作台> rev-list --count <統合先>..<対象>`。**形は本数だけ**で決まる。例外は「衝突」の rebase を禁じる作業 branch への取り込みで、祖先でなければ本数を問わず `--no-ff`。
 
 | 本数   | 形                     |
 | ------ | ---------------------- |
@@ -34,11 +34,11 @@ description: >-
 
 ## 衝突
 
-方向を問わず、統合先の HEAD が対象ブランチの祖先なら、どちらの形も衝突しない。**祖先でない**なら merge せず、自分の worktree で rebase してから出直す。
+方向を問わず、統合先の HEAD が対象ブランチの祖先なら、どちらの形も衝突しない。**祖先でない**なら merge せず、自分の worktree で rebase してから出直す。ただし取り込みで、cwd の作業 branch が project の規則で rebase を禁じる branch（共有済みの履歴を持つ）なら、rebase せず `--no-ff` で merge し、衝突は cwd で解く。
 
 ## 着地の検査
 
-統合先の木は自分以外も読む（どの木かは project 差分。live checkout）。着地なら、検査の前に `<skills root>/merge/scripts/ensure-integration-ref.sh <操作台> <統合先 ref>` を呼ぶ（作成と条件付き switch。述語は script が SSOT）。ensure のあと統合先がどの worktree にも checkout されていなければ、この検査は通さず「checkout の無い着地」へ進む。統合先に居ることは ensure のあと、この検査で確かめる。次を 1 つでも観測したら、直さずに報告して止まる。
+統合先の木は自分以外も読む（どの木かは project の規則。live checkout）。着地なら、検査の前に `<skills root>/merge/scripts/ensure-integration-ref.sh <操作台> <統合先 ref>` を呼ぶ（作成と条件付き switch。述語は script が SSOT）。ensure のあと統合先がどの worktree にも checkout されていなければ、この検査は通さず「checkout の無い着地」へ進む。統合先に居ることは ensure のあと、この検査で確かめる。次を 1 つでも観測したら、直さずに報告して止まる。
 
 - dirty（`status --porcelain` が空でない）
 - HEAD が統合先の branch でない（**両側とも full ref**。`symbolic-ref HEAD` と座標の `refs/heads/<name>` を比べる。`--short` / `git branch --show-current` は `temp` 対 `refs/heads/temp` で常に不一致になる）

@@ -5,7 +5,7 @@ description: >-
   push は `scripts/sync-and-push.sh` で行い、素の `git push` は使わない。
 ---
 
-PR を作り、呼ぶ側が指定した経路で **Draft PR** で止めるか、Ready-for-review まで持っていく。呼ぶ側（`resolve` 等）が経路を決める。`pr` は経路を推測しない。
+PR を作り、呼ぶ側が指定した経路で **Draft PR** で止めるか、Ready-for-review まで持っていく。呼ぶ側が経路を決める。`pr` は経路を推測しない。
 
 | 経路         | 終わり                                       |
 | ------------ | -------------------------------------------- |
@@ -16,14 +16,14 @@ PR を作り、呼ぶ側が指定した経路で **Draft PR** で止めるか、
 
 **他の PR を待たない**。
 
-| その変更は                   | base                                     | 結果                              |
-| ---------------------------- | ---------------------------------------- | --------------------------------- |
-| 未着地の PR の成果に依存する | **その PR の head ブランチ**（積み上げ） | 下から順にしか merge できない     |
-| 依存しない                   | default                                  | 順序は無い。いつ merge してもよい |
+| その変更は                   | base                                                | 結果                              |
+| ---------------------------- | --------------------------------------------------- | --------------------------------- |
+| 未着地の PR の成果に依存する | **その PR の head ブランチ**（積み上げ）            | 下から順にしか merge できない     |
+| 依存しない                   | default（project の規則が統合先を定めていればそれ） | 順序は無い。いつ merge してもよい |
 
 **依存しないブランチを他のフィーチャーブランチへ rebase しない**。偽の依存が生まれ、本来不要な直列化を招く。
 
-**base の PR が既に着地しているなら、`gh pr edit <自分> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替えてから rebase する。** 放置すると merge できない。
+**base の PR が既に着地しているなら、`gh pr edit <自分> --base <着地した PR の baseRefName>` で張り替えてから rebase する。** 放置すると merge できない。
 
 **repo 方針が rebase / force-push を禁じるときだけ** `sync-and-push.sh` を使わず、`git merge origin/<base>` で追随して `git push origin HEAD` で送る。
 
@@ -31,10 +31,10 @@ PR を作り、呼ぶ側が指定した経路で **Draft PR** で止めるか、
 
 次が揃う前には呼ばない。
 
-| 揃っているもの            | 確かめ方                                              |
-| ------------------------- | ----------------------------------------------------- |
-| worktree が clean         | `git status`                                          |
-| CI 相当の local gate が緑 | その repo の CI と同じ検査。入口の名前は project 差分 |
+| 揃っているもの            | 確かめ方                                                |
+| ------------------------- | ------------------------------------------------------- |
+| worktree が clean         | `git status`                                            |
+| CI 相当の local gate が緑 | その repo の CI と同じ検査。入口の名前は project の規則 |
 
 揃う前に呼ぶと、push が先に走り、あとから直すたびに CI が回る。
 
@@ -49,17 +49,16 @@ local gate の入口が無い repo では、**CI の定義から同じ検査を�
 3. body に再開欄を書く: 確認の持ち主 / 未決の問い / 期待結果 / 対象 head SHA / 確認の仕方 / 次の行動
 4. **ここで終わる。** `gh pr checks --watch` はしない
 
-**Draft で CI が skip されるかは project 差分。** 共通 skill は skip を前提にしない。skip 契約がある面でも、外部 check は走り得る。
+**Draft で CI が skip されるかは project の規則。** 共通 skill は skip を前提にしない。skip 契約がある面でも、外部 check は走り得る。
 
 ## Ready
 
 **入る条件（共通に加え）:** 意図の確認が決着している（明示承認があるか、不要と判定されている）。
 
 1. `bash <skills root>/pr/scripts/sync-and-push.sh [<base>]` で push する。衝突が出たら解消して再実行する
-2. sync 後、ready 前に HEAD の意味を見る。差し戻し基準は `resolve` の承認後表。**承認後でも、`finish` を通っていない diff（承認までの往復の修正など）があるなら Ready に入らず**、この skill を抜けて呼ぶ側へ戻し `finish`（必要なら再検証 / 再確認）させる。面変化も同時なら呼ぶ側が **要** 行へ進む。再確認だけが残ったときだけ **Draft PR** 節の 2 以降へ（作成・Draft 化・再開欄を済ませて止まる）
-3. PR が無ければ `gh pr create --base <base>`（draft にしない）。あれば title / body を更新する
-4. `bash <skills root>/pr/scripts/ready-and-watch.sh <number>`（Draft なら ready し、createdAt が Ready 時刻以降の pull_request run を待って watch）
-5. 失敗したらログを見て修正・コミットし 1 に戻る。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
+2. PR が無ければ `gh pr create --base <base>`（draft にしない）。あれば title / body を更新する
+3. `bash <skills root>/pr/scripts/ready-and-watch.sh <number>`（Draft なら ready し、createdAt が Ready 時刻以降の pull_request run を待って watch）
+4. 失敗したらログを見て修正・コミットし 1 に戻る。呼び出し元が修正の経路を定めていれば、失敗を返してそこで直す。**ここで落ちてよいのは、local gate が持たない検査だけ**（環境差・flaky）。local gate で再現するものが落ちたら、直す前にその gate を通す手順へ足す
 
 **commit を足したら必ず 1 へ戻る。CI が緑になったあとも同じ。**「もう通ったから push だけ」で追随を飛ばすと、base から離れたまま積み上がり、着地の直前に大きな rebase と衝突が出る。
 

@@ -1,5 +1,5 @@
 # consult のアドバイザー候補（advisors）と dispatch の実装役の候補（workers。先頭が既定）。
-# 解釈と検証は roster.ts の parseRoster。選出は agents/shared/advisors.ts の selectAdvisors（表の順が優先順）。
+# 解釈と検証は roster.ts の parseRoster。advisors は表の先頭から起こせる 1 つを使う（表の順が優先順）。
 # advisors の read-only 手段は roster.ts の readOnlyArgs が末尾に足す。workers には足さない。
 # DISPATCH_KIND は workers の表から引く。表に無い kind は起動しない。
 #
@@ -20,7 +20,7 @@
 
 [[advisors]]
 kind = "codex"
-args = []
+args = ["--model", "gpt-6.1-terra", "-c", "model_reasoning_effort=xhigh"]
 
 [[advisors]]
 kind = "claude"

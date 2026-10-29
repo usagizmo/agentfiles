@@ -13,11 +13,7 @@
 // 選出は候補表の順。自己 kind は見ない（書き手と別 session であれば足りる）。
 // TUI 画面の読み方はこのファイルだけが持つ。
 
-import { RosterError, type Slot, directLaunchArgv, flag, parseRoster } from "./roster.ts";
-
-export type Selection = {
-  readonly chosen: readonly Slot[];
-};
+import { RosterError, directLaunchArgv, flag, parseRoster } from "./roster.ts";
 
 export type CompleteReason = "出力なし" | "マーカー無し";
 
@@ -443,11 +439,6 @@ export const responseAfter = (raw: string, prev: string): string => {
   return from(0);
 };
 
-export const selectAdvisors = (slots: readonly Slot[]): Selection => {
-  if (slots.length === 0) throw new RosterError("選出できる枠が無い");
-  return { chosen: slots };
-};
-
 const main = async (): Promise<void> => {
   const argv = process.argv.slice(2);
   const cmd = argv[0];
@@ -456,8 +447,7 @@ const main = async (): Promise<void> => {
       const rosterPath = flag(argv, "--roster");
       if (rosterPath === undefined) throw new RosterError("--roster が無い");
       const { advisors } = parseRoster(await Bun.file(rosterPath).text());
-      const { chosen } = selectAdvisors(advisors);
-      process.stdout.write(chosen.map((slot) => `${slot.kind}\n`).join(""));
+      process.stdout.write(advisors.map((slot) => `${slot.kind}\n`).join(""));
       return;
     }
     if (cmd === "complete") {

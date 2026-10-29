@@ -15,8 +15,6 @@ import {
   lastContentLine,
   paneState,
   responseAfter,
-  selectAdvisors,
-  type Selection,
   trustKey,
 } from "../agents/shared/advisors.ts";
 import {
@@ -28,6 +26,7 @@ import {
   parseRoster,
   selectWorker,
   type Slot,
+  inlineArgs,
   readOnlyArgs,
   type Roster,
 } from "../agents/shared/roster.ts";
@@ -56,8 +55,6 @@ const withWorker = (workers: string): Roster =>
   parseRoster(
     `${toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]').replace(WORKER_TOML, "")}${workers}`,
   );
-
-const kinds = (result: Selection): string[] => result.chosen.map((s) => s.kind);
 
 // 並び順と args は quota 切れで人が並べ替える運用値。順序を固定せず、妥当性だけを見る
 test("実体の宣言 file が検証を通る", () => {
@@ -146,15 +143,6 @@ test("worker は read-only を要求しない", () => {
     '[[workers]]\nkind = "claude"\nargs = ["--permission-mode", "acceptEdits"]\n',
   );
   expect(c.workers[0]?.kind).toBe("claude");
-});
-
-test("選出は候補表の順（全枠。自己 kind を見ない）", () => {
-  expect(kinds(selectAdvisors(roster))).toEqual(roster.map((s) => s.kind));
-  const swapped = parseRoster(
-    toml('[{"kind":"claude","args":[]},{"kind":"codex","args":[]}]'),
-  ).advisors;
-  expect(kinds(selectAdvisors(swapped))).toEqual(["claude", "codex"]);
-  expect(selectAdvisors(swapped).chosen).toHaveLength(2);
 });
 
 test("kind は 32 文字まで（tmux の session 名・socket 名に使う）", () => {
@@ -255,13 +243,18 @@ test("壊れた TOML はパーサの位置を残す", () => {
   expect(message.length).toBeGreaterThan("TOML として読めない:".length);
 });
 
-test("起動 argv は宣言の args のあとに read-only を足す", () => {
+test("起動 argv は宣言の args のあとに read-only と inline を足す", () => {
   const codex: Slot = { kind: "codex", args: ["--model", "gpt-5.6"] };
   expect(directLaunchArgv(codex)).toEqual([
     directBinary("codex"),
     ...codex.args,
     ...readOnlyArgs("codex"),
+    ...inlineArgs("codex"),
   ]);
+});
+
+test("codex の advisor は inline 画面で起動する", () => {
+  expect(directLaunchArgv({ kind: "codex", args: [] })).toContain("--no-alt-screen");
 });
 
 test("空の args でも read-only は付く", () => {

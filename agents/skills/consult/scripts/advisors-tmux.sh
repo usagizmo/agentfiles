@@ -7,9 +7,10 @@
 #   advisors-tmux.sh ask <run-dir> <prompt-file>        次の巡を同じ session へ送る
 #   advisors-tmux.sh replace <run-dir>                  dead を次の候補で起こし直し、巡 1〜今の巡の依頼と回収済み応答を連結して送る
 #   advisors-tmux.sh close <run-dir>                    tmux session を破棄
-#   advisors-tmux.sh verify <run-dir>                   今の巡の判定を並べ、「指摘なし」なら 0
+#   advisors-tmux.sh verify <run-dir>                   今の巡の判定を出し、「指摘なし」なら 0
 #
-# 状態ファイル契約（round / marker / prompt / <a>/{start.rc,sent,rc,reason,out,dead}）。
+# アドバイザーは 1 run に 1 つ（current）。tried は起こそうとした kind の順。
+# 状態ファイル契約（round / marker / prompt / current / tried / <a>/{start.rc,sent,rc,reason,out,dead}）。
 # silent fallback しない。
 
 set -u
@@ -39,18 +40,14 @@ place_prompt() {
 }
 
 require_run() {
-	[ -n "$1" ] && [ -d "$1" ] && [ -f "$1/advisors" ] && [ -f "$1/round" ] || fatal "run dir が不正: ${1:-未指定}"
+	[ -n "$1" ] && [ -d "$1" ] && [ -f "$1/current" ] && [ -f "$1/round" ] || fatal "run dir が不正: ${1:-未指定}"
 	[ -f "$1/closed" ] && fatal "この run は close 済み: $1"
 	[ -f "$1/backend" ] && [ "$(cat "$1/backend")" = tmux ] || fatal "tmux backend の run ではない: ${1:-未指定}"
 }
 
-live_advisors() {
-	while IFS= read -r a; do
-		[ -n "$a" ] || continue
-		[ "$(cat "$1/$a/start.rc" 2>/dev/null)" = 0 ] || continue
-		[ -f "$1/$a/dead" ] && continue
-		printf '%s\n' "$a"
-	done <"$1/advisors"
+# run $1 の kind $2 が起きていて終端していない
+alive() {
+	[ "$(cat "$1/$2/start.rc" 2>/dev/null)" = 0 ] && [ ! -f "$1/$2/dead" ]
 }
 
 # 巡 n の prompt を 1 session へ paste する。第 4 引数があればその file を送る
@@ -89,7 +86,7 @@ append_response() {
 	' "$1" >>"$3"
 }
 
-# 巡 k の回収済み応答（rc.k == 0 の advisor の out.k。dead でも除外しない）
+# 巡 k の回収済み応答（rc.k == 0 の kind の out.k。dead でも除外しない）
 out_of() {
 	o_run=$1
 	o_k=$2
@@ -99,7 +96,7 @@ out_of() {
 		[ -f "$o_run/$a/out.$o_k" ] || continue
 		printf '%s\n' "$o_run/$a/out.$o_k"
 		return 0
-	done <"$o_run/advisors"
+	done <"$o_run/tried"
 	return 1
 }
 
@@ -131,12 +128,12 @@ compose_replace_prompt() {
 
 kill_sessions() {
 	k_run=$1
-	[ -f "$k_run/advisors" ] || return 0
+	[ -f "$k_run/tried" ] || return 0
 	while IFS= read -r a; do
 		[ -n "$a" ] || continue
 		session=$(cat "$k_run/$a/session" 2>/dev/null) || continue
 		sh "$tmux_sh" kill "$session" >>"$k_run/$a/log" 2>&1 || true
-	done <"$k_run/advisors"
+	done <"$k_run/tried"
 }
 
 record_tried() {
@@ -236,14 +233,13 @@ start)
 	cat "$run/select.err" >&2 || true
 	[ -s "$run/candidates" ] || fatal "選出結果が空"
 	: >"$run/tried"
-	: >"$run/advisors"
 
 	caller_cwd=$PWD
 	started=0
 	while IFS= read -r a; do
 		[ -n "$a" ] || continue
 		if start_kind "$run" "$a" 1 "$caller_cwd"; then
-			printf '%s\n' "$a" >>"$run/advisors"
+			printf '%s\n' "$a" >"$run/current"
 			started=1
 			break
 		fi
@@ -278,108 +274,81 @@ collect)
 	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
 	deadline=$(($(date +%s) + wait_s))
 
+	a=$(cat "$run/current")
+
 	# 不在・送信失敗を先に確定
-	while IFS= read -r a; do
-		[ -n "$a" ] || continue
-		[ -f "$run/$a/rc.$n" ] && continue
-		if [ "$(cat "$run/$a/start.rc" 2>/dev/null)" != 0 ] || [ -f "$run/$a/dead" ]; then
+	if [ ! -f "$run/$a/rc.$n" ]; then
+		if ! alive "$run" "$a"; then
 			printf '%s\n' 1 >"$run/$a/rc.$n"
 			printf '%s\n' "不在" >"$run/$a/reason.$n"
-			continue
-		fi
-		if [ "$(cat "$run/$a/sent.$n" 2>/dev/null)" != 0 ]; then
+		elif [ "$(cat "$run/$a/sent.$n" 2>/dev/null)" != 0 ]; then
 			printf '%s\n' 1 >"$run/$a/rc.$n"
 			printf '%s\n' "送信失敗" >"$run/$a/reason.$n"
 			: >"$run/$a/dead"
 		fi
-	done <"$run/advisors"
+	fi
 
-	# 全員を round-robin で観測（1 体が待ちを食い尽くさない）
 	# timeout は rc を書かないので、再 collect で続きを観測できる
-	while :; do
-		pending=0
-		while IFS= read -r a; do
-			[ -n "$a" ] || continue
-			[ -f "$run/$a/rc.$n" ] && continue
-			pending=1
-			session=$(cat "$run/$a/session")
-			if ! sh "$tmux_sh" exists "$session"; then
-				printf '%s\n' 1 >"$run/$a/rc.$n"
-				printf '%s\n' "消失" >"$run/$a/reason.$n"
-				: >"$run/$a/dead"
-				continue
-			fi
-			case $(sh "$tmux_sh" poll "$session" 2>>"$run/$a/log") in
-			fatal)
-				sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
-				if [ -f "$run/$a/raw.$n" ]; then
-					bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
-						>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
-				fi
-				printf '%s\n' 1 >"$run/$a/rc.$n"
-				printf '%s\n' "不通" >"$run/$a/reason.$n"
-				: >"$run/$a/dead"
-				continue
-				;;
-			esac
+	session=$(cat "$run/$a/session")
+	while [ ! -f "$run/$a/rc.$n" ]; do
+		if ! sh "$tmux_sh" exists "$session"; then
+			printf '%s\n' 1 >"$run/$a/rc.$n"
+			printf '%s\n' "消失" >"$run/$a/reason.$n"
+			: >"$run/$a/dead"
+			break
+		fi
+		if [ "$(sh "$tmux_sh" poll "$session" 2>>"$run/$a/log")" = fatal ]; then
 			sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
-			if bun "$select_ts" complete --output "$run/$a/raw.$n" --marker "$marker" \
-				>"$run/$a/complete.$n.json" 2>>"$run/$a/log"; then
-				# 判定は out.N だけを読み、画面の範囲は extract が決める。切り出せ
-				# なかった raw を rc=0 で渡すと、入力欄以降の偽判定で上書きされる
-				if bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
-					>"$run/$a/out.$n" 2>>"$run/$a/log"; then
-					printf '%s\n' 0 >"$run/$a/rc.$n"
-					: >"$run/$a/reason.$n"
-				else
-					cp "$run/$a/raw.$n" "$run/$a/out.$n"
-					printf '%s\n' 1 >"$run/$a/rc.$n"
-					printf '%s\n' "抽出失敗" >"$run/$a/reason.$n"
-				fi
+			if [ -f "$run/$a/raw.$n" ]; then
+				bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
+					>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
 			fi
-		done <"$run/advisors"
-		[ "$pending" -eq 0 ] && break
+			printf '%s\n' 1 >"$run/$a/rc.$n"
+			printf '%s\n' "不通" >"$run/$a/reason.$n"
+			: >"$run/$a/dead"
+			break
+		fi
+		sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" || true
+		if bun "$select_ts" complete --output "$run/$a/raw.$n" --marker "$marker" \
+			>"$run/$a/complete.$n.json" 2>>"$run/$a/log"; then
+			# 判定は out.N だけを読み、画面の範囲は extract が決める。切り出せ
+			# なかった raw を rc=0 で渡すと、入力欄以降の偽判定で上書きされる
+			if bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
+				>"$run/$a/out.$n" 2>>"$run/$a/log"; then
+				printf '%s\n' 0 >"$run/$a/rc.$n"
+				: >"$run/$a/reason.$n"
+			else
+				cp "$run/$a/raw.$n" "$run/$a/out.$n"
+				printf '%s\n' 1 >"$run/$a/rc.$n"
+				printf '%s\n' "抽出失敗" >"$run/$a/reason.$n"
+			fi
+			break
+		fi
 		if [ "$(date +%s)" -ge "$deadline" ]; then
-			while IFS= read -r a; do
-				[ -n "$a" ] || continue
-				[ -f "$run/$a/rc.$n" ] && continue
-				printf '%s\n' timeout >"$run/$a/reason.$n"
-				if [ -f "$run/$a/raw.$n" ]; then
-					bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
-						>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
-				fi
-			done <"$run/advisors"
+			printf '%s\n' timeout >"$run/$a/reason.$n"
+			if [ -f "$run/$a/raw.$n" ]; then
+				bun "$select_ts" extract --raw "$run/$a/raw.$n" --prev "$prev" \
+					>"$run/$a/out.$n" 2>>"$run/$a/log" || cp "$run/$a/raw.$n" "$run/$a/out.$n"
+			fi
 			break
 		fi
 		sleep 1
 	done
 
-	while IFS= read -r a; do
-		[ -n "$a" ] || continue
-		rc=$(cat "$run/$a/rc.$n" 2>/dev/null) || rc=1
-		reason=$(cat "$run/$a/reason.$n" 2>/dev/null) || reason=""
-		if [ -n "$reason" ]; then
-			printf '=== %s 巡 %s (rc=%s %s) ===\n' "$a" "$n" "$rc" "$reason"
-		else
-			printf '=== %s 巡 %s (rc=%s) ===\n' "$a" "$n" "$rc"
-		fi
-		[ -s "$run/$a/out.$n" ] && cat "$run/$a/out.$n"
-		if [ "$rc" != 0 ] || [ ! -s "$run/$a/out.$n" ]; then
-			printf '(log の末尾)\n'
-			tail -n 20 "$run/$a/log" 2>/dev/null
-		fi
-		printf '\n'
-	done <"$run/advisors"
-
-	passed=0
-	while IFS= read -r a; do
-		[ -n "$a" ] || continue
-		[ "$(cat "$run/$a/reason.$n" 2>/dev/null)" = "不在" ] && continue
-		[ -f "$run/$a/dead" ] && continue
-		[ "$(cat "$run/$a/rc.$n" 2>/dev/null)" = 0 ] || exit 1
-		passed=1
-	done <"$run/advisors"
-	[ "$passed" -eq 1 ] || exit 1
+	rc=$(cat "$run/$a/rc.$n" 2>/dev/null) || rc=1
+	reason=$(cat "$run/$a/reason.$n" 2>/dev/null) || reason=""
+	if [ -n "$reason" ]; then
+		printf '=== %s 巡 %s (rc=%s %s) ===\n' "$a" "$n" "$rc" "$reason"
+	else
+		printf '=== %s 巡 %s (rc=%s) ===\n' "$a" "$n" "$rc"
+	fi
+	[ -s "$run/$a/out.$n" ] && cat "$run/$a/out.$n"
+	if [ "$rc" != 0 ] || [ ! -s "$run/$a/out.$n" ]; then
+		printf '(log の末尾)\n'
+		tail -n 20 "$run/$a/log" 2>/dev/null
+	fi
+	printf '\n'
+	[ "$rc" = 0 ] || exit 1
 	exit 0
 	;;
 
@@ -389,58 +358,47 @@ ask)
 	prompt=${2:-}
 	[ -n "$prompt" ] && [ -s "$prompt" ] || fatal "prompt が空 / 不正: ${prompt:-未指定}"
 	n=$(cat "$run/round")
-	live=$(live_advisors "$run")
-	[ -n "$live" ] || fatal "生きている advisor が無い"
-	for a in $live; do
-		[ -f "$run/$a/rc.$n" ] && continue
+	a=$(cat "$run/current")
+	alive "$run" "$a" || fatal "生きている advisor が無い"
+	if [ ! -f "$run/$a/rc.$n" ]; then
 		[ -f "$run/$a/reason.$n" ] || fatal "巡 $n が未回収: ${a}（collect を先に通す）"
 		# timeout: 完走なら collect を要求。稼働中なら止める。止まって未完走なら終端
 		session=$(cat "$run/$a/session")
-		if ! sh "$tmux_sh" exists "$session"; then
-			printf '%s\n' 1 >"$run/$a/rc.$n"
+		if sh "$tmux_sh" exists "$session"; then
+			sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" ||
+				fatal "巡 $n の $a を読めない（終端しない。collect をやり直す）"
+			bun "$select_ts" complete --output "$run/$a/raw.$n" --marker "$(cat "$run/marker.$n")" \
+				>/dev/null 2>>"$run/$a/log"
+			case $? in
+			0) fatal "巡 $n を $a が完走している（collect で回収してから ask する）" ;;
+			1) ;;
+			*) fatal "巡 $n の $a を判定できない（終端しない。collect をやり直す）" ;;
+			esac
+			# 終端してよいのは、表示中の画面が入力待ちに戻っているときだけ
+			case $(sh "$tmux_sh" poll "$session") in
+			working) fatal "巡 $n を $a がまだ処理中（collect を先に通す）" ;;
+			ready) ;;
+			*) fatal "巡 $n の $a の状態を読めない（終端しない。collect をやり直す）" ;;
+			esac
+			printf '%s\n' "timeout" >"$run/$a/reason.$n"
+		else
 			printf '%s\n' "消失" >"$run/$a/reason.$n"
-			: >"$run/$a/dead"
-			continue
 		fi
-		sh "$tmux_sh" capture "$session" >"$run/$a/raw.$n" 2>>"$run/$a/log" ||
-			fatal "巡 $n の $a を読めない（終端しない。collect をやり直す）"
-		bun "$select_ts" complete --output "$run/$a/raw.$n" --marker "$(cat "$run/marker.$n")" \
-			>/dev/null 2>>"$run/$a/log"
-		case $? in
-		0) fatal "巡 $n を $a が完走している（collect で回収してから ask する）" ;;
-		1) ;;
-		*) fatal "巡 $n の $a を判定できない（終端しない。collect をやり直す）" ;;
-		esac
-		# 終端してよいのは、表示中の画面が入力待ちに戻っているときだけ
-		case $(sh "$tmux_sh" poll "$session") in
-		working) fatal "巡 $n を $a がまだ処理中（collect を先に通す）" ;;
-		ready) ;;
-		*) fatal "巡 $n の $a の状態を読めない（終端しない。collect をやり直す）" ;;
-		esac
 		printf '%s\n' 1 >"$run/$a/rc.$n"
-		printf '%s\n' "timeout" >"$run/$a/reason.$n"
 		: >"$run/$a/dead"
-	done
-	live=$(live_advisors "$run")
-	[ -n "$live" ] || fatal "生きている advisor が無い"
+		fatal "生きている advisor が無い"
+	fi
 	next=$((n + 1))
 	place_prompt "$run" "$prompt" "$next"
 	printf '%s\n' "$next" >"$run/round" || fatal "round を書けない"
-	sent=0
-	for a in $live; do
-		send_round "$run" "$a" "$next" && sent=$((sent + 1))
-	done
-	[ "$sent" -ge 1 ] || fatal "巡 $next を 1 つも送れなかった"
+	send_round "$run" "$a" "$next" || fatal "巡 $next を送れなかった"
 	printf '%s\n' "$next"
 	;;
 
 replace)
 	run=${1:-}
 	require_run "$run"
-	live=$(live_advisors "$run")
-	if [ -n "$live" ]; then
-		exit 0
-	fi
+	alive "$run" "$(cat "$run/current")" && exit 0
 	[ -f "$run/candidates" ] || fatal "候補列が無い"
 	n=$(cat "$run/round")
 	[ -f "$run/prompt.$n" ] || fatal "巡 $n の prompt が無い"
@@ -457,7 +415,7 @@ replace)
 		fi
 		if start_kind "$run" "$a" "$n" "$caller_cwd" "$combined"; then
 			rm -f "$combined"
-			printf '%s\n' "$a" >>"$run/advisors"
+			printf '%s\n' "$a" >"$run/current"
 			exit 0
 		fi
 	done <"$run/candidates"
@@ -480,7 +438,7 @@ close)
 			printf 'WARN\tsession を殺せない: %s\n' "$session" >&2
 			fail=1
 		fi
-	done <"$run/advisors"
+	done <"$run/tried"
 	[ "$fail" -eq 0 ] || exit 1
 	: >"$run/closed"
 	;;
@@ -488,46 +446,36 @@ close)
 verify)
 	# close 済みでも読める（証跡は run dir に残る）。session には触らない
 	run=${1:-}
-	[ -n "$run" ] && [ -d "$run" ] && [ -f "$run/advisors" ] && [ -f "$run/round" ] || fatal "run dir が不正: ${run:-未指定}"
+	[ -n "$run" ] && [ -d "$run" ] && [ -f "$run/current" ] && [ -f "$run/round" ] || fatal "run dir が不正: ${run:-未指定}"
 	[ -f "$run/backend" ] && [ "$(cat "$run/backend")" = tmux ] || fatal "tmux backend の run ではない: $run"
 	[ -f "$select_ts" ] || fatal "述語が無い: $select_ts"
 	command -v bun >/dev/null 2>&1 || fatal "bun が PATH に無い"
 	n=$(cat "$run/round")
 	[ -f "$run/marker.$n" ] || fatal "巡 $n の marker が無い"
 	marker=$(cat "$run/marker.$n")
+	a=$(cat "$run/current")
 	printf 'run: %s\n' "$run"
 	printf 'round: %s\n' "$n"
 	if [ -f "$run/closed" ]; then printf 'closed: yes\n'; else printf 'closed: no\n'; fi
-	passed=0
-	failed=0
-	while IFS= read -r a; do
-		[ -n "$a" ] || continue
-		rc=$(cat "$run/$a/rc.$n" 2>/dev/null) || rc=""
-		reason=$(cat "$run/$a/reason.$n" 2>/dev/null) || reason=""
-		if [ "$rc" = 0 ]; then
-			verdict=$(bun "$select_ts" verdict --output "$run/$a/out.$n" --marker "$marker" 2>>"$run/$a/log") ||
-				fatal "巡 $n の $a の判定を読めない"
-			printf '%s: %s\n' "$a" "$verdict"
-			if [ "$verdict" = 指摘なし ]; then passed=$((passed + 1)); else failed=$((failed + 1)); fi
-			continue
+	reason=$(cat "$run/$a/reason.$n" 2>/dev/null) || reason=""
+	if [ "$(cat "$run/$a/rc.$n" 2>/dev/null)" = 0 ]; then
+		verdict=$(bun "$select_ts" verdict --output "$run/$a/out.$n" --marker "$marker" 2>>"$run/$a/log") ||
+			fatal "巡 $n の $a の判定を読めない"
+		printf '%s: %s\n' "$a" "$verdict"
+		if [ "$verdict" = 指摘なし ]; then
+			printf 'verify: pass\n'
+			exit 0
 		fi
-		# 起こせなかった・終端した agent は判定に数えない。回収前の agent は未終了
-		if [ "$(cat "$run/$a/start.rc" 2>/dev/null)" != 0 ] || [ -f "$run/$a/dead" ]; then
-			printf '%s: 終端 (%s)\n' "$a" "${reason:-不在}"
-			continue
-		fi
-		printf '%s: 未回収 (%s)\n' "$a" "${reason:-collect 前}"
-		failed=$((failed + 1))
-	done <"$run/advisors"
-	if [ "$failed" -eq 0 ] && [ "$passed" -ge 1 ]; then
-		printf 'verify: pass\n'
-		exit 0
-	fi
-	if [ "$passed" -eq 0 ] && [ "$failed" -eq 0 ]; then
-		printf 'verify: fail (生きている advisor が無い。未レビュー)\n'
-	else
 		printf 'verify: fail\n'
+		exit 1
 	fi
+	if ! alive "$run" "$a"; then
+		printf '%s: 終端 (%s)\n' "$a" "${reason:-不在}"
+		printf 'verify: fail (生きている advisor が無い。未レビュー)\n'
+		exit 1
+	fi
+	printf '%s: 未回収 (%s)\n' "$a" "${reason:-collect 前}"
+	printf 'verify: fail\n'
 	exit 1
 	;;
 
