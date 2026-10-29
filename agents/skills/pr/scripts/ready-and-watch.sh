@@ -7,6 +7,9 @@
 # Draft なら ready する。Ready 遷移が一度も無い PR は待たずに watch する。
 set -euo pipefail
 
+# rate limit（REST・GraphQL とも 5,000 / 時）は同じ user の全 session で共有する。gh の watch 既定（run 3 秒・checks 10 秒）を使わない。
+INTERVAL=30
+
 fail() {
 	printf '%s\n' "$1" >&2
 	exit 1
@@ -58,14 +61,14 @@ EOF
 		if [ "$(date +%s)" -ge "$deadline" ]; then
 			fail "Ready で CI が起動していない。workflow の pull_request.types に ready_for_review があるか、空 commit で再走させる"
 		fi
-		sleep 2
+		sleep 10
 	done
 	while IFS= read -r id; do
 		[ -n "$id" ] || continue
-		gh run watch "$id" --exit-status
+		gh run watch "$id" --exit-status --interval "$INTERVAL"
 	done <<EOF
 $ids
 EOF
 fi
 
-gh pr checks "$number" --watch
+gh pr checks "$number" --watch --interval "$INTERVAL"
