@@ -1,6 +1,6 @@
 # アドバイザー起動表
 
-候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。表の解釈と検証は `roster.ts`、選出・完走判定・画面判定は `advisors.ts`。選出は `selectAdvisors`（表の順が優先順。quota 切れ・不通は表を並べ替える）。
+候補表は起動スクリプトと同じディレクトリの `roster.toml` の `advisors`。表の解釈と検証は `roster.ts`、選出・完走判定・画面判定は `advisors.ts`。アドバイザーは 1 run に 1 つ。表の先頭から起こせるものを使い、終端したら `replace` で次の候補へ引き継ぐ。
 
 TS が返すのは常に**行**（選出 kind・起動 argv・応答）。sh は行を読むだけで、JSON を解釈しない。
 
@@ -39,7 +39,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 
 ```
 <skills root>/consult/scripts/consult-backend.sh start <prompt-file>      # run dir を stdout へ返し、巡 1 を送る
-<skills root>/consult/scripts/consult-backend.sh collect <run-dir> [秒]   # 今の巡が出揃うまで待って出力
+<skills root>/consult/scripts/consult-backend.sh collect <run-dir> [秒]   # 今の巡の応答を待って出力
 <skills root>/consult/scripts/consult-backend.sh ask <run-dir> <prompt-file>  # 次の巡を同じ agent へ送る
 <skills root>/consult/scripts/consult-backend.sh replace <run-dir>        # dead を次の候補で起こし直し、巡 1〜今の巡の依頼と回収済み応答を連結して送る
 <skills root>/consult/scripts/consult-backend.sh close <run-dir>          # session / tab を閉じる
@@ -55,7 +55,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 - 回収ヘッダの `rc≠0` は未完了。`消失`（session/agent が居なくなった）・`送信失敗`・`不通`（fatal）・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
 - timeout の巡は pane / `tmux capture` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
 - **どのモードでも最後に `close` を呼ぶ**。完了・終端を確認してから閉じる
-- `verify` は `close` 済みでも読める。1 行目から `run:` / `round:` / `closed:` / `<kind>: <判定>`… / `verify: pass|fail`。判定は応答末尾の `判定: …` 行だけから取る（`advisors.ts` の `verdict`）。判定行が無い完走は `不明`、回収前は `未回収`、終端した agent は `終端` で判定に数えない。rc 0 で判定行あり以外が 1 つでもあれば fail、数える agent が 0 でも fail（未レビュー）
+- `verify` は `close` 済みでも読める。1 行目から `run:` / `round:` / `closed:` / `<kind>: <判定>` / `verify: pass|fail`。判定は応答末尾の `判定: …` 行だけから取る（`advisors.ts` の `verdict`）。判定行が無い完走は `不明`、回収前は `未回収`、終端した agent は `終端`。判定が「指摘なし」のときだけ pass。`終端` は fail（未レビュー）
 
 ## レイアウト
 
@@ -74,4 +74,4 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 - `rc` が 0 以外 → 回収ヘッダの理由と log の末尾を見る。**失敗・未完了は隠さない**
 - 終端（`消失`・`送信失敗`・`不通`・`ask` が終端した `timeout`）→ `replace` で次 kind へ引き継ぐ（同じ run。巡 1〜今の巡の依頼と回収済み応答を連結）。`候補枯渇` なら未レビュー
 - 巡が進まない（`working` / `unknown` のまま）→ `close` し、巡 1〜今の巡の依頼と回収済み応答を連結した prompt で新しい `start` を行い、同じレビューとして続ける（`replace` は close 済みの run を受け付けない）。この `close` はレビューの終了ではない
-- 揃わないときの次手は呼び出し側 skill
+- 続けられないときの次手は呼び出し側 skill

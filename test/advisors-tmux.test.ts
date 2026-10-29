@@ -346,14 +346,14 @@ test.concurrent("tmux backend: replace は dead を次の kind で起こし直�
     const started = await run(dir, ["start", join(dir, "prompt")]);
     expect(started.exitCode).toBe(0);
     const runDir = started.stdout.trim();
-    expect(await readFile(join(runDir, "advisors"), "utf8")).toBe(`${FIRST}\n`);
+    expect(await readFile(join(runDir, "current"), "utf8")).toBe(`${FIRST}\n`);
     await putCapacity(dir);
     expect((await run(dir, ["collect", runDir, "8"])).exitCode).toBe(1);
     const replaced = await run(dir, ["replace", runDir]);
     expect(replaced.exitCode).toBe(0);
     const second = ADVISORS[1]?.kind ?? "";
     expect(second).not.toBe("");
-    expect(await readFile(join(runDir, "advisors"), "utf8")).toContain(`${second}\n`);
+    expect(await readFile(join(runDir, "current"), "utf8")).toBe(`${second}\n`);
     expect(await readFile(join(runDir, "tried"), "utf8")).toContain(`${FIRST}\n`);
     expect(await readFile(join(runDir, "tried"), "utf8")).toContain(`${second}\n`);
     expect(await Bun.file(join(runDir, second, "dead")).exists()).toBe(false);
