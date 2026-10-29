@@ -47,12 +47,12 @@ mark_start() {
   done_s=""
 }
 
-# head を最新 base へ追随させる。自分の worktree の PR だけ local を動かし、他 session の local は触らない。
+# head を PR の base へ追随させる。自分の worktree の PR だけ local を動かし、他 session の local は触らない。
 sync_head() {
-  local head_ref="$1" branch
+  local head_ref="$1" base_ref="$2" branch
   branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
   if [ "$branch" = "$head_ref" ]; then
-    "$DIR/sync-and-push.sh" >&2
+    "$DIR/sync-and-push.sh" "$base_ref" >&2
   else
     gh pr update-branch "$pr" --rebase >&2
   fi
@@ -109,7 +109,7 @@ while :; do
       [ "$syncs" -le "$MAX_SYNCS" ] || finish behind-limit 4
       # 起点の時刻は追随の前に取る。push 直後に完了した check の completedAt が起点より後になる。
       sync_iso=$(now_iso)
-      if ! sync_head "$head_ref"; then
+      if ! sync_head "$head_ref" "$base_ref"; then
         say "PR #${pr} の追随に失敗した"
         finish error 1
       fi

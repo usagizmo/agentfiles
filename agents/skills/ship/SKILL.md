@@ -28,9 +28,11 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
 
 ## フロー
 
+`<base>` は `gh pr view <number> --json baseRefName --jq .baseRefName` の値。取れない・空なら止める。
+
 1. head を最新 base に載せる。PR head の worktree で:
    ```
-   bash <skills root>/ship/scripts/sync-and-push.sh
+   bash <skills root>/ship/scripts/sync-and-push.sh <base>
    ```
    衝突は rebase 上で解消して再実行する。SHA が動いたら前提の CI を取り直し、通るまで待つ
 2. auto-merge を有効化する:
@@ -43,8 +45,8 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
    bash <skills root>/ship/scripts/wait-merge.sh <number>
    ```
    stdout の理由が `merged` なら手順 4 へ進む。それ以外は理由を報告して止める。理由の定義と `BEHIND` の追随は script が持つ
-4. **この PR の head を base にしている open PR があれば `gh pr edit <子> --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"` で張り替える。** head を消す前に張り替える。GitHub の自動付け替えに頼らない
-5. `bash <skills root>/ship/scripts/sync-local-default.sh` でローカル default を最新化する。マージした PR と変更の要点を報告する
+4. **この PR の head を base にしている open PR があれば `gh pr edit <子> --base <base>` で張り替える。** head を消す前に張り替える。GitHub の自動付け替えに頼らない
+5. `bash <skills root>/ship/scripts/sync-local-default.sh <base>` でローカルの base を最新化する。マージした PR と変更の要点を報告する
 6. closing keyword で紐付けた Issue が実際に `CLOSED` になったか確認する（`gh issue view <n> --json state`）。open のまま残っていたら閉じる
 7. `bash <skills root>/ship/scripts/retire-head.sh <number>` で head の worktree と branch を消す。消す条件は script が持つ。**止まったら消しにいかない** —— script が出した理由と、移動先を促されたならその path へ移ってからの再実行だけで進める
 

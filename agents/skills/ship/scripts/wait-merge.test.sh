@@ -36,7 +36,7 @@ SCRIPT="$TMP/skill/wait-merge.sh"
 
 cat >"$TMP/skill/sync-and-push.sh" <<'STUB'
 #!/bin/sh
-echo sync-and-push >>"$SCENE/calls"
+echo "sync-and-push $*" >>"$SCENE/calls"
 cat "$SCENE/n" >>"$SCENE/synced-at"
 echo "sync-and-push stub: stdout へ出す"
 # 追随に掛かる秒数。
@@ -257,7 +257,7 @@ scene own feat
 put view.1 "$(v open behind a)"
 put view.2 "$(v closed unknown b 2026-01-01T00:00:00Z)"
 expect merged 0
-if [ "$(calls)" = "sync-and-push " ]; then ok; else fail "own: 追随経路が違う: $(calls)"; fi
+if [ "$(calls)" = "sync-and-push main " ]; then ok; else fail "own: 追随経路が違う: $(calls)"; fi
 
 # 他 session の PR は update-branch。local は触らない。
 scene other main
