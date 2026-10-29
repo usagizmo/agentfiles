@@ -117,7 +117,7 @@ pass_late_trust() {
 late_trust_or_fatal() {
 	pass_late_trust "$1" "$2" && return 0
 	case $? in
-	1) fatal "trust 対話のあとに入力を受けない画面になった（$l_state）: $session" ;;
+	1) fatal "trust 対話のあとに入力を受けない画面になった（${l_state}）: $session" ;;
 	*) fatal "trust 対話を越えられない: $session" ;;
 	esac
 }
@@ -134,7 +134,7 @@ poll_state() {
 			p_state=$l_state
 		else
 			case $? in
-			1) fatal "trust 対話のあとに入力を受けない画面になった（$l_state）: $session" ;;
+			1) fatal "trust 対話のあとに入力を受けない画面になった（${l_state}）: $session" ;;
 			*) fatal "trust 対話を越えられない: $session" ;;
 			esac
 		fi
