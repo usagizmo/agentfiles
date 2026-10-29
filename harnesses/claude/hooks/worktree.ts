@@ -1,5 +1,4 @@
 // Claude Code の WorktreeCreate / WorktreeRemove / SubagentStop hook。
-// 置き場所の規則は agents/skills/resolve/SKILL.md step 2。
 //
 // 使い方: bun worktree.ts <create|remove|subagent-stop>（hook 入力 JSON を stdin で受ける）
 //

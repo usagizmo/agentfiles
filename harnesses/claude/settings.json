@@ -13,7 +13,6 @@
       "Read",
       "WebFetch",
       "WebSearch",
-      "Skill(docs:*)",
       "Skill(commit:*)",
       "Bash(git worktree remove:*)",
       "Bash(git branch -D:*)"

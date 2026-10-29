@@ -11,9 +11,9 @@ CI が通った Ready-for-review PR を merge し、後始末まで見る。
 - CI が通っている:
   - `gh pr checks <number> --json bucket` に `pending` / `fail` / `cancel` が無い
   - `pass` が 1 つ以上ある。**checks が空、または全部 `skipping` は通っていない**（Draft skip や未起動を緑とみなさない）
-- **base が default**（`gh pr view <number> --json baseRefName`）。別 PR の head が base なら積み上げの途中
-- 配信してよい（判断基準は project 差分。既定は「その変更の検証を終えている」）
-- **人に見せる面（定義は `refine`）を変えたなら、明示の承認がある**。承認なしに merge しない。**沈黙は承認ではない**。承認の置き場と判定手順は project が定める（無ければ、このセッションでの明示承認か PR の人によるレビュー承認）
+- **base が default か、project の規則が定める統合先**（`gh pr view <number> --json baseRefName`）。別 PR の head が base なら積み上げの途中
+- 配信してよい（判断基準は project の規則。既定は「その変更の検証を終えている」）
+- **人に見せる面（UI・公開 API・設計骨格）を変えたなら、明示の承認がある**。**沈黙は承認ではない**。承認の置き場と判定手順は project の規則（無ければ、このセッションでの明示承認か PR の人によるレビュー承認）。project の規則が配信境界より手前の統合先を定め、承認を配信時に取るなら、その統合先への merge には問わない
 
 満たさないなら merge せず、満たしていない側を報告する。
 
