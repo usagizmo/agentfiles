@@ -364,7 +364,12 @@ const LOGIN_SCREENS: readonly (readonly RegExp[])[] = [
 const isLoginScreen = (lines: readonly string[]): boolean =>
   LOGIN_SCREENS.some((screen) => screen.every((row) => lines.some((line) => row.test(line))));
 
-export const HARNESS_FATAL: readonly RegExp[] = [/^Selected model is at capacity\.$/u];
+// codex は利用上限の告知を `■` で始め、その下に model 切替の対話を重ねる（入力欄を描かない）。
+// 上限が戻るまで応答しないので、その agent は終端して次の候補へ引き継ぐ
+export const HARNESS_FATAL: readonly RegExp[] = [
+  /^Selected model is at capacity\.$/u,
+  /^■ You[’']ve hit your usage limit\b/u,
+];
 
 const isFatalLine = (line: string): boolean => HARNESS_FATAL.some((re) => re.test(line));
 
@@ -392,6 +397,8 @@ export const paneState = (screen: string): PaneState => {
       return "trust";
     }
     if (lines.some(isStatusLine)) return "working";
+    // 入力欄を隠す対話の上に致命行が出ていれば、その対話は致命の続き
+    if (lines.some(isFatalLine)) return "fatal";
     return isLoginScreen(lines) ? "login" : "unknown";
   }
   // 入力欄の右端の中断案内と、入力欄まわりの状態行・致命行だけを見る（本文は見ない）
