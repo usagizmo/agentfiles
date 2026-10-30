@@ -925,6 +925,18 @@ test("codex の capacity 画面は fatal", async () => {
   expect(paneState(await paneFixture("codex-capacity.txt"))).toBe("fatal");
 });
 
+test("codex の利用上限の告知の下に model 切替の対話が重なった画面は fatal", async () => {
+  expect(paneState(await paneFixture("codex-usage-limit.txt"))).toBe("fatal");
+});
+
+test("本文に引用した利用上限の行では fatal にしない", async () => {
+  const ready = await paneFixture("ready-codex");
+  const anchor = "• up.sh と doctor.sh を確認します。";
+  expect(
+    paneState(ready.replace(anchor, `${anchor}\n■ You’ve hit your usage limit. Upgrade to Pro`)),
+  ).toBe("ready");
+});
+
 test("本文に引用した capacity 行では fatal にしない", async () => {
   const ready = await paneFixture("ready-codex");
   const anchor = "• up.sh と doctor.sh を確認します。";

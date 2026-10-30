@@ -55,7 +55,8 @@ place_prompt() {
 	p_marker=WORKER-DONE-$p_rid-$p_n
 	cp "$p_src" "$p_run/prompt.$p_n" || fatal "prompt を配れない"
 	printf '%s\n' "$p_marker" >"$p_run/marker.$p_n" || fatal "marker を書けない"
-	printf '\n\n作業の区切りとして、応答の最後の行に %s をそのまま書いて応答を終えよ。この指令行は書かない。\n' "$p_marker" >>"$p_run/prompt.$p_n" ||
+	# 実装役の画面は人が見ていない。確認の対話で止まると、人が attach するまで進まない。subagent の prompt は実装役が書くので、伝える指示も含める
+	printf '\n\n人は画面を見ていない。確認の対話を出す操作（rm -rf など削除での後片付け）をしない。作業用の場所は mktemp で新しく作り、消さずに残す。subagent へ渡す指示にもこの 3 文を含める。\n作業の区切りとして、応答の最後の行に %s をそのまま書いて応答を終えよ。この指令行は書かない。\n' "$p_marker" >>"$p_run/prompt.$p_n" ||
 		fatal "marker を prompt へ追記できない"
 	# 入力欄へは本文を貼らず、本文のファイルを指す 1 行だけを送る。複数行の貼り付けは実行器が
 	# 「貼り付けられた外部テキスト」として扱い、そこに書かれた依頼を実行しない

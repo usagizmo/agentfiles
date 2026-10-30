@@ -353,6 +353,8 @@ test.concurrent("dispatch tmux: 入力欄へは本文を貼らず、本文のフ
     const body = await readFile(join(runDir, "prompt.1"), "utf8");
     expect(body).toContain("Implement the fix.");
     expect(body).toContain(marker);
+    expect(body).toContain("確認の対話を出す操作（rm -rf など削除での後片付け）をしない");
+    expect(body).toContain("subagent へ渡す指示にもこの 3 文を含める");
     expect((await run(dir, ["close", runDir])).exitCode).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
