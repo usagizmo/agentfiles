@@ -53,7 +53,7 @@ tmux backend の session primitive は `agents/shared/tmux-session.sh`（consult
 - agent は文脈を保っている。`ask` の本文は 原因表 / 採否と理由 / 問い / 修正の要約 だけでよく、diff は agent に取り直させる
 - 完走の述語は今の巡の marker（`advisors.ts` の `complete`）。idle / done は読むきっかけであって完了ではない
 - 回収ヘッダの `rc≠0` は未完了。`消失`（session/agent が居なくなった）・`送信失敗`・`不通`（fatal）・`ask` が終端した `timeout` はその agent の終端で、次の巡には居ない。`不在` は起こせなかった agent
-- timeout の巡は pane / `tmux capture` で状態を確認し、作業中なら同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
+- `collect` は前景で呼び、待つ間に turn を閉じない（background に回さない）。timeout の巡は pane / `tmux capture` で状態を確認し、作業中なら同じ turn で同じ run を再 `collect` する。短い待機の終了だけで失敗と判定しない
 - **どのモードでも最後に `close` を呼ぶ**。完了・終端を確認してから閉じる
 - `verify` は `close` 済みでも読める。1 行目から `run:` / `round:` / `closed:` / `<kind>: <判定>` / `verify: pass|fail`。判定は応答末尾の `判定: …` 行だけから取る（`advisors.ts` の `verdict`）。判定行が無い完走は `不明`、回収前は `未回収`、終端した agent は `終端`。判定が「指摘なし」のときだけ pass。`終端` は fail（未レビュー）
 
